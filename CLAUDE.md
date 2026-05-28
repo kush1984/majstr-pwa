@@ -1,240 +1,58 @@
-# Majstr Backend — Claude guide
+# CLAUDE.md
 
-SaaS backend for Ukrainian contractors. Current scope: authentication +
-project foundation. See [README.md](README.md) for end-user setup and the
-public REST contract; this file is for Claude / contributors working *in*
-the codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Stack (pinned)
+## Commands
 
-- **Spring Boot 4.0.6** (Spring Framework 7, Jakarta EE 11) on **Java 25**
-- **Gradle Kotlin DSL** — toolchain pinned to JDK 25 in `build.gradle.kts`
-- **PostgreSQL 17** via `docker-compose.yml`, schema owned by **Flyway**
-- **Spring Security 7**, stateless, JWT via **jjwt 0.12.x** (HS256)
-- **Bucket4j 8.x** (`bucket4j_jdk17-core`) — login rate limiting
-- **Jackson 3** — **note the package change** (see *Gotchas*)
-- **Lombok**, **springdoc-openapi 2.8.x**, **JUnit 5 + MockMvc**
+- `npm run dev` — Vite dev server on port 5173 (binds `0.0.0.0` for LAN/phone access). PWA dev mode is enabled (`devOptions.enabled: true`), so the service worker registers even in dev.
+- `npm run build` — runs `tsc -b` then `vite build`. Type errors fail the build; there is no separate `typecheck` script.
+- `npm run preview` — serves `dist/` for a quick sanity check.
+- `npm run lint` — runs `eslint .`. **No eslint config is checked in**, so this will currently fail; either add a config or skip until one exists.
 
-Don't bump these without a clear reason — the combo is chosen for Spring
-Boot 4 / Spring 7 / Jakarta EE 11 / Java 25 compatibility.
+There is no test runner configured.
 
-## Common commands
+## Architecture
 
-```bash
-# bring Postgres up (requires .env with POSTGRES_PASSWORD)
-docker compose up -d
+### What this repo is
 
-# run the app (env vars from .env must be exported)
-./gradlew bootRun
+A standalone React 19 + TypeScript PWA. It is the **client only**. The Spring Boot backend lives in the sibling repo at `C:\Work\Majstr app\majstr-app\` (same parent folder). All non-UI state — users, plans, estimates, files — comes from that backend over REST.
 
-# tests
-./gradlew test
+### Backend coupling
 
-# full build with verification
-./gradlew build
-```
+The two repos are tightly coupled by contract, not by build:
 
-JWT secret and DB credentials come from **env vars only** — never hardcode.
-The base `application.yml` references `${JWT_SECRET}` with no default;
-startup fails fast if it isn't set.
+- `src/api/types.ts` mirrors Spring DTOs **verbatim**. If a backend field is renamed/dropped, TS compilation here will silently keep the old shape until a `/me` or similar call returns the new payload at runtime — when changing backend DTOs, update this file in lockstep.
+- The backend reads `app.cors.allowed-origins` (env: `CORS_ALLOWED_ORIGINS`). Dev defaults include `http://localhost:5173`. **Any new origin (different port, LAN IP for phone testing, ngrok URL) must be added on the backend side** or the browser blocks the call before it leaves.
+- `VITE_API_BASE_URL` (default `http://localhost:8080`) is the only thing pointing this app at the backend.
 
-## Package layout
+### Auth flow (the central nervous system)
 
-```
-com.majstr.backend
-├── MajstrApplication.java     — @SpringBootApplication, registers @ConfigurationProperties
-├── config/                    — SecurityConfig, OpenApiConfig, *Properties records
-├── controller/                — REST endpoints (thin, delegate to services)
-├── service/                   — business logic, @Transactional boundaries
-├── repository/                — Spring Data JPA interfaces
-├── entity/                    — JPA entities (Lombok-annotated)
-├── dto/                       — request/response **records**, validated with jakarta.validation
-├── security/                  — JwtService, filters, UserPrincipal, body-cache wrapper
-└── exception/                 — typed exceptions + GlobalExceptionHandler
-```
+Three files own auth and they must stay in sync:
 
-Layering rule: `controller → service → repository`. Entities never leave
-the service layer — controllers return DTOs. `passwordHash` never appears
-in any response (`UserResponse` excludes it; `User#toString` excludes it).
+1. `src/lib/tokens.ts` — token storage. **localStorage by design** (PWA boot-from-home-screen needs persistence; trade-offs documented in the file). `httpOnly` cookies are the planned upgrade once the backend supports them.
+2. `src/api/client.ts` — the axios instance with two interceptors:
+   - request: attaches `Authorization: Bearer <accessToken>`.
+   - response: on 401, refreshes via `/api/auth/refresh` and retries the original request. A module-level `refreshInFlight` promise **deduplicates concurrent 401s** — don't introduce a parallel refresh path or you'll race-rotate the refresh token. `/api/auth/login` and `/api/auth/refresh` are explicitly excluded from the refresh logic to avoid loops. Use the exported `rawApi` for endpoints that must skip the bearer (login, register).
+3. `src/routes/ProtectedRoute.tsx` — auth gate driven by `useMe()`. Decision tree: no token → redirect; token present + `/me` pending → spinner; `/me` errored → redirect (interceptor already cleared tokens on a failed refresh).
 
-## Architecture notes (non-obvious)
+`useLogin` primes the `['me']` cache with the user from the login response so the dashboard renders without a second `/me` round-trip.
 
-### Auth flow
+### PWA / service worker
 
-1. `POST /api/auth/register` — `AuthService.register` hashes via BCrypt(12),
-   persists the user, issues access + refresh tokens.
-2. `POST /api/auth/login` — `LoginRateLimitFilter` runs first
-   (`addFilterBefore(UsernamePasswordAuthenticationFilter)`), then the
-   controller delegates to `AuthService.login`.
-3. `POST /api/auth/refresh` — `RefreshTokenService.rotate` revokes the old
-   refresh token and issues a new pair (rotation pattern).
-4. `GET /api/auth/me` — `JwtAuthenticationFilter` parses the Bearer token,
-   loads the user, sets `SecurityContextHolder` with `UserPrincipal`.
+- Uses `vite-plugin-pwa` with the **`injectManifest` strategy** (not `generateSW`). The custom SW at `src/sw.ts` precaches the app shell, handles `push` and `notificationclick`, and **never caches `/api/**`** (user-specific data). If switching strategies, you lose the ability to handle push.
+- The SW calls `skipWaiting()` + `clients.claim()` on install/activate, and `registerType: 'autoUpdate'` is set in `main.tsx`, so users land on the new build on next navigation.
+- Web push subscribe flow exists end-to-end (`EnablePushButton` → `usePush` → `pushApi.subscribe`), but **the backend `/api/push/subscribe` endpoint is a known TODO and currently 404s**. The client side stays subscribed locally; whoever lands the backend will likely only need to verify the payload shape.
+- iOS web push requires the PWA to be installed via Safari → Add to Home Screen on iOS 16.4+. The button is a no-op in regular mobile Safari.
 
-### Refresh tokens are hashed at rest
+### Conventions
 
-Raw refresh token = 48 random bytes, base64url-encoded, returned to the
-client **only once** on issue. The DB stores only its SHA-256 hash
-(`refresh_tokens.token_hash`, UNIQUE). On `/refresh`, the incoming raw
-token is re-hashed and looked up by hash. `revoked = true` is set on the
-old row before issuing the new one. Don't change this to store raw tokens.
+- Path alias `@/*` → `src/*` (configured in both `tsconfig.app.json` and `vite.config.ts`). Use it instead of relative `../../` chains.
+- TypeScript is `strict` including `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax`. `import type { ... }` is required for type-only imports — a plain `import` will fail the build.
+- React Query defaults are set in `main.tsx` (`staleTime: 30s`, `retry: 1`, `refetchOnWindowFocus: false`); they're chosen for mobile feel, not test convenience.
+- All env access goes through `src/lib/config.ts`. Don't read `import.meta.env` from anywhere else.
+- All thrown errors should go through `toAppError()` from `src/api/errors.ts` to get a Ukrainian user-facing message + structured backend payload.
+- **UI strings are in Ukrainian** (lang `uk` in the manifest). Code, comments, commit messages, and docs stay in English.
 
-### Login rate limit relies on a custom request wrapper
+### Feature folder layout
 
-`LoginRateLimitFilter` needs to read the JSON body to extract `email` for
-the rate-limit key, **and** Spring still needs to read it for `@RequestBody`.
-Servlet input streams aren't re-readable, and `ContentCachingRequestWrapper`
-doesn't replay reads — so we use a custom
-[CachedBodyHttpServletRequest](src/main/java/com/majstr/backend/security/CachedBodyHttpServletRequest.java)
-that buffers the body once and yields a fresh `ServletInputStream` per
-`getInputStream()` call. The filter passes the wrapped request downstream.
-
-Bucket key is `lowercased-email + "|" + clientIp`, where `clientIp`
-respects the first entry of `X-Forwarded-For` if present. Buckets live in
-a `ConcurrentHashMap` — fine for single-instance dev/prod but a known
-limitation for multi-node deployments (would need a shared store).
-
-### Spring Security 7 wiring
-
-`SecurityConfig.filterChain` uses the lambda DSL only (Spring 7 removed
-the deprecated chained forms). Both custom filters are added with
-`addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)` —
-order matters: `LoginRateLimitFilter` must run before
-`JwtAuthenticationFilter` so login attempts are rate-limited even when no
-JWT is presented. Public paths are listed in `SecurityConfig.PUBLIC_PATHS`;
-everything else requires authentication.
-
-CORS is configured via `CorsConfigurationSource` bean fed by
-`CorsProperties.allowedOrigins` (comma-separated env var).
-
-### Error response shape
-
-All errors flow through `GlobalExceptionHandler` and use
-[ErrorResponse](src/main/java/com/majstr/backend/dto/ErrorResponse.java):
-
-```
-{ timestamp, status, error, message, path, retryAfterSeconds? }
-```
-
-`retryAfterSeconds` is set only by `ErrorResponse.rateLimited(...)` from
-the rate-limit filter. Null fields are stripped globally via
-`spring.jackson.default-property-inclusion: non_null`.
-
-Status mapping:
-- 400 — `MethodArgumentNotValidException`, `ConstraintViolationException`,
-  `HttpMessageNotReadableException`
-- 401 — `BadCredentialsException`, `UsernameNotFoundException`,
-  `InvalidTokenException`, any other `AuthenticationException`
-- 403 — `AccessDeniedException`
-- 409 — `EmailAlreadyExistsException`
-- 429 — emitted directly by `LoginRateLimitFilter` (does **not** go through
-  the advice — it bypasses Spring MVC because the filter writes the
-  response itself)
-- 500 — fallback, with a logged stack trace
-
-### Schema is owned by Flyway
-
-`hibernate.ddl-auto: validate`. Never put schema changes in entity
-annotations expecting Hibernate to apply them. Add a new
-`V<N>__<desc>.sql` under `src/main/resources/db/migration/`. The
-`users.trade` column has a `CHECK` constraint enumerating the allowed
-values — if you add a `Trade` enum constant, write a migration to extend
-the CHECK.
-
-### Entities vs. records
-
-- **Entities** (`User`, `RefreshToken`) — mutable JPA, Lombok
-  `@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor`,
-  `@EqualsAndHashCode(of = "id")` to avoid the lazy-loading pitfall.
-  `@ToString(exclude = "passwordHash")` on `User`.
-- **DTOs** — `record`s with `jakarta.validation` constraints on
-  components. Don't mix Lombok with records.
-
-## Gotchas
-
-- **Spring Boot 4 split many auto-configs into per-feature modules** that
-  starters do *not* pull transitively. So far we've hit:
-  - **`spring-boot-flyway`** — required for Flyway auto-config. Without it
-    Flyway silently does nothing, Hibernate then fails schema validation.
-    Already declared in `build.gradle.kts`; don't remove it.
-  - Test-slice annotations (`@WebMvcTest` etc.) are also gone — see
-    *Testing* below.
-  Expect similar surprises for other auto-configs (`spring-boot-liquibase`,
-  `spring-boot-jpa-test`, `spring-boot-jdbc-test`, ...). Symptom is
-  usually "feature X silently doesn't run" or a NoClassDefFound.
-- **Jackson 3 package**: Spring Boot 4 ships Jackson 3, whose package is
-  `tools.jackson.*` (not `com.fasterxml.jackson.*`). When injecting
-  `ObjectMapper`, use `import tools.jackson.databind.ObjectMapper;`. The
-  `com.fasterxml.jackson.*` classes may still be on the classpath
-  (transitively via `jjwt-jackson`) — they're for jjwt's internal use,
-  don't pull them into application code.
-- **Lombok + Java 25**: works via the Spring Boot–managed Lombok version.
-  If you bump Java further, verify Lombok supports it.
-- **JWT secret length**: HS256 requires ≥ 32 bytes (256 bits). Validated
-  by `JwtProperties` (`@Size(min = 32)`). Generate with
-  `openssl rand -base64 48`.
-- **`-parameters` compile flag** is enabled — required for
-  `@PathVariable`/`@RequestParam` without explicit names and for Spring 6+
-  parameter-name discovery. Don't remove it from `build.gradle.kts`.
-- **`open-in-view: false`** — JPA sessions don't extend into the view
-  layer. If you need a lazy association in a controller, fetch it
-  explicitly in the service.
-
-## Testing
-
-**Spring Boot 4 removed all test-slice annotations** — `@WebMvcTest`,
-`@AutoConfigureMockMvc`, `@DataJpaTest`, etc. are gone from every jar.
-Tests therefore use one of two patterns:
-
-1. **Controller tests** (`AuthControllerTest`) — pure Mockito with
-   `@ExtendWith(MockitoExtension.class)` + `@Mock` / `@InjectMocks` +
-   `MockMvcBuilders.standaloneSetup(controller)`. No Spring context, no
-   DB, instant startup. `GlobalExceptionHandler` is registered manually
-   via `.setControllerAdvice(...)` so the error mapping is exercised too.
-2. **Integration tests** (not yet wired) — full `@SpringBootTest` against
-   a **Testcontainers** PostgreSQL. Don't try H2; the Flyway migrations
-   are PostgreSQL-specific.
-
-`application-test.yml` still holds a test JWT secret for the day we add
-an integration slice that loads the real context.
-
-## Open-question log
-
-[docs/open-questions.md](docs/open-questions.md) keeps deferred decisions
-and known gaps across iterations — multi-instance state, billing,
-PHOTO_REPORTS / AI_ASSISTANT, JWT key rotation, etc. There is a skill
-at `.claude/skills/open-questions/SKILL.md` whose description says "use
-at the start of every new iteration"; Claude should self-trigger it via
-the Skill tool whenever the user kicks off a new step / feature, before
-writing any code. It reads the file, classifies every `OPEN` item against
-the upcoming work (in scope / adjacent / out of scope), and offers to
-promote, close, or add items. Update statuses inline, don't rewrite the
-file. When an item is closed, leave it in the file with `RESOLVED` +
-a one-line note so the history is preserved.
-
-## Conventions
-
-- **Language**: all code, comments, log messages, SQL, YAML, and
-  Markdown — **English only**. The user prefers chatting in Ukrainian but
-  artifacts stay English.
-- **Comments**: default to none. Write a one-liner only when the *why* is
-  non-obvious (e.g. the body-cache wrapper rationale). Don't restate code.
-- **Boundaries of change**: keep changes scoped. Bug fix ≠ refactor.
-  Don't add abstractions for hypothetical future needs.
-- **No backwards-compat shims** for code that hasn't shipped — this is a
-  greenfield project; just change it.
-
-## Not implemented yet
-
-These are intentional gaps to be aware of (don't claim they exist):
-
-- No `actuator` starter — `/actuator/health` is permitted in
-  `SecurityConfig` for future use but the dependency isn't on the
-  classpath yet.
-- No scheduled cleanup of expired refresh tokens (the
-  `RefreshTokenRepository.deleteExpired` query exists; nothing calls it).
-- No `User` profile / logo upload endpoints — only the column is in V1.
-- No integration tests (only the MockMvc slice).
-- No multi-instance rate-limit store (in-memory `ConcurrentHashMap`).
-- No estimates / projects / client-communication domain — that's the
-  next iteration.
+`src/features/<surface>/` holds the pages and the hooks/schemas they own (e.g. `LoginPage.tsx` + `loginSchema.ts` + `useLogin.ts`). Cross-cutting hooks (`useToast`, `usePush`) live in `src/hooks/`. Add new surfaces as sibling folders rather than splitting them across `pages/` and `hooks/` top-level dirs.

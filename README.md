@@ -1,137 +1,142 @@
-# Majstr Backend
+# Majstr PWA
 
-SaaS backend for Ukrainian contractors: estimate tracking and client
-communication. This iteration covers authentication and the project
-foundation only.
+Mobile-first React + TypeScript PWA. Client of the Spring Boot backend
+that lives at the sibling repo `majstr-app` (here:
+`C:\Work\Majstr app\`). This iteration ships the auth flow only —
+register, login, dashboard stub, refresh-token rotation, plus PWA
+manifest, service worker, and the scaffolding for web push.
 
 ## Stack
 
-- Spring Boot **4.0.6** (Spring Framework 7) on Java **25** (LTS)
-- Gradle (Kotlin DSL)
-- PostgreSQL **17** via Docker
-- Spring Data JPA / Hibernate + Flyway
-- Spring Security 7 + JWT (jjwt 0.12.x), stateless
-- Bucket4j 8.x — rate limiting
-- springdoc-openapi — Swagger UI at `/swagger-ui.html`
-- Lombok, JUnit 5 + MockMvc
+- React 19 + TypeScript (strict)
+- Vite 6 + `vite-plugin-pwa` (`injectManifest` strategy with a custom SW)
+- React Router 7
+- TanStack Query 5 for server state
+- Axios HTTP client with a refresh-token interceptor
+- Tailwind CSS 3 for styling
+- react-hook-form + Zod for forms
 
 ## Quick start
 
-### 1. Set up environment variables
-
 ```bash
+# 1. install deps
+npm install
+
+# 2. point at your backend
 cp .env.example .env
-# generate a real JWT secret:
-openssl rand -base64 48
-# paste it into JWT_SECRET in .env, then update POSTGRES_PASSWORD
+# edit .env if backend is not on http://localhost:8080
+
+# 3. run the dev server
+npm run dev
+# opens http://localhost:5173 — Vite binds 0.0.0.0 so you can also hit it
+# from your phone on the same Wi-Fi (see "Test on a phone" below).
 ```
 
-### 2. Start the database
+Build for production:
 
 ```bash
-docker compose up -d
-docker compose ps         # confirm the healthcheck reports "healthy"
+npm run build           # outputs dist/
+npm run preview         # serves dist/ for a quick sanity check
 ```
 
-Postgres listens on `localhost:5432`; data is kept in the named volume
-`majstr_pgdata` and survives container restarts.
+## Backend CORS reminder
 
-### 3. Run the application
+The backend already configures CORS from `app.cors.allowed-origins` (or
+the `CORS_ALLOWED_ORIGINS` env var). The dev defaults include
+`http://localhost:5173`, so this PWA works out of the box.
 
-Make sure the variables from `.env` are exported into your shell
-(`set -a; source .env; set +a` in bash, or an IDE run configuration),
-then:
+If you run the dev server on a different port, or you open it from your
+phone via `http://192.168.x.y:5173`, **add that origin** to the backend's
+`CORS_ALLOWED_ORIGINS` (comma-separated). Without it the browser blocks
+the API call before it even leaves.
+
+## Icons
+
+`vite-plugin-pwa` needs three PNG icons referenced by the manifest:
+
+```
+public/icons/icon-192.png
+public/icons/icon-512.png
+public/icons/icon-maskable-512.png
+public/icons/apple-touch-icon.png
+```
+
+A placeholder `public/logo.svg` is included (orange tile with a white
+"M"). To generate the PNGs from it in one command:
 
 ```bash
-./gradlew bootRun
+npx pwa-asset-generator public/logo.svg public/icons \
+  --icon-only --type png --opaque false --padding "0"
+
+npx pwa-asset-generator public/logo.svg public/icons \
+  --icon-only --type png --opaque true --maskable true \
+  --background "#ea580c" --padding "10%"
 ```
 
-> If you don't have `./gradlew` yet, generate it once with
-> `gradle wrapper --gradle-version 8.14` — you'll need a system Gradle
-> 8.10+ for Java 25 toolchain support.
+You only need to do this once (or after you swap the logo). If you skip
+it, the app still runs but the manifest will log icon-not-found warnings
+and the "Add to Home Screen" prompt shows a generic icon.
 
-The server listens on `http://localhost:8080`. Flyway runs `V1` and `V2`
-automatically on startup.
+## Test on a phone
 
-### 4. Swagger UI
+PWA install prompts and `Notification.requestPermission()` both refuse
+to run on plain HTTP, except for `localhost`. To test the real install
+on your phone:
 
-Open `http://localhost:8080/swagger-ui.html`.
+1. Make sure the phone is on the same Wi-Fi as your laptop.
+2. Find your laptop's local IP:
+   - Windows: `ipconfig` → look for IPv4
+   - macOS / Linux: `ifconfig` or `ip addr`
+3. Open `http://<your-ip>:5173` on the phone.
+4. Add the local IP to the backend's `CORS_ALLOWED_ORIGINS` (see above).
+5. **Android (Chrome):** menu → *Install app* / *Add to Home Screen*.
+6. **iOS (Safari only):** share button → *Add to Home Screen*.
 
-## REST API (auth)
+For full PWA features (service worker beyond `localhost`, web push), you
+need HTTPS. Two easy options:
 
-| Method | Path | Description | Auth |
-| --- | --- | --- | --- |
-| POST | `/api/auth/register` | Register a new contractor | public |
-| POST | `/api/auth/login` | Issue access + refresh tokens | public, 5/15min rate limit |
-| POST | `/api/auth/refresh` | Exchange refresh for a new pair | public |
-| GET  | `/api/auth/me` | Currently authenticated contractor | Bearer JWT |
+- `ngrok http 5173` — gives you a public HTTPS URL.
+- `mkcert` + Vite's HTTPS option — local certificate.
 
-### Example: register
+## Web push
 
-```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email":"john@example.com",
-    "password":"S3cret-pass!",
-    "fullName":"John Smith",
-    "trade":"ELECTRICAL",
-    "phone":"+15551234567",
-    "companyName":"Smith Electrical LLC"
-  }'
-```
+`EnablePushButton` on the dashboard kicks off:
 
-Response: `accessToken` (15 min) + `refreshToken` (7 days) + `user`.
+1. `Notification.requestPermission()`
+2. `serviceWorkerRegistration.pushManager.subscribe()` with the VAPID
+   public key from `VITE_VAPID_PUBLIC_KEY`
+3. `POST /api/push/subscribe` to hand the subscription to the backend
 
-### Example: authenticated request
+Step 3 currently fails with 404 — the backend endpoint is a TODO. The
+client code is wired up so when the backend lands, only the request
+shape might need a tweak.
 
-```bash
-curl http://localhost:8080/api/auth/me \
-  -H "Authorization: Bearer <accessToken>"
-```
+**iOS caveat:** Apple ships web push only for PWAs installed via *Add
+to Home Screen* on iOS 16.4+. The button will be a no-op in regular
+Safari.
 
-## Rate limiting
-
-`POST /api/auth/login` is capped at **5 attempts per 15 minutes** keyed by
-`email + IP`. When exceeded the server returns HTTP 429 with a structured
-error body and a `Retry-After` header (seconds until the bucket refills).
-
-## Error format
-
-Every error is returned in a single shape:
-
-```json
-{
-  "timestamp": "2026-05-25T10:15:30Z",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "email: must be a well-formed email address",
-  "path": "/api/auth/register"
-}
-```
-
-`retryAfterSeconds` is included only on 429 responses.
-
-## Package layout
+## Project layout
 
 ```
-com.majstr.backend
-├── config/      — Spring Security, CORS, OpenAPI, @ConfigurationProperties
-├── controller/  — REST endpoints
-├── service/     — business logic
-├── repository/  — Spring Data JPA
-├── entity/      — JPA entities
-├── dto/         — request/response records
-├── security/    — JWT, UserDetails, filters
-└── exception/   — global handler + typed exceptions
+src/
+├── api/        HTTP client, endpoint wrappers, backend response types
+├── components/ reusable UI primitives (Button, Input, FormField, Spinner, Toast)
+├── features/   feature folders, one per surface (auth, dashboard)
+├── hooks/      cross-cutting hooks (useToast, usePush)
+├── lib/        token storage, config, helpers, push utilities
+├── routes/     ProtectedRoute, route table
+├── styles/     Tailwind directives, base globals
+├── sw.ts       custom service worker (precache + push handler)
+├── App.tsx, main.tsx
 ```
 
-## Tests
+`src/main.tsx` is the entry point. It wires `QueryClient`, the router,
+and the SW registration.
 
-```bash
-./gradlew test
-```
+## Where to look first
 
-The base layer is `AuthControllerTest` (MockMvc) covering `register` and
-`login`. Integration tests against a real PostgreSQL will come next via
-Testcontainers.
+- `src/api/client.ts` — axios instance, refresh-token interceptor
+- `src/lib/tokens.ts` — token storage and why `localStorage`
+- `src/routes/ProtectedRoute.tsx` — auth gate driven by `useMe`
+- `src/sw.ts` — push notification handler
+- `vite.config.ts` — manifest + PWA setup

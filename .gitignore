@@ -1,28 +1,22 @@
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-.idea/
-*.iml
-*.iws
-*.ipr
-out/
-.vscode/
-
+node_modules
+dist
+dist-ssr
 .env
 .env.local
-*.log
+.env.*.local
+*.local
 
-# Claude Code: keep shared commands, ignore local-only settings
-.claude/settings.local.json
+# Vite + PWA
+dev-dist
 
-# Auto-downloaded by the downloadPdfFonts Gradle task
-src/main/resources/fonts/
+# IDE
+.idea
+.vscode
+*.iml
 
-# Local file storage (logos and other uploads)
-data/
-
+# OS
 .DS_Store
 Thumbs.db
+
+# logs
+*.log
