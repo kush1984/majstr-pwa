@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply font-sans text-gray-900 antialiased;
+  }
+  /* Avoid the iOS Safari "tap to zoom" bump when an input has font-size < 16px */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
