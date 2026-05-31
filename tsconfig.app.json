@@ -22,7 +22,7 @@
     "noUncheckedSideEffectImports": true,
 
     /* paths */
-    "baseUrl": "./majstr-pwa",
+    "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     },

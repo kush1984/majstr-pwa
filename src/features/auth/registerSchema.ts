@@ -24,7 +24,9 @@ export const registerSchema = z.object({
     .string()
     .min(1, 'Введіть ім\'я та прізвище')
     .max(255, 'Занадто довге значення'),
-  trade: z.enum(TRADE_VALUES, { message: 'Оберіть тип робіт' }),
+  trades: z
+    .array(z.enum(TRADE_VALUES))
+    .min(1, 'Оберіть хоча б один тип робіт'),
   phone: z
     .string()
     .min(5, 'Введіть телефон')

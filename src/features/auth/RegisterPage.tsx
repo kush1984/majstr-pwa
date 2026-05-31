@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
-import { Select } from '@/components/Select.tsx';
+import { Checkbox } from '@/components/Checkbox.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { useRegister } from './useRegister.ts';
 import {
@@ -32,7 +32,7 @@ export function RegisterPage() {
       email: '',
       password: '',
       fullName: '',
-      trade: '' as unknown as Trade,
+      trades: [],
       phone: '',
       companyName: '',
     },
@@ -48,7 +48,7 @@ export function RegisterPage() {
     try {
       await register$.mutateAsync({
         ...values,
-        trade: values.trade as Trade,
+        trades: values.trades as Trade[],
       });
     } catch (err) {
       const e = toAppError(err);
@@ -96,14 +96,26 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField label="Тип робіт" htmlFor="trade" required error={errors.trade?.message}>
-          <Select id="trade" invalid={Boolean(errors.trade)} defaultValue="" {...register('trade')}>
-            <option value="" disabled>Оберіть зі списку</option>
+        <fieldset>
+          <legend className="mb-1 block text-sm font-medium text-gray-700">
+            Тип робіт
+            <span className="ml-0.5 text-red-500" aria-hidden>*</span>
+            <span className="ml-2 font-normal text-gray-500">можна обрати кілька</span>
+          </legend>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {TRADE_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+              <Checkbox
+                key={t.value}
+                value={t.value}
+                label={t.label}
+                {...register('trades')}
+              />
             ))}
-          </Select>
-        </FormField>
+          </div>
+          {errors.trades && (
+            <span className="mt-1 block text-xs text-red-600">{errors.trades.message}</span>
+          )}
+        </fieldset>
 
         <FormField label="Телефон" htmlFor="phone" required error={errors.phone?.message}>
           <Input

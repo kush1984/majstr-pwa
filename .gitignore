@@ -9,6 +9,9 @@ dist-ssr
 # Vite + PWA
 dev-dist
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # IDE
 .idea
 .vscode

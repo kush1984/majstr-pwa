@@ -11,7 +11,7 @@ export interface UserResponse {
   id: string;
   email: string;
   fullName: string;
-  trade: Trade;
+  trades: Trade[];
   phone: string;
   companyName: string;
   logoUrl: string | null;
@@ -32,7 +32,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   fullName: string;
-  trade: Trade;
+  trades: Trade[];
   phone: string;
   companyName: string;
 }

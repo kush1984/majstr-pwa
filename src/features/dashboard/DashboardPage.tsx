@@ -37,7 +37,7 @@ export function DashboardPage() {
           </h2>
           {me && (
             <p className="mt-1 text-sm text-gray-600">
-              {TRADE_LABEL[me.trade] ?? me.trade}
+              {(me.trades ?? []).map((t) => TRADE_LABEL[t] ?? t).join(', ')}
               {' · '}
               <span className="text-gray-400">план</span>{' '}
               <span className="font-medium text-brand-700">{me.plan}</span>

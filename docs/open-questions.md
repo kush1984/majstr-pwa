@@ -22,135 +22,184 @@ one-line summary — keep the item in the file as a record.
 
 ---
 
-## Architecture & operations
+## PWA & service worker
 
-### Multi-instance support for in-memory state
+### App icons not generated
 - **Status:** OPEN
-- **Since:** step 1 (login limiter), tightened in step 3 (portal limiter, lastActiveAt tracker)
-- **Context:** `LoginRateLimitFilter`, `PublicPortalRateLimitFilter` and `LastActiveTracker` all keep state in process-local `ConcurrentHashMap`s. Single-node is fine. On a second pod, users could double their rate-limit budget by being load-balanced across nodes, and `lastActiveAt` would underreport.
-- **Notes / options:** Backed by Redis (Bucket4j has a Redis backend, would also serve `lastActiveAt` as a TTL key).
+- **Since:** initial scaffold
+- **Context:** `vite.config.ts` manifest references `/icons/icon-192.png`,
+  `/icons/icon-512.png`, `/icons/icon-maskable-512.png`; `index.html`
+  references `/icons/apple-touch-icon.png`. Only `public/logo.svg` is
+  committed — none of those PNGs exist. Result: manifest warnings in
+  DevTools, generic icon in the Add-to-Home-Screen prompt on Android
+  and iOS.
+- **Notes / options:** Run the `pwa-asset-generator` commands from the
+  README once and commit the PNGs to `public/icons/`. Or swap to a
+  single SVG icon with `purpose: "any"` — least fuss but still no iOS
+  icon coverage.
 
-### Background cleanup of expired refresh tokens
+### Service worker update UX
 - **Status:** OPEN
-- **Since:** step 1
-- **Context:** `RefreshTokenRepository.deleteExpired` exists but nothing calls it. Table grows monotonically with revoked + expired rows.
-- **Notes / options:** `@Scheduled` job, daily at quiet hour. Or piggy-back on user login.
+- **Since:** initial scaffold
+- **Context:** `main.tsx` calls `registerSW({ immediate: true })` with
+  `autoUpdate`, but both `onNeedRefresh` and `onOfflineReady` are
+  no-ops. Users silently get the new build on next navigation — no
+  toast, no manual refresh button. In-progress form data is lost
+  without warning.
+- **Notes / options:** Show a toast ("Доступна нова версія, оновити?")
+  with a button that calls the `updateSW()` returned by `registerSW`.
+  Trade-off: more clicks vs. surprise reloads.
 
-### File storage migration to S3/R2
+### HTTPS for LAN phone testing
 - **Status:** OPEN
-- **Since:** step 3
-- **Context:** `LocalStorageService` is the only `StorageService` impl. Production cloud deploys want object storage.
-- **Notes / options:** Add `S3StorageService` behind `app.storage.kind` property. The interface should not change; if it does, refactor before adding the second impl.
+- **Since:** initial scaffold
+- **Context:** Service worker registration and
+  `Notification.requestPermission()` both refuse to run on plain HTTP
+  except for `localhost`. Today the README points at `ngrok` or
+  `mkcert` ad-hoc; opening `http://192.168.x.y:5173` on the phone
+  doesn't actually exercise the PWA features the user is trying to
+  test.
+- **Notes / options:** Add `vite-plugin-basic-ssl` (or document the
+  `mkcert` flow) so `npm run dev -- --https` Just Works for phone
+  testing.
 
-### Audit log for sensitive actions
+### Offline fallback / network indicator
 - **Status:** OPEN
-- **Since:** step 4
-- **Context:** Admin can change a user's plan via `/api/admin/users/{id}/plan` — nothing records who did it. Same for hypothetical future "suspend user", "delete user".
-- **Notes / options:** Separate `audit_events` table with `actor_id`, `action`, `target_id`, `payload`, `created_at`. Write via interceptor or explicit service calls.
+- **Since:** initial scaffold
+- **Context:** SW precaches the app shell, so the React app boots
+  offline — but then every `/api/*` call fails, axios surfaces "Сервер
+  недоступний", and there is no global indicator that the user is
+  offline. Confusing UX.
+- **Notes / options:** Subscribe to `online` / `offline` events; show a
+  sticky banner. Background-sync queueing for mutations is much later.
 
 ---
 
-## Security
+## Auth & sessions
 
-### JWT secret rotation strategy
+### httpOnly cookie migration for tokens
 - **Status:** OPEN
-- **Since:** step 1
-- **Context:** Today secret comes from env, no kid header, no key rollover. Rotating the secret invalidates every live access token at once. Acceptable for low traffic, painful at scale.
-- **Notes / options:** Add `kid` claim, keep two keys in rotation, deprecate old after access TTL passes.
+- **Since:** initial scaffold
+- **Context:** `src/lib/tokens.ts` documents the trade-off — localStorage
+  is XSS-vulnerable, but the backend returns tokens in the JSON body
+  today. A real XSS in any dependency would leak both access and
+  refresh tokens to an attacker.
+- **Notes / options:** Backend switches `/api/auth/login` + `/refresh`
+  to set `Secure; HttpOnly; SameSite=Strict` cookies; this app deletes
+  `tokens.ts`, sets `withCredentials: true` on axios. CORS gets
+  stricter (no `*` for `Access-Control-Allow-Origin`).
 
-### Share-link tokens stored raw vs hashed
+### Multi-tab refresh-token race
 - **Status:** OPEN
-- **Since:** step 3
-- **Context:** `EstimateShareLink.token` stores the raw token so the contractor can re-copy the URL later. DB compromise reveals all live share URLs.
-- **Notes / options:** Hash like refresh tokens; lose the "show URL again" feature, gain breach safety. Decide once we have real users.
+- **Since:** initial scaffold
+- **Context:** `refreshInFlight` in `src/api/client.ts` dedupes
+  concurrent 401s **within one tab**. Two tabs each hit 401 at the
+  same instant — they race on `/api/auth/refresh`, and the loser's
+  rotated refresh token gets invalidated, kicking the user out.
+- **Notes / options:** Coordinate via `BroadcastChannel('majstr-auth')`
+  or a `Web Locks` mutex. Real-world impact is rare (refresh windows
+  are long), so probably defer until anyone reports being kicked out.
 
-### Password reset flow
+### Backend logout endpoint
 - **Status:** OPEN
-- **Since:** step 1
-- **Context:** No reset endpoint — lock yourself out, lose the account.
-- **Notes / options:** Needs an email service first (see below).
+- **Since:** initial scaffold
+- **Context:** `useLogout` only clears localStorage. The refresh token
+  stays valid in the backend DB until natural expiry — stealing it
+  from a logged-out shared device still works.
+- **Notes / options:** Backend adds `POST /api/auth/logout` that revokes
+  the supplied refresh token; PWA hits it before clearing storage.
 
-### Email verification on register
+### Password reset UI
 - **Status:** OPEN
-- **Since:** step 1
-- **Context:** Anyone can register with any email; no proof of ownership. Fine for closed beta, blocks real billing later (people use throwaway emails).
+- **Since:** initial scaffold
+- **Context:** `LoginPage` already has a TODO comment for "Забули
+  пароль?". Blocked on backend endpoints + email transport.
+- **Notes / options:** Two screens: `/forgot-password` (email →
+  `POST /api/auth/forgot`) and `/reset-password?token=...` (new
+  password form). Pure UI work once backend ships.
 
-### Multi-factor auth / OAuth providers
-- **Status:** DEFERRED
-- **Since:** step 1
-- **Context:** Not needed for v1; B2C contractor audience won't expect it. Revisit if first paying customer asks.
+### Email verification flow
+- **Status:** OPEN
+- **Since:** initial scaffold
+- **Context:** `useRegister` auto-logs in on success. When the backend
+  adds email confirmation, the register response won't carry tokens
+  any more — needs a "перевір пошту" intermediate screen and a
+  `/verify-email?token=...` route.
+- **Notes / options:** Detect by response shape (no `accessToken` →
+  navigate to confirmation screen). Pure client change once backend
+  switches.
 
 ---
 
-## Business logic
+## Backend coupling
 
-### Billing integration
+### `POST /api/push/subscribe` is a 404
 - **Status:** OPEN
-- **Since:** step 4
-- **Context:** Plan change today is admin-only manual via `PATCH /api/admin/users/{id}/plan`. Real customers need self-serve checkout + recurring billing.
-- **Notes / options:** WayForPay or Fondy for UA market; Stripe if going international. Webhook-driven plan changes flowing through the same admin endpoint internally.
+- **Since:** initial scaffold
+- **Context:** `src/api/push.ts` defines a payload (endpoint +
+  expirationTime + p256dh + auth keys) and POSTs it. The backend
+  endpoint doesn't exist yet — the button shows "✓ Сповіщення
+  увімкнено" but no push ever arrives.
+- **Notes / options:** Block on backend. When it lands, verify the DTO
+  matches what Java expects; current shape mirrors the standard
+  `PushSubscriptionJSON` interface so it should slot in cleanly.
 
-### Plan downgrade with over-limit data
+### VAPID public key wiring
 - **Status:** OPEN
-- **Since:** step 4
-- **Context:** PRO user with 7 active projects downgrades to FREE (limit 2). What happens? Today: nothing — limit only enforced on CREATE. They can edit / view existing 7 projects but can't make new ones until they delete down to 2.
-- **Notes / options:** Either current "soft enforcement" is fine (UX-friendly), or block writes to over-limit resources too. Pick before billing lands.
+- **Since:** initial scaffold
+- **Context:** `.env.example` ships `VITE_VAPID_PUBLIC_KEY=` empty. With
+  no key, `usePush.enable()` short-circuits with a Ukrainian error.
+  Need the backend to generate a keypair, expose the public half, and
+  document setup.
+- **Notes / options:** Simplest: backend admin command prints it once,
+  devs paste into `.env`. Cleaner: fetch from `/api/config/public` at
+  app boot — single source of truth, no copy-paste drift.
 
-### Trial period for PRO/TEAM
+### Manual DTO mirroring in `src/api/types.ts`
 - **Status:** OPEN
-- **Since:** step 4
-- **Context:** No trial concept. New user is FREE forever until manual upgrade.
-- **Notes / options:** Add `trial_ends_at` to user; `FeatureGuard` / `LimitService` reads it before checking plan.
-
-### Team plan: actual multi-user workspaces
-- **Status:** OPEN
-- **Since:** step 4
-- **Context:** `Plan.TEAM` exists in the enum but unlocks the same per-user features as PRO plus `AI_ASSISTANT`. No notion of a workspace shared between several users.
-- **Notes / options:** Workspaces would need new entities (`Workspace`, `WorkspaceMember`) and ownership semantics on existing tables would shift from `owner_id (User)` to `workspace_id`. Big change; do not start until customers ask.
-
-### Email notifications
-- **Status:** OPEN
-- **Since:** step 3
-- **Context:** Client signs an estimate or asks a question via portal — contractor learns about it only by refreshing the API.
-- **Notes / options:** Need an email transport (Postmark, Resend, SES). Once it exists, wire it into `PublicEstimateService.sign` and `askQuestion`.
+- **Since:** initial scaffold
+- **Context:** Types are hand-mirrored from Spring DTOs (documented in
+  CLAUDE.md). If the backend renames a field nothing breaks at compile
+  time on this side — the call just returns runtime-undefined for the
+  old name.
+- **Notes / options:** Generate types from OpenAPI
+  (`openapi-typescript` against Springdoc's `/v3/api-docs`). Adds a
+  build step. Worth it once the surface area grows past auth.
 
 ---
 
-## Features in the catalog enum but not implemented
+## Quality & tooling
 
-### PHOTO_REPORTS
+### ESLint config missing
 - **Status:** OPEN
-- **Since:** step 3
-- **Context:** Enum value exists in `Feature` and grants in PRO/TEAM. No code path uses it.
-- **Notes / options:** Likely a per-project gallery of contractor-uploaded photos with timestamped notes; reuses `StorageService`.
+- **Since:** initial scaffold
+- **Context:** `npm run lint` runs `eslint majstr-pwa` (wrong target —
+  the project root *is* `majstr-pwa`, should be `eslint .`) and there
+  is no `eslint.config.js` committed, so the command fails either way.
+  Net: no linting in CI or locally. CLAUDE.md flags this.
+- **Notes / options:** Add `eslint@9` flat config + `@typescript-eslint`,
+  `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`. Fix the
+  script to `eslint .` while at it.
 
-### AI_ASSISTANT
+### No test runner
 - **Status:** OPEN
-- **Since:** step 4
-- **Context:** Only TEAM has it. No code path.
-- **Notes / options:** "Draft estimate from project description" feels like the highest-value first cut. Anthropic Claude API integration; gated by `Feature.AI_ASSISTANT`.
+- **Since:** initial scaffold
+- **Context:** Zero coverage of the refresh-token interceptor,
+  `ProtectedRoute` state machine, form validation, or push lifecycle
+  — exactly the bits that bite hardest when they regress.
+- **Notes / options:** Vitest + React Testing Library for
+  components/hooks; MSW to mock the backend without spinning Spring
+  Boot. Playwright e2e for the install + login happy path is a later
+  step.
 
----
-
-## Testing & quality
-
-### Integration tests with Testcontainers
+### Client-side error reporting
 - **Status:** OPEN
-- **Since:** step 1
-- **Context:** All current tests are pure-Mockito unit tests. Nothing covers Flyway migrations actually running, real Hibernate mapping, or the security filter chain end-to-end.
-- **Notes / options:** Spring Boot 4 removed `@DataJpaTest` etc — see CLAUDE.md *Testing* section. Use `@SpringBootTest` + Testcontainers `PostgreSQLContainer`.
-
-### Estimate versioning / history
-- **Status:** DEFERRED
-- **Since:** step 2
-- **Context:** Edit a sent estimate — old version is gone. Clients may want to see what they originally signed if there's a dispute.
-- **Notes / options:** Snapshot on `SIGN`, immutable thereafter. Lower priority until a customer hits it.
-
-### Soft delete
-- **Status:** DEFERRED
-- **Since:** step 2
-- **Context:** All deletes are hard. No "trash" / undo.
-- **Notes / options:** Add `deleted_at` columns + repository scoping. Defer until someone deletes the wrong thing in anger.
+- **Since:** initial scaffold
+- **Context:** Uncaught errors disappear into the user's DevTools. We
+  hear about bugs only when someone reports them in Ukrainian over
+  Viber.
+- **Notes / options:** Sentry SDK + source-map upload on `vite build`.
+  Cheap and same provider the backend will likely use.
 
 ---
 
