@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Majstr — Мокапи інтерфейсу</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --brand: #F26B1F;
+    --brand-dark: #D85A12;
+    --brand-soft: #FFF1E8;
+    --brand-soft-2: #FFE0CC;
+    --ink: #0F1419;
+    --ink-2: #1F2937;
+    --gray-1: #6B7280;
+    --gray-2: #9CA3AF;
+    --gray-3: #D1D5DB;
+    --gray-4: #E5E7EB;
+    --gray-5: #F3F4F6;
+    --gray-6: #F9FAFB;
+    --white: #FFFFFF;
+    --green: #10B981;
+    --green-soft: #ECFDF5;
+    --amber: #F59E0B;
+    --amber-soft: #FFFBEB;
+    --blue: #3B82F6;
+    --blue-soft: #EFF6FF;
+    --red: #EF4444;
+    --red-soft: #FEF2F2;
+    --shadow-sm: 0 1px 2px rgba(15,20,25,0.04);
+    --shadow-md: 0 4px 12px rgba(15,20,25,0.06);
+    --shadow-lg: 0 20px 40px rgba(15,20,25,0.10);
+  }
+
+  body {
+    background: #EEF0F3;
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 32px 16px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-title {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .page-title h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .page-title .accent {
+    color: var(--brand);
+  }
+  .page-title p {
+    color: var(--gray-1);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  /* Phones grid */
+  .phones-wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 360px));
+    gap: 32px 24px;
+    justify-content: center;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .phone-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .phone {
+    width: 340px;
+    height: 720px;
+    background: #1a1a1a;
+    border-radius: 44px;
+    border: 6px solid #1a1a1a;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.05);
+    position: relative;
+    margin-bottom: 12px;
+  }
+
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    background: var(--white);
+    border-radius: 36px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    scrollbar-width: none;
+  }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  .status-bar {
+    height: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--white);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .status-bar .right {
+    display: flex;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-1);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Shared components */
+  .screen-content {
+    padding: 0 20px 100px;
+  }
+
+  .screen-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 4px 0 16px;
+  }
+
+  .greeting {
+    padding: 12px 0 4px;
+  }
+  .greeting-small {
+    font-size: 13px;
+    color: var(--gray-1);
+    margin-bottom: 2px;
+  }
+  .greeting-name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .greeting-trade {
+    background: var(--brand-soft);
+    color: var(--brand);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Metrics */
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 18px 0 20px;
+  }
+  .metric-card {
+    background: var(--white);
+    border: 1px solid var(--gray-4);
+    border-radius: 16px;
+    padding: 14px 14px 12px;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+  }
+  .metric-card:active {
+    transform: scale(0.98);
+  }
+  .metric-card .label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .metric-card .lbl {
+    font-size: 11px;
+    color: var(--gray-1);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .metric-card .icon-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .metric-card.active .icon-circle {
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+  .metric-card.pending .icon-circle {
+    background: var(--amber-soft);
+    color: var(--amber);
+  }
+  .metric-card .value {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--ink);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .metric-card .hint {
+    font-size: 11px;
+    color: var(--gray-1);
+    margin-top: 4px;
+  }
+
+  /* Main CTA */
+  .cta-primary {
+    background: var(--brand);
+    color: var(--white);
+    border: none;
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(242, 107, 31, 0.32);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    margin-bottom: 24px;
+    font-family: inherit;
+    letter-spacing: -0.01em;
+  }
+  .cta-primary:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(242, 107, 31, 0.32);
+  }
+  .cta-primary .plus {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  /* Section title */
+  .section-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 0 12px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .section-link {
+    font-size: 13px;
+    color: var(--brand);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Project cards */
+  .project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .project-card {
+    background: var(--white);
+    border: 1px solid var(--gray-4);
+    border-radius: 14px;
+    padding: 14px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .project-card:active {
+    transform: scale(0.99);
+  }
+  .project-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 18px;
+  }
+  .project-icon.tile { background: #FEE9D9; color: #BD4D00; }
+  .project-icon.electric { background: #FEF3C7; color: #92400E; }
+  .project-icon.plumb { background: #DBEAFE; color: #1E40AF; }
+  .project-icon.office { background: #D1FAE5; color: #065F46; }
+
+  .project-body { flex: 1; min-width: 0; }
+  .project-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-meta {
+    font-size: 12px;
+    color: var(--gray-1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 3px; height: 3px; background: var(--gray-2); border-radius: 50%; }
+
+  .project-side {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .project-sum {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 20px;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge.active { background: var(--green-soft); color: var(--green); }
+  .badge.pending { background: var(--amber-soft); color: var(--amber); }
+  .badge.draft { background: var(--gray-5); color: var(--gray-1); }
+  .badge.done { background: var(--blue-soft); color: var(--blue); }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--white);
+    border-top: 1px solid var(--gray-4);
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0 22px;
+    z-index: 40;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--gray-1);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    flex: 1;
+    padding: 4px 0;
+  }
+  .nav-item .nav-icon {
+    font-size: 22px;
+    line-height: 1;
+  }
+  .nav-item.active { color: var(--brand); }
+
+  /* Estimate editor */
+  .header-back {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    margin-bottom: 4px;
+  }
+  .back-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--gray-5);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .header-title-block { flex: 1; }
+  .header-title { font-size: 17px; font-weight: 700; color: var(--ink); }
+  .header-sub { font-size: 12px; color: var(--gray-1); margin-top: 1px; }
+
+  .client-banner {
+    background: linear-gradient(135deg, var(--brand-soft), var(--brand-soft-2));
+    border: 1px solid var(--brand-soft-2);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .client-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .client-info { flex: 1; }
+  .client-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .client-meta { font-size: 12px; color: var(--ink-2); opacity: 0.7; margin-top: 1px; }
+
+  /* Estimate items */
+  .category-block {
+    margin-bottom: 16px;
+  }
+  .category-head {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--brand);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .category-dot {
+    width: 5px;
+    height: 5px;
+    background: var(--brand);
+    border-radius: 50%;
+  }
+  .item-card {
+    background: var(--white);
+    border: 1px solid var(--gray-4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  .item-row-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4px;
+  }
+  .item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    flex: 1;
+  }
+  .item-sum {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+  .item-meta {
+    font-size: 12px;
+    color: var(--gray-1);
+    display: flex;
+    gap: 8px;
+  }
+  .add-btn {
+    background: var(--white);
+    border: 1px dashed var(--brand);
+    color: var(--brand);
+    border-radius: 12px;
+    padding: 12px;
+    width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  /* Estimate total bar (sticky) */
+  .total-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--ink);
+    color: var(--white);
+    padding: 14px 20px 26px;
+    z-index: 40;
+  }
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .total-label { font-size: 12px; color: rgba(255,255,255,0.65); font-weight: 500; }
+  .total-value { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+  .total-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .total-btn {
+    background: rgba(255,255,255,0.12);
+    color: var(--white);
+    border: none;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .total-btn.primary {
+    background: var(--brand);
+  }
+
+  /* Project detail */
+  .tabs {
+    display: flex;
+    gap: 6px;
+    border-bottom: 1px solid var(--gray-4);
+    margin: 12px 0 18px;
+  }
+  .tab {
+    padding: 10px 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-1);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    flex: 1;
+    text-align: center;
+  }
+  .tab.active {
+    color: var(--brand);
+    border-bottom-color: var(--brand);
+  }
+
+  .project-hero {
+    background: var(--gray-6);
+    border: 1px solid var(--gray-4);
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 4px;
+  }
+  .project-hero .title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .project-hero .addr {
+    font-size: 12px;
+    color: var(--gray-1);
+    margin-bottom: 12px;
+  }
+  .project-hero .client-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--gray-4);
+  }
+  .mini-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--brand-soft);
+    color: var(--brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .mini-text { font-size: 12px; color: var(--ink); }
+  .mini-text strong { font-weight: 600; }
+
+  .share-banner {
+    background: var(--brand);
+    color: var(--white);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 16px rgba(242, 107, 31, 0.28);
+  }
+  .share-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .share-text { flex: 1; }
+  .share-title { font-size: 14px; font-weight: 700; }
+  .share-sub { font-size: 11px; opacity: 0.85; margin-top: 1px; }
+
+  /* Catalog */
+  .filter-chips {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  .chip {
+    background: var(--gray-5);
+    color: var(--gray-1);
+    border: 1px solid transparent;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .chip.active {
+    background: var(--ink);
+    color: var(--white);
+  }
+
+  .catalog-item {
+    background: var(--white);
+    border: 1px solid var(--gray-4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+  .catalog-item-info { flex: 1; min-width: 0; }
+  .catalog-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .catalog-item-unit {
+    font-size: 12px;
+    color: var(--gray-1);
+  }
+  .catalog-item-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+
+  /* Profile */
+  .profile-hero {
+    background: linear-gradient(135deg, var(--brand-soft) 0%, var(--brand-soft-2) 100%);
+    border-radius: 18px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 auto 12px;
+    box-shadow: 0 8px 24px rgba(242,107,31,0.32);
+  }
+  .profile-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .profile-trade {
+    display: inline-block;
+    background: var(--white);
+    color: var(--ink-2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .plan-card {
+    background: var(--ink);
+    color: var(--white);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .plan-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .plan-title {
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    font-weight: 500;
+  }
+  .plan-name {
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .plan-tag {
+    background: var(--brand);
+    color: var(--white);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .plan-limit {
+    background: rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 12px 0;
+  }
+  .plan-limit-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .plan-limit-label { color: rgba(255,255,255,0.7); }
+  .progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--brand);
+    border-radius: 2px;
+    width: 67%;
+  }
+  .plan-cta {
+    background: var(--brand);
+    color: var(--white);
+    border: none;
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .menu-list {
+    background: var(--white);
+    border: 1px solid var(--gray-4);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--gray-4);
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--gray-5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--ink-2);
+    flex-shrink: 0;
+  }
+  .menu-text { flex: 1; }
+  .menu-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .menu-sub { font-size: 12px; color: var(--gray-1); margin-top: 1px; }
+  .menu-chevron {
+    color: var(--gray-2);
+    font-size: 16px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .empty-illustration {
+    width: 96px;
+    height: 96px;
+    background: var(--brand-soft);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+  }
+  .empty-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .empty-text {
+    font-size: 13px;
+    color: var(--gray-1);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    max-width: 240px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Section divider */
+  .section-divider {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--gray-1);
+    margin: 60px 0 24px;
+    letter-spacing: -0.01em;
+  }
+
+  /* Color/typography legend */
+  .legend {
+    max-width: 1200px;
+    margin: 80px auto 0;
+    background: var(--white);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: var(--shadow-md);
+  }
+  .legend h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .swatch {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--gray-4);
+  }
+  .swatch-color {
+    height: 64px;
+  }
+  .swatch-info {
+    padding: 10px 12px;
+    background: var(--white);
+  }
+  .swatch-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .swatch-hex {
+    font-size: 11px;
+    color: var(--gray-1);
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1><span class="accent">Majstr</span> · Реалістичні мокапи</h1>
+  <p>Помаранчевий бренд · світла тема · 6 ключових екранів</p>
+</div>
+
+<div class="phones-wrap">
+
+  <!-- ============ 1. ГОЛОВНА (Dashboard) ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content">
+          <div class="greeting">
+            <div class="greeting-small">Доброго ранку,</div>
+            <div class="greeting-name">
+              Андрій
+              <span class="greeting-trade">⚡ Електрика</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric-card active">
+              <div class="label-row">
+                <span class="lbl">Активних</span>
+                <div class="icon-circle">📁</div>
+              </div>
+              <div class="value">4</div>
+              <div class="hint">об'єкти в роботі</div>
+            </div>
+            <div class="metric-card pending">
+              <div class="label-row">
+                <span class="lbl">Очікує</span>
+                <div class="icon-circle">⏳</div>
+              </div>
+              <div class="value">2</div>
+              <div class="hint">кошториси без підпису</div>
+            </div>
+          </div>
+
+          <button class="cta-primary">
+            <span class="plus">+</span>
+            Новий кошторис
+          </button>
+
+          <div class="section-row">
+            <div class="section-title">Останні об'єкти</div>
+            <div class="section-link">Усі →</div>
+          </div>
+
+          <div class="project-list">
+            <div class="project-card">
+              <div class="project-icon tile">🛁</div>
+              <div class="project-body">
+                <div class="project-name">Ванна, кв. Олени</div>
+                <div class="project-meta">
+                  <span>Сонячна 12</span>
+                  <span class="dot"></span>
+                  <span>сьогодні</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">61 070 ₴</div>
+                <div class="badge active">В роботі</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon electric">⚡</div>
+              <div class="project-body">
+                <div class="project-name">Електрика, Іван</div>
+                <div class="project-meta">
+                  <span>Миру 5</span>
+                  <span class="dot"></span>
+                  <span>вчора</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">24 300 ₴</div>
+                <div class="badge pending">Кошторис</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon plumb">🔧</div>
+              <div class="project-body">
+                <div class="project-name">Сантехніка, Шевчук</div>
+                <div class="project-meta">
+                  <span>Шевченка 8</span>
+                  <span class="dot"></span>
+                  <span>3 дні</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">18 500 ₴</div>
+                <div class="badge draft">Чернетка</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-nav">
+          <div class="nav-item active"><div class="nav-icon">🏠</div><span>Головна</span></div>
+          <div class="nav-item"><div class="nav-icon">📁</div><span>Об'єкти</span></div>
+          <div class="nav-item"><div class="nav-icon">📖</div><span>Каталог</span></div>
+          <div class="nav-item"><div class="nav-icon">👤</div><span>Я</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="label">1 · Головна / Дашборд</div>
+  </div>
+
+  <!-- ============ 2. ОБ'ЄКТИ (список) ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content">
+          <h2 class="screen-title" style="margin-top: 12px;">Об'єкти</h2>
+
+          <div class="filter-chips">
+            <div class="chip active">Усі · 12</div>
+            <div class="chip">В роботі · 4</div>
+            <div class="chip">Завершені</div>
+          </div>
+
+          <div class="project-list">
+            <div class="project-card">
+              <div class="project-icon tile">🛁</div>
+              <div class="project-body">
+                <div class="project-name">Ванна, кв. Олени</div>
+                <div class="project-meta">
+                  <span>Сонячна 12</span>
+                  <span class="dot"></span>
+                  <span>Олена П.</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">61 070 ₴</div>
+                <div class="badge active">В роботі</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon electric">⚡</div>
+              <div class="project-body">
+                <div class="project-name">Електрика, Іван</div>
+                <div class="project-meta">
+                  <span>Миру 5</span>
+                  <span class="dot"></span>
+                  <span>Іван К.</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">24 300 ₴</div>
+                <div class="badge pending">Кошторис</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon plumb">🔧</div>
+              <div class="project-body">
+                <div class="project-name">Сантехніка, Шевчук</div>
+                <div class="project-meta">
+                  <span>Шевченка 8</span>
+                  <span class="dot"></span>
+                  <span>М. Шевчук</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">18 500 ₴</div>
+                <div class="badge draft">Чернетка</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon office">🏢</div>
+              <div class="project-body">
+                <div class="project-name">Офіс, ТОВ Будпром</div>
+                <div class="project-meta">
+                  <span>Героїв 18</span>
+                  <span class="dot"></span>
+                  <span>В. Кравчук</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">142 000 ₴</div>
+                <div class="badge done">Готово</div>
+              </div>
+            </div>
+
+            <div class="project-card">
+              <div class="project-icon tile">🏠</div>
+              <div class="project-body">
+                <div class="project-name">Квартира, Петренко</div>
+                <div class="project-meta">
+                  <span>Європейська 22</span>
+                  <span class="dot"></span>
+                  <span>Г. Петренко</span>
+                </div>
+              </div>
+              <div class="project-side">
+                <div class="project-sum">87 400 ₴</div>
+                <div class="badge active">В роботі</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="cta-primary" style="margin-top: 18px;">
+            <span class="plus">+</span>
+            Новий кошторис
+          </button>
+        </div>
+
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">🏠</div><span>Головна</span></div>
+          <div class="nav-item active"><div class="nav-icon">📁</div><span>Об'єкти</span></div>
+          <div class="nav-item"><div class="nav-icon">📖</div><span>Каталог</span></div>
+          <div class="nav-item"><div class="nav-icon">👤</div><span>Я</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="label">2 · Усі об'єкти</div>
+  </div>
+
+  <!-- ============ 3. ЕКРАН ОБ'ЄКТА ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content">
+          <div class="header-back">
+            <div class="back-btn">←</div>
+            <div class="header-title-block">
+              <div class="header-title">Об'єкт</div>
+              <div class="header-sub">Створено 18 листопада</div>
+            </div>
+          </div>
+
+          <div class="project-hero">
+            <div class="title">🛁 Ванна, кв. Олени</div>
+            <div class="addr">📍 вул. Сонячна 12, кв. 47 · 4 м²</div>
+            <span class="badge active">В роботі</span>
+            <div class="client-row">
+              <div class="mini-avatar">ОП</div>
+              <div class="mini-text"><strong>Олена П.</strong> · +380 67 123 4567</div>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <div class="tab active">Кошторис</div>
+            <div class="tab">Фото</div>
+            <div class="tab">Зміни</div>
+            <div class="tab">Акт</div>
+          </div>
+
+          <div class="share-banner">
+            <div class="share-icon">📤</div>
+            <div class="share-text">
+              <div class="share-title">Поділитися з клієнтом</div>
+              <div class="share-sub">Створити посилання на портал</div>
+            </div>
+            <div style="font-size: 18px;">→</div>
+          </div>
+
+          <div class="section-row">
+            <div class="section-title">Кошториси · 1</div>
+            <div class="section-link">+ Новий</div>
+          </div>
+
+          <div class="item-card" style="margin-bottom: 8px;">
+            <div class="item-row-top">
+              <div class="item-name">Кошторис v1 (актуальний)</div>
+              <div class="item-sum">61 070 ₴</div>
+            </div>
+            <div class="item-meta">
+              <span class="badge pending" style="margin-top: 0;">Очікує підпису</span>
+              <span style="margin-left: auto;">12 позицій</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">🏠</div><span>Головна</span></div>
+          <div class="nav-item active"><div class="nav-icon">📁</div><span>Об'єкти</span></div>
+          <div class="nav-item"><div class="nav-icon">📖</div><span>Каталог</span></div>
+          <div class="nav-item"><div class="nav-icon">👤</div><span>Я</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="label">3 · Екран об'єкта</div>
+  </div>
+
+  <!-- ============ 4. РЕДАКТОР КОШТОРИСУ ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content" style="padding-bottom: 180px;">
+          <div class="header-back">
+            <div class="back-btn">←</div>
+            <div class="header-title-block">
+              <div class="header-title">Кошторис</div>
+              <div class="header-sub">Чернетка · автозбереження</div>
+            </div>
+          </div>
+
+          <div class="client-banner">
+            <div class="client-avatar">ОП</div>
+            <div class="client-info">
+              <div class="client-name">Олена Петренко</div>
+              <div class="client-meta">Ванна, кв. 47 · 4 м²</div>
+            </div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Підготовка основи
+            </div>
+            <div class="item-card">
+              <div class="item-row-top">
+                <div class="item-name">Демонтаж старої плитки</div>
+                <div class="item-sum">3 600 ₴</div>
+              </div>
+              <div class="item-meta">
+                <span>18 м²</span>
+                <span class="dot"></span>
+                <span>200 ₴/м²</span>
+              </div>
+            </div>
+            <div class="item-card">
+              <div class="item-row-top">
+                <div class="item-name">Гідроізоляція</div>
+                <div class="item-sum">4 400 ₴</div>
+              </div>
+              <div class="item-meta">
+                <span>22 м²</span>
+                <span class="dot"></span>
+                <span>200 ₴/м²</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Укладка
+            </div>
+            <div class="item-card">
+              <div class="item-row-top">
+                <div class="item-name">Укладка плитки на стіни</div>
+                <div class="item-sum">12 600 ₴</div>
+              </div>
+              <div class="item-meta">
+                <span>18 м²</span>
+                <span class="dot"></span>
+                <span>700 ₴/м²</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Матеріали
+            </div>
+            <div class="item-card">
+              <div class="item-row-top">
+                <div class="item-name">Плитка настінна</div>
+                <div class="item-sum">8 800 ₴</div>
+              </div>
+              <div class="item-meta">
+                <span>22 м²</span>
+                <span class="dot"></span>
+                <span>400 ₴/м²</span>
+              </div>
+            </div>
+            <div class="item-card">
+              <div class="item-row-top">
+                <div class="item-name">Клей Ceresit CM11</div>
+                <div class="item-sum">960 ₴</div>
+              </div>
+              <div class="item-meta">
+                <span>40 кг</span>
+                <span class="dot"></span>
+                <span>24 ₴/кг</span>
+              </div>
+            </div>
+            <button class="add-btn">+ Додати позицію</button>
+          </div>
+        </div>
+
+        <div class="total-bar">
+          <div class="total-row">
+            <div>
+              <div class="total-label">До сплати</div>
+              <div class="total-value">61 070 ₴</div>
+            </div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.55); text-align: right;">
+              Роботи: 20 600 ₴<br>
+              Матеріали: 9 760 ₴
+            </div>
+          </div>
+          <div class="total-actions">
+            <button class="total-btn">📄 PDF</button>
+            <button class="total-btn primary">📤 Поділитися</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="label">4 · Редактор кошторису</div>
+  </div>
+
+  <!-- ============ 5. КАТАЛОГ ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content">
+          <h2 class="screen-title" style="margin-top: 12px;">Каталог</h2>
+
+          <div class="filter-chips">
+            <div class="chip active">Усі</div>
+            <div class="chip">Роботи</div>
+            <div class="chip">Матеріали</div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Електрика · 8
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Прокладка кабелю NYM 3×2.5</div>
+                <div class="catalog-item-unit">за метр</div>
+              </div>
+              <div class="catalog-item-price">45 ₴</div>
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Встановлення розетки</div>
+                <div class="catalog-item-unit">за шт</div>
+              </div>
+              <div class="catalog-item-price">120 ₴</div>
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Монтаж щитка</div>
+                <div class="catalog-item-unit">за шт</div>
+              </div>
+              <div class="catalog-item-price">3 200 ₴</div>
+            </div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Плитка · 4
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Укладка плитки на стіну</div>
+                <div class="catalog-item-unit">за м²</div>
+              </div>
+              <div class="catalog-item-price">700 ₴</div>
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Затирка швів</div>
+                <div class="catalog-item-unit">за м²</div>
+              </div>
+              <div class="catalog-item-price">80 ₴</div>
+            </div>
+          </div>
+
+          <div class="category-block">
+            <div class="category-head">
+              <span class="category-dot"></span>
+              Демонтаж · 3
+            </div>
+            <div class="catalog-item">
+              <div class="catalog-item-info">
+                <div class="catalog-item-name">Демонтаж старої плитки</div>
+                <div class="catalog-item-unit">за м²</div>
+              </div>
+              <div class="catalog-item-price">200 ₴</div>
+            </div>
+          </div>
+
+          <button class="add-btn" style="margin-top: 8px;">+ Додати позицію</button>
+        </div>
+
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">🏠</div><span>Головна</span></div>
+          <div class="nav-item"><div class="nav-icon">📁</div><span>Об'єкти</span></div>
+          <div class="nav-item active"><div class="nav-icon">📖</div><span>Каталог</span></div>
+          <div class="nav-item"><div class="nav-icon">👤</div><span>Я</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="label">5 · Каталог (по категоріях)</div>
+  </div>
+
+  <!-- ============ 6. ПРОФІЛЬ ============ -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span class="right">●●●●  ◑  100%</span>
+        </div>
+        <div class="screen-content">
+          <h2 class="screen-title" style="margin-top: 12px;">Профіль</h2>
+
+          <div class="profile-hero">
+            <div class="profile-avatar">АК</div>
+            <div class="profile-name">Андрій Коваль</div>
+            <div class="profile-trade">⚡ Електрика</div>
+          </div>
+
+          <div class="plan-card">
+            <div class="plan-head">
+              <div>
+                <div class="plan-title">Поточний план</div>
+                <div class="plan-name">FREE</div>
+              </div>
+              <span class="plan-tag">Безкоштовно</span>
+            </div>
+            <div class="plan-limit">
+              <div class="plan-limit-row">
+                <span class="plan-limit-label">Об'єкти</span>
+                <span style="font-weight: 600;">2 з 3</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+            <button class="plan-cta">⭐ Оновити до PRO · 199 ₴/міс</button>
+          </div>
+
+          <div class="menu-list">
+            <div class="menu-item">
+              <div class="menu-icon">🖼️</div>
+              <div class="menu-text">
+                <div class="menu-title">Логотип компанії</div>
+                <div class="menu-sub">Доступно в PRO</div>
+              </div>
+              <div class="menu-chevron">›</div>
+            </div>
+            <div class="menu-item">
+              <div class="menu-icon">🔔</div>
+              <div class="menu-text">
+                <div class="menu-title">Увімкнути сповіщення</div>
+                <div class="menu-sub">Push-повідомлення</div>
+              </div>
+              <div class="menu-chevron">›</div>
+            </div>
+            <div class="menu-item">
+              <div class="menu-icon">⚙️</div>
+              <div class="menu-text">
+                <div class="menu-title">Налаштування</div>
+                <div class="menu-sub">Профіль, контакти</div>
+              </div>
+              <div class="menu-chevron">›</div>
+            </div>
+            <div class="menu-item">
+              <div class="menu-icon" style="background: var(--red-soft); color: var(--red);">↪</div>
+              <div class="menu-text">
+                <div class="menu-title" style="color: var(--red);">Вийти</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-nav">
+          <div class="nav-item"><div class="nav-icon">🏠</div><span>Головна</span></div>
+          <div class="nav-item"><div class="nav-icon">📁</div><span>Об'єкти</span></div>
+          <div class="nav-item"><div class="nav-icon">📖</div><span>Каталог</span></div>
+          <div class="nav-item active"><div class="nav-icon">👤</div><span>Я</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="label">6 · Профіль</div>
+  </div>
+
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <h3>🎨 Design tokens · бери в Tailwind config</h3>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-color" style="background: #F26B1F;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Brand</div>
+        <div class="swatch-hex">#F26B1F</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #D85A12;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Brand dark (hover)</div>
+        <div class="swatch-hex">#D85A12</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #FFF1E8;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Brand soft (фон)</div>
+        <div class="swatch-hex">#FFF1E8</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #0F1419;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Ink (текст)</div>
+        <div class="swatch-hex">#0F1419</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #6B7280;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Gray (вторинний)</div>
+        <div class="swatch-hex">#6B7280</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #10B981;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Success (в роботі)</div>
+        <div class="swatch-hex">#10B981</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #F59E0B;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Warning (очікує)</div>
+        <div class="swatch-hex">#F59E0B</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background: #F9FAFB; border: 1px solid #E5E7EB;"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Surface (фон)</div>
+        <div class="swatch-hex">#F9FAFB</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 8px;">📝 Типографіка</h3>
+  <p style="font-size: 13px; color: var(--gray-1); margin-bottom: 16px;">
+    <strong style="color: var(--ink);">Inter</strong> (Google Fonts) — універсальна, чудова для українських символів.
+    Розміри: 11/12 (мета), 13 (тіло), 14 (item), 17 (header), 22 (greeting), 26+ (екрани/суми).
+  </p>
+
+  <h3 style="margin-top: 8px;">⚙️ Принципи</h3>
+  <ul style="font-size: 13px; color: var(--ink-2); padding-left: 20px; line-height: 1.7;">
+    <li>Радіуси: 10-12 (елементи) · 14-16 (картки) · 20+ (бейджі/чипи) · 44 (телефон)</li>
+    <li>Тіні: ледь помітні на картках, виразна тільки на головному CTA (помаранчева)</li>
+    <li>Помаранчевий <strong>економно</strong>: CTA + акценти. НЕ заливай великі площі.</li>
+    <li>Бейджі статусів: зелений (в роботі), янтарний (очікує), сірий (чернетка), синій (готово)</li>
+    <li>Категорії в каталозі/кошторисі — помаранчевий заголовок з крапкою-маркером</li>
+  </ul>
+</div>
+
+</body>
+</html>

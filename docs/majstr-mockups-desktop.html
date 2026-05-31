@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Majstr — Десктопні мокапи</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --brand: #F26B1F; --brand-dark: #D85A12; --brand-soft: #FFF1E8; --brand-soft-2: #FFE0CC;
+    --ink: #0F1419; --ink-2: #1F2937; --gray-1: #6B7280; --gray-2: #9CA3AF;
+    --gray-3: #D1D5DB; --gray-4: #E5E7EB; --gray-5: #F3F4F6; --gray-6: #F9FAFB;
+    --white: #FFFFFF; --green: #10B981; --green-soft: #ECFDF5; --amber: #F59E0B;
+    --amber-soft: #FFFBEB; --blue: #3B82F6; --blue-soft: #EFF6FF; --red: #EF4444; --red-soft: #FEF2F2;
+    --shadow-sm: 0 1px 2px rgba(15,20,25,0.04); --shadow-md: 0 4px 12px rgba(15,20,25,0.06);
+    --shadow-lg: 0 20px 40px rgba(15,20,25,0.10);
+  }
+  body { background:#EEF0F3; font-family:'Inter',sans-serif; color:var(--ink); padding:32px 16px 80px; -webkit-font-smoothing:antialiased; }
+  .page-title { text-align:center; margin-bottom:32px; }
+  .page-title h1 { font-size:34px; font-weight:800; letter-spacing:-0.03em; }
+  .page-title .accent { color:var(--brand); }
+  .page-title p { color:var(--gray-1); font-size:14px; margin-top:6px; }
+
+  .browser {
+    max-width:1280px; margin:0 auto 48px; background:var(--white);
+    border-radius:16px; overflow:hidden; box-shadow:var(--shadow-lg);
+    border:1px solid var(--gray-4);
+  }
+  .browser-bar {
+    height:44px; background:var(--gray-5); display:flex; align-items:center;
+    padding:0 16px; gap:8px; border-bottom:1px solid var(--gray-4);
+  }
+  .browser-dots { display:flex; gap:6px; }
+  .browser-dots span { width:11px; height:11px; border-radius:50%; }
+  .browser-dots span:nth-child(1){background:#FF5F57;}
+  .browser-dots span:nth-child(2){background:#FEBC2E;}
+  .browser-dots span:nth-child(3){background:#28C840;}
+  .browser-url {
+    flex:1; background:var(--white); border-radius:8px; height:26px;
+    display:flex; align-items:center; padding:0 12px; font-size:12px;
+    color:var(--gray-1); max-width:400px; margin:0 auto;
+  }
+
+  .app-shell { display:flex; min-height:680px; }
+
+  /* Sidebar */
+  .sidebar {
+    width:240px; background:var(--white); border-right:1px solid var(--gray-4);
+    padding:20px 14px; flex-shrink:0; display:flex; flex-direction:column;
+  }
+  .logo {
+    font-size:22px; font-weight:800; color:var(--brand); padding:8px 12px 20px;
+    letter-spacing:-0.02em;
+  }
+  .nav-link {
+    display:flex; align-items:center; gap:12px; padding:11px 12px;
+    border-radius:10px; font-size:14px; font-weight:500; color:var(--gray-1);
+    cursor:pointer; margin-bottom:2px; transition:all 0.15s;
+  }
+  .nav-link .ico { font-size:18px; width:22px; text-align:center; }
+  .nav-link.active { background:var(--brand-soft); color:var(--brand); font-weight:600; }
+  .nav-link:not(.active):hover { background:var(--gray-5); }
+  .sidebar-spacer { flex:1; }
+  .sidebar-user {
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border-radius:10px; cursor:pointer; border-top:1px solid var(--gray-4); margin-top:8px; padding-top:16px;
+  }
+  .su-avatar {
+    width:34px; height:34px; border-radius:50%; background:var(--brand);
+    color:var(--white); display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; flex-shrink:0;
+  }
+  .su-info { flex:1; min-width:0; }
+  .su-name { font-size:13px; font-weight:600; }
+  .su-plan { font-size:11px; color:var(--gray-1); }
+
+  /* Main area */
+  .main {
+    flex:1; background:var(--gray-6); padding:28px 32px; overflow-y:auto;
+    max-height:680px;
+  }
+  .main-header {
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;
+  }
+  .main-title { font-size:26px; font-weight:800; letter-spacing:-0.02em; }
+  .main-sub { font-size:13px; color:var(--gray-1); margin-top:2px; }
+  .btn-primary {
+    background:var(--brand); color:var(--white); border:none; padding:12px 20px;
+    border-radius:11px; font-size:14px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; gap:8px; font-family:inherit;
+    box-shadow:0 4px 14px rgba(242,107,31,0.3);
+  }
+  .btn-primary .plus {
+    width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,0.22);
+    display:flex; align-items:center; justify-content:center; font-size:15px;
+  }
+
+  /* Dashboard grid */
+  .dash-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px; }
+  .metric {
+    background:var(--white); border:1px solid var(--gray-4); border-radius:16px;
+    padding:18px; box-shadow:var(--shadow-sm); cursor:pointer;
+  }
+  .metric .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .metric .lbl { font-size:12px; color:var(--gray-1); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+  .metric .ic { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .metric.a .ic { background:var(--brand-soft); color:var(--brand); }
+  .metric.b .ic { background:var(--amber-soft); color:var(--amber); }
+  .metric.c .ic { background:var(--green-soft); color:var(--green); }
+  .metric .val { font-size:34px; font-weight:800; letter-spacing:-0.02em; line-height:1; }
+  .metric .hint { font-size:12px; color:var(--gray-1); margin-top:6px; }
+
+  .content-cols { display:grid; grid-template-columns:1.6fr 1fr; gap:20px; }
+  .panel { background:var(--white); border:1px solid var(--gray-4); border-radius:16px; padding:20px; }
+  .panel-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .panel-title { font-size:15px; font-weight:700; }
+  .panel-link { font-size:13px; color:var(--brand); font-weight:600; cursor:pointer; }
+
+  .proj { display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid var(--gray-4); cursor:pointer; }
+  .proj:last-child { border-bottom:none; }
+  .proj-ic { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; flex-shrink:0; }
+  .proj-ic.tile{background:#FEE9D9;} .proj-ic.el{background:#FEF3C7;} .proj-ic.pl{background:#DBEAFE;} .proj-ic.of{background:#D1FAE5;}
+  .proj-body{flex:1;min-width:0;}
+  .proj-name{font-size:14px;font-weight:600;margin-bottom:3px;}
+  .proj-meta{font-size:12px;color:var(--gray-1);display:flex;gap:7px;align-items:center;}
+  .pdot{width:3px;height:3px;background:var(--gray-2);border-radius:50%;}
+  .proj-side{text-align:right;}
+  .proj-sum{font-size:14px;font-weight:700;}
+  .bdg{display:inline-block;font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;margin-top:4px;text-transform:uppercase;letter-spacing:0.04em;}
+  .bdg.act{background:var(--green-soft);color:var(--green);}
+  .bdg.pen{background:var(--amber-soft);color:var(--amber);}
+  .bdg.dft{background:var(--gray-5);color:var(--gray-1);}
+  .bdg.don{background:var(--blue-soft);color:var(--blue);}
+
+  /* side panel quick actions */
+  .quick { display:flex; flex-direction:column; gap:10px; }
+  .quick-item { display:flex; align-items:center; gap:12px; padding:13px; background:var(--gray-6); border-radius:12px; cursor:pointer; }
+  .quick-ic { width:36px; height:36px; border-radius:10px; background:var(--white); border:1px solid var(--gray-4); display:flex; align-items:center; justify-content:center; font-size:17px; }
+  .quick-txt { flex:1; }
+  .quick-t { font-size:13px; font-weight:600; }
+  .quick-s { font-size:11px; color:var(--gray-1); }
+
+  /* Estimate editor desktop: two columns */
+  .est-layout { display:grid; grid-template-columns:1.7fr 1fr; gap:20px; align-items:start; }
+  .est-main { background:var(--white); border:1px solid var(--gray-4); border-radius:16px; padding:20px; }
+  .est-side { position:sticky; top:0; }
+  .cat-block { margin-bottom:18px; }
+  .cat-head { font-size:11px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .cat-dot { width:5px; height:5px; background:var(--brand); border-radius:50%; }
+  .eitem { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border:1px solid var(--gray-4); border-radius:11px; margin-bottom:6px; cursor:pointer; }
+  .eitem-l{flex:1;}
+  .eitem-n{font-size:14px;font-weight:500;margin-bottom:3px;}
+  .eitem-m{font-size:12px;color:var(--gray-1);display:flex;gap:8px;}
+  .eitem-s{font-size:14px;font-weight:700;margin-left:12px;}
+  .addbtn{background:var(--white);border:1px dashed var(--brand);color:var(--brand);border-radius:11px;padding:12px;width:100%;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .summary-card{background:var(--ink);color:var(--white);border-radius:16px;padding:20px;}
+  .sum-client{display:flex;align-items:center;gap:10px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:16px;}
+  .sc-av{width:38px;height:38px;border-radius:50%;background:var(--brand);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+  .sc-n{font-size:14px;font-weight:600;}
+  .sc-s{font-size:12px;color:rgba(255,255,255,0.6);}
+  .sum-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;color:rgba(255,255,255,0.75);}
+  .sum-row.total{font-size:15px;color:var(--white);font-weight:600;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);margin-top:4px;}
+  .sum-total-val{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:6px 0 16px;}
+  .sum-actions{display:flex;flex-direction:column;gap:8px;}
+  .sum-btn{padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;background:rgba(255,255,255,0.12);color:var(--white);}
+  .sum-btn.primary{background:var(--brand);}
+
+  .label{text-align:center;font-size:13px;font-weight:600;color:var(--gray-1);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;}
+  .note{max-width:1280px;margin:0 auto 40px;font-size:13px;color:var(--gray-1);text-align:center;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1><span class="accent">Majstr</span> · Десктопна версія</h1>
+  <p>Той самий продукт, перекомпонований під широкий екран: sidebar + багатоколонковість</p>
+</div>
+
+<!-- DASHBOARD -->
+<div class="label">Дашборд (десктоп)</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="browser-dots"><span></span><span></span><span></span></div>
+    <div class="browser-url">🔒 app.majstr.com</div>
+  </div>
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="logo">majstr</div>
+      <div class="nav-link active"><span class="ico">🏠</span> Головна</div>
+      <div class="nav-link"><span class="ico">📁</span> Об'єкти</div>
+      <div class="nav-link"><span class="ico">📖</span> Каталог</div>
+      <div class="nav-link"><span class="ico">👤</span> Профіль</div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-user">
+        <div class="su-avatar">АК</div>
+        <div class="su-info">
+          <div class="su-name">Андрій Коваль</div>
+          <div class="su-plan">План FREE</div>
+        </div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="main-header">
+        <div>
+          <div class="main-title">Доброго ранку, Андрій 👋</div>
+          <div class="main-sub">Ось що відбувається з вашими об'єктами</div>
+        </div>
+        <button class="btn-primary"><span class="plus">+</span> Новий кошторис</button>
+      </div>
+
+      <div class="dash-grid">
+        <div class="metric a">
+          <div class="top"><span class="lbl">Активних</span><div class="ic">📁</div></div>
+          <div class="val">4</div>
+          <div class="hint">об'єкти в роботі</div>
+        </div>
+        <div class="metric b">
+          <div class="top"><span class="lbl">Очікує підпису</span><div class="ic">⏳</div></div>
+          <div class="val">2</div>
+          <div class="hint">кошториси надіслані</div>
+        </div>
+        <div class="metric c">
+          <div class="top"><span class="lbl">Завершено (міс)</span><div class="ic">✓</div></div>
+          <div class="val">6</div>
+          <div class="hint">на суму 312 000 ₴</div>
+        </div>
+      </div>
+
+      <div class="content-cols">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Останні об'єкти</div>
+            <div class="panel-link">Усі об'єкти →</div>
+          </div>
+          <div class="proj">
+            <div class="proj-ic tile">🛁</div>
+            <div class="proj-body"><div class="proj-name">Ванна, кв. Олени</div><div class="proj-meta"><span>Сонячна 12</span><span class="pdot"></span><span>Олена П.</span></div></div>
+            <div class="proj-side"><div class="proj-sum">61 070 ₴</div><div class="bdg act">В роботі</div></div>
+          </div>
+          <div class="proj">
+            <div class="proj-ic el">⚡</div>
+            <div class="proj-body"><div class="proj-name">Електрика, Іван</div><div class="proj-meta"><span>Миру 5</span><span class="pdot"></span><span>Іван К.</span></div></div>
+            <div class="proj-side"><div class="proj-sum">24 300 ₴</div><div class="bdg pen">Кошторис</div></div>
+          </div>
+          <div class="proj">
+            <div class="proj-ic pl">🔧</div>
+            <div class="proj-body"><div class="proj-name">Сантехніка, Шевчук</div><div class="proj-meta"><span>Шевченка 8</span><span class="pdot"></span><span>М. Шевчук</span></div></div>
+            <div class="proj-side"><div class="proj-sum">18 500 ₴</div><div class="bdg dft">Чернетка</div></div>
+          </div>
+          <div class="proj">
+            <div class="proj-ic of">🏢</div>
+            <div class="proj-body"><div class="proj-name">Офіс, ТОВ Будпром</div><div class="proj-meta"><span>Героїв 18</span><span class="pdot"></span><span>В. Кравчук</span></div></div>
+            <div class="proj-side"><div class="proj-sum">142 000 ₴</div><div class="bdg don">Готово</div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Швидкі дії</div></div>
+          <div class="quick">
+            <div class="quick-item"><div class="quick-ic">📋</div><div class="quick-txt"><div class="quick-t">Новий кошторис</div><div class="quick-s">Для нового клієнта</div></div></div>
+            <div class="quick-item"><div class="quick-ic">📖</div><div class="quick-txt"><div class="quick-t">Додати в каталог</div><div class="quick-s">Робота чи матеріал</div></div></div>
+            <div class="quick-item"><div class="quick-ic">📤</div><div class="quick-txt"><div class="quick-t">Надіслати клієнту</div><div class="quick-s">2 кошториси чекають</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ESTIMATE EDITOR -->
+<div class="label">Редактор кошторису (десктоп — дві колонки)</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="browser-dots"><span></span><span></span><span></span></div>
+    <div class="browser-url">🔒 app.majstr.com/estimates/abc123</div>
+  </div>
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="logo">majstr</div>
+      <div class="nav-link"><span class="ico">🏠</span> Головна</div>
+      <div class="nav-link active"><span class="ico">📁</span> Об'єкти</div>
+      <div class="nav-link"><span class="ico">📖</span> Каталог</div>
+      <div class="nav-link"><span class="ico">👤</span> Профіль</div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-user">
+        <div class="su-avatar">АК</div>
+        <div class="su-info"><div class="su-name">Андрій Коваль</div><div class="su-plan">План FREE</div></div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="main-header">
+        <div>
+          <div class="main-title">Кошторис · Ванна, кв. Олени</div>
+          <div class="main-sub">Чернетка · автозбереження</div>
+        </div>
+      </div>
+
+      <div class="est-layout">
+        <div class="est-main">
+          <div class="cat-block">
+            <div class="cat-head"><span class="cat-dot"></span> Підготовка основи</div>
+            <div class="eitem"><div class="eitem-l"><div class="eitem-n">Демонтаж старої плитки</div><div class="eitem-m"><span>18 м²</span><span>·</span><span>200 ₴/м²</span></div></div><div class="eitem-s">3 600 ₴</div></div>
+            <div class="eitem"><div class="eitem-l"><div class="eitem-n">Гідроізоляція</div><div class="eitem-m"><span>22 м²</span><span>·</span><span>200 ₴/м²</span></div></div><div class="eitem-s">4 400 ₴</div></div>
+          </div>
+          <div class="cat-block">
+            <div class="cat-head"><span class="cat-dot"></span> Укладка</div>
+            <div class="eitem"><div class="eitem-l"><div class="eitem-n">Укладка плитки на стіни</div><div class="eitem-m"><span>18 м²</span><span>·</span><span>700 ₴/м²</span></div></div><div class="eitem-s">12 600 ₴</div></div>
+          </div>
+          <div class="cat-block">
+            <div class="cat-head"><span class="cat-dot"></span> Матеріали</div>
+            <div class="eitem"><div class="eitem-l"><div class="eitem-n">Плитка настінна</div><div class="eitem-m"><span>22 м²</span><span>·</span><span>400 ₴/м²</span></div></div><div class="eitem-s">8 800 ₴</div></div>
+            <div class="eitem"><div class="eitem-l"><div class="eitem-n">Клей Ceresit CM11</div><div class="eitem-m"><span>40 кг</span><span>·</span><span>24 ₴/кг</span></div></div><div class="eitem-s">960 ₴</div></div>
+            <button class="addbtn">+ Додати позицію</button>
+          </div>
+        </div>
+
+        <div class="est-side">
+          <div class="summary-card">
+            <div class="sum-client">
+              <div class="sc-av">ОП</div>
+              <div><div class="sc-n">Олена Петренко</div><div class="sc-s">+380 67 123 4567</div></div>
+            </div>
+            <div class="sum-row"><span>Роботи</span><span>20 600 ₴</span></div>
+            <div class="sum-row"><span>Матеріали</span><span>9 760 ₴</span></div>
+            <div class="sum-row total"><span>До сплати</span><span></span></div>
+            <div class="sum-total-val">61 070 ₴</div>
+            <div class="sum-actions">
+              <button class="sum-btn primary">📤 Поділитися з клієнтом</button>
+              <button class="sum-btn">📄 Сформувати PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  На десктопі: нижня навігація → бічне меню (sidebar), метрики в ряд по 3,
+  дашборд у дві колонки (об'єкти + швидкі дії), редактор кошторису — позиції зліва,
+  підсумок липкою карткою справа. Контент обмежений max-width ~1280px і центрований.
+  Той самий код, інша розкладка через адаптивні breakpoints.
+</div>
+
+</body>
+</html>
