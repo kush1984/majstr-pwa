@@ -8,8 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run build` — runs `tsc -b` then `vite build`. Type errors fail the build; there is no separate `typecheck` script.
 - `npm run preview` — serves `dist/` for a quick sanity check.
 - `npm run lint` — runs `eslint .`. **No eslint config is checked in**, so this will currently fail; either add a config or skip until one exists.
+- `npm run test:e2e` — Playwright smoke test of the contractor happy path (register → new estimate → add item → share). **Requires the backend on `:8080`** (it checks reachability and fails fast otherwise); the Vite dev server is auto-started, or reused if already on 5173. `npm run test:e2e:ui` opens the debug UI. No unit-test runner yet (Vitest is a deferred open-question).
 
-There is no test runner configured.
+## Roadmap & project docs — reconcile every iteration
+
+This PWA is one half of a two-repo project; the shared docs drift fast, so **update and cross-check** them before starting and after finishing each chunk:
+
+- `C:\Work\SPEC.md` — canonical roadmap + status (section F steps, G future work). Move statuses ⏳ → 🔄 → ✅ and tick chunk boxes as work lands.
+- `C:\Work\PROMPTS.md` — per-step prompt archive; keep its TOC + heading statuses matching SPEC.
+- `CLAUDE.md` (this file) — keep commands, conventions and paths current.
+- `docs/open-questions.md` — the `open-questions` skill walks it at the start of every iteration; log new deferred items here.
+
+The backend lives in `C:\Work\majstr-backend\`; mirror any backend DTO change into `src/api/types.ts` in lockstep.
 
 ## Architecture
 

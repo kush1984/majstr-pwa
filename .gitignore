@@ -12,6 +12,11 @@ dev-dist
 # TypeScript incremental build cache
 *.tsbuildinfo
 
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
 # IDE
 .idea
 .vscode

@@ -55,3 +55,24 @@ the open-questions log so nothing important is silently skipped.
 - **Be concise.** This routine is a lightweight checklist, not a
   re-planning session. If the answer for every item is "out of scope",
   the whole pass should fit in a short message.
+
+## Project docs to read & reconcile every iteration
+
+Two cross-repo docs live one directory up in `C:\Work` — shared by both
+`majstr-backend` and `majstr-pwa`, not inside this repo:
+
+- **`C:\Work\SPEC.md`** — product spec + roadmap (steps, chunks, statuses).
+- **`C:\Work\PROMPTS.md`** — running log of the task prompts / definitions.
+
+Plus, inside this repo:
+
+- **`CLAUDE.md`** — keep its commands, conventions and paths current.
+
+Read them at the start of an iteration for context, and **update them when work
+lands** so they reflect reality:
+- tick SPEC chunk boxes and move step statuses ⏳ → 🔄 → ✅;
+- keep the `PROMPTS.md` TOC + heading statuses matching SPEC;
+- refresh `CLAUDE.md` if commands/paths/conventions changed.
+
+Surgical edits only — the user owns these files' overall shape; don't
+restructure or rewrite them.

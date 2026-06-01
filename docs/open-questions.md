@@ -222,16 +222,16 @@ one-line summary — keep the item in the file as a record.
   `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`. Fix the
   script to `eslint .` while at it.
 
-### No test runner
+### No unit / component test runner (E2E smoke exists)
 - **Status:** OPEN
 - **Since:** initial scaffold
-- **Context:** Zero coverage of the refresh-token interceptor,
-  `ProtectedRoute` state machine, form validation, or push lifecycle
-  — exactly the bits that bite hardest when they regress.
-- **Notes / options:** Vitest + React Testing Library for
-  components/hooks; MSW to mock the backend without spinning Spring
-  Boot. Playwright e2e for the install + login happy path is a later
-  step.
+- **Context:** A Playwright E2E smoke now guards the contractor happy path
+  (`npm run test:e2e`, see README). Still missing a fast unit/component layer
+  for the refresh-token interceptor, `ProtectedRoute` state machine, form
+  validation, money/label formatting, and the push lifecycle.
+- **Notes / options:** Vitest + React Testing Library for components/hooks;
+  MSW to mock the backend without spinning Spring Boot. Runs without a
+  backend — good for pre-commit.
 
 ### Client-side error reporting
 - **Status:** OPEN

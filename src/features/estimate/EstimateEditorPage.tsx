@@ -203,7 +203,9 @@ export function EstimateEditorPage() {
         <div className="mb-2.5 flex items-end justify-between">
           <div>
             <div className="text-xs text-white/60">До сплати</div>
-            <div className="text-2xl font-extrabold tracking-tight">{formatMoney(est.total)}</div>
+            <div data-testid="estimate-total" className="text-2xl font-extrabold tracking-tight">
+              {formatMoney(est.total)}
+            </div>
           </div>
           <div className="text-right text-[11px] text-white/55">
             Роботи: {formatMoney(est.worksSubtotal)}
@@ -326,7 +328,12 @@ function SummaryCard({
         <span>{formatMoney(est.materialsSubtotal)}</span>
       </div>
       <div className="mt-1 border-t border-white/10 pt-3 text-[13px] font-semibold">До сплати</div>
-      <div className="my-1.5 text-2xl font-extrabold tracking-tight">{formatMoney(est.total)}</div>
+      <div
+        data-testid="estimate-total"
+        className="my-1.5 text-2xl font-extrabold tracking-tight"
+      >
+        {formatMoney(est.total)}
+      </div>
       <div className="mt-3 flex flex-col gap-2">
         <Button onClick={onShare} loading={sharing} fullWidth>
           📤 Поділитися з клієнтом

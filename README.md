@@ -1,10 +1,10 @@
 # Majstr PWA
 
 Mobile-first React + TypeScript PWA. Client of the Spring Boot backend
-that lives at the sibling repo `majstr-app` (here:
-`C:\Work\Majstr app\`). This iteration ships the auth flow only —
-register, login, dashboard stub, refresh-token rotation, plus PWA
-manifest, service worker, and the scaffolding for web push.
+in the sibling repo `C:\Work\majstr-backend\`. Ships the full contractor
+UI — auth, dashboard, projects, the inline new-estimate flow, the estimate
+editor, catalog and profile — plus PWA manifest, service worker and the
+web-push scaffolding.
 
 ## Stack
 
@@ -38,6 +38,24 @@ Build for production:
 npm run build           # outputs dist/
 npm run preview         # serves dist/ for a quick sanity check
 ```
+
+## End-to-end tests
+
+A Playwright smoke test walks the core contractor journey — register →
+dashboard → new estimate (inline client + object) → add a catalog item →
+totals recompute in ₴ → share feedback. Run it now and then to catch
+regressions across the whole stack.
+
+```bash
+npm run test:e2e        # headless run (the report opens with test:e2e:report)
+npm run test:e2e:ui     # interactive Playwright UI for debugging
+```
+
+**Needs the backend running on `http://localhost:8080`** (Playwright can't
+start the Java app; it checks reachability and fails fast with a hint if it's
+down). The Vite dev server is started automatically, or reused if one is
+already on 5173. Each run registers a fresh user, so it's repeatable without
+cleanup — it does leave test rows in the dev DB.
 
 ## Backend CORS reminder
 

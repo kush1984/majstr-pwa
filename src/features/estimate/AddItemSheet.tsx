@@ -174,6 +174,7 @@ function CatalogPicker({
             <button
               key={item.id}
               type="button"
+              data-testid="catalog-row"
               onClick={() => {
                 setSelected(item);
                 setQty('');
