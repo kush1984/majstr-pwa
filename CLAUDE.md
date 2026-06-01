@@ -15,7 +15,7 @@ There is no test runner configured.
 
 ### What this repo is
 
-A standalone React 19 + TypeScript PWA. It is the **client only**. The Spring Boot backend lives in the sibling repo at `C:\Work\Majstr app\majstr-app\` (same parent folder). All non-UI state — users, plans, estimates, files — comes from that backend over REST.
+A standalone React 19 + TypeScript PWA. It is the **client only**. The Spring Boot backend lives in the sibling repo at `C:\Work\majstr-backend\` (controllers under `src/main/java/com/majstr/backend/controller/`, DTOs under `.../dto/`). All non-UI state — users, plans, projects, estimates, catalog, files — comes from that backend over REST.
 
 ### Backend coupling
 

@@ -40,7 +40,7 @@ export function RegisterPage() {
 
   useEffect(() => {
     if (register$.isSuccess) {
-      navigate(routes.dashboard, { replace: true });
+      navigate(routes.home, { replace: true });
     }
   }, [register$.isSuccess, navigate]);
 

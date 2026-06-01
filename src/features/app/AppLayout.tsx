@@ -1,0 +1,87 @@
+import { NavLink, Outlet } from 'react-router-dom';
+import { cn } from '@/lib/cn.ts';
+import { initials } from '@/lib/format.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { NAV_ITEMS } from './navItems.ts';
+
+/**
+ * The authenticated shell. One component, two layouts via Tailwind:
+ *  - <lg: a fixed bottom nav, single content column.
+ *  - ≥lg: a left sidebar (logo + nav + profile), content capped at max-w-app.
+ */
+export function AppLayout() {
+  const { data: me } = useMe();
+
+  return (
+    <div className="min-h-dvh bg-canvas lg:flex">
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-surface lg:p-3.5">
+        <div className="px-3 pb-5 pt-2 text-[22px] font-extrabold tracking-tight text-brand">
+          majstr
+        </div>
+        <nav className="flex flex-col gap-0.5">
+          {NAV_ITEMS.map((it) => (
+            <NavLink
+              key={it.to}
+              to={it.to}
+              end={it.end}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-brand-soft font-semibold text-brand'
+                    : 'text-muted hover:bg-surface-sunken',
+                )
+              }
+            >
+              <span className="w-5 text-center text-lg">{it.icon}</span>
+              {it.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <NavLink
+          to="/profile"
+          className="mt-2 flex items-center gap-2.5 border-t border-border px-3 pb-1 pt-4"
+        >
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+            {initials(me?.fullName) || '—'}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold text-primary">
+              {me?.fullName ?? '...'}
+            </span>
+            <span className="block text-[11px] text-muted">План {me?.plan ?? ''}</span>
+          </span>
+        </NavLink>
+      </aside>
+
+      {/* Content column */}
+      <div className="flex-1">
+        <main className="mx-auto w-full max-w-app px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+        {NAV_ITEMS.map((it) => (
+          <NavLink
+            key={it.to}
+            to={it.to}
+            end={it.end}
+            className={({ isActive }) =>
+              cn(
+                'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors',
+                isActive ? 'text-brand' : 'text-muted',
+              )
+            }
+          >
+            <span className="text-[22px] leading-none">{it.icon}</span>
+            {it.label}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  );
+}

@@ -11,5 +11,11 @@ export const config = {
 export const routes = {
   login: '/login',
   register: '/register',
-  dashboard: '/dashboard',
+  home: '/',
+  projects: '/projects',
+  catalog: '/catalog',
+  profile: '/profile',
+  newEstimate: '/new',
+  project: (id: string) => `/projects/${id}`,
+  estimate: (id: string) => `/estimates/${id}`,
 } as const;

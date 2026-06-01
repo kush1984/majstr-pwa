@@ -2,13 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens as space-separated RGB channels so Tailwind can apply
+ * opacity modifiers (see tailwind.config.js). Light theme lives in :root.
+ * A dark theme would add a `.dark { ... }` block overriding the same names
+ * — every component already reads them, so no component edits are needed.
+ * darkMode:'class' is configured but no dark palette is shipped yet.
+ */
+:root {
+  /* raw palette */
+  --brand: 242 107 31;
+  --brand-dark: 216 90 18;
+  --brand-soft: 255 241 232;
+  --brand-soft-2: 255 224 204;
+  --ink: 15 20 25;
+  --ink-2: 31 41 55;
+  --gray-1: 107 114 128;
+  --gray-2: 156 163 175;
+  --gray-3: 209 213 219;
+  --gray-4: 229 231 235;
+  --gray-5: 243 244 246;
+  --gray-6: 249 250 251;
+  --success: 16 185 129;
+  --success-soft: 236 253 245;
+  --amber: 245 158 11;
+  --amber-soft: 255 251 235;
+  --blue: 59 130 246;
+  --blue-soft: 239 246 255;
+  --red: 239 68 68;
+  --red-soft: 254 242 242;
+
+  /* semantic aliases (what components should reference) */
+  --canvas: 249 250 251;          /* app background */
+  --surface: 255 255 255;         /* cards / sheets */
+  --surface-sunken: 243 244 246;  /* inset rows, quick-action tiles */
+  --border: 229 231 235;
+  --text-primary: 15 20 25;
+  --text-secondary: 31 41 55;
+  --text-muted: 107 114 128;
+  --text-faint: 156 163 175;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
   body {
-    @apply font-sans text-gray-900 antialiased;
+    @apply bg-canvas font-sans text-primary antialiased;
   }
   /* Avoid the iOS Safari "tap to zoom" bump when an input has font-size < 16px */
   input,

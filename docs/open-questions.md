@@ -168,6 +168,47 @@ one-line summary — keep the item in the file as a record.
 
 ---
 
+## Domain UI (Step 6)
+
+### Per-estimate total + item count not in EstimateSummary
+- **Status:** OPEN
+- **Since:** step 6
+- **Context:** `EstimateSummary` (the project-detail estimates list) has no
+  `total` or item count, so `ProjectDetailPage` fetches each estimate in
+  full (`GET /api/estimates/{id}`) just to show the sum + "N позицій". N+1,
+  but N is usually 1 — acceptable for now.
+- **Notes / options:** Add `total` + `itemCount` to `EstimateSummary` on the
+  backend (same shape the project card already got via Fix B). Then drop the
+  per-row fetch.
+
+### Project card has a neutral icon (no trade on project)
+- **Status:** OPEN
+- **Since:** step 6
+- **Context:** Mockups show per-type project icons (tile/electric/plumb/office).
+  `ProjectResponse` has no trade/type field, so every card uses a neutral 📁.
+- **Notes / options:** Either add a `trade`/`icon` to the project (backend), or
+  let the user pick an icon on create. Low priority — cosmetic.
+
+### Plan project-limit is a client-side constant
+- **Status:** OPEN
+- **Since:** step 6
+- **Context:** Profile's limit bar reads `FREE = 3` from a constant in
+  `ProfilePage.tsx` (used count is real, from `GET /api/projects`). The real
+  enforcement lives in the backend `LimitService`; the client just mirrors the
+  number for display, which drifts if the limit changes.
+- **Notes / options:** Expose the limit on `/me` (e.g. `maxProjects`) so the UI
+  reads one source of truth.
+
+### Logo upload UI is a stub
+- **Status:** OPEN
+- **Since:** step 6
+- **Context:** `POST /api/profile/logo` exists, but the Profile "Логотип
+  компанії" row only toasts for PRO users — no file picker / crop / preview yet.
+- **Notes / options:** Build the upload sheet (multipart, 2 MB, PNG/JPEG)
+  once branded PDF matters to a paying user.
+
+---
+
 ## Quality & tooling
 
 ### ESLint config missing

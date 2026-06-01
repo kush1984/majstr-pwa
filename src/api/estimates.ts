@@ -1,0 +1,115 @@
+import { api } from './client.ts';
+import { config } from '@/lib/config.ts';
+import { tokens } from '@/lib/tokens.ts';
+import type {
+  EstimateCreateRequest,
+  EstimateItemFromCatalogRequest,
+  EstimateItemRequest,
+  EstimateItemResponse,
+  EstimateResponse,
+  EstimateSummary,
+  EstimateUpdateRequest,
+  ShareLinkResponse,
+} from './types.ts';
+
+/**
+ * Estimates + their line items. Totals (worksSubtotal / materialsSubtotal /
+ * total) are computed by the backend and returned on EstimateResponse — the
+ * client never sums money itself.
+ */
+export const estimatesApi = {
+  // ---- under a project ----
+  listForProject(projectId: string): Promise<EstimateSummary[]> {
+    return api
+      .get<EstimateSummary[]>(`/api/projects/${projectId}/estimates`)
+      .then((r) => r.data);
+  },
+
+  createForProject(
+    projectId: string,
+    req: EstimateCreateRequest,
+  ): Promise<EstimateResponse> {
+    return api
+      .post<EstimateResponse>(`/api/projects/${projectId}/estimates`, req)
+      .then((r) => r.data);
+  },
+
+  // ---- single estimate ----
+  get(id: string): Promise<EstimateResponse> {
+    return api.get<EstimateResponse>(`/api/estimates/${id}`).then((r) => r.data);
+  },
+
+  update(id: string, req: EstimateUpdateRequest): Promise<EstimateResponse> {
+    return api.put<EstimateResponse>(`/api/estimates/${id}`, req).then((r) => r.data);
+  },
+
+  remove(id: string): Promise<void> {
+    return api.delete(`/api/estimates/${id}`).then(() => undefined);
+  },
+
+  // ---- items ----
+  addItem(estimateId: string, req: EstimateItemRequest): Promise<EstimateItemResponse> {
+    return api
+      .post<EstimateItemResponse>(`/api/estimates/${estimateId}/items`, req)
+      .then((r) => r.data);
+  },
+
+  addItemFromCatalog(
+    estimateId: string,
+    catalogItemId: string,
+    req: EstimateItemFromCatalogRequest,
+  ): Promise<EstimateItemResponse> {
+    return api
+      .post<EstimateItemResponse>(
+        `/api/estimates/${estimateId}/items/from-catalog/${catalogItemId}`,
+        req,
+      )
+      .then((r) => r.data);
+  },
+
+  updateItem(
+    estimateId: string,
+    itemId: string,
+    req: EstimateItemRequest,
+  ): Promise<EstimateItemResponse> {
+    return api
+      .put<EstimateItemResponse>(`/api/estimates/${estimateId}/items/${itemId}`, req)
+      .then((r) => r.data);
+  },
+
+  removeItem(estimateId: string, itemId: string): Promise<void> {
+    return api
+      .delete(`/api/estimates/${estimateId}/items/${itemId}`)
+      .then(() => undefined);
+  },
+
+  // ---- share link ----
+  createShareLink(id: string): Promise<ShareLinkResponse> {
+    return api
+      .post<ShareLinkResponse>(`/api/estimates/${id}/share`)
+      .then((r) => r.data);
+  },
+
+  revokeShareLink(id: string, linkId: string): Promise<void> {
+    return api
+      .delete(`/api/estimates/${id}/share/${linkId}`)
+      .then(() => undefined);
+  },
+
+  /**
+   * The PDF endpoint streams bytes with the Authorization header, so it can't
+   * be a plain <a href>. Fetch as a blob and hand back an object URL the
+   * caller can open / download, plus a revoke fn to free it.
+   */
+  async fetchPdf(id: string): Promise<{ url: string; revoke: () => void }> {
+    const resp = await fetch(`${config.apiBaseUrl}/api/estimates/${id}/pdf`, {
+      headers: { Authorization: `Bearer ${tokens.getAccess() ?? ''}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`PDF request failed: ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    return { url, revoke: () => URL.revokeObjectURL(url) };
+  },
+};

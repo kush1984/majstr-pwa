@@ -1,20 +1,21 @@
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useMe } from '@/features/auth/useMe.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { Spinner } from '@/components/Spinner.tsx';
 import { routes } from '@/lib/config.ts';
 
 interface ProtectedRouteProps {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 /**
- * Wraps protected pages. Three states:
+ * Auth gate. Works both wrapping a single page (`<ProtectedRoute><Page/></>`)
+ * and as a layout route (`<ProtectedRoute />` → renders the nested <Outlet/>).
+ * Three states:
  *  - no token in storage → redirect immediately, no API call.
  *  - token present, /me in flight → spinner.
- *  - /me failed (e.g. refresh also failed, interceptor already cleared
- *    tokens) → redirect.
+ *  - /me failed (refresh also failed, interceptor already cleared tokens) → redirect.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const hasToken = tokens.hasAny();
@@ -23,7 +24,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (!hasToken) return <Navigate to={routes.login} replace />;
   if (isPending) return <FullPageSpinner />;
   if (isError) return <Navigate to={routes.login} replace />;
-  return <>{children}</>;
+  return <>{children ?? <Outlet />}</>;
 }
 
 /** Inverse of ProtectedRoute — used to bounce logged-in users away
@@ -32,7 +33,7 @@ export function PublicOnlyRoute({ children }: ProtectedRouteProps) {
   const hasToken = tokens.hasAny();
   const { data, isPending } = useMe();
   if (hasToken && isPending) return <FullPageSpinner />;
-  if (hasToken && data) return <Navigate to={routes.dashboard} replace />;
+  if (hasToken && data) return <Navigate to={routes.home} replace />;
   return <>{children}</>;
 }
 

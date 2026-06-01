@@ -1,0 +1,63 @@
+import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+
+/**
+ * Responsive modal: a bottom sheet on mobile (slides up, rounded top),
+ * a centred dialog on desktop. Closes on backdrop click or Escape.
+ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button
+        type="button"
+        aria-label="Закрити"
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+      />
+      <div className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-card-lg sm:rounded-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-bold text-primary">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Закрити"
+            className="text-lg text-faint hover:text-muted"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}

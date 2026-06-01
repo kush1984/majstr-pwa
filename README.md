@@ -119,11 +119,11 @@ Safari.
 
 ```
 src/
-├── api/        HTTP client, endpoint wrappers, backend response types
-├── components/ reusable UI primitives (Button, Input, FormField, Spinner, Toast)
-├── features/   feature folders, one per surface (auth, dashboard)
+├── api/        HTTP client, endpoint wrappers (auth, clients, projects, estimates, catalog, dashboard), backend response types
+├── components/ reusable UI primitives (Button, Input, Badge, Chip, MetricCard, ProjectCard, Modal, EmptyState, Skeleton, …)
+├── features/   feature folders, one per surface (app shell, auth, dashboard, projects, estimate, catalog, clients, profile)
 ├── hooks/      cross-cutting hooks (useToast, usePush)
-├── lib/        token storage, config, helpers, push utilities
+├── lib/        token storage, config, design-token-aware helpers (format money/dates, labels, decimal parsing)
 ├── routes/     ProtectedRoute, route table
 ├── styles/     Tailwind directives, base globals
 ├── sw.ts       custom service worker (precache + push handler)
