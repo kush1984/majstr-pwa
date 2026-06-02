@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
 import { NAV_ITEMS } from './navItems.ts';
 
 /**
@@ -59,6 +60,7 @@ export function AppLayout() {
       {/* Content column */}
       <div className="flex-1">
         <main className="mx-auto w-full max-w-app px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+          <EmailVerificationBanner />
           <Outlet />
         </main>
       </div>

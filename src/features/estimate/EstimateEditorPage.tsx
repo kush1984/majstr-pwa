@@ -13,6 +13,7 @@ import { ESTIMATE_STATUS, UNIT_LABEL } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
 import { useProject } from '@/features/projects/useProjects.ts';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { useEstimate, useRemoveItem, useUpdateItem } from './useEstimate.ts';
@@ -44,6 +45,7 @@ export function EstimateEditorPage() {
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
   const [sharing, setSharing] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
 
   if (estimate.isPending) {
     return (
@@ -93,7 +95,11 @@ export function EstimateEditorPage() {
       toast.success('Посилання скопійовано');
     } catch (err) {
       const e = toAppError(err);
-      toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
+      if (e.code === 'EMAIL_NOT_VERIFIED') {
+        setEmailGateOpen(true);
+      } else {
+        toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
+      }
     } finally {
       setSharing(false);
     }
@@ -232,6 +238,8 @@ export function EstimateEditorPage() {
           </button>
         </div>
       </div>
+
+      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
 
       <AddItemSheet
         estimateId={id}

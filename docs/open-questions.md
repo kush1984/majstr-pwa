@@ -119,7 +119,7 @@ one-line summary — keep the item in the file as a record.
   password form). Pure UI work once backend ships.
 
 ### Email verification flow
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** `useRegister` auto-logs in on success. When the backend
   adds email confirmation, the register response won't carry tokens
@@ -128,6 +128,11 @@ one-line summary — keep the item in the file as a record.
 - **Notes / options:** Detect by response shape (no `accessToken` →
   navigate to confirmation screen). Pure client change once backend
   switches.
+- **Resolution:** Step 7 — chose the *soft* variant (not a hard "перевір пошту"
+  gate): register still auto-logs in; unverified users get a soft banner + a
+  public `/verify-email?token=...` page, and only sharing is gated
+  (403 `EMAIL_NOT_VERIFIED` → modal). Lives in `src/features/email/`. Verified
+  live (browser + DB confirmed `email_verified=t`) and via the E2E share step.
 
 ---
 

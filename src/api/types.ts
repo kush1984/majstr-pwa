@@ -17,6 +17,7 @@ export interface UserResponse {
   logoUrl: string | null;
   plan: Plan;
   role: Role;
+  emailVerified: boolean;
   createdAt: string;
 }
 
@@ -54,6 +55,8 @@ export interface BackendError {
   message: string;
   path: string;
   retryAfterSeconds?: number;
+  /** Machine-readable code the client branches on, e.g. EMAIL_NOT_VERIFIED. */
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
+import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
 import { routes } from '@/lib/config.ts';
 
@@ -29,6 +30,8 @@ export const router = createBrowserRouter([
       </PublicOnlyRoute>
     ),
   },
+  // Public: the email-verification link works whether logged in or out.
+  { path: routes.verifyEmail, element: <VerifyEmailPage /> },
   {
     // Authenticated shell — sidebar (desktop) / bottom nav (mobile).
     element: (

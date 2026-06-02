@@ -6,6 +6,7 @@ import { Button } from '@/components/Button.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { IconTile } from '@/components/IconTile.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -31,6 +32,7 @@ export function ProjectDetailPage() {
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
   const [sharing, setSharing] = useState(false);
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
 
   const estimates = useQuery({
     queryKey: ['project-estimates', id],
@@ -82,7 +84,11 @@ export function ProjectDetailPage() {
       toast.success('Посилання скопійовано');
     } catch (err) {
       const e = toAppError(err);
-      toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
+      if (e.code === 'EMAIL_NOT_VERIFIED') {
+        setEmailGateOpen(true);
+      } else {
+        toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
+      }
     } finally {
       setSharing(false);
     }
@@ -90,6 +96,8 @@ export function ProjectDetailPage() {
 
   return (
     <>
+      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+
       <div className="mb-3 flex items-center gap-3">
         <button
           type="button"

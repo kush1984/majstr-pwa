@@ -9,6 +9,8 @@ export interface AppError {
   message: string;
   status?: number;
   retryAfterSeconds?: number;
+  /** Machine-readable backend code, e.g. EMAIL_NOT_VERIFIED. */
+  code?: string;
   backend?: BackendError;
 }
 
@@ -31,6 +33,7 @@ function fromAxios(err: AxiosError): AppError {
       message: data.message,
       status: data.status ?? err.response?.status,
       retryAfterSeconds: data.retryAfterSeconds,
+      code: data.code,
       backend: data as BackendError,
     };
   }

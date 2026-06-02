@@ -11,6 +11,7 @@ export const config = {
 export const routes = {
   login: '/login',
   register: '/register',
+  verifyEmail: '/verify-email',
   home: '/',
   projects: '/projects',
   catalog: '/catalog',
