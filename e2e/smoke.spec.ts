@@ -58,10 +58,12 @@ test('повний сценарій підрядника: реєстрація �
   await expect(total).toContainText('₴');
   await expect(total).not.toHaveText(/^0\s*₴$/);
 
-  // 7 — Sharing always gives clear feedback, never a silent failure. Tolerant
-  // of every policy outcome: a copied portal link, the PRO gate toast, or the
-  // "verify email" dialog (targeted by role so the page banner can't false-pass).
+  // 7 — Sharing opens a sheet with options; triggering "copy link" gives clear
+  // feedback, never a silent failure. Tolerant of every policy outcome: a copied
+  // link, the verify-email gate (unverified contractor), or the PRO gate.
   await page.getByRole('button', { name: /Поділитися/ }).first().click();
+  await expect(page.getByRole('dialog', { name: 'Поділитися з клієнтом' })).toBeVisible();
+  await page.getByRole('button', { name: /Копіювати посилання/ }).click();
   await expect(
     page
       .getByText(/Посилання скопійовано|доступний у плані PRO/)

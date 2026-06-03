@@ -16,6 +16,7 @@ import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
+import { ShareEstimateSheet } from './ShareEstimateSheet.tsx';
 import { useEstimate, useRemoveItem, useUpdateItem } from './useEstimate.ts';
 
 const NO_CATEGORY = 'Без категорії';
@@ -43,7 +44,7 @@ export function EstimateEditorPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
 
@@ -87,23 +88,7 @@ export function EstimateEditorPage() {
     }
   };
 
-  const onShare = async () => {
-    setSharing(true);
-    try {
-      const link = await estimatesApi.createShareLink(id);
-      await navigator.clipboard?.writeText(link.url).catch(() => undefined);
-      toast.success('Посилання скопійовано');
-    } catch (err) {
-      const e = toAppError(err);
-      if (e.code === 'EMAIL_NOT_VERIFIED') {
-        setEmailGateOpen(true);
-      } else {
-        toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
-      }
-    } finally {
-      setSharing(false);
-    }
-  };
+  const onShare = () => setShareOpen(true);
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -198,7 +183,6 @@ export function EstimateEditorPage() {
               onPdf={onPdf}
               onShare={onShare}
               pdfLoading={pdfLoading}
-              sharing={sharing}
             />
           </div>
         </div>
@@ -231,8 +215,7 @@ export function EstimateEditorPage() {
           <button
             type="button"
             onClick={onShare}
-            disabled={sharing}
-            className="rounded-[10px] bg-brand py-3 text-sm font-semibold disabled:opacity-60"
+            className="rounded-[10px] bg-brand py-3 text-sm font-semibold"
           >
             📤 Поділитися
           </button>
@@ -240,6 +223,15 @@ export function EstimateEditorPage() {
       </div>
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+      {project.data && (
+        <ShareEstimateSheet
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          estimateId={id}
+          project={project.data}
+          onNeedEmailVerify={() => setEmailGateOpen(true)}
+        />
+      )}
 
       <AddItemSheet
         estimateId={id}
@@ -303,14 +295,12 @@ function SummaryCard({
   onPdf,
   onShare,
   pdfLoading,
-  sharing,
 }: {
   est: EstimateResponse;
   project: ProjectResponse | undefined;
   onPdf: () => void;
   onShare: () => void;
   pdfLoading: boolean;
-  sharing: boolean;
 }) {
   return (
     <div className="rounded-card bg-ink p-5 text-white">
@@ -343,7 +333,7 @@ function SummaryCard({
         {formatMoney(est.total)}
       </div>
       <div className="mt-3 flex flex-col gap-2">
-        <Button onClick={onShare} loading={sharing} fullWidth>
+        <Button onClick={onShare} fullWidth>
           📤 Поділитися з клієнтом
         </Button>
         <button

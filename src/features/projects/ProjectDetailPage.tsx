@@ -16,6 +16,7 @@ import { routes } from '@/lib/config.ts';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
+import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
 
 type Tab = 'estimate' | 'photos' | 'changes' | 'act';
 const TABS: { key: Tab; label: string }[] = [
@@ -31,7 +32,7 @@ export function ProjectDetailPage() {
   const qc = useQueryClient();
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
-  const [sharing, setSharing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
 
   const estimates = useQuery({
@@ -71,32 +72,24 @@ export function ProjectDetailPage() {
   const list = estimates.data ?? [];
   const status = PROJECT_STATUS[p.status];
 
-  const shareLatest = async () => {
-    const latest = list[0];
-    if (!latest) {
+  const openShare = () => {
+    if (list.length === 0) {
       toast.info('Спершу створіть кошторис');
       return;
     }
-    setSharing(true);
-    try {
-      const link = await estimatesApi.createShareLink(latest.id);
-      await navigator.clipboard?.writeText(link.url).catch(() => undefined);
-      toast.success('Посилання скопійовано');
-    } catch (err) {
-      const e = toAppError(err);
-      if (e.code === 'EMAIL_NOT_VERIFIED') {
-        setEmailGateOpen(true);
-      } else {
-        toast.error(e.status === 403 ? 'Портал для клієнта доступний у плані PRO' : e.message);
-      }
-    } finally {
-      setSharing(false);
-    }
+    setShareOpen(true);
   };
 
   return (
     <>
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+      <ShareEstimateSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        estimateId={list[0]?.id ?? ''}
+        project={p}
+        onNeedEmailVerify={() => setEmailGateOpen(true)}
+      />
 
       <div className="mb-3 flex items-center gap-3">
         <button
@@ -157,9 +150,8 @@ export function ProjectDetailPage() {
         <>
           <button
             type="button"
-            onClick={shareLatest}
-            disabled={sharing}
-            className="mb-4 flex w-full items-center gap-3 rounded-card bg-brand p-3.5 text-left text-white shadow-cta disabled:opacity-70"
+            onClick={openShare}
+            className="mb-4 flex w-full items-center gap-3 rounded-card bg-brand p-3.5 text-left text-white shadow-cta"
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/20 text-lg">
               📤

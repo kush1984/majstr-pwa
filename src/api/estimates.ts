@@ -90,6 +90,14 @@ export const estimatesApi = {
       .then((r) => r.data);
   },
 
+  /** Email the portal link to the estimate's client (creates a link if none yet).
+   *  400 CLIENT_EMAIL_MISSING when the client has no email on file. */
+  sendShareEmail(id: string): Promise<ShareLinkResponse> {
+    return api
+      .post<ShareLinkResponse>(`/api/estimates/${id}/share/send-email`)
+      .then((r) => r.data);
+  },
+
   revokeShareLink(id: string, linkId: string): Promise<void> {
     return api
       .delete(`/api/estimates/${id}/share/${linkId}`)

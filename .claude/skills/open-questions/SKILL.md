@@ -76,3 +76,14 @@ lands** so they reflect reality:
 
 Surgical edits only — the user owns these files' overall shape; don't
 restructure or rewrite them.
+
+## Subagents — pre-approved for analysis
+
+The user has **standing approval** to spawn subagents (the Agent tool) for
+read-only analysis / exploration when it genuinely helps — e.g. fanning out
+across the sibling `C:\Work\majstr-backend` repo to map a contract, or
+sweeping many files. **Don't ask each time.** Keep it proportionate: for a
+couple of targeted reads, just read inline (cheaper); reach for an
+`Explore`/`general-purpose` subagent when the search is broad or spans many
+locations. Implementation and edits stay in the main thread unless the user
+says otherwise.

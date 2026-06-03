@@ -85,6 +85,7 @@ export interface ClientResponse {
   fullName: string;
   phone: string;
   address: string | null;
+  email: string | null;
   createdAt: string;
 }
 
@@ -92,6 +93,8 @@ export interface ClientRequest {
   fullName: string;
   phone: string;
   address?: string;
+  /** Optional — lets the contractor email the estimate to the client. */
+  email?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -27,7 +27,7 @@ export function NewEstimatePage() {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [newClient, setNewClient] = useState({ fullName: '', phone: '' });
+  const [newClient, setNewClient] = useState({ fullName: '', phone: '', email: '' });
   const [project, setProject] = useState({ name: '', address: '' });
   const [busy, setBusy] = useState(false);
 
@@ -60,6 +60,7 @@ export function NewEstimatePage() {
         const c = await createClient.mutateAsync({
           fullName: newClient.fullName.trim(),
           phone: newClient.phone.trim(),
+          email: newClient.email.trim() || undefined,
         });
         clientId = c.id;
       }
@@ -124,6 +125,16 @@ export function NewEstimatePage() {
                   placeholder="+380..."
                   value={newClient.phone}
                   onChange={(e) => setNewClient((s) => ({ ...s, phone: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Email" htmlFor="nc-email" hint="Необов'язково — щоб надсилати кошторис поштою">
+                <Input
+                  id="nc-email"
+                  type="email"
+                  inputMode="email"
+                  placeholder="client@example.com"
+                  value={newClient.email}
+                  onChange={(e) => setNewClient((s) => ({ ...s, email: e.target.value }))}
                 />
               </FormField>
             </div>
