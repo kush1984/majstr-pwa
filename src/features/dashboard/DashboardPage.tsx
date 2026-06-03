@@ -69,7 +69,7 @@ export function DashboardPage() {
               hint="об'єкти в роботі"
               icon="📁"
               tone="brand"
-              onClick={() => navigate(routes.projects)}
+              onClick={() => navigate(`${routes.projects}?status=IN_PROGRESS`)}
             />
             <MetricCard
               label="Очікує"
@@ -77,7 +77,7 @@ export function DashboardPage() {
               hint="кошториси без підпису"
               icon="⏳"
               tone="amber"
-              onClick={() => navigate(routes.projects)}
+              onClick={() => navigate(`${routes.projects}?status=SENT`)}
             />
             <MetricCard
               className="hidden lg:block"
@@ -86,7 +86,7 @@ export function DashboardPage() {
               hint={`на суму ${formatMoney(m?.completedThisMonth.totalAmount)}`}
               icon="✓"
               tone="green"
-              onClick={() => navigate(routes.projects)}
+              onClick={() => navigate(`${routes.projects}?status=COMPLETED`)}
             />
           </>
         )}

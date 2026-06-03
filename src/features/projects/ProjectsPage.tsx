@@ -1,33 +1,58 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Chip } from '@/components/Chip.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { routes } from '@/lib/config.ts';
-import type { ProjectStatus } from '@/api/types.ts';
+import type { ProjectResponse } from '@/api/types.ts';
 import { useProjects } from './useProjects.ts';
 
-type Filter = 'ALL' | Extract<ProjectStatus, 'IN_PROGRESS' | 'COMPLETED'>;
+/**
+ * Filter is URL-driven (`?status=`) so the dashboard metric cards can deep-link
+ * straight into a filtered list. SENT filters by the latest estimate's status
+ * (awaiting signature); the others by the project's own status.
+ */
+type Filter = 'ALL' | 'IN_PROGRESS' | 'SENT' | 'COMPLETED';
+
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: 'ALL', label: 'Усі' },
+  { value: 'IN_PROGRESS', label: 'В роботі' },
+  { value: 'SENT', label: 'Очікує' },
+  { value: 'COMPLETED', label: 'Завершені' },
+];
+
+function matches(p: ProjectResponse, f: Filter): boolean {
+  if (f === 'ALL') return true;
+  if (f === 'SENT') return p.estimateStatus === 'SENT';
+  return p.status === f;
+}
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [params, setParams] = useSearchParams();
+  const raw = params.get('status');
+  const filter: Filter =
+    raw === 'IN_PROGRESS' || raw === 'SENT' || raw === 'COMPLETED' ? raw : 'ALL';
+
   // Fetch all once and filter client-side so the chips can show live counts.
   const { data, isPending, isError, refetch } = useProjects();
-
   const all = useMemo(() => data ?? [], [data]);
-  const counts = useMemo(
+
+  const counts = useMemo<Record<Filter, number>>(
     () => ({
       ALL: all.length,
       IN_PROGRESS: all.filter((p) => p.status === 'IN_PROGRESS').length,
+      SENT: all.filter((p) => p.estimateStatus === 'SENT').length,
       COMPLETED: all.filter((p) => p.status === 'COMPLETED').length,
     }),
     [all],
   );
-  const shown = filter === 'ALL' ? all : all.filter((p) => p.status === filter);
+  const shown = useMemo(() => all.filter((p) => matches(p, filter)), [all, filter]);
 
+  const setFilter = (f: Filter) =>
+    setParams(f === 'ALL' ? {} : { status: f }, { replace: true });
   const newEstimate = () => navigate(routes.newEstimate);
 
   return (
@@ -42,15 +67,11 @@ export function ProjectsPage() {
       </div>
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        <Chip active={filter === 'ALL'} onClick={() => setFilter('ALL')}>
-          Усі · {counts.ALL}
-        </Chip>
-        <Chip active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')}>
-          В роботі · {counts.IN_PROGRESS}
-        </Chip>
-        <Chip active={filter === 'COMPLETED'} onClick={() => setFilter('COMPLETED')}>
-          Завершені · {counts.COMPLETED}
-        </Chip>
+        {FILTERS.map((f) => (
+          <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
+            {f.label} · {counts[f.value]}
+          </Chip>
+        ))}
       </div>
 
       {isPending ? (
