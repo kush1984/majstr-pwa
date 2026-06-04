@@ -1,32 +1,44 @@
 import { api } from './client.ts';
 
 /**
- * Push subscription endpoints. The backend doesn't have these yet —
- * tracked in the open-questions log under "Email notifications".
- * Calling subscribe() will currently 404; the rest of the client flow
- * still runs so we catch the obvious wiring bugs early.
+ * Web-push subscription endpoints. The backend (Step 8) owns the VAPID
+ * keypair, stores one row per browser subscription, and fans push out to
+ * every device a contractor has enabled.
  *
- * TODO(backend): implement POST /api/push/subscribe (and DELETE) plus a
- * `push_subscriptions` table.
+ * Contract (mirrors the Spring DTOs verbatim):
+ *  - GET  /api/push/vapid-public-key → { publicKey: string | null }
+ *      `null` means push is not configured on the server.
+ *  - POST /api/push/subscribe   (bearer) → 204, body is the FLAT shape below
+ *  - POST /api/push/unsubscribe (bearer) → 204, body { endpoint }
+ *
+ * Note the subscribe body is flat (endpoint + p256dh + auth + userAgent),
+ * NOT the nested `PushSubscriptionJSON` the browser produces — `usePush`
+ * flattens it before calling here.
  */
 
-export interface PushSubscriptionPayload {
+export interface VapidPublicKeyResponse {
+  publicKey: string | null;
+}
+
+export interface PushSubscribePayload {
   endpoint: string;
-  expirationTime: number | null;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
+  p256dh: string;
+  auth: string;
+  userAgent?: string;
 }
 
 export const pushApi = {
-  subscribe(payload: PushSubscriptionPayload): Promise<void> {
+  getVapidPublicKey(): Promise<string | null> {
+    return api
+      .get<VapidPublicKeyResponse>('/api/push/vapid-public-key')
+      .then((r) => r.data.publicKey);
+  },
+
+  subscribe(payload: PushSubscribePayload): Promise<void> {
     return api.post('/api/push/subscribe', payload).then(() => undefined);
   },
 
   unsubscribe(endpoint: string): Promise<void> {
-    return api
-      .delete('/api/push/subscribe', { data: { endpoint } })
-      .then(() => undefined);
+    return api.post('/api/push/unsubscribe', { endpoint }).then(() => undefined);
   },
 };

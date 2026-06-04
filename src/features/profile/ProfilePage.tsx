@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { usePush } from '@/hooks/usePush.ts';
+import { isIOS, isStandalone } from '@/lib/push.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { initials } from '@/lib/format.ts';
@@ -173,30 +174,75 @@ function LogoRow({ isPro }: { isPro: boolean }) {
   );
 }
 
+/**
+ * Push notifications row with an on/off toggle. Permission is requested only
+ * when the user flips the switch (never on load). On iPhone/iPad web push only
+ * works once the PWA is installed to the home screen, so we surface that as a
+ * hint instead of a dead toggle.
+ */
 function PushRow() {
-  const { permission, isSubscribed, isReady, enable } = usePush();
+  const { permission, isSubscribed, isReady, isBusy, enable, disable } = usePush();
   if (!isReady) return null;
 
-  const sub =
-    permission === 'unsupported'
+  // iOS Safari only exposes PushManager inside an installed PWA. If we're an
+  // un-installed iOS tab, explain how to enable it rather than show "unsupported".
+  const iosNeedsInstall = permission === 'unsupported' && isIOS() && !isStandalone();
+
+  const toggle = async () => {
+    if (isBusy) return;
+    if (isSubscribed) {
+      await disable();
+      toast.info('Сповіщення вимкнено');
+      return;
+    }
+    const r = await enable();
+    if (r.ok) toast.success('Сповіщення увімкнено');
+    else if (r.error) toast.error(r.error);
+  };
+
+  const sub = iosNeedsInstall
+    ? 'Додайте застосунок на головний екран, щоб увімкнути'
+    : permission === 'unsupported'
       ? 'Недоступно у цьому браузері'
-      : isSubscribed
-        ? 'Увімкнено'
-        : permission === 'denied'
-          ? 'Заблоковано в браузері'
-          : 'Push-повідомлення';
+      : permission === 'denied'
+        ? 'Заблоковано в налаштуваннях браузера'
+        : isSubscribed
+          ? 'Увімкнено на цьому пристрої'
+          : 'Сповіщення про підпис і питання клієнта';
+
+  const canToggle =
+    permission !== 'unsupported' && permission !== 'denied' && !iosNeedsInstall;
 
   return (
-    <MenuRow
-      icon="🔔"
-      title="Сповіщення"
-      sub={sub}
-      onClick={async () => {
-        if (isSubscribed || permission === 'unsupported') return;
-        const r = await enable();
-        if (r.ok) toast.success('Сповіщення увімкнено');
-        else if (r.error) toast.error(r.error);
-      }}
-    />
+    <div className="flex w-full items-center gap-3 border-b border-border p-3.5 last:border-b-0">
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
+        🔔
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-primary">Сповіщення</span>
+        <span className="block text-xs text-muted">{sub}</span>
+      </span>
+      {canToggle ? (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isSubscribed}
+          aria-label="Push-сповіщення"
+          disabled={isBusy}
+          onClick={toggle}
+          className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+            isSubscribed ? 'bg-brand' : 'bg-border'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              isSubscribed ? 'translate-x-[22px]' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      ) : (
+        <span className="text-base text-faint">🔕</span>
+      )}
+    </div>
   );
 }

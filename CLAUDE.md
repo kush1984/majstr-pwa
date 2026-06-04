@@ -41,8 +41,9 @@ Three files own auth and they must stay in sync:
 
 1. `src/lib/tokens.ts` — token storage. **localStorage by design** (PWA boot-from-home-screen needs persistence; trade-offs documented in the file). `httpOnly` cookies are the planned upgrade once the backend supports them.
 2. `src/api/client.ts` — the axios instance with two interceptors:
-   - request: attaches `Authorization: Bearer <accessToken>`.
-   - response: on 401, refreshes via `/api/auth/refresh` and retries the original request. A module-level `refreshInFlight` promise **deduplicates concurrent 401s** — don't introduce a parallel refresh path or you'll race-rotate the refresh token. `/api/auth/login` and `/api/auth/refresh` are explicitly excluded from the refresh logic to avoid loops. Use the exported `rawApi` for endpoints that must skip the bearer (login, register).
+   - request: if the access token's `exp` has **already passed** (decoded client-side, 10s skew), refresh **before sending** — we never fire a request with a known-expired token and bounce off a 401 (this is what prevents the expired-JWT-hammering loop). Then attach `Authorization: Bearer <accessToken>`.
+   - response: on 401 (token looked valid but server rejected it), refresh once and retry the original request a single time (`_retry` guard).
+   - Refresh is **single-flight** via the module-level `refreshInFlight` promise (shared by both interceptors *and* `ensureAccessToken`) — don't introduce a parallel refresh path or you'll race-rotate the refresh token. When refresh can't produce a token, `forceLogin()` clears storage and redirects to `/login` **once** (`redirectingToLogin` latch), and pending requests reject instead of retrying forever. `/api/auth/login` and `/api/auth/refresh` are excluded from the 401 logic; `rawApi` skips the bearer entirely (login, register). Bearer calls outside axios (PDF blob `fetch`) must call the exported `ensureAccessToken()` to get the same proactive-refresh guarantee.
 3. `src/routes/ProtectedRoute.tsx` — auth gate driven by `useMe()`. Decision tree: no token → redirect; token present + `/me` pending → spinner; `/me` errored → redirect (interceptor already cleared tokens on a failed refresh).
 
 `useLogin` primes the `['me']` cache with the user from the login response so the dashboard renders without a second `/me` round-trip.
@@ -51,8 +52,8 @@ Three files own auth and they must stay in sync:
 
 - Uses `vite-plugin-pwa` with the **`injectManifest` strategy** (not `generateSW`). The custom SW at `src/sw.ts` precaches the app shell, handles `push` and `notificationclick`, and **never caches `/api/**`** (user-specific data). If switching strategies, you lose the ability to handle push.
 - The SW calls `skipWaiting()` + `clients.claim()` on install/activate, and `registerType: 'autoUpdate'` is set in `main.tsx`, so users land on the new build on next navigation.
-- Web push subscribe flow exists end-to-end (`EnablePushButton` → `usePush` → `pushApi.subscribe`), but **the backend `/api/push/subscribe` endpoint is a known TODO and currently 404s**. The client side stays subscribed locally; whoever lands the backend will likely only need to verify the payload shape.
-- iOS web push requires the PWA to be installed via Safari → Add to Home Screen on iOS 16.4+. The button is a no-op in regular mobile Safari.
+- Web push is wired end-to-end (Step 8): the Profile "Сповіщення" toggle → `usePush` → `pushApi`. `usePush.enable()` fetches the VAPID public key from **`GET /api/push/vapid-public-key`** at runtime (not an env var — there is no `VITE_VAPID_PUBLIC_KEY` any more), requests permission **only on the click**, subscribes, and POSTs the **flat** payload `{endpoint, p256dh, auth, userAgent}` to `/api/push/subscribe`. Disable POSTs `/api/push/unsubscribe`. The key is cached in a module-level promise for the page lifetime. Backend fans push out on estimate-sign / client-question.
+- iOS web push requires the PWA to be installed via Safari → Add to Home Screen on iOS 16.4+; `PushManager` is absent in a plain mobile-Safari tab. The Profile row detects this (`isIOS() && !isStandalone()`) and shows an "add to home screen" hint instead of a dead toggle.
 
 ### Conventions
 

@@ -72,5 +72,22 @@ export default defineConfig({
   server: {
     host: true, // bind 0.0.0.0 so we can open it from the phone on LAN
     port: 5173,
+    // Vite 6 rejects requests whose Host header it doesn't recognise (DNS-
+    // rebinding protection). Tunnel providers hand out random subdomains, so
+    // allow their parent domains (a leading dot = any subdomain) for phone
+    // testing. Use `allowedHosts: true` if you use a provider not listed here.
+    allowedHosts: ['.loca.lt', '.trycloudflare.com', '.ngrok-free.app', '.ngrok.io', '.ngrok.app'],
+    // Forward /api to the backend. Only kicks in when the app uses *relative*
+    // API URLs (set VITE_API_BASE_URL= empty) — e.g. phone testing through a
+    // single HTTPS tunnel, so the browser sees one origin (no mixed-content,
+    // no extra CORS origin to whitelist). With the default absolute base URL
+    // the app calls the backend directly and this proxy is never used.
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

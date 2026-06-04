@@ -25,7 +25,7 @@ one-line summary — keep the item in the file as a record.
 ## PWA & service worker
 
 ### App icons not generated
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** `vite.config.ts` manifest references `/icons/icon-192.png`,
   `/icons/icon-512.png`, `/icons/icon-maskable-512.png`; `index.html`
@@ -37,6 +37,12 @@ one-line summary — keep the item in the file as a record.
   README once and commit the PNGs to `public/icons/`. Or swap to a
   single SVG icon with `purpose: "any"` — least fuss but still no iOS
   icon coverage.
+- **Resolution:** Step 8 — added `scripts/generate-icons.mjs`
+  (`npm run generate-icons`, uses `@resvg/resvg-js`) which rasterizes the
+  brand mark — the "M" drawn as a stroked vector path, no font dependency —
+  into all four PNGs under `public/icons/`. Committed. Rounded tile for
+  "any", full-bleed with the logo inside the 80% safe zone for maskable,
+  180px for apple-touch-icon. Re-run the script if the brand mark changes.
 
 ### Service worker update UX
 - **Status:** OPEN
@@ -51,7 +57,7 @@ one-line summary — keep the item in the file as a record.
   Trade-off: more clicks vs. surprise reloads.
 
 ### HTTPS for LAN phone testing
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** Service worker registration and
   `Notification.requestPermission()` both refuse to run on plain HTTP
@@ -62,6 +68,15 @@ one-line summary — keep the item in the file as a record.
 - **Notes / options:** Add `vite-plugin-basic-ssl` (or document the
   `mkcert` flow) so `npm run dev -- --https` Just Works for phone
   testing.
+- **Resolution:** Step 8 — went a different (better) way than basic-ssl,
+  which doesn't help phones (a cert error blocks SW registration). For
+  push testing the README now documents two paths: **desktop** push works
+  on `http://localhost` with no TLS at all (the recommended quick check);
+  **phone** uses a real-cert tunnel (cloudflared/ngrok) plus the new Vite
+  `/api` dev proxy, so setting `VITE_API_BASE_URL=` empty makes the app
+  use relative URLs and everything stays on the tunnel's single HTTPS
+  origin — no mixed-content, no extra backend CORS entry. (`config.ts`
+  now uses `??` so an explicitly-empty base URL is honoured.)
 
 ### Offline fallback / network indicator
 - **Status:** OPEN
@@ -139,7 +154,7 @@ one-line summary — keep the item in the file as a record.
 ## Backend coupling
 
 ### `POST /api/push/subscribe` is a 404
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** `src/api/push.ts` defines a payload (endpoint +
   expirationTime + p256dh + auth keys) and POSTs it. The backend
@@ -148,9 +163,14 @@ one-line summary — keep the item in the file as a record.
 - **Notes / options:** Block on backend. When it lands, verify the DTO
   matches what Java expects; current shape mirrors the standard
   `PushSubscriptionJSON` interface so it should slot in cleanly.
+- **Resolution:** Step 8 — backend shipped `POST /api/push/subscribe`
+  (upsert by endpoint) + `POST /api/push/unsubscribe`. The real DTO is
+  **flat** (`endpoint, p256dh, auth, userAgent`), not the nested
+  `PushSubscriptionJSON` shape — `usePush.subscriptionToPayload` now
+  flattens it. Push fans out on estimate-sign / client-question.
 
 ### VAPID public key wiring
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** `.env.example` ships `VITE_VAPID_PUBLIC_KEY=` empty. With
   no key, `usePush.enable()` short-circuits with a Ukrainian error.
@@ -159,6 +179,12 @@ one-line summary — keep the item in the file as a record.
 - **Notes / options:** Simplest: backend admin command prints it once,
   devs paste into `.env`. Cleaner: fetch from `/api/config/public` at
   app boot — single source of truth, no copy-paste drift.
+- **Resolution:** Step 8 — took the "cleaner" option. The PWA fetches
+  the key from `GET /api/push/vapid-public-key` (`{publicKey: string|null}`,
+  cached for the page lifetime) inside `enable()`; `null` → "не налаштовані
+  на сервері". Removed `VITE_VAPID_PUBLIC_KEY` from `config.ts`,
+  `vite-env.d.ts`, and `.env.example`. The keypair lives only on the
+  backend (`VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT`).
 
 ### Manual DTO mirroring in `src/api/types.ts`
 - **Status:** OPEN
@@ -211,6 +237,23 @@ one-line summary — keep the item in the file as a record.
   компанії" row only toasts for PRO users — no file picker / crop / preview yet.
 - **Notes / options:** Build the upload sheet (multipart, 2 MB, PNG/JPEG)
   once branded PDF matters to a paying user.
+
+### In-app notifications (bell + per-object client questions)
+- **Status:** OPEN
+- **Since:** step 8
+- **Context:** Web push (Step 8) surfaces client questions / signatures only as
+  **OS notifications** — there is nothing inside the app. The question text lives
+  solely in the push body; project detail has no "questions" view, so a
+  contractor who misses or dismisses the toast can't recover the question, and
+  there's no unread indicator anywhere in the UI.
+- **Notes / options:** Add an in-app notifications surface — a bell with an
+  unread counter in the header + a per-object list of client questions (and
+  sign events), with mark-as-read state. Needs a **backend endpoint** to list
+  questions for the contractor (e.g. `GET /api/projects/{id}/questions`, or a
+  unified `GET /api/notifications`) since `EstimateQuestion` isn't exposed to the
+  authenticated API yet — only written from the public portal. Bonus: the SW can
+  `postMessage` open clients so a live in-app toast shows when a push arrives
+  while the app is already open.
 
 ---
 

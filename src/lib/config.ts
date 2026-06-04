@@ -4,8 +4,13 @@
  */
 
 export const config = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
-  vapidPublicKey: import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '',
+  // `??` (not `||`) so an *explicitly empty* VITE_API_BASE_URL stays "" — that
+  // makes axios use relative `/api/...` URLs, which the Vite dev proxy forwards
+  // to the backend. Used for phone testing through a single HTTPS tunnel (one
+  // origin → no mixed-content, no extra CORS origin). Unset → localhost default.
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080',
+  // Note: the VAPID public key is no longer an env var — it's fetched at
+  // runtime from GET /api/push/vapid-public-key (single source of truth).
 } as const;
 
 export const routes = {

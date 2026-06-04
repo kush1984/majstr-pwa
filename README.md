@@ -79,59 +79,87 @@ public/icons/icon-maskable-512.png
 public/icons/apple-touch-icon.png
 ```
 
-A placeholder `public/logo.svg` is included (orange tile with a white
-"M"). To generate the PNGs from it in one command:
+These PNGs are committed. To regenerate them from the brand mark:
 
 ```bash
-npx pwa-asset-generator public/logo.svg public/icons \
-  --icon-only --type png --opaque false --padding "0"
-
-npx pwa-asset-generator public/logo.svg public/icons \
-  --icon-only --type png --opaque true --maskable true \
-  --background "#ea580c" --padding "10%"
+npm run generate-icons
 ```
 
-You only need to do this once (or after you swap the logo). If you skip
-it, the app still runs but the manifest will log icon-not-found warnings
-and the "Add to Home Screen" prompt shows a generic icon.
+`scripts/generate-icons.mjs` rasterizes the orange tile + white "M"
+(drawn as a stroked vector path, so no system font is needed) with
+`@resvg/resvg-js`: a rounded tile for the `any` icons, a full-bleed
+variant with the logo inside the 80% safe zone for `maskable`, and a
+180px `apple-touch-icon`. Re-run it after changing the mark.
 
-## Test on a phone
+## Testing web push
 
-PWA install prompts and `Notification.requestPermission()` both refuse
-to run on plain HTTP, except for `localhost`. To test the real install
-on your phone:
+Service workers and `Notification.requestPermission()` require a **secure
+context**. `http://localhost` counts as secure, so the whole push flow
+works on the desktop with zero TLS setup. A phone is *not* localhost, so
+it needs real HTTPS.
 
-1. Make sure the phone is on the same Wi-Fi as your laptop.
-2. Find your laptop's local IP:
-   - Windows: `ipconfig` → look for IPv4
-   - macOS / Linux: `ifconfig` or `ip addr`
-3. Open `http://<your-ip>:5173` on the phone.
-4. Add the local IP to the backend's `CORS_ALLOWED_ORIGINS` (see above).
-5. **Android (Chrome):** menu → *Install app* / *Add to Home Screen*.
-6. **iOS (Safari only):** share button → *Add to Home Screen*.
+### On the desktop (fastest — recommended first)
 
-For full PWA features (service worker beyond `localhost`, web push), you
-need HTTPS. Two easy options:
+1. Backend running on `:8080`, then `npm run dev`.
+2. Open **`http://localhost:5173` in Chrome** (or Edge).
+3. Profile → **Сповіщення** → toggle on → allow the browser prompt.
+4. Open the estimate's client portal link, **sign the estimate** (or
+   leave a question) → a push notification appears.
 
-- `ngrok http 5173` — gives you a public HTTPS URL.
-- `mkcert` + Vite's HTTPS option — local certificate.
+No HTTPS, no tunnel, no CORS change needed — `localhost` is enough.
+
+### On a phone (real HTTPS via one tunnel)
+
+A self-signed LAN cert does **not** work: phones refuse to register a
+service worker on a cert error. Use a tunnel that gives a real cert. The
+trick below routes the API through the **Vite dev proxy** so the browser
+only ever sees one origin — no mixed-content, and nothing extra to add to
+the backend's `CORS_ALLOWED_ORIGINS`.
+
+1. In `.env` (or `.env.local`) set the API base **empty** so the app uses
+   relative `/api` URLs (the proxy forwards them to `:8080`):
+   ```
+   VITE_API_BASE_URL=
+   ```
+2. `npm run dev` (the dev server already binds `0.0.0.0`).
+3. In another terminal, expose port 5173 over HTTPS. Either:
+   - **cloudflared** (free, real cert): `cloudflared tunnel --url http://localhost:5173`
+   - **localtunnel**: `npx localtunnel --port 5173`
+   - or **ngrok**: `ngrok http 5173`
+   These providers' domains are pre-listed in `vite.config.ts`
+   `server.allowedHosts` (Vite 6 blocks unknown Host headers). For a
+   provider not listed there, add its domain or set `allowedHosts: true`.
+4. Open the `https://…` URL the tunnel prints **on the phone**.
+5. **iOS only:** Safari → Share → *Add to Home Screen*, then open the
+   installed app. iOS delivers web push **only** to an installed PWA on
+   16.4+ — the Profile row shows an install hint until you do this.
+6. Enable Сповіщення and trigger a push as in the desktop steps.
+
+> Why empty `VITE_API_BASE_URL`? With an absolute `http://localhost:8080`
+> base, the phone can't reach your laptop's localhost and an HTTPS page
+> can't call an HTTP API anyway. Relative URLs + the Vite `/api` proxy
+> keep everything on the tunnel's single HTTPS origin.
 
 ## Web push
 
-`EnablePushButton` on the dashboard kicks off:
+The **Profile → "Сповіщення"** toggle owns the subscription lifecycle
+(`usePush`). Turning it on:
 
-1. `Notification.requestPermission()`
-2. `serviceWorkerRegistration.pushManager.subscribe()` with the VAPID
-   public key from `VITE_VAPID_PUBLIC_KEY`
-3. `POST /api/push/subscribe` to hand the subscription to the backend
+1. fetches the VAPID public key from `GET /api/push/vapid-public-key`
+   (the keypair lives only on the backend — no `VITE_VAPID_*` env var)
+2. `Notification.requestPermission()` — fired **only on the click**
+3. `pushManager.subscribe()` with that key
+4. `POST /api/push/subscribe` with the flat payload
+   `{ endpoint, p256dh, auth, userAgent }`
 
-Step 3 currently fails with 404 — the backend endpoint is a TODO. The
-client code is wired up so when the backend lands, only the request
-shape might need a tweak.
+Turning it off `POST`s `/api/push/unsubscribe`. The backend sends a push
+when a client signs an estimate or leaves a question on the portal; the
+service worker (`src/sw.ts`) shows the notification and routes the click.
 
 **iOS caveat:** Apple ships web push only for PWAs installed via *Add
-to Home Screen* on iOS 16.4+. The button will be a no-op in regular
-Safari.
+to Home Screen* on iOS 16.4+ — `PushManager` doesn't exist in a plain
+mobile-Safari tab. The Profile row detects this and shows an install
+hint instead of a toggle.
 
 ## Project layout
 
