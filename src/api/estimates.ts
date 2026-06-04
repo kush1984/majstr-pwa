@@ -1,6 +1,5 @@
-import { api } from './client.ts';
+import { api, ensureAccessToken } from './client.ts';
 import { config } from '@/lib/config.ts';
-import { tokens } from '@/lib/tokens.ts';
 import type {
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest,
@@ -110,8 +109,11 @@ export const estimatesApi = {
    * caller can open / download, plus a revoke fn to free it.
    */
   async fetchPdf(id: string): Promise<{ url: string; revoke: () => void }> {
+    // Goes through ensureAccessToken so this bearer call gets the same
+    // proactive-refresh guarantee as the axios paths.
+    const access = await ensureAccessToken();
     const resp = await fetch(`${config.apiBaseUrl}/api/estimates/${id}/pdf`, {
-      headers: { Authorization: `Bearer ${tokens.getAccess() ?? ''}` },
+      headers: { Authorization: `Bearer ${access ?? ''}` },
     });
     if (!resp.ok) {
       throw new Error(`PDF request failed: ${resp.status}`);
