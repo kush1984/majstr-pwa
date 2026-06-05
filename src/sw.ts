@@ -68,3 +68,32 @@ self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
+
+// ---------- subscription rotation ----------
+
+// The push service can rotate/expire a subscription (e.g. after an SW update or
+// a key rotation). Re-subscribe with the same VAPID key so the browser keeps a
+// live subscription, then nudge any open client to re-POST it to the backend.
+// The SW can't call the protected /api/push/subscribe itself (no auth token),
+// so the client does it; an app-open re-sync is the backstop when none is open.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const evt = event as ExtendableEvent & { oldSubscription: PushSubscription | null };
+  evt.waitUntil(
+    (async () => {
+      const applicationServerKey = evt.oldSubscription?.options?.applicationServerKey;
+      if (!applicationServerKey) return; // can't re-subscribe without the original key
+      try {
+        await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+        const clients = await self.clients.matchAll({ includeUncontrolled: true });
+        for (const client of clients) {
+          client.postMessage({ type: 'push-subscription-changed' });
+        }
+      } catch {
+        // Best-effort; the next app open re-syncs via resyncPushSubscription().
+      }
+    })(),
+  );
+});

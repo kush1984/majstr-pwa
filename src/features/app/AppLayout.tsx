@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
+import { NotificationBell } from '@/components/NotificationBell.tsx';
 import { NAV_ITEMS } from './navItems.ts';
 
 /**
@@ -12,6 +15,24 @@ import { NAV_ITEMS } from './navItems.ts';
  */
 export function AppLayout() {
   const { data: me } = useMe();
+
+  // Keep the backend's stored push subscription in sync with the browser's
+  // actual one: re-POST it on every app open, and again whenever the SW reports
+  // the subscription rotated (pushsubscriptionchange). Without this, a rotated
+  // subscription leaves the backend pushing to a dead endpoint (FCM 201, no
+  // notification) until the user manually re-toggles.
+  useEffect(() => {
+    void resyncPushSubscription();
+    const sw = navigator.serviceWorker;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent) => {
+      if ((e.data as { type?: string } | null)?.type === 'push-subscription-changed') {
+        void resyncPushSubscription();
+      }
+    };
+    sw.addEventListener('message', onMessage);
+    return () => sw.removeEventListener('message', onMessage);
+  }, []);
 
   return (
     <div className="min-h-dvh bg-canvas lg:flex">
@@ -60,6 +81,9 @@ export function AppLayout() {
       {/* Content column */}
       <div className="flex-1">
         <main className="mx-auto w-full max-w-app px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+          <div className="mb-3 flex justify-end lg:mb-4">
+            <NotificationBell />
+          </div>
           <EmailVerificationBanner />
           <Outlet />
         </main>

@@ -130,6 +130,27 @@ export function usePush(): UsePushResult {
   return { permission, isSubscribed, isReady, isBusy, enable, disable };
 }
 
+/**
+ * Re-POST the browser's current push subscription to the backend (upsert), so a
+ * subscription the browser silently rotated (SW reinstall, push-service key
+ * rotation) gets re-synced — otherwise the backend keeps sending to a stale
+ * endpoint that FCM accepts (201) but the browser can't display. Best-effort
+ * and silent: called on app open and on the SW's `pushsubscriptionchange`.
+ * Runs in the app (not the SW) because the subscribe endpoint needs the bearer.
+ */
+export async function resyncPushSubscription(): Promise<void> {
+  if (!isPushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await pushApi.subscribe(subscriptionToPayload(sub));
+    }
+  } catch {
+    // Non-fatal — a failed re-sync just means we retry on the next app open.
+  }
+}
+
 function subscriptionToPayload(sub: PushSubscription): PushSubscribePayload {
   const json = sub.toJSON();
   return {
