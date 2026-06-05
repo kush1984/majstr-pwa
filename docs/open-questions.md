@@ -239,7 +239,7 @@ one-line summary — keep the item in the file as a record.
   once branded PDF matters to a paying user.
 
 ### In-app notifications (bell + per-object client questions)
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** step 8
 - **Context:** Web push (Step 8) surfaces client questions / signatures only as
   **OS notifications** — there is nothing inside the app. The question text lives
@@ -254,6 +254,12 @@ one-line summary — keep the item in the file as a record.
   authenticated API yet — only written from the public portal. Bonus: the SW can
   `postMessage` open clients so a live in-app toast shows when a push arrives
   while the app is already open.
+- **Resolution:** Fix F — backend shipped `GET /api/projects/{id}/questions`,
+  `PATCH .../{qid}/read`, and `unreadQuestions` per project. PWA added a
+  "Питання від клієнта" section on the project screen (opening marks unread
+  read), a "💬 N" card indicator, and a header **NotificationBell** whose
+  counter/list aggregate `unreadQuestions` across the projects list (no global
+  endpoint needed). The live SW→client toast bonus is still future work.
 
 ---
 

@@ -74,7 +74,7 @@ export type EstimateStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 
 export type ItemType = 'WORK' | 'MATERIAL';
 
-export type Unit = 'M2' | 'M' | 'PIECE' | 'KG' | 'HOUR' | 'SET';
+export type Unit = 'M2' | 'M' | 'LINEAR_METER' | 'PIECE' | 'KG' | 'HOUR' | 'SET';
 
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)
@@ -112,6 +112,8 @@ export interface ProjectResponse {
   /** Latest estimate's total + status for the project card. Null = no estimate yet. */
   latestEstimateTotal: number | null;
   estimateStatus: EstimateStatus | null;
+  /** Count of unread client questions across the project's estimates (Fix F). */
+  unreadQuestions: number;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -122,6 +124,21 @@ export interface ProjectRequest {
   address: string;
   description?: string;
   clientId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Client questions (Fix F). Left by the client on the public portal; the
+// contractor reads them on the project screen. Mirrors the contractor-facing
+// QuestionResponse (the portal's own ack DTO only returns id + createdAt).
+// ---------------------------------------------------------------------------
+
+export interface QuestionResponse {
+  id: string;
+  message: string;
+  authorName: string | null;
+  authorPhone: string | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------

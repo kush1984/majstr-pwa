@@ -37,6 +37,11 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
         </div>
       </div>
       <div className="flex flex-shrink-0 flex-col items-end gap-1">
+        {project.unreadQuestions > 0 && (
+          <span className="whitespace-nowrap rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+            💬 {project.unreadQuestions}
+          </span>
+        )}
         {project.latestEstimateTotal != null && (
           <span className="whitespace-nowrap text-sm font-bold text-primary">
             {formatMoney(project.latestEstimateTotal)}

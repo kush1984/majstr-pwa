@@ -39,6 +39,20 @@ export function formatDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : dateFmt.format(d);
 }
 
+const dateTimeFmt = new Intl.DateTimeFormat('uk-UA', {
+  day: 'numeric',
+  month: 'long',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** ISO instant → "18 листопада, 14:30". For timestamped items like questions. */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : dateTimeFmt.format(d);
+}
+
 /** Two-letter initials for avatars: "Олена Петренко" → "ОП". */
 export function initials(fullName: string | null | undefined): string {
   if (!fullName) return '';

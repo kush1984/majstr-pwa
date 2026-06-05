@@ -9,6 +9,7 @@ export const ITEM_TYPE_OPTIONS: { value: ItemType; label: string }[] = [
 export const UNIT_OPTIONS: { value: Unit; label: string }[] = [
   { value: 'M2', label: 'м² (метр квадратний)' },
   { value: 'M', label: 'м (метр)' },
+  { value: 'LINEAR_METER', label: 'м.п. (метр погонний)' },
   { value: 'PIECE', label: 'шт (штука)' },
   { value: 'KG', label: 'кг (кілограм)' },
   { value: 'HOUR', label: 'год (година)' },
@@ -31,7 +32,9 @@ const priceString = z
 export const catalogItemSchema = z.object({
   name: z.string().min(1, 'Введіть назву').max(255, 'Занадто довга назва'),
   type: z.enum(['WORK', 'MATERIAL'], { message: 'Оберіть тип' }),
-  unit: z.enum(['M2', 'M', 'PIECE', 'KG', 'HOUR', 'SET'], { message: 'Оберіть одиницю' }),
+  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET'], {
+    message: 'Оберіть одиницю',
+  }),
   category: z.string().max(100, 'Занадто довга назва категорії'),
   defaultPrice: priceString,
 });

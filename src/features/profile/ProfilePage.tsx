@@ -9,9 +9,9 @@ import { initials } from '@/lib/format.ts';
 import { TRADE_EMOJI, TRADE_LABEL } from '@/lib/labels.ts';
 import type { Plan } from '@/api/types.ts';
 
-/** Object limits per plan (UI display; the backend enforces them). FREE = 3. */
+/** Object limits per plan (UI display; the backend enforces them). FREE = 2. */
 const PROJECT_LIMIT: Record<Plan, number | null> = {
-  FREE: 3,
+  FREE: 2,
   PRO: null,
   TEAM: null,
 };

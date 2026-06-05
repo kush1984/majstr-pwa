@@ -9,7 +9,7 @@ export const itemFormSchema = z.object({
   type: z.enum(['WORK', 'MATERIAL']),
   name: z.string().min(1, 'Введіть назву').max(255, 'Занадто довга назва'),
   category: z.string().max(100, 'Занадто довга категорія'),
-  unit: z.enum(['M2', 'M', 'PIECE', 'KG', 'HOUR', 'SET']),
+  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET']),
   quantity: decimalString('Введіть кількість'),
   unitPrice: decimalString('Введіть ціну'),
   saveToCatalog: z.boolean(),

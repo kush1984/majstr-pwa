@@ -17,6 +17,8 @@ import type { EstimateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
 import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
+import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
+import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 
 type Tab = 'estimate' | 'photos' | 'changes' | 'act';
 const TABS: { key: Tab; label: string }[] = [
@@ -34,6 +36,7 @@ export function ProjectDetailPage() {
   const [tab, setTab] = useState<Tab>('estimate');
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const [editClientOpen, setEditClientOpen] = useState(false);
 
   const estimates = useQuery({
     queryKey: ['project-estimates', id],
@@ -90,6 +93,13 @@ export function ProjectDetailPage() {
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
       />
+      {p.clientId && (
+        <ClientEditModal
+          open={editClientOpen}
+          onClose={() => setEditClientOpen(false)}
+          clientId={p.clientId}
+        />
+      )}
 
       <div className="mb-3 flex items-center gap-3">
         <button
@@ -121,6 +131,15 @@ export function ProjectDetailPage() {
             <span className="text-xs text-primary">
               <strong className="font-semibold">{p.clientFullName}</strong>
             </span>
+            {p.clientId && (
+              <button
+                type="button"
+                onClick={() => setEditClientOpen(true)}
+                className="ml-auto text-xs font-semibold text-brand"
+              >
+                Редагувати
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -203,6 +222,8 @@ export function ProjectDetailPage() {
           )}
         </>
       )}
+
+      <QuestionsSection projectId={id} />
     </>
   );
 }

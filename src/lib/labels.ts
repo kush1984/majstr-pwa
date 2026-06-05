@@ -32,6 +32,7 @@ export const TRADE_EMOJI: Record<Trade, string> = {
 export const UNIT_LABEL: Record<Unit, string> = {
   M2: 'м²',
   M: 'м',
+  LINEAR_METER: 'м.п.',
   PIECE: 'шт',
   KG: 'кг',
   HOUR: 'год',
