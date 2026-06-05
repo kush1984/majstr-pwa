@@ -41,7 +41,7 @@ export function AppLayout() {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-surface lg:p-3.5">
         <div className="px-3 pb-5 pt-2 text-[22px] font-extrabold tracking-tight text-brand">
-          majstr
+          Majstr
         </div>
         <nav className="flex flex-col gap-0.5">
           {NAV_ITEMS.map((it) => (
