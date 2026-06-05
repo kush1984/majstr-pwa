@@ -32,6 +32,17 @@ export const authApi = {
     return api.get<UserResponse>('/api/auth/me').then((r) => r.data);
   },
 
+  /** Revoke the given refresh token server-side. Public endpoint (it identifies
+   *  the session from the token in the body, not the bearer), so it goes through
+   *  rawApi and works even when the access token has already expired. */
+  logout(refreshToken: string): Promise<void> {
+    return rawApi({
+      method: 'POST',
+      url: '/api/auth/logout',
+      data: { refreshToken },
+    }).then(() => undefined);
+  },
+
   /** Public — the user may open the email link while logged out. Bad/expired
    *  token → 400 (handled by the caller). */
   verifyEmail(token: string): Promise<void> {

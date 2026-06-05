@@ -46,6 +46,8 @@ Three files own auth and they must stay in sync:
    - Refresh is **single-flight** via the module-level `refreshInFlight` promise (shared by both interceptors *and* `ensureAccessToken`) — don't introduce a parallel refresh path or you'll race-rotate the refresh token. When refresh can't produce a token, `forceLogin()` clears storage and redirects to `/login` **once** (`redirectingToLogin` latch), and pending requests reject instead of retrying forever. `/api/auth/login` and `/api/auth/refresh` are excluded from the 401 logic; `rawApi` skips the bearer entirely (login, register). Bearer calls outside axios (PDF blob `fetch`) must call the exported `ensureAccessToken()` to get the same proactive-refresh guarantee.
 3. `src/routes/ProtectedRoute.tsx` — auth gate driven by `useMe()`. Decision tree: no token → redirect; token present + `/me` pending → spinner; `/me` errored → redirect (interceptor already cleared tokens on a failed refresh).
 
+The backend **rotates the refresh token on every `/api/auth/refresh`** (old token → 401) and the refresh TTL is 30 days (`REFRESH_TOKEN_TTL_DAYS`); `doRefresh` therefore stores the *new* refresh token from each response. `useLogout` calls the public `POST /api/auth/logout {refreshToken}` (via `rawApi`) to **revoke the token server-side** — best-effort/fire-and-forget so it never blocks local logout — before `tokens.clear()`. The involuntary `forceLogin()` path doesn't revoke (the refresh token is already dead, which is why refresh failed).
+
 `useLogin` primes the `['me']` cache with the user from the login response so the dashboard renders without a second `/me` round-trip.
 
 ### PWA / service worker

@@ -69,4 +69,13 @@ test('повний сценарій підрядника: реєстрація �
       .getByText(/Посилання скопійовано|доступний у плані PRO/)
       .or(page.getByRole('dialog', { name: 'Підтвердіть email' })),
   ).toBeVisible();
+
+  // 8 — Logout (Fix G): clicking "Вийти" revokes the session server-side
+  // (POST /api/auth/logout, fire-and-forget) then routes to /login. After that
+  // the protected route no longer opens — the token is cleared.
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Вийти' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/);
 });

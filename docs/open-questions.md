@@ -116,13 +116,19 @@ one-line summary — keep the item in the file as a record.
   are long), so probably defer until anyone reports being kicked out.
 
 ### Backend logout endpoint
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** `useLogout` only clears localStorage. The refresh token
   stays valid in the backend DB until natural expiry — stealing it
   from a logged-out shared device still works.
 - **Notes / options:** Backend adds `POST /api/auth/logout` that revokes
   the supplied refresh token; PWA hits it before clearing storage.
+- **Resolution:** Refresh-token audit — backend shipped public
+  `POST /api/auth/logout {refreshToken}` (revokes server-side). `useLogout`
+  now calls `authApi.logout(refreshToken)` (best-effort, fire-and-forget, never
+  blocks local logout) before `tokens.clear()`. Verified live: a refresh token
+  used after logout is rejected 401. (Backend also rotates refresh on every
+  `/refresh` — old token → 401 — and TTL is 30 days via `REFRESH_TOKEN_TTL_DAYS`.)
 
 ### Password reset UI
 - **Status:** OPEN
