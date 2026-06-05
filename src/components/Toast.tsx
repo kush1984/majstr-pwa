@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useToast, type ToastKind } from '@/hooks/useToast.ts';
 import { cn } from '@/lib/cn.ts';
 
@@ -12,27 +13,28 @@ const kindStyles: Record<ToastKind, string> = {
  * on desktop. Auto-dismisses on a timer set by the `toast()` caller.
  */
 export function ToastViewport() {
+  const { t } = useTranslation();
   const { toasts, dismiss } = useToast();
   if (toasts.length === 0) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4 sm:bottom-auto sm:right-4 sm:top-4 sm:items-end">
-      {toasts.map((t) => (
+      {toasts.map((item) => (
         <div
-          key={t.id}
+          key={item.id}
           role="status"
           className={cn(
             'pointer-events-auto max-w-md rounded-lg border px-4 py-3 text-sm shadow-sm',
-            kindStyles[t.kind],
+            kindStyles[item.kind],
           )}
         >
           <div className="flex items-start gap-3">
-            <p className="flex-1">{t.message}</p>
+            <p className="flex-1">{item.message}</p>
             <button
               type="button"
-              onClick={() => dismiss(t.id)}
+              onClick={() => dismiss(item.id)}
               className="text-current opacity-60 hover:opacity-100"
-              aria-label="Закрити"
+              aria-label={t('common.close')}
             >
               ✕
             </button>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Modal } from './Modal.tsx';
 import { Button } from './Button.tsx';
 
@@ -6,7 +7,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Видалити',
+  confirmLabel,
   loading = false,
   onConfirm,
   onClose,
@@ -19,12 +20,13 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal open={open} onClose={onClose} title={title}>
       <p className="mb-5 text-sm text-muted">{message}</p>
       <div className="flex gap-2">
         <Button variant="secondary" fullWidth onClick={onClose}>
-          Скасувати
+          {t('common.cancel')}
         </Button>
         <Button
           fullWidth
@@ -32,7 +34,7 @@ export function ConfirmDialog({
           onClick={onConfirm}
           className="bg-danger text-white hover:bg-danger focus-visible:ring-danger"
         >
-          {confirmLabel}
+          {confirmLabel ?? t('common.delete')}
         </Button>
       </div>
     </Modal>

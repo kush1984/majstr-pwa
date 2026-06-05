@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App.tsx';
+import './lib/i18n.ts';
 import './styles/index.css';
 
 // One shared QueryClient. Sensible defaults for this app:

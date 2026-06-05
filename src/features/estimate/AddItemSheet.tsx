@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -7,7 +8,6 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
-import { UNIT_LABEL, unitPer } from '@/lib/labels.ts';
 import { cn } from '@/lib/cn.ts';
 import { useCatalog, useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
@@ -27,6 +27,7 @@ export function AddItemSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('catalog');
   const addItem = useAddItem(estimateId);
   const addFromCatalog = useAddItemFromCatalog(estimateId);
@@ -38,19 +39,19 @@ export function AddItemSheet({
   };
 
   return (
-    <Modal open={open} onClose={close} title="Додати позицію">
+    <Modal open={open} onClose={close} title={t('estimate.addItemTitle')}>
       <div className="mb-4 flex gap-1 rounded-xl bg-surface-sunken p-1">
-        {(['catalog', 'manual'] as Tab[]).map((t) => (
+        {(['catalog', 'manual'] as Tab[]).map((tabKey) => (
           <button
-            key={t}
+            key={tabKey}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(tabKey)}
             className={cn(
               'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors',
-              tab === t ? 'bg-surface text-primary shadow-card' : 'text-muted',
+              tab === tabKey ? 'bg-surface text-primary shadow-card' : 'text-muted',
             )}
           >
-            {t === 'catalog' ? 'З каталогу' : 'Вручну'}
+            {tabKey === 'catalog' ? t('estimate.fromCatalog') : t('estimate.manual')}
           </button>
         ))}
       </div>
@@ -61,7 +62,7 @@ export function AddItemSheet({
           onPick={async (item, qty) => {
             const quantity = parseDecimal(qty);
             if (!Number.isFinite(quantity) || quantity <= 0) {
-              toast.error('Введіть кількість');
+              toast.error(t('estimate.enterQuantity'));
               return;
             }
             try {
@@ -69,7 +70,7 @@ export function AddItemSheet({
                 catalogItemId: item.id,
                 req: { quantity, sortOrder: nextSortOrder },
               });
-              toast.success('Позицію додано');
+              toast.success(t('estimate.itemAdded'));
               close();
             } catch (err) {
               toast.error(toAppError(err).message);
@@ -79,7 +80,7 @@ export function AddItemSheet({
       ) : (
         <ItemForm
           showSaveToCatalog
-          submitLabel="Додати"
+          submitLabel={t('common.add')}
           submitting={addItem.isPending}
           onSubmit={async (req, saveToCatalog) => {
             try {
@@ -93,7 +94,7 @@ export function AddItemSheet({
                   defaultPrice: req.unitPrice,
                 });
               }
-              toast.success('Позицію додано');
+              toast.success(t('estimate.itemAdded'));
               close();
             } catch (err) {
               toast.error(toAppError(err).message);
@@ -113,6 +114,7 @@ function CatalogPicker({
   onPick: (item: CatalogItemResponse, quantity: string) => void;
   picking: boolean;
 }) {
+  const { t } = useTranslation();
   const { data, isPending } = useCatalog();
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<CatalogItemResponse | null>(null);
@@ -134,7 +136,11 @@ function CatalogPicker({
         >
           ← {selected.name}
         </button>
-        <FormField label={`Кількість, ${UNIT_LABEL[selected.unit]}`} htmlFor="pick-qty" required>
+        <FormField
+          label={t('estimate.quantityWithUnit', { unit: t('units.' + selected.unit) })}
+          htmlFor="pick-qty"
+          required
+        >
           <Input
             id="pick-qty"
             inputMode="decimal"
@@ -145,10 +151,13 @@ function CatalogPicker({
           />
         </FormField>
         <p className="mb-4 mt-1 text-xs text-muted">
-          Ціна з каталогу: {formatMoney(selected.defaultPrice)} / {UNIT_LABEL[selected.unit]}
+          {t('estimate.catalogPrice', {
+            price: formatMoney(selected.defaultPrice),
+            unit: t('units.' + selected.unit),
+          })}
         </p>
         <Button fullWidth loading={picking} onClick={() => onPick(selected, qty)}>
-          Додати
+          {t('common.add')}
         </Button>
       </div>
     );
@@ -157,17 +166,17 @@ function CatalogPicker({
   return (
     <div>
       <Input
-        placeholder="Пошук у каталозі..."
+        placeholder={t('estimate.searchCatalog')}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         className="mb-3"
       />
       <div className="max-h-[46dvh] space-y-1.5 overflow-y-auto">
         {isPending ? (
-          <p className="py-6 text-center text-sm text-muted">Завантаження...</p>
+          <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
         ) : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">
-            Нічого не знайдено. Додайте вручну або поповніть каталог.
+            {t('estimate.catalogEmptyResult')}
           </p>
         ) : (
           filtered.map((item) => (
@@ -183,7 +192,9 @@ function CatalogPicker({
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-primary">{item.name}</span>
-                <span className="block text-xs text-muted">{unitPer(item.unit)}</span>
+                <span className="block text-xs text-muted">
+                  {t('unitPer', { unit: t('units.' + item.unit) })}
+                </span>
               </span>
               <span className="whitespace-nowrap text-sm font-semibold text-primary">
                 {formatMoney(item.defaultPrice)}

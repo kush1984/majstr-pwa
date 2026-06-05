@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -31,6 +32,7 @@ export function ShareEstimateSheet({
   project: ProjectResponse;
   onNeedEmailVerify: () => void;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const client = useClient(project.clientId ?? '', open && Boolean(project.clientId));
   const updateClient = useUpdateClient();
@@ -54,12 +56,12 @@ export function ShareEstimateSheet({
       onClose();
       onNeedEmailVerify();
     } else if (e.code === 'CLIENT_EMAIL_MISSING') {
-      toast.error('У клієнта не вказано email');
+      toast.error(t('estimate.clientEmailMissing'));
       setShowAddEmail(true);
     } else if (e.status === 429) {
-      toast.error('Забагато листів — спробуйте трохи згодом');
+      toast.error(t('estimate.tooManyEmails'));
     } else if (e.status === 403) {
-      toast.error('Портал для клієнта доступний у плані PRO');
+      toast.error(t('estimate.portalProOnly'));
     } else {
       toast.error(e.message);
     }
@@ -71,7 +73,7 @@ export function ShareEstimateSheet({
       const link = await estimatesApi.createShareLink(estimateId);
       await navigator.clipboard?.writeText(link.url).catch(() => undefined);
       invalidateAfterShare();
-      toast.success('Посилання скопійовано');
+      toast.success(t('estimate.linkCopied'));
       onClose();
     } catch (err) {
       handleError(err);
@@ -85,7 +87,7 @@ export function ShareEstimateSheet({
     try {
       await estimatesApi.sendShareEmail(estimateId);
       invalidateAfterShare();
-      toast.success('Лист надіслано клієнту ✅');
+      toast.success(t('estimate.emailSent'));
       onClose();
     } catch (err) {
       handleError(err);
@@ -98,7 +100,7 @@ export function ShareEstimateSheet({
     const c = client.data;
     if (!c || !project.clientId) return;
     if (!emailInput.includes('@')) {
-      toast.error('Введіть коректний email');
+      toast.error(t('estimate.enterValidEmail'));
       return;
     }
     try {
@@ -111,7 +113,7 @@ export function ShareEstimateSheet({
           email: emailInput.trim(),
         },
       });
-      toast.success('Email клієнта збережено');
+      toast.success(t('estimate.clientEmailSaved'));
       setShowAddEmail(false);
       setEmailInput('');
     } catch (err) {
@@ -120,11 +122,11 @@ export function ShareEstimateSheet({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Поділитися з клієнтом">
+    <Modal open={open} onClose={onClose} title={t('estimate.shareSheetTitle')}>
       <div className="space-y-3">
         {email && (
           <Button fullWidth loading={busy === 'email'} onClick={onEmail}>
-            📧 Надіслати на {email}
+            {t('estimate.sendToEmail', { email })}
           </Button>
         )}
 
@@ -134,13 +136,13 @@ export function ShareEstimateSheet({
           loading={busy === 'copy'}
           onClick={onCopy}
         >
-          🔗 Копіювати посилання
+          {t('estimate.copyLink')}
         </Button>
 
         {!email && project.clientId && (
           <div className="rounded-xl bg-surface-sunken p-3">
             <p className="mb-2 text-xs text-muted">
-              Додайте email клієнта, щоб надсилати кошторис поштою.
+              {t('estimate.addClientEmailHint')}
             </p>
             {showAddEmail ? (
               <div className="space-y-2">
@@ -153,10 +155,10 @@ export function ShareEstimateSheet({
                 />
                 <div className="flex gap-2">
                   <Button variant="secondary" fullWidth onClick={() => setShowAddEmail(false)}>
-                    Скасувати
+                    {t('common.cancel')}
                   </Button>
                   <Button fullWidth loading={updateClient.isPending} onClick={onSaveEmail}>
-                    Зберегти
+                    {t('common.save')}
                   </Button>
                 </div>
               </div>
@@ -169,7 +171,7 @@ export function ShareEstimateSheet({
                   setShowAddEmail(true);
                 }}
               >
-                + Додати email клієнта
+                {t('estimate.addClientEmail')}
               </Button>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
@@ -34,6 +35,7 @@ export function CatalogItemForm({
   initial: CatalogItemResponse | null;
   onDone: () => void;
 }) {
+  const { t } = useTranslation();
   const isEdit = Boolean(initial);
   const create = useCreateCatalogItem();
   const update = useUpdateCatalogItem();
@@ -71,10 +73,10 @@ export function CatalogItemForm({
     try {
       if (isEdit && initial) {
         await update.mutateAsync({ id: initial.id, req });
-        toast.success('Збережено');
+        toast.success(t('estimate.saved'));
       } else {
         await create.mutateAsync(req);
-        toast.success('Додано в каталог');
+        toast.success(t('catalog.savedToCatalog'));
       }
       onDone();
     } catch (err) {
@@ -86,7 +88,7 @@ export function CatalogItemForm({
     if (!initial) return;
     try {
       await del.mutateAsync(initial.id);
-      toast.success('Видалено');
+      toast.success(t('estimate.deleted'));
       onDone();
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -96,26 +98,26 @@ export function CatalogItemForm({
   return (
     <>
       <form noValidate onSubmit={onSubmit} className="space-y-4">
-        <FormField label="Назва" htmlFor="ci-name" required error={errors.name?.message}>
+        <FormField label={t('estimate.itemName')} htmlFor="ci-name" required error={errors.name?.message}>
           <Input id="ci-name" invalid={Boolean(errors.name)} {...register('name')} />
         </FormField>
 
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Тип" htmlFor="ci-type" required error={errors.type?.message}>
+          <FormField label={t('estimate.type')} htmlFor="ci-type" required error={errors.type?.message}>
             <Select id="ci-type" invalid={Boolean(errors.type)} {...register('type')}>
-              {ITEM_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+              {ITEM_TYPE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {t('itemType.' + value)}
                 </option>
               ))}
             </Select>
           </FormField>
 
-          <FormField label="Одиниця" htmlFor="ci-unit" required error={errors.unit?.message}>
+          <FormField label={t('estimate.unit')} htmlFor="ci-unit" required error={errors.unit?.message}>
             <Select id="ci-unit" invalid={Boolean(errors.unit)} {...register('unit')}>
-              {UNIT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+              {UNIT_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {t('unitOptions.' + value)}
                 </option>
               ))}
             </Select>
@@ -123,10 +125,10 @@ export function CatalogItemForm({
         </div>
 
         <FormField
-          label="Категорія"
+          label={t('estimate.category')}
           htmlFor="ci-category"
           error={errors.category?.message}
-          hint="Напр. Електрика, Плитка, Демонтаж"
+          hint={t('catalog.categoryHint')}
         >
           <Input
             id="ci-category"
@@ -142,7 +144,7 @@ export function CatalogItemForm({
         </FormField>
 
         <FormField
-          label="Ціна за одиницю, ₴"
+          label={t('catalog.priceLabel')}
           htmlFor="ci-price"
           required
           error={errors.defaultPrice?.message}
@@ -164,19 +166,19 @@ export function CatalogItemForm({
               onClick={() => setConfirmOpen(true)}
               className="text-danger hover:bg-danger-soft"
             >
-              Видалити
+              {t('common.delete')}
             </Button>
           )}
           <Button type="submit" fullWidth loading={submitting}>
-            {isEdit ? 'Зберегти' : 'Додати'}
+            {isEdit ? t('common.save') : t('common.add')}
           </Button>
         </div>
       </form>
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Видалити позицію?"
-        message={`«${initial?.name}» буде видалено з каталогу. Уже додані в кошториси позиції залишаться.`}
+        title={t('catalog.deleteTitle')}
+        message={t('catalog.deleteMessage', { name: initial?.name ?? '' })}
         loading={del.isPending}
         onConfirm={onDelete}
         onClose={() => setConfirmOpen(false)}

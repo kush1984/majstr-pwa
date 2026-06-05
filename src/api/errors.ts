@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios';
+import i18n from '@/lib/i18n.ts';
 import type { BackendError } from './types.ts';
 
 /**
@@ -21,7 +22,7 @@ export function toAppError(err: unknown): AppError {
   if (err instanceof Error) {
     return { message: err.message };
   }
-  return { message: 'Невідома помилка' };
+  return { message: i18n.t('errors.unknown') };
 }
 
 function fromAxios(err: AxiosError): AppError {
@@ -41,7 +42,7 @@ function fromAxios(err: AxiosError): AppError {
   // Network errors / no response
   if (!err.response) {
     return {
-      message: 'Сервер недоступний. Перевірте з’єднання та повторіть.',
+      message: i18n.t('errors.network'),
     };
   }
 
@@ -53,13 +54,13 @@ function fromAxios(err: AxiosError): AppError {
 
 function defaultMessageForStatus(status: number): string {
   switch (status) {
-    case 400: return 'Невірний запит';
-    case 401: return 'Невірний логін або пароль';
-    case 403: return 'Доступ заборонено';
-    case 404: return 'Не знайдено';
-    case 409: return 'Конфлікт даних';
-    case 429: return 'Забагато спроб. Спробуйте за кілька хвилин.';
-    case 500: return 'Помилка сервера';
-    default:  return `Помилка ${status}`;
+    case 400: return i18n.t('errors.badRequest');
+    case 401: return i18n.t('errors.unauthorized');
+    case 403: return i18n.t('errors.forbidden');
+    case 404: return i18n.t('errors.notFound');
+    case 409: return i18n.t('errors.conflict');
+    case 429: return i18n.t('errors.tooManyRequests');
+    case 500: return i18n.t('errors.serverError');
+    default:  return i18n.t('errors.withStatus', { status });
   }
 }

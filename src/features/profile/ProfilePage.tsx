@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { usePush } from '@/hooks/usePush.ts';
@@ -6,7 +7,7 @@ import { isIOS, isStandalone } from '@/lib/push.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { initials } from '@/lib/format.ts';
-import { TRADE_EMOJI, TRADE_LABEL } from '@/lib/labels.ts';
+import { TRADE_EMOJI } from '@/lib/labels.ts';
 import type { Plan } from '@/api/types.ts';
 
 /** Object limits per plan (UI display; the backend enforces them). FREE = 2. */
@@ -17,6 +18,8 @@ const PROJECT_LIMIT: Record<Plan, number | null> = {
 };
 
 export function ProfilePage() {
+  // TODO(i18n): language switcher + hotkey — G2
+  const { t } = useTranslation();
   const { data: me } = useMe();
   const logout = useLogout();
 
@@ -34,7 +37,7 @@ export function ProfilePage() {
   return (
     <>
       <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
-        Профіль
+        {t('profile.title')}
       </h1>
 
       {/* Hero */}
@@ -45,7 +48,7 @@ export function ProfilePage() {
         <div className="text-lg font-bold text-primary">{me?.fullName ?? '...'}</div>
         {me && me.trades.length > 0 && (
           <div className="mt-1.5 inline-block rounded-full bg-surface px-3 py-1 text-xs font-semibold text-secondary">
-            {me.trades.map((t) => `${TRADE_EMOJI[t]} ${TRADE_LABEL[t]}`).join(' · ')}
+            {me.trades.map((trade) => `${TRADE_EMOJI[trade]} ${t('trades.' + trade)}`).join(' · ')}
           </div>
         )}
       </div>
@@ -54,19 +57,19 @@ export function ProfilePage() {
       <div className="mb-4 rounded-card bg-ink p-4 text-white">
         <div className="mb-2.5 flex items-center justify-between">
           <div>
-            <div className="text-[13px] text-white/65">Поточний план</div>
+            <div className="text-[13px] text-white/65">{t('profile.currentPlan')}</div>
             <div className="text-lg font-extrabold">{plan}</div>
           </div>
           <span className="rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold uppercase">
-            {plan === 'FREE' ? 'Безкоштовно' : 'Активний'}
+            {plan === 'FREE' ? t('profile.planFree') : t('profile.planActive')}
           </span>
         </div>
 
         <div className="my-3 rounded-xl bg-white/[0.08] p-3">
           <div className="mb-1.5 flex justify-between text-xs">
-            <span className="text-white/70">Об'єкти</span>
+            <span className="text-white/70">{t('profile.objects')}</span>
             <span className="font-semibold">
-              {limit === null ? 'Без обмежень' : `${used} з ${limit}`}
+              {limit === null ? t('profile.unlimited') : t('profile.usedOfLimit', { used, limit })}
             </span>
           </div>
           {limit !== null && (
@@ -82,10 +85,10 @@ export function ProfilePage() {
         {!isPro && (
           <button
             type="button"
-            onClick={() => toast.info('Оплата підписки буде доступна найближчим часом')}
+            onClick={() => toast.info(t('profile.subscriptionSoon'))}
             className="w-full rounded-xl bg-brand py-3 text-sm font-bold text-white"
           >
-            ⭐ Оновити до PRO · 199 ₴/міс
+            {t('profile.upgradeToPro')}
           </button>
         )}
       </div>
@@ -96,9 +99,9 @@ export function ProfilePage() {
         <PushRow />
         <MenuRow
           icon="⚙️"
-          title="Налаштування"
-          sub="Профіль, контакти"
-          onClick={() => toast.info('Налаштування профілю — скоро')}
+          title={t('profile.settings')}
+          sub={t('profile.settingsSub')}
+          onClick={() => toast.info(t('profile.settingsSoon'))}
         />
         <button
           type="button"
@@ -108,13 +111,13 @@ export function ProfilePage() {
           <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-danger-soft text-base text-danger">
             ↪
           </span>
-          <span className="text-sm font-medium text-danger">Вийти</span>
+          <span className="text-sm font-medium text-danger">{t('profile.logout')}</span>
         </button>
       </div>
 
       {limit !== null && used >= limit && (
         <p className="mt-3 text-center text-xs text-muted">
-          Досягнуто ліміту об'єктів. Оновіть план, щоб створювати більше.
+          {t('profile.limitReached')}
         </p>
       )}
     </>
@@ -159,16 +162,17 @@ function MenuRow({
 }
 
 function LogoRow({ isPro }: { isPro: boolean }) {
+  const { t } = useTranslation();
   return (
     <MenuRow
       icon="🖼️"
-      title="Логотип компанії"
-      sub={isPro ? 'Для брендованих PDF' : 'Доступно в PRO'}
+      title={t('profile.companyLogo')}
+      sub={isPro ? t('profile.companyLogoBranded') : t('profile.companyLogoPro')}
       locked={!isPro}
       onClick={
         isPro
-          ? () => toast.info('Завантаження логотипу — скоро')
-          : () => toast.info('Брендований PDF доступний у плані PRO')
+          ? () => toast.info(t('profile.logoUploadSoon'))
+          : () => toast.info(t('profile.brandedPdfPro'))
       }
     />
   );
@@ -181,6 +185,7 @@ function LogoRow({ isPro }: { isPro: boolean }) {
  * hint instead of a dead toggle.
  */
 function PushRow() {
+  const { t } = useTranslation();
   const { permission, isSubscribed, isReady, isBusy, enable, disable } = usePush();
   if (!isReady) return null;
 
@@ -192,23 +197,23 @@ function PushRow() {
     if (isBusy) return;
     if (isSubscribed) {
       await disable();
-      toast.info('Сповіщення вимкнено');
+      toast.info(t('profile.notificationsOff'));
       return;
     }
     const r = await enable();
-    if (r.ok) toast.success('Сповіщення увімкнено');
+    if (r.ok) toast.success(t('profile.notificationsOn'));
     else if (r.error) toast.error(r.error);
   };
 
   const sub = iosNeedsInstall
-    ? 'Додайте застосунок на головний екран, щоб увімкнути'
+    ? t('profile.pushAddToHome')
     : permission === 'unsupported'
-      ? 'Недоступно у цьому браузері'
+      ? t('profile.pushUnsupported')
       : permission === 'denied'
-        ? 'Заблоковано в налаштуваннях браузера'
+        ? t('profile.pushDenied')
         : isSubscribed
-          ? 'Увімкнено на цьому пристрої'
-          : 'Сповіщення про підпис і питання клієнта';
+          ? t('profile.pushEnabledOnDevice')
+          : t('profile.pushDescription');
 
   const canToggle =
     permission !== 'unsupported' && permission !== 'denied' && !iosNeedsInstall;
@@ -219,7 +224,7 @@ function PushRow() {
         🔔
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-primary">Сповіщення</span>
+        <span className="block text-sm font-medium text-primary">{t('profile.notifications')}</span>
         <span className="block text-xs text-muted">{sub}</span>
       </span>
       {canToggle ? (
@@ -227,7 +232,7 @@ function PushRow() {
           type="button"
           role="switch"
           aria-checked={isSubscribed}
-          aria-label="Push-сповіщення"
+          aria-label={t('profile.notificationsToggle')}
           disabled={isBusy}
           onClick={toggle}
           className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${

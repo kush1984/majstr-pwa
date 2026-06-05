@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -9,6 +10,7 @@ import { useResendVerification } from './useEmailVerification.ts';
  * when the field is absent (backend not deployed yet), so it degrades safely.
  */
 export function EmailVerificationBanner() {
+  const { t } = useTranslation();
   const { data: me } = useMe();
   const resend = useResendVerification();
 
@@ -17,12 +19,14 @@ export function EmailVerificationBanner() {
   const onResend = async () => {
     try {
       await resend.mutateAsync();
-      toast.success('Лист надіслано — перевірте пошту');
+      toast.success(t('email.sentCheckInbox'));
     } catch (err) {
       const e = toAppError(err);
       toast.error(
         e.status === 429
-          ? `Зачекайте${e.retryAfterSeconds ? ` ${e.retryAfterSeconds} с` : ''} перед повторною відправкою`
+          ? t('email.waitBeforeResend', {
+              seconds: e.retryAfterSeconds ? t('email.waitSeconds', { seconds: e.retryAfterSeconds }) : '',
+            })
           : e.message,
       );
     }
@@ -33,9 +37,9 @@ export function EmailVerificationBanner() {
       <div className="flex items-start gap-2.5">
         <span className="text-lg leading-none">✉️</span>
         <div>
-          <div className="text-sm font-semibold text-primary">Підтвердіть email</div>
+          <div className="text-sm font-semibold text-primary">{t('email.bannerTitle')}</div>
           <div className="text-xs text-muted">
-            Ми надіслали лист на {me.email}. Підтвердіть, щоб надсилати кошториси клієнтам.
+            {t('email.bannerText', { email: me.email })}
           </div>
         </div>
       </div>
@@ -45,7 +49,7 @@ export function EmailVerificationBanner() {
         disabled={resend.isPending}
         className="shrink-0 self-start rounded-lg bg-surface px-3 py-2 text-xs font-semibold text-primary shadow-card disabled:opacity-60 sm:self-auto"
       >
-        Надіслати лист ще раз
+        {t('email.resend')}
       </button>
     </div>
   );

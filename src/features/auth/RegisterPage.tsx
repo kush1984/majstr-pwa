@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
@@ -9,7 +10,7 @@ import { FormField } from '@/components/FormField.tsx';
 import { useRegister } from './useRegister.ts';
 import {
   registerSchema,
-  TRADE_OPTIONS,
+  TRADE_VALUES,
   type RegisterFormValues,
 } from './registerSchema.ts';
 import { AuthShell } from './LoginPage.tsx';
@@ -20,6 +21,7 @@ import type { Trade } from '@/api/types.ts';
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const register$ = useRegister();
   const {
     register,
@@ -54,7 +56,7 @@ export function RegisterPage() {
       const e = toAppError(err);
       if (e.status === 409) {
         // Backend returns "Email is already registered: foo@example.com"
-        setError('email', { message: 'Цей email вже зареєстрований' });
+        setError('email', { message: t('auth.emailAlreadyRegistered') });
       } else if (e.status === 400) {
         toast.error(e.message); // server-side validation details
       } else {
@@ -64,9 +66,9 @@ export function RegisterPage() {
   });
 
   return (
-    <AuthShell title="Реєстрація">
+    <AuthShell title={t('auth.registerTitle')}>
       <form noValidate onSubmit={onSubmit} className="space-y-4">
-        <FormField label="Email" htmlFor="email" required error={errors.email?.message}>
+        <FormField label={t('common.email')} htmlFor="email" required error={errors.email?.message}>
           <Input
             id="email"
             type="email"
@@ -77,7 +79,7 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField label="Пароль" htmlFor="password" required error={errors.password?.message} hint="Мінімум 8 символів">
+        <FormField label={t('auth.password')} htmlFor="password" required error={errors.password?.message} hint={t('auth.passwordHint')}>
           <Input
             id="password"
             type="password"
@@ -87,7 +89,7 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField label="Ім'я та прізвище" htmlFor="fullName" required error={errors.fullName?.message}>
+        <FormField label={t('common.fullName')} htmlFor="fullName" required error={errors.fullName?.message}>
           <Input
             id="fullName"
             autoComplete="name"
@@ -98,16 +100,16 @@ export function RegisterPage() {
 
         <fieldset>
           <legend className="mb-1 block text-sm font-medium text-gray-700">
-            Тип робіт
+            {t('auth.tradeType')}
             <span className="ml-0.5 text-red-500" aria-hidden>*</span>
-            <span className="ml-2 font-normal text-gray-500">можна обрати кілька</span>
+            <span className="ml-2 font-normal text-gray-500">{t('auth.chooseSeveral')}</span>
           </legend>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {TRADE_OPTIONS.map((t) => (
+            {TRADE_VALUES.map((value) => (
               <Checkbox
-                key={t.value}
-                value={t.value}
-                label={t.label}
+                key={value}
+                value={value}
+                label={t('trades.' + value)}
                 {...register('trades')}
               />
             ))}
@@ -117,19 +119,19 @@ export function RegisterPage() {
           )}
         </fieldset>
 
-        <FormField label="Телефон" htmlFor="phone" required error={errors.phone?.message}>
+        <FormField label={t('common.phone')} htmlFor="phone" required error={errors.phone?.message}>
           <Input
             id="phone"
             type="tel"
             autoComplete="tel"
             inputMode="tel"
-            placeholder="+380..."
+            placeholder={t('auth.phonePlaceholder')}
             invalid={Boolean(errors.phone)}
             {...register('phone')}
           />
         </FormField>
 
-        <FormField label="Назва компанії" htmlFor="companyName" required error={errors.companyName?.message}>
+        <FormField label={t('auth.companyName')} htmlFor="companyName" required error={errors.companyName?.message}>
           <Input
             id="companyName"
             autoComplete="organization"
@@ -139,13 +141,13 @@ export function RegisterPage() {
         </FormField>
 
         <Button type="submit" fullWidth loading={isSubmitting || register$.isPending}>
-          Створити акаунт
+          {t('auth.signUp')}
         </Button>
 
         <p className="text-center text-sm text-gray-600">
-          Уже зареєстровані?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link to={routes.login} className="font-medium text-brand-700 hover:underline">
-            Увійти
+            {t('auth.signIn')}
           </Link>
         </p>
       </form>

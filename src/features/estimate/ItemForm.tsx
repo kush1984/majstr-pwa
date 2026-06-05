@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { FormField } from '@/components/FormField.tsx';
@@ -34,6 +35,7 @@ export function ItemForm({
   onDelete?: () => void;
   deleting?: boolean;
 }) {
+  const { t } = useTranslation();
   const categories = useCatalogCategories();
   const {
     register,
@@ -76,36 +78,36 @@ export function ItemForm({
 
   return (
     <form noValidate onSubmit={submit} className="space-y-4">
-      <FormField label="Назва" htmlFor="it-name" required error={errors.name?.message}>
+      <FormField label={t('estimate.itemName')} htmlFor="it-name" required error={errors.name?.message}>
         <Input id="it-name" invalid={Boolean(errors.name)} {...register('name')} />
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Тип" htmlFor="it-type" required error={errors.type?.message}>
+        <FormField label={t('estimate.type')} htmlFor="it-type" required error={errors.type?.message}>
           <Select id="it-type" invalid={Boolean(errors.type)} {...register('type')}>
-            {ITEM_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {ITEM_TYPE_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {t('itemType.' + value)}
               </option>
             ))}
           </Select>
         </FormField>
-        <FormField label="Одиниця" htmlFor="it-unit" required error={errors.unit?.message}>
+        <FormField label={t('estimate.unit')} htmlFor="it-unit" required error={errors.unit?.message}>
           <Select id="it-unit" invalid={Boolean(errors.unit)} {...register('unit')}>
-            {UNIT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {UNIT_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {t('unitOptions.' + value)}
               </option>
             ))}
           </Select>
         </FormField>
       </div>
 
-      <FormField label="Категорія" htmlFor="it-category" error={errors.category?.message}>
+      <FormField label={t('estimate.category')} htmlFor="it-category" error={errors.category?.message}>
         <Input
           id="it-category"
           list="it-category-list"
-          placeholder="Напр. Демонтаж, Укладка"
+          placeholder={t('estimate.categoryPlaceholder')}
           invalid={Boolean(errors.category)}
           {...register('category')}
         />
@@ -117,7 +119,7 @@ export function ItemForm({
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Кількість" htmlFor="it-qty" required error={errors.quantity?.message}>
+        <FormField label={t('estimate.quantity')} htmlFor="it-qty" required error={errors.quantity?.message}>
           <Input
             id="it-qty"
             inputMode="decimal"
@@ -126,7 +128,7 @@ export function ItemForm({
             {...register('quantity')}
           />
         </FormField>
-        <FormField label="Ціна за од., ₴" htmlFor="it-price" required error={errors.unitPrice?.message}>
+        <FormField label={t('estimate.unitPrice')} htmlFor="it-price" required error={errors.unitPrice?.message}>
           <Input
             id="it-price"
             inputMode="decimal"
@@ -144,7 +146,7 @@ export function ItemForm({
             className="h-4 w-4 rounded border-border text-brand focus:ring-brand"
             {...register('saveToCatalog')}
           />
-          Зберегти позицію в каталог
+          {t('estimate.saveToCatalog')}
         </label>
       )}
 
@@ -157,7 +159,7 @@ export function ItemForm({
             onClick={onDelete}
             className="text-danger hover:bg-danger-soft"
           >
-            Видалити
+            {t('common.delete')}
           </Button>
         )}
         <Button type="submit" fullWidth loading={submitting}>

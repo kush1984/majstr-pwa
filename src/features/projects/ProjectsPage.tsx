@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
@@ -16,11 +17,11 @@ import { useProjects } from './useProjects.ts';
  */
 type Filter = 'ALL' | 'IN_PROGRESS' | 'SENT' | 'COMPLETED';
 
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'ALL', label: 'Усі' },
-  { value: 'IN_PROGRESS', label: 'В роботі' },
-  { value: 'SENT', label: 'Очікує' },
-  { value: 'COMPLETED', label: 'Завершені' },
+const FILTERS: { value: Filter; labelKey: string }[] = [
+  { value: 'ALL', labelKey: 'projects.filterAll' },
+  { value: 'IN_PROGRESS', labelKey: 'projects.filterInProgress' },
+  { value: 'SENT', labelKey: 'projects.filterPending' },
+  { value: 'COMPLETED', labelKey: 'projects.filterCompleted' },
 ];
 
 function matches(p: ProjectResponse, f: Filter): boolean {
@@ -31,6 +32,7 @@ function matches(p: ProjectResponse, f: Filter): boolean {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const raw = params.get('status');
   const filter: Filter =
@@ -59,17 +61,17 @@ export function ProjectsPage() {
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
-          Об'єкти
+          {t('projects.title')}
         </h1>
         <Button onClick={newEstimate} className="hidden sm:inline-flex">
-          + Новий кошторис
+          {t('common.addEstimate')}
         </Button>
       </div>
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
           <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
-            {f.label} · {counts[f.value]}
+            {t(f.labelKey)} · {counts[f.value]}
           </Chip>
         ))}
       </div>
@@ -83,19 +85,23 @@ export function ProjectsPage() {
       ) : isError ? (
         <EmptyState
           icon="⚠️"
-          title="Не вдалося завантажити об'єкти"
-          text="Перевірте з'єднання та спробуйте ще раз."
-          action={<Button onClick={() => void refetch()}>Спробувати знову</Button>}
+          title={t('projects.loadErrorTitle')}
+          text={t('projects.loadErrorText')}
+          action={<Button onClick={() => void refetch()}>{t('common.retry')}</Button>}
         />
       ) : all.length === 0 ? (
         <EmptyState
           icon="📁"
-          title="Ще немає об'єктів"
-          text="Створіть перший кошторис — об'єкт і клієнт додаються прямо в потоці."
-          action={<Button onClick={newEstimate}>Новий кошторис</Button>}
+          title={t('projects.emptyTitle')}
+          text={t('projects.emptyText')}
+          action={<Button onClick={newEstimate}>{t('common.newEstimate')}</Button>}
         />
       ) : shown.length === 0 ? (
-        <EmptyState icon="🔍" title="Нічого не знайдено" text="У цьому фільтрі поки порожньо." />
+        <EmptyState
+          icon="🔍"
+          title={t('projects.noneFoundTitle')}
+          text={t('projects.noneFoundText')}
+        />
       ) : (
         <>
           <div className="space-y-2.5">
@@ -104,7 +110,7 @@ export function ProjectsPage() {
             ))}
           </div>
           <Button onClick={newEstimate} fullWidth className="mt-5 py-3.5 shadow-cta sm:hidden">
-            + Новий кошторис
+            {t('common.addEstimate')}
           </Button>
         </>
       )}

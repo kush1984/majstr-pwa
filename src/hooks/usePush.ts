@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { isPushSupported, urlBase64ToUint8Array } from '@/lib/push.ts';
 import { pushApi, type PushSubscribePayload } from '@/api/push.ts';
 import { toAppError } from '@/api/errors.ts';
+import i18n from '@/lib/i18n.ts';
 
 type PermissionState = NotificationPermission | 'unsupported' | 'unknown';
 
@@ -72,21 +73,21 @@ export function usePush(): UsePushResult {
 
   const enable = useCallback<UsePushResult['enable']>(async () => {
     if (!supported) {
-      return { ok: false, error: 'Браузер не підтримує push-сповіщення' };
+      return { ok: false, error: i18n.t('profile.pushNotSupported') };
     }
 
     setBusy(true);
     try {
       const vapidKey = await getVapidPublicKey();
       if (!vapidKey) {
-        return { ok: false, error: 'Push-сповіщення не налаштовані на сервері' };
+        return { ok: false, error: i18n.t('profile.pushNotConfigured') };
       }
 
       // Permission prompt fires here — i.e. only on the user's click.
       const granted = await Notification.requestPermission();
       setPermission(granted);
       if (granted !== 'granted') {
-        return { ok: false, error: 'Дозвіл на сповіщення не надано' };
+        return { ok: false, error: i18n.t('profile.pushPermissionDenied') };
       }
 
       const reg = await navigator.serviceWorker.ready;

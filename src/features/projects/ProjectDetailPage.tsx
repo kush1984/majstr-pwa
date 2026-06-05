@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -11,7 +12,7 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
-import { ESTIMATE_STATUS, PROJECT_STATUS } from '@/lib/labels.ts';
+import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
@@ -21,16 +22,17 @@ import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 
 type Tab = 'estimate' | 'photos' | 'changes' | 'act';
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'estimate', label: 'Кошторис' },
-  { key: 'photos', label: 'Фото' },
-  { key: 'changes', label: 'Зміни' },
-  { key: 'act', label: 'Акт' },
+const TABS: { key: Tab; labelKey: string }[] = [
+  { key: 'estimate', labelKey: 'projects.tabEstimate' },
+  { key: 'photos', labelKey: 'projects.tabPhotos' },
+  { key: 'changes', labelKey: 'projects.tabChanges' },
+  { key: 'act', labelKey: 'projects.tabAct' },
 ];
 
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
@@ -65,19 +67,18 @@ export function ProjectDetailPage() {
     return (
       <EmptyState
         icon="⚠️"
-        title="Об'єкт не знайдено"
-        action={<Button onClick={() => navigate(routes.projects)}>До списку</Button>}
+        title={t('projects.notFoundTitle')}
+        action={<Button onClick={() => navigate(routes.projects)}>{t('projects.toList')}</Button>}
       />
     );
   }
 
   const p = project.data;
   const list = estimates.data ?? [];
-  const status = PROJECT_STATUS[p.status];
 
   const openShare = () => {
     if (list.length === 0) {
-      toast.info('Спершу створіть кошторис');
+      toast.info(t('projects.createEstimateFirst'));
       return;
     }
     setShareOpen(true);
@@ -105,12 +106,12 @@ export function ProjectDetailPage() {
         <button
           type="button"
           onClick={() => navigate(routes.projects)}
-          aria-label="Назад"
+          aria-label={t('common.back')}
           className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary"
         >
           ←
         </button>
-        <span className="text-sm text-muted">Об'єкт</span>
+        <span className="text-sm text-muted">{t('projects.detailLabel')}</span>
       </div>
 
       {/* Hero */}
@@ -122,7 +123,7 @@ export function ProjectDetailPage() {
           <span className="min-w-0 truncate">{p.name}</span>
         </div>
         <div className="mb-3 text-xs text-muted">📍 {p.address}</div>
-        <Badge variant={status.variant}>{status.label}</Badge>
+        <Badge variant={PROJECT_STATUS_VARIANT[p.status]}>{t('status.project.' + p.status)}</Badge>
         {p.clientFullName && (
           <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">
@@ -137,7 +138,7 @@ export function ProjectDetailPage() {
                 onClick={() => setEditClientOpen(true)}
                 className="ml-auto text-xs font-semibold text-brand"
               >
-                Редагувати
+                {t('common.edit')}
               </button>
             )}
           </div>
@@ -146,25 +147,25 @@ export function ProjectDetailPage() {
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1.5 border-b border-border">
-        {TABS.map((t) => (
+        {TABS.map((tabItem) => (
           <button
-            key={t.key}
+            key={tabItem.key}
             type="button"
-            onClick={() => setTab(t.key)}
+            onClick={() => setTab(tabItem.key)}
             className={
               'flex-1 border-b-2 py-2.5 text-center text-[13px] font-semibold transition-colors ' +
-              (tab === t.key
+              (tab === tabItem.key
                 ? 'border-brand text-brand'
                 : 'border-transparent text-muted')
             }
           >
-            {t.label}
+            {t(tabItem.labelKey)}
           </button>
         ))}
       </div>
 
       {tab !== 'estimate' ? (
-        <EmptyState icon="🚧" title="Скоро" text="Цей розділ зʼявиться в наступних оновленнях." />
+        <EmptyState icon="🚧" title={t('common.soon')} text={t('projects.sectionSoonText')} />
       ) : (
         <>
           <button
@@ -176,15 +177,15 @@ export function ProjectDetailPage() {
               📤
             </span>
             <span className="flex-1">
-              <span className="block text-sm font-bold">Поділитися з клієнтом</span>
-              <span className="block text-[11px] opacity-85">Посилання на портал</span>
+              <span className="block text-sm font-bold">{t('projects.shareWithClient')}</span>
+              <span className="block text-[11px] opacity-85">{t('projects.clientPortalLink')}</span>
             </span>
             <span className="text-lg">→</span>
           </button>
 
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">
-              Кошториси · {list.length}
+              {t('projects.estimatesCount', { count: list.length })}
             </h2>
             <button
               type="button"
@@ -192,20 +193,20 @@ export function ProjectDetailPage() {
               disabled={createEstimate.isPending}
               className="text-[13px] font-semibold text-brand disabled:opacity-60"
             >
-              + Новий
+              {t('projects.addNew')}
             </button>
           </div>
 
           {estimates.isPending ? (
-            <p className="py-6 text-center text-sm text-muted">Завантаження...</p>
+            <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
           ) : list.length === 0 ? (
             <EmptyState
               icon="🧾"
-              title="Ще немає кошторисів"
-              text="Створіть перший кошторис для цього об'єкта."
+              title={t('projects.noEstimatesTitle')}
+              text={t('projects.noEstimatesText')}
               action={
                 <Button onClick={() => createEstimate.mutate()} loading={createEstimate.isPending}>
-                  Новий кошторис
+                  {t('common.newEstimate')}
                 </Button>
               }
             />
@@ -230,8 +231,8 @@ export function ProjectDetailPage() {
 
 /** Loads the full estimate to show the backend-computed total + item count. */
 function EstimateRow({ summary, onClick }: { summary: EstimateSummary; onClick: () => void }) {
+  const { t } = useTranslation();
   const full = useEstimate(summary.id);
-  const status = ESTIMATE_STATUS[summary.status];
   return (
     <button
       type="button"
@@ -239,15 +240,17 @@ function EstimateRow({ summary, onClick }: { summary: EstimateSummary; onClick: 
       className="w-full rounded-card border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-primary">Кошторис</span>
+        <span className="text-sm font-medium text-primary">{t('projects.estimateRowName')}</span>
         <span className="whitespace-nowrap text-sm font-bold text-primary">
           {full.data ? formatMoney(full.data.total) : '—'}
         </span>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <Badge variant={status.variant}>{status.label}</Badge>
+        <Badge variant={ESTIMATE_STATUS_VARIANT[summary.status]}>
+          {t('status.estimate.' + summary.status)}
+        </Badge>
         <span className="ml-auto text-xs text-muted">
-          {full.data ? `${full.data.items.length} позицій` : '…'}
+          {full.data ? t('projects.itemsCount', { count: full.data.items.length }) : '…'}
         </span>
       </div>
     </button>

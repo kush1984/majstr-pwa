@@ -1,40 +1,39 @@
 import { z } from 'zod';
+import i18n from '@/lib/i18n.ts';
 
-export const TRADE_OPTIONS = [
-  { value: 'ELECTRICAL', label: 'Електрика' },
-  { value: 'PLUMBING',   label: 'Сантехніка' },
-  { value: 'TILING',     label: 'Плитка' },
-  { value: 'GENERAL',    label: 'Загальні роботи' },
-  { value: 'OTHER',      label: 'Інше' },
-] as const;
-
-const TRADE_VALUES = TRADE_OPTIONS.map((t) => t.value) as [string, ...string[]];
+export const TRADE_VALUES = [
+  'ELECTRICAL',
+  'PLUMBING',
+  'TILING',
+  'GENERAL',
+  'OTHER',
+] as const satisfies readonly string[];
 
 export const registerSchema = z.object({
   email: z
     .string()
-    .min(1, 'Введіть email')
-    .email('Невірний формат email')
-    .max(255, 'Занадто довгий email'),
+    .min(1, i18n.t('validation.enterEmail'))
+    .email(i18n.t('validation.invalidEmail'))
+    .max(255, i18n.t('validation.emailTooLong')),
   password: z
     .string()
-    .min(8, 'Пароль має бути не коротше 8 символів')
-    .max(100, 'Пароль занадто довгий'),
+    .min(8, i18n.t('validation.passwordTooShort'))
+    .max(100, i18n.t('validation.passwordTooLong')),
   fullName: z
     .string()
-    .min(1, 'Введіть ім\'я та прізвище')
-    .max(255, 'Занадто довге значення'),
+    .min(1, i18n.t('validation.enterFullName'))
+    .max(255, i18n.t('validation.valueTooLong')),
   trades: z
     .array(z.enum(TRADE_VALUES))
-    .min(1, 'Оберіть хоча б один тип робіт'),
+    .min(1, i18n.t('validation.chooseTrade')),
   phone: z
     .string()
-    .min(5, 'Введіть телефон')
-    .max(50, 'Занадто довге значення'),
+    .min(5, i18n.t('validation.enterPhone'))
+    .max(50, i18n.t('validation.valueTooLong')),
   companyName: z
     .string()
-    .min(1, 'Введіть назву компанії')
-    .max(255, 'Занадто довге значення'),
+    .min(1, i18n.t('validation.enterCompanyName'))
+    .max(255, i18n.t('validation.valueTooLong')),
 });
 
 export type RegisterFormValues = z.infer<typeof registerSchema>;

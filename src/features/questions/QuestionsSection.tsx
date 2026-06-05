@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '@/lib/format.ts';
 import { useProjectQuestions, useMarkQuestionsRead } from './useQuestions.ts';
 
@@ -9,6 +10,7 @@ import { useProjectQuestions, useMarkQuestionsRead } from './useQuestions.ts';
  * highlighted for this viewing so the contractor can tell which were new.
  */
 export function QuestionsSection({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
   const q = useProjectQuestions(projectId);
   const { mutate: markRead } = useMarkQuestionsRead(projectId);
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
@@ -29,17 +31,19 @@ export function QuestionsSection({ projectId }: { projectId: string }) {
   return (
     <section className="mt-6">
       <h2 className="mb-3 text-[13px] font-bold uppercase tracking-wide text-primary">
-        💬 Питання від клієнта{items.length > 0 ? ` · ${items.length}` : ''}
+        {items.length > 0
+          ? t('questions.titleWithCount', { count: items.length })
+          : t('questions.title')}
       </h2>
 
       {q.isPending ? (
-        <p className="py-4 text-center text-sm text-muted">Завантаження...</p>
+        <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
       ) : q.isError ? (
-        <p className="py-4 text-center text-sm text-muted">Не вдалося завантажити питання.</p>
+        <p className="py-4 text-center text-sm text-muted">{t('questions.loadError')}</p>
       ) : items.length === 0 ? (
         <div className="rounded-card border border-dashed border-border bg-surface-sunken p-5 text-center">
           <div className="mb-1 text-2xl">💬</div>
-          <p className="text-sm text-muted">Питань поки немає</p>
+          <p className="text-sm text-muted">{t('questions.empty')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -56,7 +60,7 @@ export function QuestionsSection({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-2">
                   {isNew && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand" />}
                   <span className="text-sm font-semibold text-primary">
-                    {item.authorName || 'Клієнт'}
+                    {item.authorName || t('questions.client')}
                   </span>
                   <span className="ml-auto whitespace-nowrap text-[11px] text-muted">
                     {formatDateTime(item.createdAt)}

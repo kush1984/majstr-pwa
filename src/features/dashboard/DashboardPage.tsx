@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useProjects } from '@/features/projects/useProjects.ts';
 import { useDashboardMetrics } from './useDashboardMetrics.ts';
@@ -8,19 +9,20 @@ import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { Button } from '@/components/Button.tsx';
 import { formatMoney } from '@/lib/format.ts';
-import { TRADE_EMOJI, TRADE_LABEL } from '@/lib/labels.ts';
+import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
-
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Доброго ранку';
-  if (h < 18) return 'Доброго дня';
-  return 'Доброго вечора';
-}
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: me } = useMe();
+
+  const greeting = (): string => {
+    const h = new Date().getHours();
+    if (h < 12) return t('dashboard.greetingMorning');
+    if (h < 18) return t('dashboard.greetingDay');
+    return t('dashboard.greetingEvening');
+  };
   const metrics = useDashboardMetrics();
   const projects = useProjects();
 
@@ -43,13 +45,13 @@ export function DashboardPage() {
             {firstName || '...'}
             {firstTrade && (
               <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">
-                {TRADE_EMOJI[firstTrade]} {TRADE_LABEL[firstTrade]}
+                {TRADE_EMOJI[firstTrade]} {t('trades.' + firstTrade)}
               </span>
             )}
           </h1>
         </div>
         <Button onClick={newEstimate} className="hidden lg:inline-flex">
-          + Новий кошторис
+          {t('common.addEstimate')}
         </Button>
       </div>
 
@@ -64,26 +66,28 @@ export function DashboardPage() {
         ) : (
           <>
             <MetricCard
-              label="Активних"
+              label={t('dashboard.metricActive')}
               value={m?.activeProjects ?? 0}
-              hint="об'єкти в роботі"
+              hint={t('dashboard.metricActiveHint')}
               icon="📁"
               tone="brand"
               onClick={() => navigate(`${routes.projects}?status=IN_PROGRESS`)}
             />
             <MetricCard
-              label="Очікує"
+              label={t('dashboard.metricPending')}
               value={m?.pendingEstimates ?? 0}
-              hint="кошториси без підпису"
+              hint={t('dashboard.metricPendingHint')}
               icon="⏳"
               tone="amber"
               onClick={() => navigate(`${routes.projects}?status=SENT`)}
             />
             <MetricCard
               className="hidden lg:block"
-              label="Завершено (міс)"
+              label={t('dashboard.metricCompleted')}
               value={m?.completedThisMonth.count ?? 0}
-              hint={`на суму ${formatMoney(m?.completedThisMonth.totalAmount)}`}
+              hint={t('dashboard.metricCompletedHint', {
+                amount: formatMoney(m?.completedThisMonth.totalAmount),
+              })}
               icon="✓"
               tone="green"
               onClick={() => navigate(`${routes.projects}?status=COMPLETED`)}
@@ -94,29 +98,29 @@ export function DashboardPage() {
 
       {/* Mobile CTA */}
       <Button onClick={newEstimate} fullWidth className="mb-6 py-4 text-base shadow-cta lg:hidden">
-        + Новий кошторис
+        {t('common.addEstimate')}
       </Button>
 
       {isEmpty ? (
         <EmptyState
           icon="📋"
-          title="Створіть перший кошторис"
-          text="Додайте об'єкт, клієнта і позиції — за кілька хвилин матимете готовий кошторис для клієнта."
-          action={<Button onClick={newEstimate}>Створити перший кошторис</Button>}
+          title={t('dashboard.createFirstTitle')}
+          text={t('dashboard.createFirstText')}
+          action={<Button onClick={newEstimate}>{t('dashboard.createFirstAction')}</Button>}
         />
       ) : (
         <div className="lg:grid lg:grid-cols-[1.6fr_1fr] lg:items-start lg:gap-5">
           <section className="lg:rounded-card lg:border lg:border-border lg:bg-surface lg:p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary lg:text-[15px] lg:normal-case lg:tracking-normal">
-                Останні об'єкти
+                {t('dashboard.recentProjects')}
               </h2>
               <button
                 type="button"
                 onClick={() => navigate(routes.projects)}
                 className="text-[13px] font-semibold text-brand"
               >
-                Усі →
+                {t('common.all')} →
               </button>
             </div>
 
@@ -137,19 +141,24 @@ export function DashboardPage() {
 
           {/* Desktop-only quick actions */}
           <aside className="hidden lg:block lg:rounded-card lg:border lg:border-border lg:bg-surface lg:p-5">
-            <h2 className="mb-4 text-[15px] font-bold text-primary">Швидкі дії</h2>
+            <h2 className="mb-4 text-[15px] font-bold text-primary">{t('dashboard.quickActions')}</h2>
             <div className="flex flex-col gap-2.5">
-              <QuickAction icon="📋" title="Новий кошторис" sub="Для нового клієнта" onClick={newEstimate} />
+              <QuickAction
+                icon="📋"
+                title={t('dashboard.quickNewEstimate')}
+                sub={t('dashboard.quickNewEstimateSub')}
+                onClick={newEstimate}
+              />
               <QuickAction
                 icon="📖"
-                title="Додати в каталог"
-                sub="Робота чи матеріал"
+                title={t('dashboard.quickAddCatalog')}
+                sub={t('dashboard.quickAddCatalogSub')}
                 onClick={() => navigate(routes.catalog)}
               />
               <QuickAction
                 icon="📁"
-                title="Усі об'єкти"
-                sub="Переглянути список"
+                title={t('dashboard.quickAllProjects')}
+                sub={t('dashboard.quickAllProjectsSub')}
                 onClick={() => navigate(routes.projects)}
               />
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/Spinner.tsx';
 import { Button } from '@/components/Button.tsx';
 import { toast } from '@/hooks/useToast.ts';
@@ -17,6 +18,7 @@ type State = 'loading' | 'success' | 'error' | 'notoken';
  * redirects home a few seconds after success.
  */
 export function VerifyEmailPage() {
+  const { t } = useTranslation();
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const navigate = useNavigate();
@@ -52,19 +54,19 @@ export function VerifyEmailPage() {
   const onResend = async () => {
     try {
       await resend.mutateAsync();
-      toast.success('Лист надіслано — перевірте пошту');
+      toast.success(t('email.sentCheckInbox'));
     } catch (err) {
       const e = toAppError(err);
-      toast.error(e.status === 429 ? 'Зачекайте перед повторною відправкою' : e.message);
+      toast.error(e.status === 429 ? t('email.waitBeforeResendShort') : e.message);
     }
   };
 
   if (state === 'loading') {
     return (
-      <AuthShell title="Підтвердження email">
+      <AuthShell title={t('email.verifyTitle')}>
         <div className="flex flex-col items-center gap-3 py-4 text-brand">
           <Spinner size="lg" />
-          <p className="text-sm text-muted">Перевіряємо посилання…</p>
+          <p className="text-sm text-muted">{t('email.verifying')}</p>
         </div>
       </AuthShell>
     );
@@ -72,33 +74,33 @@ export function VerifyEmailPage() {
 
   if (state === 'success') {
     return (
-      <AuthShell title="Email підтверджено ✅">
+      <AuthShell title={t('email.successTitle')}>
         <p className="mb-5 text-center text-sm text-muted">
-          Дякуємо! За мить повернемо вас у застосунок.
+          {t('email.successText')}
         </p>
         <Button fullWidth onClick={() => navigate(routes.home, { replace: true })}>
-          На головну
+          {t('email.toHome')}
         </Button>
       </AuthShell>
     );
   }
 
-  const title = state === 'notoken' ? 'Посилання неповне' : 'Не вдалося підтвердити';
+  const title = state === 'notoken' ? t('email.noTokenTitle') : t('email.failedTitle');
   const message =
     state === 'notoken'
-      ? 'У посиланні немає токена. Відкрийте лист повторно або надішліть новий.'
-      : errMsg || 'Можливо, посилання застаріло або вже використане.';
+      ? t('email.noTokenText')
+      : errMsg || t('email.failedText');
 
   return (
     <AuthShell title={title}>
       <p className="mb-5 text-center text-sm text-muted">{message}</p>
       {tokens.hasAny() ? (
         <Button fullWidth loading={resend.isPending} onClick={onResend}>
-          Надіслати новий лист
+          {t('email.sendNewLetter')}
         </Button>
       ) : (
         <Button fullWidth onClick={() => navigate(routes.login, { replace: true })}>
-          Увійти
+          {t('auth.signIn')}
         </Button>
       )}
     </AuthShell>

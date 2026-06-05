@@ -63,7 +63,7 @@ Three files own auth and they must stay in sync:
 - React Query defaults are set in `main.tsx` (`staleTime: 30s`, `retry: 1`, `refetchOnWindowFocus: false`); they're chosen for mobile feel, not test convenience.
 - All env access goes through `src/lib/config.ts`. Don't read `import.meta.env` from anywhere else.
 - All thrown errors should go through `toAppError()` from `src/api/errors.ts` to get a Ukrainian user-facing message + structured backend payload.
-- **UI strings are in Ukrainian** (lang `uk` in the manifest). Code, comments, commit messages, and docs stay in English.
+- **UI strings go through i18n** (Step 9). No hardcoded user-facing text — use `const { t } = useTranslation()` then `t('namespace.key')` in components, and `import i18n from '@/lib/i18n.ts'` + `i18n.t(...)` in non-component modules (zod schemas, `errors.ts`). Keys live in `src/locales/uk.json` + `en.json` (keep both **structurally identical**), grouped by surface (`common/nav/auth/dashboard/projects/estimate/catalog/profile/questions/email/errors/validation` + shared enum maps `units/trades/status/itemType`). Default language is `uk`; detection is localStorage-only (`majstr.lang`) so an English browser isn't shown the en stubs. There's no UI language switcher yet (G2). Enum→label goes via `t('trades.'+x)` etc.; badge **variants** stay in `labels.ts` (`PROJECT_STATUS_VARIANT`/`ESTIMATE_STATUS_VARIANT`). Money/number/date formatting stays in `src/lib/format.ts`. Code, comments, commit messages, and docs stay in English.
 
 ### Feature folder layout
 

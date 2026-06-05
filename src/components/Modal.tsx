@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Responsive modal: a bottom sheet on mobile (slides up, rounded top),
@@ -16,6 +17,7 @@ export function Modal({
   title: string;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -40,7 +42,7 @@ export function Modal({
     >
       <button
         type="button"
-        aria-label="Закрити"
+        aria-label={t('common.close')}
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
@@ -50,7 +52,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Закрити"
+            aria-label={t('common.close')}
             className="text-lg text-faint hover:text-muted"
           >
             ✕

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
 import { FormField } from '@/components/FormField.tsx';
@@ -20,6 +21,7 @@ import { useCreateProject } from '@/features/projects/useProjects.ts';
  */
 export function NewEstimatePage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const clients = useClients();
   const createClient = useCreateClient();
   const createProject = useCreateProject();
@@ -41,15 +43,15 @@ export function NewEstimatePage() {
     if (busy) return;
 
     if (mode === 'new' && (!newClient.fullName.trim() || !newClient.phone.trim())) {
-      toast.error("Введіть ім'я і телефон клієнта");
+      toast.error(t('estimate.enterClientNamePhone'));
       return;
     }
     if (mode === 'existing' && !selectedId) {
-      toast.error('Оберіть клієнта або створіть нового');
+      toast.error(t('estimate.chooseOrCreateClient'));
       return;
     }
     if (!project.name.trim() || !project.address.trim()) {
-      toast.error("Введіть назву та адресу об'єкта");
+      toast.error(t('estimate.enterObjectNameAddress'));
       return;
     }
 
@@ -84,18 +86,18 @@ export function NewEstimatePage() {
           <button
             type="button"
             onClick={() => navigate(routes.home)}
-            aria-label="Назад"
+            aria-label={t('common.back')}
             className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary"
           >
             ←
           </button>
-          <h1 className="text-xl font-extrabold tracking-tight text-primary">Новий кошторис</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-primary">{t('estimate.newTitle')}</h1>
         </div>
 
         {/* Client */}
         <section className="mb-5">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">Клієнт</h2>
+            <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">{t('estimate.client')}</h2>
             <button
               type="button"
               onClick={() => {
@@ -104,30 +106,30 @@ export function NewEstimatePage() {
               }}
               className="text-[13px] font-semibold text-brand"
             >
-              {mode === 'existing' ? '+ Новий клієнт' : 'Обрати наявного'}
+              {mode === 'existing' ? t('estimate.newClient') : t('estimate.chooseExisting')}
             </button>
           </div>
 
           {mode === 'new' ? (
             <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-              <FormField label="Ім'я та прізвище" htmlFor="nc-name" required>
+              <FormField label={t('common.fullName')} htmlFor="nc-name" required>
                 <Input
                   id="nc-name"
                   value={newClient.fullName}
                   onChange={(e) => setNewClient((s) => ({ ...s, fullName: e.target.value }))}
                 />
               </FormField>
-              <FormField label="Телефон" htmlFor="nc-phone" required>
+              <FormField label={t('common.phone')} htmlFor="nc-phone" required>
                 <Input
                   id="nc-phone"
                   type="tel"
                   inputMode="tel"
-                  placeholder="+380..."
+                  placeholder={t('auth.phonePlaceholder')}
                   value={newClient.phone}
                   onChange={(e) => setNewClient((s) => ({ ...s, phone: e.target.value }))}
                 />
               </FormField>
-              <FormField label="Email" htmlFor="nc-email" hint="Необов'язково — щоб надсилати кошторис поштою">
+              <FormField label={t('common.email')} htmlFor="nc-email" hint={t('estimate.emailHint')}>
                 <Input
                   id="nc-email"
                   type="email"
@@ -141,7 +143,7 @@ export function NewEstimatePage() {
           ) : (
             <div>
               <Input
-                placeholder="Пошук клієнта..."
+                placeholder={t('estimate.searchClient')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="mb-2"
@@ -152,7 +154,7 @@ export function NewEstimatePage() {
                 </div>
               ) : filtered.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border py-4 text-center text-sm text-muted">
-                  Немає клієнтів. Натисніть «+ Новий клієнт».
+                  {t('estimate.noClients')}
                 </p>
               ) : (
                 <div className="max-h-[34dvh] space-y-1.5 overflow-y-auto">
@@ -185,19 +187,19 @@ export function NewEstimatePage() {
 
         {/* Object */}
         <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">Об'єкт</h2>
+          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">{t('estimate.object')}</h2>
           <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-            <FormField label="Назва" htmlFor="pr-name" required hint="Напр. Ванна, кв. Олени">
+            <FormField label={t('common.name')} htmlFor="pr-name" required hint={t('estimate.objectNameHint')}>
               <Input
                 id="pr-name"
                 value={project.name}
                 onChange={(e) => setProject((s) => ({ ...s, name: e.target.value }))}
               />
             </FormField>
-            <FormField label="Адреса" htmlFor="pr-addr" required>
+            <FormField label={t('common.address')} htmlFor="pr-addr" required>
               <Input
                 id="pr-addr"
-                placeholder="вул. Сонячна 12"
+                placeholder={t('estimate.addressPlaceholder')}
                 value={project.address}
                 onChange={(e) => setProject((s) => ({ ...s, address: e.target.value }))}
               />
@@ -206,7 +208,7 @@ export function NewEstimatePage() {
         </section>
 
         <Button fullWidth loading={busy} onClick={submit} className="py-4 text-base shadow-cta">
-          Створити кошторис
+          {t('estimate.createEstimate')}
         </Button>
       </div>
     </div>

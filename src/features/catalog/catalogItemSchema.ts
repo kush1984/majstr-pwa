@@ -1,19 +1,18 @@
 import { z } from 'zod';
+import i18n from '@/lib/i18n.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
-export const ITEM_TYPE_OPTIONS: { value: ItemType; label: string }[] = [
-  { value: 'WORK', label: 'Робота' },
-  { value: 'MATERIAL', label: 'Матеріал' },
-];
+/** Option value lists; labels are rendered via i18n (`itemType.*` / `unitOptions.*`). */
+export const ITEM_TYPE_OPTIONS: readonly ItemType[] = ['WORK', 'MATERIAL'];
 
-export const UNIT_OPTIONS: { value: Unit; label: string }[] = [
-  { value: 'M2', label: 'м² (метр квадратний)' },
-  { value: 'M', label: 'м (метр)' },
-  { value: 'LINEAR_METER', label: 'м.п. (метр погонний)' },
-  { value: 'PIECE', label: 'шт (штука)' },
-  { value: 'KG', label: 'кг (кілограм)' },
-  { value: 'HOUR', label: 'год (година)' },
-  { value: 'SET', label: 'компл. (комплект)' },
+export const UNIT_OPTIONS: readonly Unit[] = [
+  'M2',
+  'M',
+  'LINEAR_METER',
+  'PIECE',
+  'KG',
+  'HOUR',
+  'SET',
 ];
 
 /**
@@ -23,19 +22,22 @@ export const UNIT_OPTIONS: { value: Unit; label: string }[] = [
  */
 const priceString = z
   .string()
-  .min(1, 'Введіть ціну')
+  .min(1, i18n.t('validation.enterPrice'))
   .refine((s) => {
     const n = Number(s.replace(',', '.'));
     return Number.isFinite(n) && n > 0;
-  }, 'Ціна має бути більше 0');
+  }, i18n.t('validation.priceTooLow'));
 
 export const catalogItemSchema = z.object({
-  name: z.string().min(1, 'Введіть назву').max(255, 'Занадто довга назва'),
-  type: z.enum(['WORK', 'MATERIAL'], { message: 'Оберіть тип' }),
+  name: z
+    .string()
+    .min(1, i18n.t('validation.enterName'))
+    .max(255, i18n.t('validation.nameTooLong')),
+  type: z.enum(['WORK', 'MATERIAL'], { message: i18n.t('validation.chooseType') }),
   unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET'], {
-    message: 'Оберіть одиницю',
+    message: i18n.t('validation.chooseUnit'),
   }),
-  category: z.string().max(100, 'Занадто довга назва категорії'),
+  category: z.string().max(100, i18n.t('validation.categoryTooLong')),
   defaultPrice: priceString,
 });
 

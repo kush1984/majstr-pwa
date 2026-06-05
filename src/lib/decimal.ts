@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from '@/lib/i18n.ts';
 
 /** "1 234,5" / "1234.5" → 1234.5 (up to 3 decimals, matching backend quantity). */
 export function parseDecimal(s: string): number {
@@ -13,5 +14,5 @@ export function decimalString(emptyMessage: string) {
     .refine((s) => {
       const n = Number(s.replace(',', '.').replace(/\s/g, ''));
       return Number.isFinite(n) && n > 0;
-    }, 'Значення має бути більше 0');
+    }, i18n.t('validation.valueTooLow'));
 }

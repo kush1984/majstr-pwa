@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
@@ -15,6 +16,7 @@ import { NAV_ITEMS } from './navItems.ts';
  */
 export function AppLayout() {
   const { data: me } = useMe();
+  const { t } = useTranslation();
 
   // Keep the backend's stored push subscription in sync with the browser's
   // actual one: re-POST it on every app open, and again whenever the SW reports
@@ -57,7 +59,7 @@ export function AppLayout() {
               }
             >
               <span className="w-5 text-center text-lg">{it.icon}</span>
-              {it.label}
+              {t(it.labelKey)}
             </NavLink>
           ))}
         </nav>
@@ -73,7 +75,9 @@ export function AppLayout() {
             <span className="block truncate text-[13px] font-semibold text-primary">
               {me?.fullName ?? '...'}
             </span>
-            <span className="block text-[11px] text-muted">План {me?.plan ?? ''}</span>
+            <span className="block text-[11px] text-muted">
+              {t('app.planShort', { plan: me?.plan ?? '' })}
+            </span>
           </span>
         </NavLink>
       </aside>
@@ -104,7 +108,7 @@ export function AppLayout() {
             }
           >
             <span className="text-[22px] leading-none">{it.icon}</span>
-            {it.label}
+            {t(it.labelKey)}
           </NavLink>
         ))}
       </nav>

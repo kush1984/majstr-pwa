@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Badge } from './Badge.tsx';
 import { IconTile } from './IconTile.tsx';
 import { formatMoney } from '@/lib/format.ts';
-import { ESTIMATE_STATUS, PROJECT_STATUS } from '@/lib/labels.ts';
+import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 
@@ -13,9 +14,16 @@ import type { ProjectResponse } from '@/api/types.ts';
  */
 export function ProjectCard({ project }: { project: ProjectResponse }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const badge = project.estimateStatus
-    ? ESTIMATE_STATUS[project.estimateStatus]
-    : PROJECT_STATUS[project.status];
+    ? {
+        label: t('status.estimate.' + project.estimateStatus),
+        variant: ESTIMATE_STATUS_VARIANT[project.estimateStatus],
+      }
+    : {
+        label: t('status.project.' + project.status),
+        variant: PROJECT_STATUS_VARIANT[project.status],
+      };
 
   return (
     <button

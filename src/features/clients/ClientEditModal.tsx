@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -28,6 +29,7 @@ export function ClientEditModal({
   onClose: () => void;
   clientId: string;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const client = useClient(clientId, open && Boolean(clientId));
   const updateClient = useUpdateClient();
@@ -72,7 +74,7 @@ export function ClientEditModal({
       });
       // The client's name shows on project cards / detail — refresh those too.
       qc.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Дані клієнта оновлено');
+      toast.success(t('clients.updated'));
       onClose();
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -80,30 +82,30 @@ export function ClientEditModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Редагувати клієнта">
+    <Modal open={open} onClose={onClose} title={t('clients.editTitle')}>
       {client.isPending ? (
-        <p className="py-4 text-center text-sm text-muted">Завантаження...</p>
+        <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
       ) : (
         <div className="space-y-3">
-          <Field label="Ім'я та прізвище">
+          <Field label={t('common.fullName')}>
             <Input
               value={form.fullName}
               onChange={set('fullName')}
               invalid={errors.fullName}
-              placeholder="Олена Петренко"
+              placeholder={t('clients.namePlaceholder')}
             />
           </Field>
-          <Field label="Телефон">
+          <Field label={t('common.phone')}>
             <Input
               type="tel"
               inputMode="tel"
               value={form.phone}
               onChange={set('phone')}
               invalid={errors.phone}
-              placeholder="0XX XXX XX XX"
+              placeholder={t('clients.phonePlaceholder')}
             />
           </Field>
-          <Field label="Email (необов'язково)">
+          <Field label={t('clients.emailOptional')}>
             <Input
               type="email"
               inputMode="email"
@@ -113,15 +115,15 @@ export function ClientEditModal({
               placeholder="client@example.com"
             />
           </Field>
-          <Field label="Адреса (необов'язково)">
-            <Input value={form.address} onChange={set('address')} placeholder="вул. Соняшна, 12" />
+          <Field label={t('clients.addressOptional')}>
+            <Input value={form.address} onChange={set('address')} placeholder={t('clients.addressPlaceholder')} />
           </Field>
           <div className="flex gap-2 pt-1">
             <Button variant="secondary" fullWidth onClick={onClose}>
-              Скасувати
+              {t('common.cancel')}
             </Button>
             <Button fullWidth loading={updateClient.isPending} onClick={onSave}>
-              Зберегти
+              {t('common.save')}
             </Button>
           </div>
         </div>
