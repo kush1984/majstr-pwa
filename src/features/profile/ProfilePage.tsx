@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
+import { ProfileEditModal } from './ProfileEditModal.tsx';
 import { usePush } from '@/hooks/usePush.ts';
 import { isIOS, isStandalone } from '@/lib/push.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -22,6 +24,7 @@ export function ProfilePage() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const logout = useLogout();
+  const [editOpen, setEditOpen] = useState(false);
 
   // Used object count for the limit bar — the real list, not a guess.
   const projects = useQuery({
@@ -93,8 +96,16 @@ export function ProfilePage() {
         )}
       </div>
 
+      <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
+
       {/* Menu */}
       <div className="overflow-hidden rounded-card border border-border bg-surface">
+        <MenuRow
+          icon="✏️"
+          title={t('profile.editProfile')}
+          sub={t('profile.editProfileSub')}
+          onClick={() => setEditOpen(true)}
+        />
         <LogoRow isPro={isPro} />
         <PushRow />
         <MenuRow

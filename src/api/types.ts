@@ -38,6 +38,17 @@ export interface RegisterRequest {
   companyName: string;
 }
 
+/** PUT /api/profile (#16). `email` is honoured only while the current email is
+ *  unverified; when already verified the backend ignores it (or 409
+ *  EMAIL_ALREADY_VERIFIED) and keeps the rest. Returns the updated UserResponse. */
+export interface ProfileUpdateRequest {
+  fullName: string;
+  phone: string;
+  companyName: string;
+  trades: Trade[];
+  email?: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;

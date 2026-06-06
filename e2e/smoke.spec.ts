@@ -70,10 +70,21 @@ test('повний сценарій підрядника: реєстрація �
       .or(page.getByRole('dialog', { name: 'Підтвердіть email' })),
   ).toBeVisible();
 
-  // 8 — Logout (Fix G): clicking "Вийти" revokes the session server-side
+  // 8 — Profile edit (#16): the modal opens prefilled with the current data.
+  // (UI only — the backend PUT /api/profile is still in progress, so we don't
+  // submit here; this just guards the form renders and is wired up.)
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Редагувати профіль' }).click();
+  const editDialog = page.getByRole('dialog', { name: 'Редагувати профіль' });
+  await expect(editDialog).toBeVisible();
+  // First textbox is the prefilled full-name field.
+  await expect(editDialog.getByRole('textbox').first()).toHaveValue('Е2Е Тестовий');
+  await editDialog.getByRole('button', { name: 'Скасувати' }).click();
+  await expect(editDialog).not.toBeVisible();
+
+  // 9 — Logout (Fix G): clicking "Вийти" revokes the session server-side
   // (POST /api/auth/logout, fire-and-forget) then routes to /login. After that
   // the protected route no longer opens — the token is cleared.
-  await page.goto('/profile');
   await page.getByRole('button', { name: 'Вийти' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/');
