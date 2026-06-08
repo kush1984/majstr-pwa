@@ -28,7 +28,7 @@ export function DashboardPage() {
   const projects = useProjects();
 
   const firstName = me?.fullName?.trim().split(/\s+/)[0] ?? '';
-  const firstTrade = me?.trades?.[0];
+  const trades = me?.trades ?? [];
   const recent = (projects.data ?? []).slice(0, 4);
   const m = metrics.data;
 
@@ -37,17 +37,26 @@ export function DashboardPage() {
   const isEmpty = projects.isSuccess && projects.data.length === 0;
 
   return (
-    <>
-      {/* Greeting + desktop CTA */}
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm text-muted">{greeting()},</div>
-          <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-extrabold tracking-tight text-primary">
-            {firstName || '...'}
-            {firstTrade && (
-              <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">
-                {TRADE_EMOJI[firstTrade]} {t('trades.' + firstTrade)}
-              </span>
+      <>
+        {/* Greeting + desktop CTA */}
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm text-muted">{greeting()},</div>
+            <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-extrabold tracking-tight text-primary">
+              {firstName || '...'}
+              {trades.length > 0 && (
+                  <span className="flex flex-wrap items-center gap-2">
+                  {trades.map((trade) => (
+                      <span
+                          key={trade}
+                          className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand"
+                          title={t('trades.' + trade)}
+                          aria-label={t('trades.' + trade)}
+                      >
+        {TRADE_EMOJI[trade]} {t('trades.' + trade)}
+      </span>
+    ))}
+  </span>
             )}
           </h1>
         </div>
