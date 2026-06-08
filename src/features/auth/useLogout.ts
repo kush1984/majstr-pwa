@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth.ts';
 import { tokens } from '@/lib/tokens.ts';
+import { setSentryUser } from '@/lib/sentry.ts';
 import { routes } from '@/lib/config.ts';
 
 /**
@@ -25,6 +26,7 @@ export function useLogout() {
       void authApi.logout(refreshToken).catch(() => undefined);
     }
     tokens.clear();
+    setSentryUser(null);
     qc.clear();
     navigate(routes.login, { replace: true });
   }, [qc, navigate]);

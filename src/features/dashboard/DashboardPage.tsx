@@ -7,6 +7,7 @@ import { MetricCard } from '@/components/MetricCard.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { Button } from '@/components/Button.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
@@ -130,6 +131,8 @@ export function DashboardPage() {
                   <Skeleton key={i} className="h-[68px] rounded-card" />
                 ))}
               </div>
+            ) : projects.isError ? (
+              <ErrorState error={projects.error} onRetry={() => void projects.refetch()} />
             ) : (
               <div className="space-y-2.5">
                 {recent.map((p) => (

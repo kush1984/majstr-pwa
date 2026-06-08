@@ -3,18 +3,27 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { initSentry } from './lib/sentry.ts';
+import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import './lib/i18n.ts';
 import './styles/index.css';
 
+// Start error reporting before anything else so even early crashes are caught.
+// No-op unless VITE_SENTRY_DSN is set.
+initSentry();
+
 // One shared QueryClient. Sensible defaults for this app:
 //   - staleTime 30s: avoid hammering /me on every navigation
-//   - retry: 1 — the axios interceptor already handles 401 refresh
+//   - retry: transient-only with backoff (the axios interceptor handles 401) —
+//     policy lives in lib/queryRetry.ts so it can be unit-tested
 //   - refetchOnWindowFocus: false — feels less twitchy on mobile
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: 1,
+      retry: shouldRetryQuery,
+      retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,
     },
   },
@@ -40,8 +49,10 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

@@ -11,6 +11,14 @@ export const config = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080',
   // Note: the VAPID public key is no longer an env var — it's fetched at
   // runtime from GET /api/push/vapid-public-key (single source of truth).
+
+  // Sentry error reporting. Empty DSN → Sentry stays disabled (the local/dev
+  // default), so it never gets in the way until prod sets a real DSN.
+  sentryDsn: import.meta.env.VITE_SENTRY_DSN ?? '',
+  // Environment tag sent with every event (dev/prod). Falls back to Vite's
+  // build mode so we don't need an extra env var for the common case.
+  sentryEnvironment:
+    import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
 } as const;
 
 export const routes = {

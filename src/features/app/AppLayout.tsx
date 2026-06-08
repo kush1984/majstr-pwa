@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { setSentryUser } from '@/lib/sentry.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
 import { NotificationBell } from '@/components/NotificationBell.tsx';
@@ -17,6 +18,12 @@ import { NAV_ITEMS } from './navItems.ts';
 export function AppLayout() {
   const { data: me } = useMe();
   const { t } = useTranslation();
+
+  // Tag Sentry with the user id on (re)load while already logged in — login()
+  // covers the fresh-login path; this covers boot-from-home-screen.
+  useEffect(() => {
+    if (me?.id) setSentryUser(me.id);
+  }, [me?.id]);
 
   // Keep the backend's stored push subscription in sync with the browser's
   // actual one: re-POST it on every app open, and again whenever the SW reports

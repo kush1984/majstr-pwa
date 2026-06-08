@@ -79,7 +79,7 @@ one-line summary — keep the item in the file as a record.
   now uses `??` so an explicitly-empty base URL is honoured.)
 
 ### Offline fallback / network indicator
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** SW precaches the app shell, so the React app boots
   offline — but then every `/api/*` call fails, axios surfaces "Сервер
@@ -87,6 +87,11 @@ one-line summary — keep the item in the file as a record.
   offline. Confusing UX.
 - **Notes / options:** Subscribe to `online` / `offline` events; show a
   sticky banner. Background-sync queueing for mutations is much later.
+- **Resolution:** Reliability block (BLOCK 1) — `OfflineBanner` (in `App.tsx`)
+  subscribes to `online`/`offline` and shows a sticky amber banner while
+  disconnected; the reusable `ErrorState` shows "Сервіс тимчасово недоступний"
+  + retry on failed fetches. **Background-sync queueing for mutations is still
+  deferred** (a separate, bigger piece of work).
 
 ---
 
@@ -283,7 +288,7 @@ one-line summary — keep the item in the file as a record.
   script to `eslint .` while at it.
 
 ### No unit / component test runner (E2E smoke exists)
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** A Playwright E2E smoke now guards the contractor happy path
   (`npm run test:e2e`, see README). Still missing a fast unit/component layer
@@ -292,15 +297,31 @@ one-line summary — keep the item in the file as a record.
 - **Notes / options:** Vitest + React Testing Library for components/hooks;
   MSW to mock the backend without spinning Spring Boot. Runs without a
   backend — good for pre-commit.
+- **Resolution:** Reliability block (BLOCK 1) — added **Vitest** + React
+  Testing Library (`npm run test`, jsdom, no backend), config in
+  `vitest.config.ts`, tests co-located as `src/**/*.test.ts(x)` (excluded from
+  `tsc -b`). First specs cover the new reliability surface: retry policy
+  (`lib/queryRetry`), Sentry scrubbers (`lib/sentry`), and `ErrorBoundary`.
+  The runner is now in place; **broader coverage** (refresh-token interceptor,
+  `ProtectedRoute`, form validation, formatting, push lifecycle, MSW) is the
+  natural follow-up to grow incrementally.
 
 ### Client-side error reporting
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** initial scaffold
 - **Context:** Uncaught errors disappear into the user's DevTools. We
   hear about bugs only when someone reports them in Ukrainian over
   Viber.
 - **Notes / options:** Sentry SDK + source-map upload on `vite build`.
   Cheap and same provider the backend will likely use.
+- **Resolution:** Reliability block (BLOCK 1) — added `@sentry/react`
+  (`src/lib/sentry.ts`), env-gated on `VITE_SENTRY_DSN` (empty → disabled, the
+  dev default). Captures unhandled + React render errors (the global
+  `ErrorBoundary` forwards via `captureException`). `beforeSend`/
+  `beforeBreadcrumb` scrub Authorization/cookie headers, auth-call request
+  bodies and token-shaped query params; `sendDefaultPii: false`; user tagged by
+  id only (login + AppLayout, cleared on logout). Source-map upload on
+  `vite build` is still TODO (needs the Sentry CLI/auth token at deploy time).
 
 ---
 

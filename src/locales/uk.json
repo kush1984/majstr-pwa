@@ -84,7 +84,13 @@
     "tooManyRequests": "Забагато спроб. Спробуйте за кілька хвилин.",
     "serverError": "Помилка сервера",
     "unknown": "Невідома помилка",
-    "withStatus": "Помилка {{status}}"
+    "withStatus": "Помилка {{status}}",
+    "unavailableTitle": "Сервіс тимчасово недоступний",
+    "unavailableText": "Не вдалося завантажити дані. Спробуйте за хвилину.",
+    "offlineBanner": "Немає з’єднання з інтернетом",
+    "boundaryTitle": "Щось пішло не так",
+    "boundaryText": "Сталася неочікувана помилка. Спробуйте оновити сторінку.",
+    "boundaryReload": "Оновити сторінку"
   },
   "auth": {
     "loginTitle": "Вхід",
