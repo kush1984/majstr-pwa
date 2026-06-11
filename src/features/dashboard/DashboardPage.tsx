@@ -36,6 +36,20 @@ export function DashboardPage() {
 
   const isEmpty = projects.isSuccess && projects.data.length === 0;
 
+  // Full outage (both dashboard queries failed) → one page-level error with a
+  // single retry instead of two stacked error blocks.
+  if (metrics.isError && projects.isError) {
+    return (
+      <ErrorState
+        error={projects.error}
+        onRetry={() => {
+          void metrics.refetch();
+          void projects.refetch();
+        }}
+      />
+    );
+  }
+
   return (
       <>
         {/* Greeting + desktop CTA */}
@@ -65,7 +79,16 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      {/* Metrics: 2 on mobile, 3 on desktop */}
+      {/* Metrics: 2 on mobile, 3 on desktop. An error shows an honest compact
+          strip — silently rendering "0 активних" during an outage would lie. */}
+      {metrics.isError ? (
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-card border border-border bg-surface p-4">
+          <p className="text-sm text-muted">⚠️ {t('dashboard.metricsError')}</p>
+          <Button variant="secondary" onClick={() => void metrics.refetch()}>
+            {t('common.retry')}
+          </Button>
+        </div>
+      ) : (
       <div className="mb-5 grid grid-cols-2 gap-2.5 lg:grid-cols-3 lg:gap-4">
         {metrics.isPending ? (
           <>
@@ -105,6 +128,7 @@ export function DashboardPage() {
           </>
         )}
       </div>
+      )}
 
       {/* Mobile CTA */}
       <Button onClick={newEstimate} fullWidth className="mb-6 py-4 text-base shadow-cta lg:hidden">

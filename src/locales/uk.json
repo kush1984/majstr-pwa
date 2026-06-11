@@ -90,7 +90,8 @@
     "offlineBanner": "Немає з’єднання з інтернетом",
     "boundaryTitle": "Щось пішло не так",
     "boundaryText": "Сталася неочікувана помилка. Спробуйте оновити сторінку.",
-    "boundaryReload": "Оновити сторінку"
+    "boundaryReload": "Оновити сторінку",
+    "sessionExpired": "Сесія завершена — потрібен повторний вхід"
   },
   "auth": {
     "loginTitle": "Вхід",
@@ -112,6 +113,7 @@
     "emailAlreadyRegistered": "Цей email вже зареєстрований"
   },
   "dashboard": {
+    "metricsError": "Не вдалося завантажити показники",
     "greetingMorning": "Доброго ранку",
     "greetingDay": "Доброго дня",
     "greetingEvening": "Доброго вечора",
@@ -220,6 +222,8 @@
     "tooManyEmails": "Забагато листів — спробуйте трохи згодом",
     "portalProOnly": "Портал для клієнта доступний у плані PRO",
     "linkCopied": "Посилання скопійовано",
+    "linkCopyFailed": "Посилання створено, але скопіювати не вдалося. Спробуйте ще раз.",
+    "clientEmailPlaceholder": "klient@poshta.ua",
     "emailSent": "Лист надіслано клієнту ✅",
     "enterValidEmail": "Введіть коректний email",
     "clientEmailSaved": "Email клієнта збережено",
@@ -252,6 +256,10 @@
   },
   "profile": {
     "title": "Профіль",
+    "help": "Допомога",
+    "supportEmail": "Написати в підтримку",
+    "supportPhone": "Зателефонувати в підтримку",
+    "appVersion": "Версія застосунку",
     "editProfile": "Редагувати профіль",
     "editProfileSub": "Ім'я, телефон, компанія, типи робіт",
     "editTitle": "Редагувати профіль",

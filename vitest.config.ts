@@ -11,6 +11,11 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  define: {
+    // Mirror vite.config's build-time constant so component tests can render
+    // surfaces that show the app version.
+    __APP_VERSION__: JSON.stringify('test'),
+  },
   test: {
     environment: 'jsdom',
     globals: true,

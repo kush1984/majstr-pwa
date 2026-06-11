@@ -82,7 +82,18 @@ test('повний сценарій підрядника: реєстрація �
   await editDialog.getByRole('button', { name: 'Скасувати' }).click();
   await expect(editDialog).not.toBeVisible();
 
-  // 9 — Logout (Fix G): clicking "Вийти" revokes the session server-side
+  // 9 — Support contacts (#17): the "Допомога" section shows clickable
+  // mailto:/tel: links sourced from config (env-overridable defaults).
+  await expect(page.getByRole('heading', { name: 'Допомога' })).toBeVisible();
+  const emailLink = page.getByRole('link', { name: /Написати в підтримку/ });
+  await expect(emailLink).toBeVisible();
+  await expect(emailLink).toHaveAttribute('href', 'mailto:support@majstr.pro');
+  const phoneLink = page.getByRole('link', { name: /Зателефонувати в підтримку/ });
+  await expect(phoneLink).toBeVisible();
+  await expect(phoneLink).toHaveAttribute('href', 'tel:+380978938990');
+  await expect(page.getByText('Версія застосунку')).toBeVisible();
+
+  // 10 — Logout (Fix G): clicking "Вийти" revokes the session server-side
   // (POST /api/auth/logout, fire-and-forget) then routes to /login. After that
   // the protected route no longer opens — the token is cleared.
   await page.getByRole('button', { name: 'Вийти' }).click();

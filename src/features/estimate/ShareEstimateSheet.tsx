@@ -71,10 +71,21 @@ export function ShareEstimateSheet({
     setBusy('copy');
     try {
       const link = await estimatesApi.createShareLink(estimateId);
-      await navigator.clipboard?.writeText(link.url).catch(() => undefined);
+      // Clipboard can legitimately fail (no permission, non-secure context,
+      // Safari focus rules) while the share link itself was created fine —
+      // never show "скопійовано" unless it actually landed in the clipboard.
+      const copied = navigator.clipboard
+        ? await navigator.clipboard.writeText(link.url).then(() => true, () => false)
+        : false;
       invalidateAfterShare();
-      toast.success(t('estimate.linkCopied'));
-      onClose();
+      if (copied) {
+        toast.success(t('estimate.linkCopied'));
+        onClose();
+      } else {
+        // Link exists but isn't in the buffer — tell the truth and keep the
+        // sheet open so the user can try again.
+        toast.error(t('estimate.linkCopyFailed'));
+      }
     } catch (err) {
       handleError(err);
     } finally {
@@ -149,7 +160,7 @@ export function ShareEstimateSheet({
                 <Input
                   type="email"
                   inputMode="email"
-                  placeholder="client@example.com"
+                  placeholder={t('estimate.clientEmailPlaceholder')}
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                 />

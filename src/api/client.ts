@@ -5,6 +5,7 @@ import axios, {
 } from 'axios';
 import { config, routes } from '@/lib/config.ts';
 import { tokens } from '@/lib/tokens.ts';
+import i18n from '@/lib/i18n.ts';
 import type { AuthResponse } from './types.ts';
 
 /**
@@ -22,9 +23,11 @@ import type { AuthResponse } from './types.ts';
  *    original request a single time (`_retry` guard).
  * 3. Refresh is single-flight: concurrent callers share one `/api/auth/refresh`
  *    promise, so a stampede of queries triggers exactly one rotation.
- * 4. If refresh can't produce a token (no/expired refresh token), we clear
- *    storage and redirect to /login ONCE (`redirectingToLogin` latch), and
- *    every pending request rejects instead of retrying forever.
+ * 4. Refresh failures are CLASSIFIED: a 4xx from /api/auth/refresh means the
+ *    token is genuinely dead → clear storage and redirect to /login ONCE
+ *    (`redirectingToLogin` latch), pending requests reject. A network error
+ *    or 5xx is transient → the failing request rejects but tokens are KEPT;
+ *    we never log the user out because of a blip or a backend hiccup.
  */
 
 interface RetryableRequest extends InternalAxiosRequestConfig {
@@ -73,8 +76,14 @@ let redirectingToLogin = false;
 /**
  * Refresh the access token, deduped: concurrent callers await the same
  * promise so we rotate the refresh token exactly once. Resolves to the new
- * access token, or `null` if refresh is impossible (no/expired refresh token,
- * malformed response) — callers treat `null` as "auth is dead".
+ * access token, or `null` if auth is DEAD (no refresh token, or the server
+ * definitively rejected it with a 4xx) — callers treat `null` as "log out".
+ *
+ * REJECTS on transient failures (network down, backend 5xx): we must NOT log
+ * the user out then — the refresh token is still perfectly valid, the server
+ * just couldn't be reached. Callers propagate the error so the original
+ * request fails like any other transient failure (and React Query's retry
+ * policy gets its shot), with tokens intact.
  */
 function runRefresh(): Promise<string | null> {
   if (!refreshInFlight) {
@@ -99,8 +108,19 @@ async function doRefresh(): Promise<string | null> {
     if (!resp.data?.accessToken || !resp.data?.refreshToken) return null;
     tokens.set(resp.data.accessToken, resp.data.refreshToken);
     return resp.data.accessToken;
-  } catch {
-    return null;
+  } catch (err) {
+    // The server SAW the token and said no (401 expired/revoked/rotated-away,
+    // or any other 4xx) → auth is genuinely dead.
+    if (
+      axios.isAxiosError(err) &&
+      err.response &&
+      err.response.status >= 400 &&
+      err.response.status < 500
+    ) {
+      return null;
+    }
+    // No response (offline / DNS / timeout) or 5xx → transient; keep tokens.
+    throw err;
   }
 }
 
@@ -117,8 +137,10 @@ function forceLogin(): void {
 /**
  * Returns a usable access token, refreshing first if the current one is
  * already expired. `null` means auth is dead (and a redirect has been kicked
- * off). Exported for the few bearer calls that bypass axios (e.g. PDF blob
- * fetch) so they get the same proactive-refresh guarantee.
+ * off); a transient refresh failure (network/5xx) REJECTS instead — the
+ * caller's request fails but the session survives. Exported for the few
+ * bearer calls that bypass axios (e.g. PDF blob fetch) so they get the same
+ * proactive-refresh guarantee.
  */
 export async function ensureAccessToken(): Promise<string | null> {
   if (accessTokenExpired()) {
@@ -136,13 +158,15 @@ export async function ensureAccessToken(): Promise<string | null> {
 
 api.interceptors.request.use(async (req) => {
   // If we can already see the token is expired, rotate it before sending
-  // instead of firing a doomed request and bouncing off a 401.
+  // instead of firing a doomed request and bouncing off a 401. A transient
+  // refresh failure rejects here (runRefresh throws) — the request fails as a
+  // network error, React Query may retry it, and the tokens stay put.
   if (accessTokenExpired()) {
     const fresh = await runRefresh();
     if (!fresh) {
       forceLogin();
       // Abort: never send a request we know will 401.
-      throw new axios.Cancel('Сесія завершена — потрібен повторний вхід');
+      throw new axios.CanceledError(i18n.t('errors.sessionExpired'));
     }
   }
   const token = tokens.getAccess();
@@ -171,7 +195,14 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
 
   original._retry = true;
 
-  const fresh = await runRefresh();
+  let fresh: string | null;
+  try {
+    fresh = await runRefresh();
+  } catch {
+    // Transient refresh failure — surface the ORIGINAL 401 to the caller and
+    // keep tokens: the session is probably still fine, the network wasn't.
+    return Promise.reject(error);
+  }
   if (!fresh) {
     forceLogin();
     return Promise.reject(error);

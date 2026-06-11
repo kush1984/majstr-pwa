@@ -6,6 +6,7 @@ import { Button } from '@/components/Button.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -59,6 +60,16 @@ export function EstimateEditorPage() {
   }
 
   if (estimate.isError || !estimate.data) {
+    // Transient failure (offline / backend down / 5xx) is NOT "не знайдено" —
+    // offer a retry instead of suggesting the estimate doesn't exist.
+    const status = estimate.error ? toAppError(estimate.error).status : 404;
+    if (estimate.isError && status !== 404 && status !== 403) {
+      return (
+        <div className="flex min-h-dvh items-center justify-center bg-canvas">
+          <ErrorState error={estimate.error} onRetry={() => void estimate.refetch()} />
+        </div>
+      );
+    }
     return (
       <div className="min-h-dvh bg-canvas">
         <EmptyState

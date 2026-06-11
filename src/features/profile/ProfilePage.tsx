@@ -10,6 +10,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { initials } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
+import { config } from '@/lib/config.ts';
 import type { Plan } from '@/api/types.ts';
 
 /** Object limits per plan (UI display; the backend enforces them). FREE = 2. */
@@ -126,6 +127,36 @@ export function ProfilePage() {
         </button>
       </div>
 
+      {/* Help / support contacts (#17) — values come from config (env-overridable) */}
+      <h2 className="mb-2 mt-5 text-[13px] font-bold uppercase tracking-wide text-muted">
+        {t('profile.help')}
+      </h2>
+      <div className="overflow-hidden rounded-card border border-border bg-surface">
+        <ContactRow
+          icon="✉️"
+          title={t('profile.supportEmail')}
+          sub={config.supportEmail}
+          href={`mailto:${config.supportEmail}`}
+        />
+        <ContactRow
+          icon="📞"
+          title={t('profile.supportPhone')}
+          sub={config.supportPhone}
+          href={`tel:${config.supportPhone.replace(/[^+\d]/g, '')}`}
+        />
+        <div className="flex w-full items-center gap-3 p-3.5">
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
+            ℹ️
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-primary">
+              {t('profile.appVersion')}
+            </span>
+          </span>
+          <span className="text-xs text-muted">{__APP_VERSION__}</span>
+        </div>
+      </div>
+
       {limit !== null && used >= limit && (
         <p className="mt-3 text-center text-xs text-muted">
           {t('profile.limitReached')}
@@ -169,6 +200,35 @@ function MenuRow({
         <span className="text-base text-faint">›</span>
       )}
     </button>
+  );
+}
+
+/** Anchor variant of MenuRow for mailto:/tel: links — same look, real <a>. */
+function ContactRow({
+  icon,
+  title,
+  sub,
+  href,
+}: {
+  icon: string;
+  title: string;
+  sub: string;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="flex w-full items-center gap-3 border-b border-border p-3.5 text-left last:border-b-0"
+    >
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-primary">{title}</span>
+        <span className="block text-xs text-muted">{sub}</span>
+      </span>
+      <span className="text-base text-faint">›</span>
+    </a>
   );
 }
 

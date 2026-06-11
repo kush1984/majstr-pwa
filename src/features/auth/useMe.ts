@@ -17,6 +17,9 @@ export function useMe() {
     queryFn: authApi.me,
     enabled: tokens.hasAny(),
     staleTime: 5 * 60 * 1000, // 5 min — re-fetched on focus / mutation
-    retry: false,             // 401 already chased by interceptor; no point retrying
+    // Uses the global retry policy: transient failures (network/5xx) retry
+    // with backoff so a blip at boot doesn't dump the user on an error
+    // screen; 401 is never retried by policy (the interceptor already
+    // chased it through refresh).
   });
 }

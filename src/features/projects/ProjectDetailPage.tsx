@@ -7,6 +7,7 @@ import { Button } from '@/components/Button.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { IconTile } from '@/components/IconTile.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -64,6 +65,12 @@ export function ProjectDetailPage() {
     );
   }
   if (project.isError || !project.data) {
+    // Transient failure (offline / backend down / 5xx) is NOT "не знайдено" —
+    // offer a retry instead of suggesting the project doesn't exist.
+    const status = project.error ? toAppError(project.error).status : 404;
+    if (project.isError && status !== 404 && status !== 403) {
+      return <ErrorState error={project.error} onRetry={() => void project.refetch()} />;
+    }
     return (
       <EmptyState
         icon="⚠️"
@@ -75,6 +82,12 @@ export function ProjectDetailPage() {
 
   const p = project.data;
   const list = estimates.data ?? [];
+  // The project-level share CTA targets the NEWEST estimate — the same
+  // "latest" notion the backend uses for the project card (latestEstimateTotal
+  // / estimateStatus). Never blindly list[0]: the list order isn't guaranteed.
+  const latestEstimate = [...list].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0];
 
   const openShare = () => {
     if (list.length === 0) {
@@ -90,7 +103,7 @@ export function ProjectDetailPage() {
       <ShareEstimateSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
-        estimateId={list[0]?.id ?? ''}
+        estimateId={latestEstimate?.id ?? ''}
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
       />

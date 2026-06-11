@@ -12,6 +12,12 @@ export const config = {
   // Note: the VAPID public key is no longer an env var — it's fetched at
   // runtime from GET /api/push/vapid-public-key (single source of truth).
 
+  // Support contacts shown on the Profile screen. `||` (not `??`) on purpose:
+  // an unset OR explicitly-empty env var falls back to the real defaults —
+  // empty contacts are never useful.
+  supportEmail: import.meta.env.VITE_SUPPORT_EMAIL || 'support@majstr.pro',
+  supportPhone: import.meta.env.VITE_SUPPORT_PHONE || '+380978938990',
+
   // Sentry error reporting. Empty DSN → Sentry stays disabled (the local/dev
   // default), so it never gets in the way until prod sets a real DSN.
   sentryDsn: import.meta.env.VITE_SENTRY_DSN ?? '',

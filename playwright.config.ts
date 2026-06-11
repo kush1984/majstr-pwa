@@ -24,6 +24,10 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     locale: 'uk-UA',
+    // The share flow now only toasts "скопійовано" when the clipboard write
+    // actually succeeded — grant the permission so headless runs take the
+    // success path.
+    permissions: ['clipboard-write', 'clipboard-read'],
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

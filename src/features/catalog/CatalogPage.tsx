@@ -5,6 +5,7 @@ import { Button } from '@/components/Button.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
@@ -36,7 +37,7 @@ function groupByCategory(items: CatalogItemResponse[]): [string, CatalogItemResp
 export function CatalogPage() {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<TypeFilter>('ALL');
-  const { data, isPending, isError, refetch, isFetching } = useCatalog(
+  const { data, isPending, isError, error, refetch, isFetching } = useCatalog(
     filter === 'ALL' ? undefined : filter,
   );
   const reset = useResetCatalog();
@@ -81,7 +82,11 @@ export function CatalogPage() {
       {isPending ? (
         <CatalogSkeleton />
       ) : isError ? (
-        <ErrorBlock onRetry={() => void refetch()} />
+        <ErrorState
+          error={error}
+          title={t('catalog.loadErrorTitle')}
+          onRetry={() => void refetch()}
+        />
       ) : (data?.length ?? 0) === 0 ? (
         <EmptyState
           icon="📖"
@@ -172,14 +177,3 @@ function CatalogSkeleton() {
   );
 }
 
-function ErrorBlock({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <EmptyState
-      icon="⚠️"
-      title={t('catalog.loadErrorTitle')}
-      text={t('catalog.loadErrorText')}
-      action={<Button onClick={onRetry}>{t('common.retry')}</Button>}
-    />
-  );
-}

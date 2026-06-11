@@ -90,7 +90,8 @@
     "offlineBanner": "No internet connection",
     "boundaryTitle": "Something went wrong",
     "boundaryText": "An unexpected error occurred. Try reloading the page.",
-    "boundaryReload": "Reload page"
+    "boundaryReload": "Reload page",
+    "sessionExpired": "Session ended — please sign in again"
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -112,6 +113,7 @@
     "emailAlreadyRegistered": "This email is already registered"
   },
   "dashboard": {
+    "metricsError": "Could not load the metrics",
     "greetingMorning": "Good morning",
     "greetingDay": "Good afternoon",
     "greetingEvening": "Good evening",
@@ -220,6 +222,8 @@
     "tooManyEmails": "Too many emails — try again a bit later",
     "portalProOnly": "The client portal is available on the PRO plan",
     "linkCopied": "Link copied",
+    "linkCopyFailed": "The link was created but copying failed. Please try again.",
+    "clientEmailPlaceholder": "client@example.com",
     "emailSent": "Email sent to the client ✅",
     "enterValidEmail": "Enter a valid email",
     "clientEmailSaved": "Client's email saved",
@@ -252,6 +256,10 @@
   },
   "profile": {
     "title": "Profile",
+    "help": "Help",
+    "supportEmail": "Email support",
+    "supportPhone": "Call support",
+    "appVersion": "App version",
     "editProfile": "Edit profile",
     "editProfileSub": "Name, phone, company, trades",
     "editTitle": "Edit profile",
