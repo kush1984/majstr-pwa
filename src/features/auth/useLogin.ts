@@ -10,6 +10,12 @@ export function useLogin() {
   return useMutation<AuthResponse, unknown, LoginRequest>({
     mutationFn: authApi.login,
     onSuccess: (data) => {
+      // Drop any cached server state from a previous account BEFORE priming the
+      // new one. Without this, switching accounts without an explicit logout
+      // (logout clears the cache, a fresh login did not) leaves the prior
+      // user's warm queries — catalog/projects/clients keys aren't user-scoped
+      // — visible to the new user until they refetch. Tenant-isolation bug.
+      qc.clear();
       tokens.set(data.accessToken, data.refreshToken);
       // Prime the cache so the dashboard renders instantly without
       // an extra /me round-trip.
