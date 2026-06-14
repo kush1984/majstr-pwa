@@ -94,10 +94,16 @@ test('повний сценарій підрядника: реєстрація �
   await expect(page.getByText('Версія застосунку')).toBeVisible();
 
   // 10 — Logout (Fix G): clicking "Вийти" revokes the session server-side
-  // (POST /api/auth/logout, fire-and-forget) then routes to /login. After that
-  // the protected route no longer opens — the token is cleared.
+  // (POST /api/auth/logout, fire-and-forget) then routes to /login.
   await page.getByRole('button', { name: 'Вийти' }).click();
   await expect(page).toHaveURL(/\/login$/);
+
+  // After logout, "/" is the PUBLIC landing again (not the dashboard) — the
+  // token is cleared, so a guest sees marketing, not app content.
   await page.goto('/');
+  await expect(page).toHaveURL('http://localhost:5173/');
+  await expect(page.getByRole('link', { name: 'Почати безкоштовно' }).first()).toBeVisible();
+  // And a protected route still bounces a logged-out user to /login.
+  await page.goto('/projects');
   await expect(page).toHaveURL(/\/login$/);
 });

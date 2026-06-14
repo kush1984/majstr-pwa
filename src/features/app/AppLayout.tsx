@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
@@ -15,7 +15,7 @@ import { NAV_ITEMS } from './navItems.ts';
  *  - <lg: a fixed bottom nav, single content column.
  *  - ≥lg: a left sidebar (logo + nav + profile), content capped at max-w-app.
  */
-export function AppLayout() {
+export function AppLayout({ children }: { children?: ReactNode }) {
   const { data: me } = useMe();
   const { t } = useTranslation();
 
@@ -96,7 +96,9 @@ export function AppLayout() {
             <NotificationBell />
           </div>
           <EmailVerificationBanner />
-          <Outlet />
+          {/* `/` renders the dashboard as a child (HomeRoute); the other
+              authed pages render through the nested router Outlet. */}
+          {children ?? <Outlet />}
         </main>
       </div>
 

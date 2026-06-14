@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Majstr — професійний кошторис для майстра, без зайвого</title>
+<meta name="description" content="Створюй кошториси для клієнтів за хвилини, надсилай посиланням і отримуй підпис онлайн. Для електриків, плиточників, сантехніків. Безкоштовно для перших об'єктів.">
+<meta property="og:title" content="Majstr — професійний кошторис для майстра">
+<meta property="og:description" content="Кошторис за хвилини. Клієнт підписує онлайн. Без зайвого.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --ink:#16202b;        /* графіт — основний текст/фон */
+    --ink-2:#22303f;
+    --paper:#f5f3ee;      /* теплий папір */
+    --paper-2:#ece8df;
+    --line:#cfc8ba;       /* лінія креслення */
+    --amber:#f0a818;      /* будівельний жовтий — акцент */
+    --amber-deep:#d98a04;
+    --blue:#2d6fb3;       /* синя розмітка */
+    --muted:#5d6b78;
+    --white:#ffffff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+  /* ── монорозмітка-заголовки (технічний характер) ── */
+  .mono{font-family:'JetBrains Mono','SF Mono',ui-monospace,monospace}
+  .eyebrow{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--amber-deep);font-weight:600;
+  }
+
+  /* ── NAV ── */
+  nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(245,243,238,.86);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.01em}
+  .logo .mark{
+    width:30px;height:30px;border-radius:7px;background:var(--ink);
+    display:grid;place-items:center;color:var(--amber);font-weight:800;
+    font-family:'JetBrains Mono',monospace;font-size:17px;
+  }
+  .nav-cta{
+    font-size:14px;font-weight:600;color:var(--white);background:var(--ink);
+    padding:9px 18px;border-radius:8px;text-decoration:none;transition:.15s;
+  }
+  .nav-cta:hover{background:var(--ink-2)}
+
+  /* ── HERO ── */
+  .hero{padding:72px 0 64px;position:relative;overflow:hidden}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  h1{
+    font-size:54px;line-height:1.04;letter-spacing:-.025em;font-weight:800;
+    margin:18px 0 20px;
+  }
+  h1 .hl{
+    position:relative;white-space:nowrap;
+  }
+  h1 .hl::after{
+    content:"";position:absolute;left:-2px;right:-2px;bottom:6px;height:14px;
+    background:var(--amber);z-index:-1;opacity:.55;transform:skewX(-6deg);
+  }
+  .lede{font-size:19px;color:var(--muted);max-width:30em;margin-bottom:30px}
+  .btn-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:600;
+    padding:14px 26px;border-radius:10px;text-decoration:none;transition:.15s;cursor:pointer;
+  }
+  .btn-primary{background:var(--ink);color:var(--white)}
+  .btn-primary:hover{background:var(--ink-2);transform:translateY(-1px)}
+  .btn-ghost{color:var(--ink);border:1.5px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--ink)}
+  .hero-note{font-size:13.5px;color:var(--muted);margin-top:16px;display:flex;align-items:center;gap:7px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#3fa650;box-shadow:0 0 0 3px rgba(63,166,80,.18)}
+
+  /* ── phone mockup ── */
+  .phone-stage{display:flex;justify-content:center;position:relative}
+  .grid-bg{
+    position:absolute;inset:-40px;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:26px 26px;opacity:.4;z-index:0;
+    -webkit-mask-image:radial-gradient(circle at center,#000 35%,transparent 72%);
+            mask-image:radial-gradient(circle at center,#000 35%,transparent 72%);
+  }
+  .phone{
+    position:relative;z-index:1;width:288px;background:var(--ink);
+    border-radius:34px;padding:11px;box-shadow:0 30px 60px -20px rgba(22,32,43,.5);
+  }
+  .screen{background:var(--white);border-radius:24px;overflow:hidden}
+  .scr-top{background:var(--ink);color:var(--white);padding:16px 18px 14px}
+  .scr-top .co{font-weight:700;font-size:15px}
+  .scr-top .ph{font-size:12px;color:#9fb0c0;font-family:'JetBrains Mono',monospace;margin-top:2px}
+  .scr-body{padding:16px 18px}
+  .scr-lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber-deep);font-weight:700;font-family:'JetBrains Mono',monospace}
+  .scr-obj{font-weight:700;font-size:15px;margin:4px 0 2px}
+  .scr-addr{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .scr-row{display:flex;justify-content:space-between;font-size:12.5px;padding:8px 0;border-top:1px solid #eee}
+  .scr-row .nm{color:var(--ink)}
+  .scr-row .am{font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+  .scr-total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:2px solid var(--ink)}
+  .scr-total .t{font-weight:800;font-size:14px}
+  .scr-total .v{font-weight:800;font-size:18px;font-family:'JetBrains Mono',monospace}
+  .scr-sign{margin-top:14px;background:var(--amber);color:var(--ink);text-align:center;font-weight:700;font-size:13px;padding:11px;border-radius:10px}
+
+  /* ── trust strip ── */
+  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--white)}
+  .strip-in{display:flex;flex-wrap:wrap;gap:14px 40px;padding:20px 0;justify-content:center;align-items:center}
+  .trade{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);display:flex;align-items:center;gap:9px;font-weight:500}
+  .trade b{color:var(--amber-deep)}
+
+  /* ── sections ── */
+  section{padding:84px 0}
+  .sec-head{max-width:34em;margin-bottom:48px}
+  .sec-head h2{font-size:38px;line-height:1.1;letter-spacing:-.02em;font-weight:800;margin:14px 0 14px}
+  .sec-head p{font-size:18px;color:var(--muted)}
+
+  /* problem→solution */
+  .ps{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .ps-col{padding:38px 36px}
+  .ps-bad{background:var(--white)}
+  .ps-good{background:var(--ink);color:var(--paper)}
+  .ps-tag{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-bottom:20px}
+  .ps-bad .ps-tag{color:#b4546b}
+  .ps-good .ps-tag{color:var(--amber)}
+  .ps-item{display:flex;gap:13px;padding:11px 0;font-size:15.5px;align-items:flex-start}
+  .ps-item .ic{flex-shrink:0;width:20px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:13px;font-weight:800;margin-top:1px}
+  .ps-bad .ic{background:#f2dee2;color:#b4546b}
+  .ps-good .ic{background:rgba(240,168,24,.18);color:var(--amber)}
+
+  /* features */
+  .feats{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  .feat{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:30px;transition:.18s}
+  .feat:hover{border-color:var(--ink);transform:translateY(-2px)}
+  .feat-n{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--amber-deep);font-weight:700}
+  .feat h3{font-size:20px;margin:14px 0 9px;letter-spacing:-.01em}
+  .feat p{font-size:15px;color:var(--muted)}
+
+  /* steps */
+  .steps-wrap{background:var(--ink);border-radius:20px;padding:60px 48px;color:var(--paper)}
+  .steps-wrap .eyebrow{color:var(--amber)}
+  .steps-wrap h2{color:var(--white);font-size:36px;letter-spacing:-.02em;margin:14px 0 44px;font-weight:800}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:30px}
+  .step{position:relative}
+  .step-n{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--ink);background:var(--amber);width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-weight:800;margin-bottom:18px}
+  .step h4{font-size:19px;margin-bottom:9px}
+  .step p{font-size:14.5px;color:#a9b8c6}
+  .step::after{content:"→";position:absolute;top:6px;right:-22px;color:var(--amber);font-size:20px;font-weight:700}
+  .step:last-child::after{display:none}
+
+  /* final CTA */
+  .final{text-align:center;padding:96px 0}
+  .final h2{font-size:44px;letter-spacing:-.025em;font-weight:800;margin-bottom:18px;line-height:1.08}
+  .final p{font-size:19px;color:var(--muted);max-width:30em;margin:0 auto 32px}
+  .final .btn-row{justify-content:center}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);background:var(--white);padding:40px 0}
+  .foot-in{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px}
+  .foot-c{font-size:14px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+  .foot-c a{color:var(--ink);text-decoration:none}
+  .foot-c a:hover{color:var(--amber-deep)}
+
+  /* ── responsive ── */
+  @media(max-width:880px){
+    .hero-grid{grid-template-columns:1fr;gap:48px}
+    .phone-stage{order:-1}
+    h1{font-size:40px}
+    .ps{grid-template-columns:1fr}
+    .feats{grid-template-columns:1fr}
+    .steps{grid-template-columns:1fr;gap:36px}
+    .step::after{content:"↓";top:auto;bottom:-26px;right:auto;left:6px}
+    .steps-wrap{padding:44px 26px}
+    .final h2{font-size:32px}
+    h1 .hl{white-space:normal}
+  }
+  @media(max-width:480px){
+    .wrap{padding:0 18px}
+    h1{font-size:33px}
+    section{padding:60px 0}
+    .ps-col{padding:30px 26px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <div class="logo"><span class="mark">M</span>Majstr</div>
+    <a href="#" class="nav-cta">Увійти</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">Кошториси для майстрів</span>
+      <h1>Професійний кошторис <span class="hl">без зайвого</span></h1>
+      <p class="lede">Склади кошторис клієнту за кілька хвилин прямо з телефона. Надішли посиланням — клієнт перегляне й підпише онлайн.</p>
+      <div class="btn-row">
+        <a href="#" class="btn btn-primary">Почати безкоштовно</a>
+        <a href="#how" class="btn btn-ghost">Як це працює</a>
+      </div>
+      <div class="hero-note"><span class="dot"></span>Перші об'єкти — безкоштовно, без картки</div>
+    </div>
+
+    <div class="phone-stage">
+      <div class="grid-bg"></div>
+      <div class="phone">
+        <div class="screen">
+          <div class="scr-top">
+            <div class="co">Олександр · Електрик</div>
+            <div class="ph">+380 97 123 45 67</div>
+          </div>
+          <div class="scr-body">
+            <div class="scr-lbl">Об'єкт</div>
+            <div class="scr-obj">Квартира на Бандери</div>
+            <div class="scr-addr">вул. С. Бандери, 17а · Клієнт: Марія</div>
+            <div class="scr-row"><span class="nm">Заміна проводки</span><span class="am">8 200 ₴</span></div>
+            <div class="scr-row"><span class="nm">Розетки та вимикачі</span><span class="am">3 400 ₴</span></div>
+            <div class="scr-row"><span class="nm">Щиток, автомати</span><span class="am">5 600 ₴</span></div>
+            <div class="scr-total"><span class="t">Разом</span><span class="v">17 200 ₴</span></div>
+            <div class="scr-sign">✓ Підписати кошторис</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- TRUST STRIP -->
+<div class="strip">
+  <div class="wrap strip-in">
+    <span class="trade"><b>//</b> Електрики</span>
+    <span class="trade"><b>//</b> Плиточники</span>
+    <span class="trade"><b>//</b> Сантехніки</span>
+    <span class="trade"><b>//</b> Маляри</span>
+    <span class="trade"><b>//</b> Будь-який ремонт</span>
+  </div>
+</div>
+
+<!-- PROBLEM → SOLUTION -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Навіщо це майстру</span>
+      <h2>Кошторис на коліні — у минулому</h2>
+      <p>Зошит, нотатки в телефоні, усне «вийде десь тисяч сімнадцять» — це втрачені гроші й суперечки з клієнтом.</p>
+    </div>
+    <div class="ps">
+      <div class="ps-col ps-bad">
+        <div class="ps-tag">Як зазвичай</div>
+        <div class="ps-item"><span class="ic">✕</span>Рахуєш у зошиті чи в голові, щось забуваєш</div>
+        <div class="ps-item"><span class="ic">✕</span>Клієнт каже «ви дописали» — а довести нічим</div>
+        <div class="ps-item"><span class="ic">✕</span>Переробляєш кошторис вручну для кожного об'єкта</div>
+        <div class="ps-item"><span class="ic">✕</span>Виглядає несерйозно — клієнт сумнівається</div>
+      </div>
+      <div class="ps-col ps-good">
+        <div class="ps-tag">З Majstr</div>
+        <div class="ps-item"><span class="ic">✓</span>Додаєш роботи зі свого каталогу — сума рахується сама</div>
+        <div class="ps-item"><span class="ic">✓</span>Клієнт підписує онлайн — підписане вже не зміниш непомітно</div>
+        <div class="ps-item"><span class="ic">✓</span>Зберігаєш свої роботи й ціни — наступний кошторис за хвилину</div>
+        <div class="ps-item"><span class="ic">✓</span>Гарний PDF з твоїм логотипом — клієнт бачить професіонала</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Що всередині</span>
+      <h2>Усе потрібне. Нічого зайвого.</h2>
+      <p>Не комбайн для проєктних бюро, а інструмент майстра, який працює руками.</p>
+    </div>
+    <div class="feats">
+      <div class="feat">
+        <div class="feat-n">01</div>
+        <h3>Кошторис за хвилини</h3>
+        <p>Клієнт, об'єкт і роботи — в одному простому потоці. Жодних складних меню та зайвих полів.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-n">02</div>
+        <h3>Свій каталог робіт і цін</h3>
+        <p>Один раз вносиш свої розцінки — далі додаєш у кошторис у два дотики. Стартовий набір під твій профіль уже всередині.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-n">03</div>
+        <h3>Портал для клієнта</h3>
+        <p>Клієнту не треба нічого встановлювати чи реєструватись. Відкрив посилання, переглянув кошторис, підписав.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-n">04</div>
+        <h3>PDF з твоїм брендом</h3>
+        <p>Акуратний документ українською з твоїм логотипом і контактами. Роздрукуй або надішли — виглядає солідно.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="padding-top:0">
+  <div class="wrap">
+    <div class="steps-wrap">
+      <span class="eyebrow">Як це працює</span>
+      <h2>Три кроки від заявки до підпису</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">1</div>
+          <h4>Склади кошторис</h4>
+          <p>Додай об'єкт і роботи зі свого каталогу. Сума порахується автоматично.</p>
+        </div>
+        <div class="step">
+          <div class="step-n">2</div>
+          <h4>Надішли клієнту</h4>
+          <p>Поділись посиланням або PDF. Клієнт відкриє з будь-якого телефона.</p>
+        </div>
+        <div class="step">
+          <div class="step-n">3</div>
+          <h4>Отримай підпис</h4>
+          <p>Клієнт підписує онлайн — об'єкт стає в роботу, а кошторис зафіксовано.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final">
+  <div class="wrap">
+    <span class="eyebrow">Готовий спробувати?</span>
+    <h2>Перший кошторис — за кілька хвилин</h2>
+    <p>Безкоштовно для перших об'єктів. Без картки, без зобов'язань. Створив акаунт — і одразу до справи.</p>
+    <div class="btn-row">
+      <a href="#" class="btn btn-primary">Почати безкоштовно</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div class="logo"><span class="mark">M</span>Majstr</div>
+    <div class="foot-c">
+      Підтримка: <a href="mailto:support@majstr.pro">support@majstr.pro</a> · <a href="tel:+380978938990">+380 97 893 89 90</a>
+    </div>
+    <div class="foot-c">© 2026 Majstr</div>
+  </div>
+</footer>
+
+</body>
+</html>

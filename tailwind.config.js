@@ -46,6 +46,19 @@ export default {
         amber: { DEFAULT: v('amber'), soft: v('amber-soft') },
         info: { DEFAULT: v('blue'), soft: v('blue-soft') },
         danger: { DEFAULT: v('red'), soft: v('red-soft') },
+        // Public landing page palette (graphite + warm paper + build yellow).
+        // Scoped under `landing-*` so it never collides with the app tokens.
+        landing: {
+          ink: v('l-graphite'),
+          'ink-2': v('l-graphite-2'),
+          paper: v('l-paper'),
+          'paper-2': v('l-paper-2'),
+          line: v('l-line'),
+          amber: v('l-amber'),
+          'amber-deep': v('l-amber-deep'),
+          blue: v('l-blue'),
+          muted: v('l-muted'),
+        },
       },
       fontFamily: {
         sans: [
@@ -57,6 +70,18 @@ export default {
           '"Helvetica Neue"',
           'Arial',
           'sans-serif',
+        ],
+        // Monospace for landing prices/labels (technical-drawing feel). Uses an
+        // installed JetBrains Mono if present, else the system mono — no extra
+        // font download, so the landing stays instant.
+        mono: [
+          '"JetBrains Mono"',
+          'ui-monospace',
+          'SFMono-Regular',
+          '"SF Mono"',
+          'Menlo',
+          'Consolas',
+          'monospace',
         ],
       },
       borderRadius: {

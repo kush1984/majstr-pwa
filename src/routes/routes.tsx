@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from '@/features/auth/LoginPage.tsx';
 import { RegisterPage } from '@/features/auth/RegisterPage.tsx';
+import { LandingPage } from '@/features/landing/LandingPage.tsx';
 import { AppLayout } from '@/features/app/AppLayout.tsx';
 import { DashboardPage } from '@/features/dashboard/DashboardPage.tsx';
 import { ProjectsPage } from '@/features/projects/ProjectsPage.tsx';
@@ -11,7 +12,26 @@ import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
+import { tokens } from '@/lib/tokens.ts';
 import { routes } from '@/lib/config.ts';
+
+/**
+ * The root "/" gate. A logged-OUT visitor (no token in storage) gets the public
+ * marketing landing — no API call, paints instantly. A logged-IN visitor gets
+ * the dashboard inside the normal app shell (unchanged from before). Anything
+ * subtle about an expired/invalid token is handled by ProtectedRoute → useMe
+ * (spinner → retry/redirect), exactly like the other authed routes.
+ */
+function HomeRoute() {
+  if (!tokens.hasAny()) return <LandingPage />;
+  return (
+    <ProtectedRoute>
+      <AppLayout>
+        <DashboardPage />
+      </AppLayout>
+    </ProtectedRoute>
+  );
+}
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +52,8 @@ export const router = createBrowserRouter([
   },
   // Public: the email-verification link works whether logged in or out.
   { path: routes.verifyEmail, element: <VerifyEmailPage /> },
+  // Root: marketing landing for guests, dashboard for authed users.
+  { path: routes.home, element: <HomeRoute /> },
   {
     // Authenticated shell — sidebar (desktop) / bottom nav (mobile).
     element: (
@@ -40,7 +62,6 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { path: routes.home, element: <DashboardPage /> },
       { path: routes.projects, element: <ProjectsPage /> },
       { path: '/projects/:id', element: <ProjectDetailPage /> },
       { path: routes.catalog, element: <CatalogPage /> },

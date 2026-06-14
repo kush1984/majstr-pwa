@@ -1,17 +1,26 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { ProfileEditModal } from './ProfileEditModal.tsx';
+import { useDeleteLogo, useUploadLogo } from './useProfile.ts';
 import { usePush } from '@/hooks/usePush.ts';
 import { isIOS, isStandalone } from '@/lib/push.ts';
 import { toast } from '@/hooks/useToast.ts';
+import { toAppError } from '@/api/errors.ts';
 import { projectsApi } from '@/api/projects.ts';
+import { Spinner } from '@/components/Spinner.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { initials } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { config } from '@/lib/config.ts';
-import type { Plan } from '@/api/types.ts';
+import type { Plan, UserResponse } from '@/api/types.ts';
+
+/** Mirrors the backend cap (spring.servlet.multipart.max-file-size: 2MB) so we
+ *  reject oversized files with a friendly message before the upload leaves. */
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+const LOGO_TYPES = ['image/png', 'image/jpeg'];
 
 /** Object limits per plan (UI display; the backend enforces them). FREE = 2. */
 const PROJECT_LIMIT: Record<Plan, number | null> = {
@@ -107,7 +116,7 @@ export function ProfilePage() {
           sub={t('profile.editProfileSub')}
           onClick={() => setEditOpen(true)}
         />
-        <LogoRow isPro={isPro} />
+        <LogoRow me={me} />
         <PushRow />
         <MenuRow
           icon="⚙️"
@@ -232,20 +241,123 @@ function ContactRow({
   );
 }
 
-function LogoRow({ isPro }: { isPro: boolean }) {
+/**
+ * Company logo: upload / replace / delete. Available on every plan — the logo
+ * brands the client portal for all contractors; it additionally appears on the
+ * PDF for PRO (the BRANDED_PDF feature), surfaced as a hint for FREE users.
+ * The file is validated client-side (PNG/JPEG, ≤2 MB to match the backend cap)
+ * before upload, with a spinner while in flight and friendly toasts on
+ * success / failure. `logoUrl` from `/me` is a relative `/api/files/...` path,
+ * so we prefix the API base for the <img> preview.
+ */
+function LogoRow({ me }: { me: UserResponse | undefined }) {
   const { t } = useTranslation();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const upload = useUploadLogo();
+  const remove = useDeleteLogo();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const logoSrc = me?.logoUrl ? `${config.apiBaseUrl}${me.logoUrl}` : null;
+  const isFree = (me?.plan ?? 'FREE') === 'FREE';
+  const busy = upload.isPending || remove.isPending;
+
+  const pick = () => fileRef.current?.click();
+
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // let the user re-pick the same file after an error
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) {
+      toast.error(t('profile.logoInvalidType'));
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error(t('profile.logoTooLarge'));
+      return;
+    }
+    try {
+      await upload.mutateAsync(file);
+      toast.success(t('profile.logoUploaded'));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const onDelete = async () => {
+    try {
+      await remove.mutateAsync();
+      toast.success(t('profile.logoDeleted'));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setConfirmOpen(false);
+    }
+  };
+
+  const sub =
+    (logoSrc ? t('profile.logoInPortal') : t('profile.logoHint')) +
+    (isFree ? ` · ${t('profile.logoFreePdfNote')}` : '');
+
   return (
-    <MenuRow
-      icon="🖼️"
-      title={t('profile.companyLogo')}
-      sub={isPro ? t('profile.companyLogoBranded') : t('profile.companyLogoPro')}
-      locked={!isPro}
-      onClick={
-        isPro
-          ? () => toast.info(t('profile.logoUploadSoon'))
-          : () => toast.info(t('profile.brandedPdfPro'))
-      }
-    />
+    <div className="flex w-full items-center gap-3 border-b border-border p-3.5 last:border-b-0">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="hidden"
+        onChange={onFile}
+      />
+      {logoSrc ? (
+        <img
+          src={logoSrc}
+          alt={t('profile.companyLogo')}
+          className="h-9 w-9 flex-shrink-0 rounded-[10px] border border-border bg-white object-contain"
+        />
+      ) : (
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
+          🖼️
+        </span>
+      )}
+
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-primary">{t('profile.companyLogo')}</span>
+        <span className="block text-xs text-muted">{sub}</span>
+      </span>
+
+      {busy ? (
+        <Spinner size="sm" className="text-brand" />
+      ) : logoSrc ? (
+        <span className="flex flex-shrink-0 items-center gap-3">
+          <button type="button" onClick={pick} className="text-xs font-semibold text-brand">
+            {t('profile.logoReplace')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            className="text-xs font-semibold text-danger"
+          >
+            {t('common.delete')}
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={pick}
+          className="flex-shrink-0 text-xs font-semibold text-brand"
+        >
+          {t('profile.logoUpload')}
+        </button>
+      )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t('profile.logoDeleteTitle')}
+        message={t('profile.logoDeleteMessage')}
+        loading={remove.isPending}
+        onConfirm={onDelete}
+        onClose={() => setConfirmOpen(false)}
+      />
+    </div>
   );
 }
 

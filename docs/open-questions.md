@@ -242,12 +242,24 @@ one-line summary — keep the item in the file as a record.
   reads one source of truth.
 
 ### Logo upload UI is a stub
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Since:** step 6
 - **Context:** `POST /api/profile/logo` exists, but the Profile "Логотип
   компанії" row only toasts for PRO users — no file picker / crop / preview yet.
 - **Notes / options:** Build the upload sheet (multipart, 2 MB, PNG/JPEG)
   once branded PDF matters to a paying user.
+- **Resolution:** Logo step — the `LogoRow` now does upload / preview /
+  replace / delete. `profileApi.uploadLogo(file)` POSTs multipart to
+  `/api/profile/logo` (Content-Type unset so the browser adds the boundary;
+  still bearer-authed via the `api` instance), `deleteLogo()` hits DELETE;
+  `useUploadLogo`/`useDeleteLogo` prime `['me']`. Client validation (PNG/JPEG,
+  ≤2 MB to match the backend cap) with friendly toasts, spinner while in
+  flight, `<img>` preview from `config.apiBaseUrl + logoUrl`, delete behind a
+  `ConfirmDialog`. **Available on every plan** (the logo brands the free client
+  portal); FREE users get a hint that the logo on the **PDF** is a PRO perk
+  (`BRANDED_PDF`). Backend was already complete (storage, public
+  `/api/files/**`, PDF + portal usage) — this was pure frontend. Covered by the
+  `contractor-journey` e2e (upload → preview → delete). No crop yet (deferred).
 
 ### In-app notifications (bell + per-object client questions)
 - **Status:** RESOLVED
@@ -322,6 +334,36 @@ one-line summary — keep the item in the file as a record.
   bodies and token-shaped query params; `sendDefaultPii: false`; user tagged by
   id only (login + AppLayout, cleared on logout). Source-map upload on
   `vite build` is still TODO (needs the Sentry CLI/auth token at deploy time).
+
+### Register rate-limit conflicts with the e2e suite
+- **Status:** OPEN
+- **Since:** e2e scenario coverage
+- **Context:** The backend caps `POST /api/auth/register` at 5/hour/IP (Fix I,
+  anti-spam). The Playwright suite registers ~4 fresh users per run, so two or
+  three runs within the same hour from one IP start getting 429 and the tests
+  fail at the registration step (stuck on `/register`) — a false red.
+- **Notes / options:** Relax the limit in the backend **dev/test profile**
+  (e.g. much higher cap or disabled for localhost), which is the clean fix and
+  lives in `majstr-backend`. Workarounds today: restart the backend (the
+  Bucket4j bucket is in-memory, so it resets), or keep registrations per run
+  minimal (the suite already shares one registration across the read-only
+  journey checks). A PWA-side option would be seeding a user via a test-only
+  endpoint, but that's also a backend change.
+
+### Landing SEO — no prerender/SSR for the public home
+- **Status:** OPEN
+- **Since:** landing step
+- **Context:** The public landing lives at `/` and is rendered client-side by
+  the SPA (`HomeRoute` → `LandingPage`). Crawlers that execute JS will index it,
+  and the core meta/OG tags are static in `index.html` so even non-JS crawlers
+  see title/description. But there's no server-rendered/prerendered HTML of the
+  marketing copy itself — weaker for SEO than a static page would be.
+- **Notes / options:** Add a build-time prerender of just `/` (e.g.
+  `vite-plugin-prerender` / a small `puppeteer` step, or `vite-react-ssg`) that
+  emits a static `index.html` with the hero/sections baked in, while the rest of
+  the app stays a plain SPA. Revisit when the landing goes to prod / we care
+  about ranking. Keep it scoped to the public route — the authed app must stay
+  client-only.
 
 ---
 

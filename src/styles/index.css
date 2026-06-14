@@ -32,6 +32,21 @@
   --red: 239 68 68;
   --red-soft: 254 242 242;
 
+  /* landing palette — the public marketing page has its own visual identity
+     (technical-drawing / spec sheet): warm oak + warm paper + bright orange
+     (matched to the Majstr app accent). Kept separate from the app tokens
+     above so neither drifts. Var names keep the `graphite` history but now
+     hold the warm-oak values. */
+  --l-paper: 247 241 231;       /* #f7f1e7 */
+  --l-paper-2: 237 226 209;     /* #ede2d1 */
+  --l-line: 217 204 181;        /* #d9ccb5 */
+  --l-graphite: 58 37 25;       /* #3a2519 — warm oak bark (ink) */
+  --l-graphite-2: 74 49 34;     /* #4a3122 — ink hover */
+  --l-amber: 245 130 31;        /* #f5821f — bright orange */
+  --l-amber-deep: 224 108 0;    /* #e06c00 */
+  --l-blue: 138 106 62;         /* #8a6a3e — warm bronze */
+  --l-muted: 112 92 71;         /* #705c47 */
+
   /* semantic aliases (what components should reference) */
   --canvas: 249 250 251;          /* app background */
   --surface: 255 255 255;         /* cards / sheets */
