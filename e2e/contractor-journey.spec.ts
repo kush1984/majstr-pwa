@@ -141,6 +141,19 @@ test('новий майстер: чесний дашборд + FREE-план + �
   await expect(page).toHaveURL(/\/estimates\//);
   await expect(page.getByText('Кошторис порожній')).toBeVisible();
 
+  // Autocomplete: typing part of a catalog item's name suggests it; picking the
+  // suggestion fills the unit + price (the just-added catalog item, 999/шт).
+  await page.getByRole('button', { name: '+ Додати позицію' }).first().click();
+  const addSheet = page.getByRole('dialog', { name: 'Додати позицію' });
+  await addSheet.getByRole('button', { name: 'Вручну' }).click();
+  await addSheet.locator('#it-name').fill('Е2Е Позиція');
+  const suggestion = addSheet.locator('li[role="option"]').filter({ hasText: catName });
+  await expect(suggestion).toBeVisible();
+  await suggestion.locator('button').click();
+  await expect(addSheet.locator('#it-price')).toHaveValue('999');
+  await page.keyboard.press('Escape'); // close the sheet without adding
+  await expect(addSheet).toBeHidden();
+
   // Work 2 × 1500 = 3000.
   await addManualItem(page, { name: 'Демонтаж стін', type: 'WORK', unit: 'M2', qty: '2', price: '1500' });
   await expect(page.getByText('Демонтаж стін')).toBeVisible();

@@ -8,6 +8,8 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { IconTile } from '@/components/IconTile.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
+import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
+import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -46,6 +48,7 @@ export function ProjectDetailPage() {
     queryFn: () => estimatesApi.listForProject(id),
     enabled: Boolean(id),
   });
+  const limits = usePlanLimits();
 
   const createEstimate = useMutation({
     mutationFn: () => estimatesApi.createForProject(id, {}),
@@ -82,6 +85,14 @@ export function ProjectDetailPage() {
 
   const p = project.data;
   const list = estimates.data ?? [];
+  // FREE caps estimates per project (closes the unlimited-drafts hole). Block
+  // "new estimate" preemptively once this project hits the cap; deleting one
+  // frees a slot (count is live). Backend still enforces it.
+  const atEstimateLimit = isAtLimit(list.length, limits.data?.maxEstimatesPerProject);
+  const addEstimate = () => {
+    if (atEstimateLimit || createEstimate.isPending) return;
+    createEstimate.mutate();
+  };
   // The project-level share CTA targets the NEWEST estimate — the same
   // "latest" notion the backend uses for the project card (latestEstimateTotal
   // / estimateStatus). Never blindly list[0]: the list order isn't guaranteed.
@@ -202,13 +213,20 @@ export function ProjectDetailPage() {
             </h2>
             <button
               type="button"
-              onClick={() => createEstimate.mutate()}
-              disabled={createEstimate.isPending}
+              onClick={addEstimate}
+              disabled={createEstimate.isPending || atEstimateLimit}
+              title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
               className="text-[13px] font-semibold text-brand disabled:opacity-60"
             >
               {t('projects.addNew')}
             </button>
           </div>
+
+          {atEstimateLimit && (
+            <UpgradeBanner
+              text={t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject })}
+            />
+          )}
 
           {estimates.isPending ? (
             <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>

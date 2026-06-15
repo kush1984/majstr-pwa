@@ -29,6 +29,12 @@
   "app": {
     "planShort": "План {{plan}}"
   },
+  "limits": {
+    "objectsHint": "FREE — до {{max}} об'єктів. Безліміт у PRO.",
+    "estimatesHint": "FREE — до {{max}} кошторисів на об'єкт. Безліміт у PRO.",
+    "atLimitTooltip": "Ви досягли ліміту безкоштовного плану. Оновіть до PRO, щоб створювати більше.",
+    "upgradeCta": "Дізнатися про PRO"
+  },
   "landing": {
     "navSignIn": "Увійти",
     "heroEyebrow": "Кошториси для майстрів",
@@ -276,6 +282,9 @@
     "searchCatalog": "Пошук у каталозі...",
     "catalogEmptyResult": "Нічого не знайдено. Додайте вручну або поповніть каталог.",
     "itemName": "Назва",
+    "itemNamePlaceholder": "Почни вводити — підкажемо з каталогу",
+    "acSearching": "Пошук у каталозі…",
+    "acAddManual": "Додати «{{name}}» вручну",
     "type": "Тип",
     "unit": "Одиниця",
     "category": "Категорія",

@@ -21,6 +21,14 @@ export interface UserResponse {
   createdAt: string;
 }
 
+/** GET /api/plan/limits — the current user's plan caps (null = unlimited),
+ *  used to disable "create" actions before the user starts. */
+export interface PlanLimits {
+  plan: Plan;
+  maxProjects: number | null;
+  maxEstimatesPerProject: number | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;

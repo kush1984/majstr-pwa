@@ -11,8 +11,10 @@ import { initials } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { routes } from '@/lib/config.ts';
 import { estimatesApi } from '@/api/estimates.ts';
+import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { useClients, useCreateClient } from '@/features/clients/useClients.ts';
-import { useCreateProject } from '@/features/projects/useProjects.ts';
+import { useCreateProject, useProjects } from '@/features/projects/useProjects.ts';
+import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
  * Inline-creation flow: pick or create a client, name the object, then we
@@ -25,6 +27,11 @@ export function NewEstimatePage() {
   const clients = useClients();
   const createClient = useCreateClient();
   const createProject = useCreateProject();
+  // This screen always creates a NEW project, so the FREE object cap applies.
+  // Guard here too (besides the disabled button on the list) for direct nav.
+  const projects = useProjects();
+  const limits = usePlanLimits();
+  const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
 
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [search, setSearch] = useState('');
@@ -41,6 +48,10 @@ export function NewEstimatePage() {
 
   const submit = async () => {
     if (busy) return;
+    if (atProjectLimit) {
+      toast.error(t('limits.objectsHint', { max: limits.data?.maxProjects }));
+      return;
+    }
 
     if (mode === 'new' && (!newClient.fullName.trim() || !newClient.phone.trim())) {
       toast.error(t('estimate.enterClientNamePhone'));
@@ -207,7 +218,16 @@ export function NewEstimatePage() {
           </div>
         </section>
 
-        <Button fullWidth loading={busy} onClick={submit} className="py-4 text-base shadow-cta">
+        {atProjectLimit && (
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+        )}
+        <Button
+          fullWidth
+          loading={busy}
+          disabled={atProjectLimit}
+          onClick={submit}
+          className="py-4 text-base shadow-cta"
+        >
           {t('estimate.createEstimate')}
         </Button>
       </div>

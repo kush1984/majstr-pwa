@@ -80,6 +80,7 @@ export function AddItemSheet({
       ) : (
         <ItemForm
           showSaveToCatalog
+          enableAutocomplete
           submitLabel={t('common.add')}
           submitting={addItem.isPending}
           onSubmit={async (req, saveToCatalog) => {

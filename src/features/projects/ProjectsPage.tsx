@@ -6,9 +6,11 @@ import { Button } from '@/components/Button.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
+import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { routes } from '@/lib/config.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { useProjects } from './useProjects.ts';
+import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
  * Filter is URL-driven (`?status=`) so the dashboard metric cards can deep-link
@@ -42,6 +44,11 @@ export function ProjectsPage() {
   const { data, isPending, isError, refetch } = useProjects();
   const all = useMemo(() => data ?? [], [data]);
 
+  // FREE caps the number of objects. Block "new object" preemptively (the
+  // backend still enforces it) once the count reaches the cap.
+  const limits = usePlanLimits();
+  const atProjectLimit = isAtLimit(all.length, limits.data?.maxProjects);
+
   const counts = useMemo<Record<Filter, number>>(
     () => ({
       ALL: all.length,
@@ -55,7 +62,11 @@ export function ProjectsPage() {
 
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { status: f }, { replace: true });
-  const newEstimate = () => navigate(routes.newEstimate);
+  const newEstimate = () => {
+    if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
+    navigate(routes.newEstimate);
+  };
+  const limitTooltip = atProjectLimit ? t('limits.atLimitTooltip') : undefined;
 
   return (
     <>
@@ -63,10 +74,19 @@ export function ProjectsPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
           {t('projects.title')}
         </h1>
-        <Button onClick={newEstimate} className="hidden sm:inline-flex">
+        <Button
+          onClick={newEstimate}
+          disabled={atProjectLimit}
+          title={limitTooltip}
+          className="hidden sm:inline-flex"
+        >
           {t('common.addEstimate')}
         </Button>
       </div>
+
+      {atProjectLimit && (
+        <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+      )}
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
@@ -109,7 +129,13 @@ export function ProjectsPage() {
               <ProjectCard key={p.id} project={p} />
             ))}
           </div>
-          <Button onClick={newEstimate} fullWidth className="mt-5 py-3.5 shadow-cta sm:hidden">
+          <Button
+            onClick={newEstimate}
+            disabled={atProjectLimit}
+            title={limitTooltip}
+            fullWidth
+            className="mt-5 py-3.5 shadow-cta sm:hidden"
+          >
             {t('common.addEstimate')}
           </Button>
         </>

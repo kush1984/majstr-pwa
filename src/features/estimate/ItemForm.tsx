@@ -1,10 +1,11 @@
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
+import { CatalogAutocomplete } from './CatalogAutocomplete.tsx';
 import { parseDecimal } from '@/lib/decimal.ts';
 import {
   ITEM_TYPE_OPTIONS,
@@ -21,6 +22,7 @@ import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
 export function ItemForm({
   initial,
   showSaveToCatalog = false,
+  enableAutocomplete = false,
   submitLabel,
   submitting,
   onSubmit,
@@ -29,6 +31,8 @@ export function ItemForm({
 }: {
   initial?: EstimateItemResponse | null;
   showSaveToCatalog?: boolean;
+  /** Turn the name field into a catalog type-ahead (add-new flow only). */
+  enableAutocomplete?: boolean;
   submitLabel: string;
   submitting: boolean;
   onSubmit: (req: EstimateItemRequest, saveToCatalog: boolean) => void;
@@ -39,6 +43,8 @@ export function ItemForm({
   const categories = useCatalogCategories();
   const {
     register,
+    control,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<ItemFormValues>({
@@ -60,7 +66,9 @@ export function ItemForm({
           unit: 'PIECE',
           quantity: '',
           unitPrice: '',
-          saveToCatalog: false,
+          // Self-filling catalog: a brand-new manual item defaults to being
+          // saved back to the catalog so it's suggested next time.
+          saveToCatalog: showSaveToCatalog,
         },
   });
 
@@ -79,7 +87,33 @@ export function ItemForm({
   return (
     <form noValidate onSubmit={submit} className="space-y-4">
       <FormField label={t('estimate.itemName')} htmlFor="it-name" required error={errors.name?.message}>
-        <Input id="it-name" invalid={Boolean(errors.name)} {...register('name')} />
+        {enableAutocomplete ? (
+          <Controller
+            control={control}
+            name="name"
+            render={({ field }) => (
+              <CatalogAutocomplete
+                id="it-name"
+                value={field.value}
+                onBlur={field.onBlur}
+                invalid={Boolean(errors.name)}
+                placeholder={t('estimate.itemNamePlaceholder')}
+                onChange={field.onChange}
+                onPick={(item) => {
+                  field.onChange(item.name);
+                  setValue('type', item.type, { shouldValidate: true });
+                  setValue('unit', item.unit, { shouldValidate: true });
+                  setValue('unitPrice', String(item.defaultPrice), { shouldValidate: true });
+                  if (item.category) setValue('category', item.category);
+                  // It's already in the catalog — don't re-save a duplicate.
+                  setValue('saveToCatalog', false);
+                }}
+              />
+            )}
+          />
+        ) : (
+          <Input id="it-name" invalid={Boolean(errors.name)} {...register('name')} />
+        )}
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">

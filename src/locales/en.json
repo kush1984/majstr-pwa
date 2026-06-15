@@ -29,6 +29,12 @@
   "app": {
     "planShort": "Plan {{plan}}"
   },
+  "limits": {
+    "objectsHint": "FREE — up to {{max}} projects. Unlimited on PRO.",
+    "estimatesHint": "FREE — up to {{max}} estimates per project. Unlimited on PRO.",
+    "atLimitTooltip": "You've reached the free-plan limit. Upgrade to PRO to create more.",
+    "upgradeCta": "Learn about PRO"
+  },
   "landing": {
     "navSignIn": "Sign in",
     "heroEyebrow": "Estimates for tradespeople",
@@ -276,6 +282,9 @@
     "searchCatalog": "Search the catalog...",
     "catalogEmptyResult": "Nothing found. Add manually or expand the catalog.",
     "itemName": "Name",
+    "itemNamePlaceholder": "Start typing — we'll suggest from your catalog",
+    "acSearching": "Searching the catalog…",
+    "acAddManual": "Add “{{name}}” manually",
     "type": "Type",
     "unit": "Unit",
     "category": "Category",

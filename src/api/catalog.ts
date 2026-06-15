@@ -21,6 +21,19 @@ export const catalogApi = {
     return api.get<string[]>('/api/catalog/categories').then((r) => r.data);
   },
 
+  /**
+   * Type-ahead search over the CURRENT contractor's catalog by partial name
+   * (case-insensitive), capped server-side. Powers the add-item autocomplete.
+   * Backend contract: `GET /api/catalog/search?q=<text>&limit=<n>` →
+   * `CatalogItemResponse[]` (owner-scoped). Until the endpoint ships the
+   * autocomplete falls back to client-side filtering of the loaded catalog.
+   */
+  search(q: string, limit = 10): Promise<CatalogItemResponse[]> {
+    return api
+      .get<CatalogItemResponse[]>('/api/catalog/search', { params: { q, limit } })
+      .then((r) => r.data);
+  },
+
   create(req: CatalogItemRequest): Promise<CatalogItemResponse> {
     return api.post<CatalogItemResponse>('/api/catalog', req).then((r) => r.data);
   },
