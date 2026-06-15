@@ -3,7 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
@@ -20,7 +22,15 @@ import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { ShareEstimateSheet } from './ShareEstimateSheet.tsx';
-import { useEstimate, useRemoveItem, useUpdateItem } from './useEstimate.ts';
+import { estimateName } from './estimateName.ts';
+import {
+  useEstimate,
+  useRemoveItem,
+  useUpdateItem,
+  useUpdateEstimate,
+  useReopenEstimate,
+  useDeleteEstimate,
+} from './useEstimate.ts';
 
 function groupByCategory(items: EstimateItemResponse[]): [string, EstimateItemResponse[]][] {
   const noCategory = i18n.t('catalog.noCategory');
@@ -44,12 +54,19 @@ export function EstimateEditorPage() {
   const project = useProject(projectId);
   const updateItem = useUpdateItem(id);
   const removeItem = useRemoveItem(id);
+  const updateEstimate = useUpdateEstimate(id);
+  const reopenEstimate = useReopenEstimate(id);
+  const deleteEstimate = useDeleteEstimate(id);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
 
   if (estimate.isPending) {
     return (
@@ -85,6 +102,9 @@ export function EstimateEditorPage() {
   const est = estimate.data;
   const groups = groupByCategory(est.items);
   const nextSortOrder = est.items.length;
+  // A signed estimate is read-only in the UI (the backend also enforces 409):
+  // hide edit/delete, show a "view only" banner with a master-only reopen.
+  const signed = est.status === 'SIGNED';
 
   const goBack = () => navigate(projectId ? routes.project(projectId) : routes.projects);
 
@@ -103,6 +123,46 @@ export function EstimateEditorPage() {
 
   const onShare = () => setShareOpen(true);
 
+  const openActions = () => {
+    setRenameValue(est.name ?? '');
+    setActionsOpen(true);
+  };
+
+  const saveName = async () => {
+    try {
+      await updateEstimate.mutateAsync({
+        status: est.status,
+        validUntil: est.validUntil ?? undefined,
+        notes: est.notes ?? undefined,
+        name: renameValue.trim() || undefined,
+      });
+      toast.success(t('estimate.saved'));
+      setActionsOpen(false);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await deleteEstimate.mutateAsync();
+      toast.success(t('estimate.estimateDeleted'));
+      navigate(projectId ? routes.project(projectId) : routes.projects, { replace: true });
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const confirmReopen = async () => {
+    try {
+      await reopenEstimate.mutateAsync();
+      toast.success(t('estimate.reopened'));
+      setReopenConfirmOpen(false);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
   return (
     <div className="min-h-dvh bg-canvas">
       <div className="mx-auto max-w-app px-4 pb-44 pt-4 sm:px-6 lg:px-8 lg:pb-10">
@@ -118,14 +178,37 @@ export function EstimateEditorPage() {
           </button>
           <div className="min-w-0 flex-1">
             <div className="truncate text-[17px] font-bold text-primary">
-              {t('estimate.title')}{project.data ? ` · ${project.data.name}` : ''}
+              {estimateName(est.name, est.createdAt)}
             </div>
-            <div className="text-xs text-muted">{t('estimate.autosaved')}</div>
+            <div className="truncate text-xs text-muted">
+              {project.data ? project.data.name : t('estimate.autosaved')}
+            </div>
           </div>
           <Badge variant={ESTIMATE_STATUS_VARIANT[est.status]}>
             {t('status.estimate.' + est.status)}
           </Badge>
+          {!signed && (
+            <button
+              type="button"
+              onClick={openActions}
+              aria-label={t('estimate.actions')}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-xl leading-none text-primary"
+            >
+              ⋮
+            </button>
+          )}
         </div>
+
+        {signed && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-border bg-brand-soft px-3.5 py-3">
+            <span className="flex-1 text-sm font-semibold text-primary">
+              {t('estimate.signedViewOnly')}
+            </span>
+            <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>
+              {t('estimate.reopen')}
+            </Button>
+          </div>
+        )}
 
         {/* Client banner */}
         {project.data && <ClientBanner project={project.data} />}
@@ -138,7 +221,11 @@ export function EstimateEditorPage() {
                 icon="🧾"
                 title={t('estimate.emptyTitle')}
                 text={t('estimate.emptyText')}
-                action={<Button onClick={() => setAddOpen(true)}>{t('estimate.addItem')}</Button>}
+                action={
+                  <Button onClick={() => setAddOpen(true)} disabled={signed}>
+                    {t('estimate.addItem')}
+                  </Button>
+                }
               />
             ) : (
               <>
@@ -153,8 +240,10 @@ export function EstimateEditorPage() {
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => setEditing(item)}
-                          className="w-full rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
+                          onClick={() => !signed && setEditing(item)}
+                          disabled={signed}
+                          title={signed ? t('estimate.signedNoEdit') : undefined}
+                          className="w-full rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <span className="text-sm font-medium text-primary">{item.name}</span>
@@ -177,13 +266,15 @@ export function EstimateEditorPage() {
                   </section>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={() => setAddOpen(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
-                >
-                  {t('estimate.addItem')}
-                </button>
+                {!signed && (
+                  <button
+                    type="button"
+                    onClick={() => setAddOpen(true)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
+                  >
+                    {t('estimate.addItem')}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -282,6 +373,53 @@ export function EstimateEditorPage() {
           />
         )}
       </Modal>
+
+      {/* Estimate actions — rename + delete. Hidden for SIGNED (⋮ not shown). */}
+      <Modal open={actionsOpen} onClose={() => setActionsOpen(false)} title={t('estimate.actionsTitle')}>
+        <label htmlFor="est-name" className="mb-1.5 block text-[13px] font-semibold text-muted">
+          {t('estimate.nameLabel')}
+        </label>
+        <Input
+          id="est-name"
+          value={renameValue}
+          maxLength={255}
+          placeholder={t('estimate.namePlaceholder')}
+          onChange={(e) => setRenameValue(e.target.value)}
+        />
+        <Button fullWidth loading={updateEstimate.isPending} onClick={saveName} className="mt-3">
+          {t('estimate.saveName')}
+        </Button>
+        <button
+          type="button"
+          onClick={() => {
+            setActionsOpen(false);
+            setDeleteConfirmOpen(true);
+          }}
+          className="mt-4 w-full rounded-lg border border-danger/40 py-2.5 text-sm font-semibold text-danger"
+        >
+          {t('estimate.deleteEstimate')}
+        </button>
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title={t('estimate.deleteEstimate')}
+        message={t('estimate.deleteConfirm')}
+        confirmLabel={t('common.delete')}
+        loading={deleteEstimate.isPending}
+        onConfirm={confirmDelete}
+        onClose={() => setDeleteConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={reopenConfirmOpen}
+        title={t('estimate.reopen')}
+        message={t('estimate.reopenConfirm')}
+        confirmLabel={t('estimate.reopen')}
+        loading={reopenEstimate.isPending}
+        onConfirm={confirmReopen}
+        onClose={() => setReopenConfirmOpen(false)}
+      />
     </div>
   );
 }

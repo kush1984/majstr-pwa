@@ -20,6 +20,7 @@ import { routes } from '@/lib/config.ts';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
+import { estimateName } from '@/features/estimate/estimateName.ts';
 import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
@@ -271,7 +272,9 @@ function EstimateRow({ summary, onClick }: { summary: EstimateSummary; onClick: 
       className="w-full rounded-card border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-primary">{t('projects.estimateRowName')}</span>
+        <span className="min-w-0 truncate text-sm font-medium text-primary">
+          {estimateName(summary.name, summary.createdAt)}
+        </span>
         <span className="whitespace-nowrap text-sm font-bold text-primary">
           {full.data ? formatMoney(full.data.total) : '—'}
         </span>

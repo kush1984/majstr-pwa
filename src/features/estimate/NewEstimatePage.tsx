@@ -38,6 +38,7 @@ export function NewEstimatePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newClient, setNewClient] = useState({ fullName: '', phone: '', email: '' });
   const [project, setProject] = useState({ name: '', address: '' });
+  const [estName, setEstName] = useState('');
   const [busy, setBusy] = useState(false);
 
   const filtered = useMemo(() => {
@@ -82,7 +83,9 @@ export function NewEstimatePage() {
         address: project.address.trim(),
         clientId: clientId ?? undefined,
       });
-      const estimate = await estimatesApi.createForProject(proj.id, {});
+      const estimate = await estimatesApi.createForProject(proj.id, {
+        name: estName.trim() || undefined,
+      });
       navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -213,6 +216,15 @@ export function NewEstimatePage() {
                 placeholder={t('estimate.addressPlaceholder')}
                 value={project.address}
                 onChange={(e) => setProject((s) => ({ ...s, address: e.target.value }))}
+              />
+            </FormField>
+            <FormField label={t('estimate.nameLabel')} htmlFor="est-name" hint={t('estimate.nameHint')}>
+              <Input
+                id="est-name"
+                maxLength={255}
+                placeholder={t('estimate.namePlaceholder')}
+                value={estName}
+                onChange={(e) => setEstName(e.target.value)}
               />
             </FormField>
           </div>

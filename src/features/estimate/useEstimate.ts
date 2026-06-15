@@ -67,3 +67,25 @@ export function useUpdateEstimate(estimateId: string) {
     onSuccess: invalidate,
   });
 }
+
+/** Reopen a SIGNED estimate (owner) → DRAFT, signature cleared. */
+export function useReopenEstimate(estimateId: string) {
+  const invalidate = useInvalidateEstimate(estimateId);
+  return useMutation({
+    mutationFn: () => estimatesApi.reopen(estimateId),
+    onSuccess: invalidate,
+  });
+}
+
+/** Delete an estimate. Backend forbids deleting SIGNED (reopen first). */
+export function useDeleteEstimate(estimateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => estimatesApi.remove(estimateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['project-estimates'] });
+    },
+  });
+}

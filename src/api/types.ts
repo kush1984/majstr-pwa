@@ -182,6 +182,7 @@ export interface DashboardMetrics {
 export interface EstimateSummary {
   id: string;
   projectId: string;
+  name: string | null;
   status: EstimateStatus;
   validUntil: string | null;
   createdAt: string;
@@ -203,6 +204,7 @@ export interface EstimateItemResponse {
 export interface EstimateResponse {
   id: string;
   projectId: string;
+  name: string | null;
   status: EstimateStatus;
   validUntil: string | null;
   notes: string | null;
@@ -217,12 +219,14 @@ export interface EstimateResponse {
 export interface EstimateCreateRequest {
   validUntil?: string;
   notes?: string;
+  name?: string;
 }
 
 export interface EstimateUpdateRequest {
   status: EstimateStatus;
   validUntil?: string;
   notes?: string;
+  name?: string;
 }
 
 export interface EstimateItemRequest {

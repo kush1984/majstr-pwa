@@ -46,6 +46,12 @@ export const estimatesApi = {
     return api.delete(`/api/estimates/${id}`).then(() => undefined);
   },
 
+  /** Reopen a SIGNED estimate for edits (owner only) → status back to DRAFT,
+   *  signature cleared. The client must sign again afterwards. */
+  reopen(id: string): Promise<EstimateResponse> {
+    return api.post<EstimateResponse>(`/api/estimates/${id}/reopen`).then((r) => r.data);
+  },
+
   // ---- items ----
   addItem(estimateId: string, req: EstimateItemRequest): Promise<EstimateItemResponse> {
     return api
