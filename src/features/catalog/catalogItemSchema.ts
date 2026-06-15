@@ -13,6 +13,8 @@ export const UNIT_OPTIONS: readonly Unit[] = [
   'KG',
   'HOUR',
   'SET',
+  'M3',
+  'T',
 ];
 
 /**
@@ -34,7 +36,7 @@ export const catalogItemSchema = z.object({
     .min(1, i18n.t('validation.enterName'))
     .max(255, i18n.t('validation.nameTooLong')),
   type: z.enum(['WORK', 'MATERIAL'], { message: i18n.t('validation.chooseType') }),
-  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET'], {
+  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T'], {
     message: i18n.t('validation.chooseUnit'),
   }),
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),

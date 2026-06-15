@@ -108,7 +108,9 @@
     "PIECE": "pcs",
     "KG": "kg",
     "HOUR": "h",
-    "SET": "set"
+    "SET": "set",
+    "M3": "m³",
+    "T": "t"
   },
   "unitOptions": {
     "M2": "m² (square metre)",
@@ -117,13 +119,16 @@
     "PIECE": "pcs (piece)",
     "KG": "kg (kilogram)",
     "HOUR": "h (hour)",
-    "SET": "set"
+    "SET": "set",
+    "M3": "m³ (cubic metre)",
+    "T": "t (tonne)"
   },
   "unitPer": "per {{unit}}",
   "trades": {
     "ELECTRICAL": "Electrical",
     "PLUMBING": "Plumbing",
     "TILING": "Tiling",
+    "BUILDER": "Builder",
     "GENERAL": "General works",
     "OTHER": "Other"
   },
