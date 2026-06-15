@@ -276,5 +276,5 @@ export interface CatalogItemRequest {
 }
 
 export interface CatalogResetResponse {
-  added: number;
+  itemsAdded: number;
 }

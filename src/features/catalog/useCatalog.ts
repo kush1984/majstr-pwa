@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi } from '@/api/catalog.ts';
-import type { CatalogItemRequest, ItemType } from '@/api/types.ts';
+import type { CatalogItemRequest, ItemType, Trade } from '@/api/types.ts';
 
 export const CATALOG_KEY = ['catalog'] as const;
 
@@ -70,6 +70,16 @@ export function useResetCatalog() {
   const invalidate = useInvalidateCatalog();
   return useMutation({
     mutationFn: () => catalogApi.resetFromTemplate(),
+    onSuccess: invalidate,
+  });
+}
+
+/** Merge the starter set for the given trades into the catalog (no overwrite,
+ *  no duplicates). Used after a trade is added to the profile. */
+export function useAddCatalogTemplates() {
+  const invalidate = useInvalidateCatalog();
+  return useMutation({
+    mutationFn: (trades: Trade[]) => catalogApi.addFromTemplate(trades),
     onSuccess: invalidate,
   });
 }

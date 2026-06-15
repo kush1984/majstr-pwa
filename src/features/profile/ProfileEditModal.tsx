@@ -9,6 +9,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { useAddCatalogTemplates } from '@/features/catalog/useCatalog.ts';
 import { useUpdateProfile } from './useProfile.ts';
 import type { Trade } from '@/api/types.ts';
 
@@ -29,10 +30,14 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   const { t } = useTranslation();
   const { data: me } = useMe();
   const update = useUpdateProfile();
+  const addTemplates = useAddCatalogTemplates();
   const emailEditable = me ? me.emailVerified === false : false;
 
   const [form, setForm] = useState<FormState>({ fullName: '', phone: '', companyName: '', email: '' });
   const [trades, setTrades] = useState<Trade[]>([]);
+  // After saving, if the user ADDED a trade we offer (with consent) to merge its
+  // starter set into the catalog. Never auto-add, never delete on trade removal.
+  const [addPrompt, setAddPrompt] = useState<Trade[] | null>(null);
   const [errors, setErrors] = useState<{
     fullName?: boolean;
     phone?: boolean;
@@ -47,6 +52,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       setForm({ fullName: me.fullName, phone: me.phone, companyName: me.companyName, email: me.email });
       setTrades(me.trades);
       setErrors({});
+      setAddPrompt(null);
     }
   }, [open, me]);
 
@@ -69,6 +75,9 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     if (Object.values(next).some(Boolean)) return;
 
     const emailChanged = emailEditable && form.email.trim() !== me?.email;
+    const previous = me?.trades ?? [];
+    const addedTrades = trades.filter((tr) => !previous.includes(tr));
+    const removedTrades = previous.filter((tr) => !trades.includes(tr));
     try {
       await update.mutateAsync({
         fullName: form.fullName.trim(),
@@ -79,6 +88,13 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       });
       toast.success(t('profile.saved'));
       if (emailChanged) toast.info(t('profile.emailChangedSent'));
+      // Removing a trade never touches the catalog (the master's data) — just a
+      // quiet note that those items remain.
+      if (removedTrades.length > 0) toast.info(t('profile.tradeRemovedNote'));
+      if (addedTrades.length > 0) {
+        setAddPrompt(addedTrades); // keep the modal open to offer the starter set
+        return;
+      }
       onClose();
     } catch (err) {
       const e = toAppError(err);
@@ -90,8 +106,47 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     }
   };
 
+  const confirmAddSet = async () => {
+    if (!addPrompt) return;
+    try {
+      const res = await addTemplates.mutateAsync(addPrompt);
+      toast.success(t('profile.tradeSetAdded', { count: res.itemsAdded }));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setAddPrompt(null);
+      onClose();
+    }
+  };
+
+  const skipAddSet = () => {
+    setAddPrompt(null);
+    onClose();
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title={t('profile.editTitle')}>
+    <Modal
+      open={open}
+      onClose={addPrompt ? skipAddSet : onClose}
+      title={addPrompt ? t('profile.addSetTitle') : t('profile.editTitle')}
+    >
+      {addPrompt ? (
+        <div>
+          <p className="mb-5 text-sm text-muted">
+            {t('profile.addSetPrompt', {
+              trades: addPrompt.map((tr) => t('trades.' + tr)).join(', '),
+            })}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" fullWidth onClick={skipAddSet}>
+              {t('profile.notNow')}
+            </Button>
+            <Button fullWidth loading={addTemplates.isPending} onClick={confirmAddSet}>
+              {t('profile.addSet')}
+            </Button>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-4">
         <FormField
           label={t('common.fullName')}
@@ -178,6 +233,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
           </Button>
         </div>
       </div>
+      )}
     </Modal>
   );
 }

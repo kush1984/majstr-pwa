@@ -49,10 +49,10 @@ export function CatalogPage() {
 
   const onReset = async () => {
     try {
-      const { added } = await reset.mutateAsync();
+      const { itemsAdded } = await reset.mutateAsync();
       toast.success(
-        added > 0
-          ? t('catalog.itemsAdded', { count: added })
+        itemsAdded > 0
+          ? t('catalog.itemsAdded', { count: itemsAdded })
           : t('catalog.starterAlreadyPresent'),
       );
     } catch (err) {

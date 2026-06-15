@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Modal } from '@/components/Modal.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { IconTile } from '@/components/IconTile.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
@@ -43,6 +45,9 @@ export function ProjectDetailPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [editClientOpen, setEditClientOpen] = useState(false);
+  // Quick actions menu on an estimate row, and the resulting confirm dialog.
+  const [menuFor, setMenuFor] = useState<EstimateSummary | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
 
   const estimates = useQuery({
     queryKey: ['project-estimates', id],
@@ -50,6 +55,31 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const limits = usePlanLimits();
+
+  const invalidateAfterRowAction = () => {
+    qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+    qc.invalidateQueries({ queryKey: ['projects'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+    setConfirm(null);
+  };
+  // Row-level delete / reopen reuse the SAME backend logic as the in-estimate
+  // actions — just a second access point. id is passed at mutate time (per row).
+  const rowDelete = useMutation({
+    mutationFn: (estId: string) => estimatesApi.remove(estId),
+    onSuccess: () => {
+      invalidateAfterRowAction();
+      toast.success(t('estimate.estimateDeleted'));
+    },
+    onError: (err) => toast.error(toAppError(err).message),
+  });
+  const rowReopen = useMutation({
+    mutationFn: (estId: string) => estimatesApi.reopen(estId),
+    onSuccess: () => {
+      invalidateAfterRowAction();
+      toast.success(t('estimate.reopened'));
+    },
+    onError: (err) => toast.error(toAppError(err).message),
+  });
 
   const createEstimate = useMutation({
     mutationFn: () => estimatesApi.createForProject(id, {}),
@@ -126,6 +156,55 @@ export function ProjectDetailPage() {
           clientId={p.clientId}
         />
       )}
+
+      {/* Estimate row quick-actions: reopen (SIGNED) or delete (DRAFT/SENT). */}
+      <Modal
+        open={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        title={menuFor ? estimateName(menuFor.name, menuFor.createdAt) : ''}
+      >
+        {menuFor && (
+          <div className="space-y-2">
+            {menuFor.status === 'SIGNED' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirm({ kind: 'reopen', est: menuFor });
+                  setMenuFor(null);
+                }}
+                className="w-full rounded-lg border border-border py-2.5 text-sm font-semibold text-primary"
+              >
+                {t('estimate.reopen')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirm({ kind: 'delete', est: menuFor });
+                  setMenuFor(null);
+                }}
+                className="w-full rounded-lg border border-danger/40 py-2.5 text-sm font-semibold text-danger"
+              >
+                {t('estimate.deleteEstimate')}
+              </button>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        title={confirm?.kind === 'reopen' ? t('estimate.reopen') : t('estimate.deleteEstimate')}
+        message={confirm?.kind === 'reopen' ? t('estimate.reopenConfirm') : t('estimate.deleteConfirm')}
+        confirmLabel={confirm?.kind === 'reopen' ? t('estimate.reopen') : t('common.delete')}
+        loading={rowDelete.isPending || rowReopen.isPending}
+        onConfirm={() => {
+          if (!confirm) return;
+          if (confirm.kind === 'reopen') rowReopen.mutate(confirm.est.id);
+          else rowDelete.mutate(confirm.est.id);
+        }}
+        onClose={() => setConfirm(null)}
+      />
 
       <div className="mb-3 flex items-center gap-3">
         <button
@@ -249,6 +328,7 @@ export function ProjectDetailPage() {
                   key={s.id}
                   summary={s}
                   onClick={() => navigate(routes.estimate(s.id))}
+                  onMenu={() => setMenuFor(s)}
                 />
               ))}
             </div>
@@ -261,32 +341,52 @@ export function ProjectDetailPage() {
   );
 }
 
-/** Loads the full estimate to show the backend-computed total + item count. */
-function EstimateRow({ summary, onClick }: { summary: EstimateSummary; onClick: () => void }) {
+/** Loads the full estimate to show the backend-computed total + item count.
+ *  A separate ⋮ button opens quick actions (delete / reopen) — kept outside the
+ *  row's main button to avoid invalid nested buttons. */
+function EstimateRow({
+  summary,
+  onClick,
+  onMenu,
+}: {
+  summary: EstimateSummary;
+  onClick: () => void;
+  onMenu: () => void;
+}) {
   const { t } = useTranslation();
   const full = useEstimate(summary.id);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-card border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-sm font-medium text-primary">
-          {estimateName(summary.name, summary.createdAt)}
-        </span>
-        <span className="whitespace-nowrap text-sm font-bold text-primary">
-          {full.data ? formatMoney(full.data.total) : '—'}
-        </span>
-      </div>
-      <div className="mt-1.5 flex items-center gap-2">
-        <Badge variant={ESTIMATE_STATUS_VARIANT[summary.status]}>
-          {t('status.estimate.' + summary.status)}
-        </Badge>
-        <span className="ml-auto text-xs text-muted">
-          {full.data ? t('projects.itemsCount', { count: full.data.items.length }) : '…'}
-        </span>
-      </div>
-    </button>
+    <div className="flex items-stretch rounded-card border border-border bg-surface">
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-w-0 flex-1 px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm font-medium text-primary">
+            {estimateName(summary.name, summary.createdAt)}
+          </span>
+          <span className="whitespace-nowrap text-sm font-bold text-primary">
+            {full.data ? formatMoney(full.data.total) : '—'}
+          </span>
+        </div>
+        <div className="mt-1.5 flex items-center gap-2">
+          <Badge variant={ESTIMATE_STATUS_VARIANT[summary.status]}>
+            {t('status.estimate.' + summary.status)}
+          </Badge>
+          <span className="ml-auto text-xs text-muted">
+            {full.data ? t('projects.itemsCount', { count: full.data.items.length }) : '…'}
+          </span>
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={onMenu}
+        aria-label={t('estimate.actions')}
+        className="flex w-11 flex-shrink-0 items-center justify-center text-xl leading-none text-muted"
+      >
+        ⋮
+      </button>
+    </div>
   );
 }
