@@ -1,0 +1,13 @@
+# majstr.pro — only the public landing ("/") should be indexed. The app routes
+# below are auth-gated SPA views with no public content; keep them out of the index.
+User-agent: *
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /projects
+Disallow: /catalog
+Disallow: /profile
+Disallow: /new
+Disallow: /estimates
+
+Sitemap: https://majstr.pro/sitemap.xml
