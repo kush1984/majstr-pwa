@@ -110,7 +110,9 @@
     "HOUR": "h",
     "SET": "set",
     "M3": "m³",
-    "T": "t"
+    "T": "t",
+    "POINT": "point",
+    "PERCENT": "%"
   },
   "unitOptions": {
     "M2": "m² (square metre)",
@@ -121,7 +123,9 @@
     "HOUR": "h (hour)",
     "SET": "set",
     "M3": "m³ (cubic metre)",
-    "T": "t (tonne)"
+    "T": "t (tonne)",
+    "POINT": "point",
+    "PERCENT": "% (percent)"
   },
   "unitPer": "per {{unit}}",
   "trades": {
@@ -129,6 +133,10 @@
     "PLUMBING": "Plumbing",
     "TILING": "Tiling",
     "BUILDER": "Builder",
+    "PAINTER": "Painting",
+    "DRYWALL": "Drywall",
+    "FLOORING": "Flooring",
+    "DEMOLITION": "Demolition",
     "GENERAL": "General works",
     "OTHER": "Other"
   },
@@ -347,7 +355,15 @@
     "categoryHint": "E.g. Electrical, Tiling, Demolition",
     "priceLabel": "Unit price, ₴",
     "deleteTitle": "Delete item?",
-    "deleteMessage": "«{{name}}» will be removed from the catalog. Items already added to estimates will remain."
+    "deleteMessage": "«{{name}}» will be removed from the catalog. Items already added to estimates will remain.",
+    "addNew": "Add new from the library",
+    "addNewChecking": "Checking…",
+    "addNewTitle": "New items in the library",
+    "addNewPrompt": "Found {{count}} new items for your lines of work. Add them to your catalog? Your prices and your own items won't change.",
+    "addNewConfirm": "Add",
+    "addNewNothingTitle": "All up to date",
+    "addNewNothing": "There are no new items in the library — your catalog already has every standard item for your lines of work.",
+    "addNewAdded": "Added {{count}} new items. Don't forget to fill in your prices."
   },
   "profile": {
     "title": "Profile",

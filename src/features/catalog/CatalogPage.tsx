@@ -11,7 +11,12 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import i18n from '@/lib/i18n.ts';
 import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
-import { useCatalog, useResetCatalog } from './useCatalog.ts';
+import {
+  useAddNewFromTemplate,
+  useCatalog,
+  useCheckTemplateUpdates,
+  useResetCatalog,
+} from './useCatalog.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 
 type TypeFilter = ItemType | 'ALL';
@@ -41,9 +46,14 @@ export function CatalogPage() {
     filter === 'ALL' ? undefined : filter,
   );
   const reset = useResetCatalog();
+  const checkUpdates = useCheckTemplateUpdates();
+  const addNew = useAddNewFromTemplate();
 
   // `undefined` = modal closed; `null` = create; an item = edit.
   const [editing, setEditing] = useState<CatalogItemResponse | null | undefined>(undefined);
+  // "Add new from library" flow: a count opens the confirm; `nothingNew` opens the info dialog.
+  const [pendingNewCount, setPendingNewCount] = useState<number | null>(null);
+  const [nothingNew, setNothingNew] = useState(false);
 
   const groups = useMemo(() => groupByCategory(data ?? []), [data]);
 
@@ -57,6 +67,27 @@ export function CatalogPage() {
       );
     } catch (err) {
       toast.error(toAppError(err).message);
+    }
+  };
+
+  const onCheckUpdates = async () => {
+    try {
+      const { available } = await checkUpdates.mutateAsync();
+      if (available > 0) setPendingNewCount(available);
+      else setNothingNew(true);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const onAddNew = async () => {
+    try {
+      const { itemsAdded } = await addNew.mutateAsync();
+      toast.success(t('catalog.addNewAdded', { count: itemsAdded }));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setPendingNewCount(null);
     }
   };
 
@@ -103,6 +134,17 @@ export function CatalogPage() {
         />
       ) : (
         <div className={isFetching ? 'opacity-60 transition-opacity' : undefined}>
+          <div className="mb-4 flex justify-end">
+            <button
+              type="button"
+              onClick={onCheckUpdates}
+              disabled={checkUpdates.isPending}
+              className="text-xs font-semibold text-brand disabled:opacity-50"
+            >
+              {checkUpdates.isPending ? t('catalog.addNewChecking') : `↻ ${t('catalog.addNew')}`}
+            </button>
+          </div>
+
           {groups.map(([category, items]) => (
             <section key={category} className="mb-5">
               <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
@@ -155,6 +197,35 @@ export function CatalogPage() {
           initial={editing ?? null}
           onDone={() => setEditing(undefined)}
         />
+      </Modal>
+
+      <Modal
+        open={pendingNewCount !== null}
+        onClose={() => setPendingNewCount(null)}
+        title={t('catalog.addNewTitle')}
+      >
+        <p className="mb-5 text-sm text-muted">
+          {t('catalog.addNewPrompt', { count: pendingNewCount ?? 0 })}
+        </p>
+        <div className="flex gap-2">
+          <Button variant="secondary" fullWidth onClick={() => setPendingNewCount(null)}>
+            {t('common.cancel')}
+          </Button>
+          <Button fullWidth loading={addNew.isPending} onClick={onAddNew}>
+            {t('catalog.addNewConfirm')}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={nothingNew}
+        onClose={() => setNothingNew(false)}
+        title={t('catalog.addNewNothingTitle')}
+      >
+        <p className="mb-5 text-sm text-muted">{t('catalog.addNewNothing')}</p>
+        <Button fullWidth onClick={() => setNothingNew(false)}>
+          {t('common.close')}
+        </Button>
       </Modal>
     </>
   );

@@ -6,6 +6,10 @@ export const TRADE_VALUES = [
   'PLUMBING',
   'TILING',
   'BUILDER',
+  'PAINTER',
+  'DRYWALL',
+  'FLOORING',
+  'DEMOLITION',
   'GENERAL',
   'OTHER',
 ] as const satisfies readonly string[];

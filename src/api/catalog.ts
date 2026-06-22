@@ -4,6 +4,7 @@ import type {
   CatalogItemResponse,
   CatalogResetResponse,
   ItemType,
+  TemplateUpdatesResponse,
   Trade,
 } from './types.ts';
 
@@ -59,6 +60,22 @@ export const catalogApi = {
   addFromTemplate(trades: Trade[]): Promise<CatalogResetResponse> {
     return api
       .post<CatalogResetResponse>('/api/catalog/add-from-template', { trades })
+      .then((r) => r.data);
+  },
+
+  /** How many NEW default items (newer catalog version, my trades, not already
+   *  in my catalog) the "Add new from library" button would add — for the preview. */
+  templateUpdates(): Promise<TemplateUpdatesResponse> {
+    return api
+      .get<TemplateUpdatesResponse>('/api/catalog/template-updates')
+      .then((r) => r.data);
+  },
+
+  /** Add those NEW default items — a merge: never overwrites prices, never
+   *  duplicates, never re-adds what the user deleted/renamed. */
+  addNewFromTemplate(): Promise<CatalogResetResponse> {
+    return api
+      .post<CatalogResetResponse>('/api/catalog/add-new-from-template')
       .then((r) => r.data);
   },
 };

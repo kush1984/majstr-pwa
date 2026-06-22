@@ -83,3 +83,22 @@ export function useAddCatalogTemplates() {
     onSuccess: invalidate,
   });
 }
+
+/** How many NEW default items are available to add (drives the "Add new from
+ *  library" button's confirm dialog). Fetched on demand (the button triggers
+ *  the check), so it's a mutation rather than an always-on query. */
+export function useCheckTemplateUpdates() {
+  return useMutation({
+    mutationFn: () => catalogApi.templateUpdates(),
+  });
+}
+
+/** Add the NEW default items for the user's trades (merge — never overwrites
+ *  prices or duplicates, never re-adds deleted items). */
+export function useAddNewFromTemplate() {
+  const invalidate = useInvalidateCatalog();
+  return useMutation({
+    mutationFn: () => catalogApi.addNewFromTemplate(),
+    onSuccess: invalidate,
+  });
+}

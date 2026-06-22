@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -46,13 +46,22 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     email?: boolean;
   }>({});
 
-  // Re-seed from the current user each time the modal opens.
+  // Seed the form ONCE per open (when `me` is first available), not on every `me`
+  // change. Saving the profile primes + invalidates the `['me']` cache, so `me`
+  // changes right after save — without this guard that re-fires the effect and
+  // wipes the "add starter set?" prompt (and any in-progress edit) before it shows.
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (open && me) {
+    if (!open) {
+      seededRef.current = false;
+      return;
+    }
+    if (me && !seededRef.current) {
       setForm({ fullName: me.fullName, phone: me.phone, companyName: me.companyName, email: me.email });
       setTrades(me.trades);
       setErrors({});
       setAddPrompt(null);
+      seededRef.current = true;
     }
   }, [open, me]);
 

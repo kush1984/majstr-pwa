@@ -3,7 +3,17 @@
  * field name fails at compile time, not in production.
  */
 
-export type Trade = 'ELECTRICAL' | 'PLUMBING' | 'TILING' | 'BUILDER' | 'GENERAL' | 'OTHER';
+export type Trade =
+  | 'ELECTRICAL'
+  | 'PLUMBING'
+  | 'TILING'
+  | 'BUILDER'
+  | 'PAINTER'
+  | 'DRYWALL'
+  | 'FLOORING'
+  | 'DEMOLITION'
+  | 'GENERAL'
+  | 'OTHER';
 export type Plan = 'FREE' | 'PRO' | 'TEAM';
 export type Role = 'USER' | 'ADMIN';
 
@@ -93,7 +103,18 @@ export type EstimateStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 
 export type ItemType = 'WORK' | 'MATERIAL';
 
-export type Unit = 'M2' | 'M' | 'LINEAR_METER' | 'PIECE' | 'KG' | 'HOUR' | 'SET' | 'M3' | 'T';
+export type Unit =
+  | 'M2'
+  | 'M'
+  | 'LINEAR_METER'
+  | 'PIECE'
+  | 'KG'
+  | 'HOUR'
+  | 'SET'
+  | 'M3'
+  | 'T'
+  | 'POINT'
+  | 'PERCENT';
 
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)
@@ -277,4 +298,11 @@ export interface CatalogItemRequest {
 
 export interface CatalogResetResponse {
   itemsAdded: number;
+}
+
+/** GET /api/catalog/template-updates — how many NEW default-catalog items
+ *  (newer than last synced, my trades, not duplicates) the "Add new from
+ *  catalog" button would add. Drives the preview ("Знайдено N нових позицій"). */
+export interface TemplateUpdatesResponse {
+  available: number;
 }
