@@ -1,6 +1,7 @@
 import { api, ensureAccessToken } from './client.ts';
 import { config } from '@/lib/config.ts';
 import type {
+  BatchCatalogItemEntry,
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
@@ -69,6 +70,16 @@ export const estimatesApi = {
         `/api/estimates/${estimateId}/items/from-catalog/${catalogItemId}`,
         req,
       )
+      .then((r) => r.data);
+  },
+
+  /** Add several catalog items at once (multi-select) → updated estimate. */
+  addItemsFromCatalogBatch(
+    estimateId: string,
+    items: BatchCatalogItemEntry[],
+  ): Promise<EstimateResponse> {
+    return api
+      .post<EstimateResponse>(`/api/estimates/${estimateId}/items/batch`, { items })
       .then((r) => r.data);
   },
 

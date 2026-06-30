@@ -31,6 +31,7 @@ import {
   useReopenEstimate,
   useDeleteEstimate,
 } from './useEstimate.ts';
+import { useSaveAsTemplate } from './useEstimateTemplates.ts';
 
 function groupByCategory(items: EstimateItemResponse[]): [string, EstimateItemResponse[]][] {
   const noCategory = i18n.t('catalog.noCategory');
@@ -67,6 +68,9 @@ export function EstimateEditorPage() {
   const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const saveAsTemplate = useSaveAsTemplate(id);
 
   if (estimate.isPending) {
     return (
@@ -138,6 +142,17 @@ export function EstimateEditorPage() {
       });
       toast.success(t('estimate.saved'));
       setActionsOpen(false);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const saveTemplate = async () => {
+    if (!templateName.trim()) return;
+    try {
+      await saveAsTemplate.mutateAsync(templateName.trim());
+      toast.success(t('templates.saved'));
+      setSaveTemplateOpen(false);
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -389,6 +404,19 @@ export function EstimateEditorPage() {
         <Button fullWidth loading={updateEstimate.isPending} onClick={saveName} className="mt-3">
           {t('estimate.saveName')}
         </Button>
+        {est.items.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setTemplateName(est.name ?? '');
+              setActionsOpen(false);
+              setSaveTemplateOpen(true);
+            }}
+            className="mt-3 w-full rounded-lg border border-border py-2.5 text-sm font-semibold text-primary"
+          >
+            {t('templates.saveAsTemplate')}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -399,6 +427,29 @@ export function EstimateEditorPage() {
         >
           {t('estimate.deleteEstimate')}
         </button>
+      </Modal>
+
+      <Modal
+        open={saveTemplateOpen}
+        onClose={() => setSaveTemplateOpen(false)}
+        title={t('templates.saveAsTemplate')}
+      >
+        <p className="mb-3 text-sm text-muted">{t('templates.saveAsTemplatePrompt')}</p>
+        <Input
+          value={templateName}
+          maxLength={255}
+          placeholder={t('templates.namePlaceholder')}
+          onChange={(e) => setTemplateName(e.target.value)}
+          className="mb-4"
+        />
+        <div className="flex gap-2">
+          <Button variant="secondary" fullWidth onClick={() => setSaveTemplateOpen(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button fullWidth loading={saveAsTemplate.isPending} onClick={saveTemplate}>
+            {t('common.save')}
+          </Button>
+        </div>
       </Modal>
 
       <ConfirmDialog

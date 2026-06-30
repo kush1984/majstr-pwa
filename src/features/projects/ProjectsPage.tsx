@@ -62,9 +62,15 @@ export function ProjectsPage() {
 
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { status: f }, { replace: true });
-  const newEstimate = () => {
+  // Combined flow (object + first estimate) vs. object-only. Both consume the
+  // FREE object quota, so both are gated the same way.
+  const newCombined = () => {
     if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
     navigate(routes.newEstimate);
+  };
+  const newObject = () => {
+    if (atProjectLimit) return;
+    navigate(routes.newObject);
   };
   const limitTooltip = atProjectLimit ? t('limits.atLimitTooltip') : undefined;
 
@@ -74,14 +80,19 @@ export function ProjectsPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
           {t('projects.title')}
         </h1>
-        <Button
-          onClick={newEstimate}
-          disabled={atProjectLimit}
-          title={limitTooltip}
-          className="hidden sm:inline-flex"
-        >
-          {t('common.addEstimate')}
-        </Button>
+        <div className="hidden gap-2 sm:flex">
+          <Button
+            variant="secondary"
+            onClick={newObject}
+            disabled={atProjectLimit}
+            title={limitTooltip}
+          >
+            {t('common.newObject')}
+          </Button>
+          <Button onClick={newCombined} disabled={atProjectLimit} title={limitTooltip}>
+            {t('common.addEstimate')}
+          </Button>
+        </div>
       </div>
 
       {atProjectLimit && (
@@ -114,7 +125,14 @@ export function ProjectsPage() {
           icon="📁"
           title={t('projects.emptyTitle')}
           text={t('projects.emptyText')}
-          action={<Button onClick={newEstimate}>{t('common.newEstimate')}</Button>}
+          action={
+            <div className="flex flex-col items-center gap-2">
+              <Button onClick={newCombined}>{t('common.addEstimate')}</Button>
+              <Button variant="secondary" onClick={newObject}>
+                {t('common.newObject')}
+              </Button>
+            </div>
+          }
         />
       ) : shown.length === 0 ? (
         <EmptyState
@@ -129,15 +147,27 @@ export function ProjectsPage() {
               <ProjectCard key={p.id} project={p} />
             ))}
           </div>
-          <Button
-            onClick={newEstimate}
-            disabled={atProjectLimit}
-            title={limitTooltip}
-            fullWidth
-            className="mt-5 py-3.5 shadow-cta sm:hidden"
-          >
-            {t('common.addEstimate')}
-          </Button>
+          <div className="mt-5 flex flex-col gap-2 sm:hidden">
+            <Button
+              onClick={newCombined}
+              disabled={atProjectLimit}
+              title={limitTooltip}
+              fullWidth
+              className="py-3.5 shadow-cta"
+            >
+              {t('common.addEstimate')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={newObject}
+              disabled={atProjectLimit}
+              title={limitTooltip}
+              fullWidth
+              className="py-3.5"
+            >
+              {t('common.newObject')}
+            </Button>
+          </div>
         </>
       )}
     </>

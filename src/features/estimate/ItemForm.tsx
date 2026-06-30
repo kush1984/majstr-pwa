@@ -173,17 +173,6 @@ export function ItemForm({
         </FormField>
       </div>
 
-      {showSaveToCatalog && (
-        <label className="flex items-center gap-2.5 text-sm text-secondary">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border text-brand focus:ring-brand"
-            {...register('saveToCatalog')}
-          />
-          {t('estimate.saveToCatalog')}
-        </label>
-      )}
-
       <div className="flex gap-2 pt-1">
         {onDelete && (
           <Button

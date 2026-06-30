@@ -11,6 +11,7 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import i18n from '@/lib/i18n.ts';
 import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
+import { useMe } from '@/features/auth/useMe.ts';
 import {
   useAddNewFromTemplate,
   useCatalog,
@@ -18,6 +19,7 @@ import {
   useResetCatalog,
 } from './useCatalog.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
+import { TradeFilterChips, tradeMatches, type TradeKey } from './TradeFilterChips.tsx';
 
 type TypeFilter = ItemType | 'ALL';
 const FILTERS: { value: TypeFilter; labelKey: string }[] = [
@@ -42,6 +44,8 @@ function groupByCategory(items: CatalogItemResponse[]): [string, CatalogItemResp
 export function CatalogPage() {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<TypeFilter>('ALL');
+  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
+  const { data: me } = useMe();
   const { data, isPending, isError, error, refetch, isFetching } = useCatalog(
     filter === 'ALL' ? undefined : filter,
   );
@@ -55,7 +59,17 @@ export function CatalogPage() {
   const [pendingNewCount, setPendingNewCount] = useState<number | null>(null);
   const [nothingNew, setNothingNew] = useState(false);
 
-  const groups = useMemo(() => groupByCategory(data ?? []), [data]);
+  // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it.
+  const hasUntagged = useMemo(() => (data ?? []).some((i) => i.trade == null), [data]);
+  const visible = useMemo(
+    () => (data ?? []).filter((i) => tradeMatches(i.trade, tradeFilter)),
+    [data, tradeFilter],
+  );
+  const groups = useMemo(() => groupByCategory(visible), [visible]);
+  // Prefill a new item's trade only when the filter narrows to exactly one real
+  // trade (ambiguous under a multi-trade or "Інше" selection).
+  const soleTrade = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
+  const defaultTrade = soleTrade && soleTrade !== 'NULL' ? soleTrade : undefined;
 
   const onReset = async () => {
     try {
@@ -101,6 +115,13 @@ export function CatalogPage() {
           {t('catalog.addItem')}
         </Button>
       </div>
+
+      <TradeFilterChips
+        userTrades={me?.trades ?? []}
+        hasUntagged={hasUntagged}
+        value={tradeFilter}
+        onChange={setTradeFilter}
+      />
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
@@ -195,6 +216,7 @@ export function CatalogPage() {
         <CatalogItemForm
           key={editing?.id ?? 'new'}
           initial={editing ?? null}
+          defaultTrade={defaultTrade}
           onDone={() => setEditing(undefined)}
         />
       </Modal>

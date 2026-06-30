@@ -3,16 +3,23 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
-import { FormField } from '@/components/FormField.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
 import { cn } from '@/lib/cn.ts';
-import { useCatalog, useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
-import type { CatalogItemResponse } from '@/api/types.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { useCatalog } from '@/features/catalog/useCatalog.ts';
+import {
+  TradeFilterChips,
+  tradeMatches,
+  type TradeKey,
+} from '@/features/catalog/TradeFilterChips.tsx';
+import {
+  SaveToCatalogPrompt,
+  type CatalogSaveDraft,
+} from '@/features/catalog/SaveToCatalogPrompt.tsx';
 import { ItemForm } from './ItemForm.tsx';
-import { useAddItem, useAddItemFromCatalog } from './useEstimate.ts';
+import { useAddItem, useAddItemsFromCatalogBatch } from './useEstimate.ts';
 
 type Tab = 'catalog' | 'manual';
 
@@ -29,181 +36,203 @@ export function AddItemSheet({
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('catalog');
+  const [catalogPrompt, setCatalogPrompt] = useState<CatalogSaveDraft | null>(null);
   const addItem = useAddItem(estimateId);
-  const addFromCatalog = useAddItemFromCatalog(estimateId);
-  const createCatalog = useCreateCatalogItem();
 
   const close = () => {
     setTab('catalog');
+    setCatalogPrompt(null);
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={close} title={t('estimate.addItemTitle')}>
-      <div className="mb-4 flex gap-1 rounded-xl bg-surface-sunken p-1">
-        {(['catalog', 'manual'] as Tab[]).map((tabKey) => (
-          <button
-            key={tabKey}
-            type="button"
-            onClick={() => setTab(tabKey)}
-            className={cn(
-              'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors',
-              tab === tabKey ? 'bg-surface text-primary shadow-card' : 'text-muted',
-            )}
-          >
-            {tabKey === 'catalog' ? t('estimate.fromCatalog') : t('estimate.manual')}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'catalog' ? (
-        <CatalogPicker
-          picking={addFromCatalog.isPending}
-          onPick={async (item, qty) => {
-            const quantity = parseDecimal(qty);
-            if (!Number.isFinite(quantity) || quantity <= 0) {
-              toast.error(t('estimate.enterQuantity'));
-              return;
-            }
-            try {
-              await addFromCatalog.mutateAsync({
-                catalogItemId: item.id,
-                req: { quantity, sortOrder: nextSortOrder },
-              });
-              toast.success(t('estimate.itemAdded'));
-              close();
-            } catch (err) {
-              toast.error(toAppError(err).message);
-            }
-          }}
-        />
+    <Modal
+      open={open}
+      onClose={close}
+      size="lg"
+      title={catalogPrompt ? t('estimate.saveToCatalogTitle') : t('estimate.addItemTitle')}
+    >
+      {catalogPrompt ? (
+        <SaveToCatalogPrompt item={catalogPrompt} onClose={close} />
       ) : (
-        <ItemForm
-          showSaveToCatalog
-          enableAutocomplete
-          submitLabel={t('common.add')}
-          submitting={addItem.isPending}
-          onSubmit={async (req, saveToCatalog) => {
-            try {
-              await addItem.mutateAsync({ ...req, sortOrder: nextSortOrder });
-              if (saveToCatalog) {
-                await createCatalog.mutateAsync({
-                  name: req.name,
-                  category: req.category,
-                  type: req.type,
-                  unit: req.unit,
-                  defaultPrice: req.unitPrice,
-                });
-              }
-              toast.success(t('estimate.itemAdded'));
-              close();
-            } catch (err) {
-              toast.error(toAppError(err).message);
-            }
-          }}
-        />
+        <>
+          <div className="mb-4 flex gap-1 rounded-xl bg-surface-sunken p-1">
+            {(['catalog', 'manual'] as Tab[]).map((tabKey) => (
+              <button
+                key={tabKey}
+                type="button"
+                onClick={() => setTab(tabKey)}
+                className={cn(
+                  'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors',
+                  tab === tabKey ? 'bg-surface text-primary shadow-card' : 'text-muted',
+                )}
+              >
+                {tabKey === 'catalog' ? t('estimate.fromCatalog') : t('estimate.manual')}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'catalog' ? (
+            <CatalogPicker estimateId={estimateId} nextSortOrder={nextSortOrder} onDone={close} />
+          ) : (
+            <ItemForm
+              showSaveToCatalog
+              enableAutocomplete
+              submitLabel={t('common.add')}
+              submitting={addItem.isPending}
+              onSubmit={async (req, offerCatalog) => {
+                try {
+                  await addItem.mutateAsync({ ...req, sortOrder: nextSortOrder });
+                  toast.success(t('estimate.itemAdded'));
+                  // Offer to save a genuinely new manual item to the catalog (not
+                  // one picked from the autocomplete — that's already there). The
+                  // line's category/price prefill the prompt.
+                  if (offerCatalog) {
+                    setCatalogPrompt({
+                      name: req.name,
+                      type: req.type,
+                      unit: req.unit,
+                      category: req.category,
+                      unitPrice: req.unitPrice,
+                    });
+                  } else {
+                    close();
+                  }
+                } catch (err) {
+                  toast.error(toAppError(err).message);
+                }
+              }}
+            />
+          )}
+        </>
       )}
     </Modal>
   );
 }
 
-/** Search the catalog, pick an item, then enter a quantity. */
+/**
+ * Browse the catalog, filter by trade (2+ trades) + name, multi-select several
+ * positions, then add them all at once with a single batch request. Quantity
+ * starts at 1 (adjusted in the estimate). The "manual" tab keeps the type-ahead
+ * autocomplete for precise single adds — this surface is the fast bulk path.
+ */
 function CatalogPicker({
-  onPick,
-  picking,
+  estimateId,
+  nextSortOrder,
+  onDone,
 }: {
-  onPick: (item: CatalogItemResponse, quantity: string) => void;
-  picking: boolean;
+  estimateId: string;
+  nextSortOrder: number;
+  onDone: () => void;
 }) {
   const { t } = useTranslation();
   const { data, isPending } = useCatalog();
+  const { data: me } = useMe();
+  const batch = useAddItemsFromCatalogBatch(estimateId);
   const [q, setQ] = useState('');
-  const [selected, setSelected] = useState<CatalogItemResponse | null>(null);
-  const [qty, setQty] = useState('');
+  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  const hasUntagged = useMemo(() => (data ?? []).some((i) => i.trade == null), [data]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const items = data ?? [];
-    return needle ? items.filter((i) => i.name.toLowerCase().includes(needle)) : items;
-  }, [data, q]);
+    return (data ?? [])
+      .filter((i) => tradeMatches(i.trade, tradeFilter))
+      .filter((i) => !needle || i.name.toLowerCase().includes(needle));
+  }, [data, q, tradeFilter]);
 
-  if (selected) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="mb-3 text-sm font-medium text-brand"
-        >
-          ← {selected.name}
-        </button>
-        <FormField
-          label={t('estimate.quantityWithUnit', { unit: t('units.' + selected.unit) })}
-          htmlFor="pick-qty"
-          required
-        >
-          <Input
-            id="pick-qty"
-            inputMode="decimal"
-            autoFocus
-            placeholder="0"
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
-        </FormField>
-        <p className="mb-4 mt-1 text-xs text-muted">
-          {t('estimate.catalogPrice', {
-            price: formatMoney(selected.defaultPrice),
-            unit: t('units.' + selected.unit),
-          })}
-        </p>
-        <Button fullWidth loading={picking} onClick={() => onPick(selected, qty)}>
-          {t('common.add')}
-        </Button>
-      </div>
-    );
-  }
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const add = async () => {
+    if (selected.size === 0) return;
+    const items = [...selected].map((id, i) => ({
+      catalogItemId: id,
+      quantity: 1,
+      sortOrder: nextSortOrder + i,
+    }));
+    try {
+      await batch.mutateAsync(items);
+      toast.success(t('estimate.itemsAdded', { count: items.length }));
+      onDone();
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
 
   return (
     <div>
+      <TradeFilterChips
+        userTrades={me?.trades ?? []}
+        hasUntagged={hasUntagged}
+        value={tradeFilter}
+        onChange={setTradeFilter}
+      />
       <Input
         placeholder={t('estimate.searchCatalog')}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         className="mb-3"
       />
-      <div className="max-h-[46dvh] space-y-1.5 overflow-y-auto">
+      <div className="max-h-[40dvh] space-y-1.5 overflow-y-auto">
         {isPending ? (
           <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
         ) : filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">
-            {t('estimate.catalogEmptyResult')}
-          </p>
+          <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
         ) : (
-          filtered.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              data-testid="catalog-row"
-              onClick={() => {
-                setSelected(item);
-                setQty('');
-              }}
-              className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-left"
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-primary">{item.name}</span>
-                <span className="block text-xs text-muted">
-                  {t('unitPer', { unit: t('units.' + item.unit) })}
+          filtered.map((item) => {
+            const checked = selected.has(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                data-testid="catalog-row"
+                onClick={() => toggle(item.id)}
+                className={cn(
+                  'flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors',
+                  checked ? 'border-brand bg-brand-soft' : 'border-border bg-surface',
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={cn(
+                      'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border text-xs',
+                      checked ? 'border-brand bg-brand text-white' : 'border-border text-transparent',
+                    )}
+                  >
+                    ✓
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-primary">
+                      {item.name}
+                    </span>
+                    <span className="block text-xs text-muted">
+                      {t('unitPer', { unit: t('units.' + item.unit) })}
+                    </span>
+                  </span>
                 </span>
-              </span>
-              <span className="whitespace-nowrap text-sm font-semibold text-primary">
-                {formatMoney(item.defaultPrice)}
-              </span>
-            </button>
-          ))
+                <span className="whitespace-nowrap text-sm font-semibold text-primary">
+                  {formatMoney(item.defaultPrice)}
+                </span>
+              </button>
+            );
+          })
         )}
       </div>
+
+      {selected.size > 0 && (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-2 text-center text-xs text-muted">{t('estimate.batchQtyHint')}</p>
+          <Button fullWidth loading={batch.isPending} onClick={add}>
+            {t('estimate.addNItems', { count: selected.size })}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

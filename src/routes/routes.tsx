@@ -6,7 +6,9 @@ import { AppLayout } from '@/features/app/AppLayout.tsx';
 import { DashboardPage } from '@/features/dashboard/DashboardPage.tsx';
 import { ProjectsPage } from '@/features/projects/ProjectsPage.tsx';
 import { ProjectDetailPage } from '@/features/projects/ProjectDetailPage.tsx';
+import { NewObjectPage } from '@/features/projects/NewObjectPage.tsx';
 import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
+import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
@@ -65,6 +67,7 @@ export const router = createBrowserRouter([
       { path: routes.projects, element: <ProjectsPage /> },
       { path: '/projects/:id', element: <ProjectDetailPage /> },
       { path: routes.catalog, element: <CatalogPage /> },
+      { path: routes.templates, element: <TemplatesPage /> },
       { path: routes.profile, element: <ProfilePage /> },
     ],
   },
@@ -73,6 +76,8 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: routes.newEstimate, element: <NewEstimatePage /> },
+      // Static '/projects/new' ranks above the '/projects/:id' detail route.
+      { path: routes.newObject, element: <NewObjectPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
     ],
   },

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi } from '@/api/estimates.ts';
 import type {
+  BatchCatalogItemEntry,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateUpdateRequest,
@@ -39,6 +40,16 @@ export function useAddItemFromCatalog(estimateId: string) {
   return useMutation({
     mutationFn: (args: { catalogItemId: string; req: EstimateItemFromCatalogRequest }) =>
       estimatesApi.addItemFromCatalog(estimateId, args.catalogItemId, args.req),
+    onSuccess: invalidate,
+  });
+}
+
+/** Add several catalog items at once (multi-select picker) in one request. */
+export function useAddItemsFromCatalogBatch(estimateId: string) {
+  const invalidate = useInvalidateEstimate(estimateId);
+  return useMutation({
+    mutationFn: (items: BatchCatalogItemEntry[]) =>
+      estimatesApi.addItemsFromCatalogBatch(estimateId, items),
     onSuccess: invalidate,
   });
 }

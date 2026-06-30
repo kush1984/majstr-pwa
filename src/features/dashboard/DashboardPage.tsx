@@ -9,9 +9,11 @@ import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { Button } from '@/components/Button.tsx';
+import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
+import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -26,13 +28,21 @@ export function DashboardPage() {
   };
   const metrics = useDashboardMetrics();
   const projects = useProjects();
+  const limits = usePlanLimits();
+  // The global CTA creates a NEW object, so the FREE object cap gates it — same
+  // as the Об'єкти list. Without this the button led to /new and a dead-end
+  // (form fills, "Створити" disabled).
+  const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
 
   const firstName = me?.fullName?.trim().split(/\s+/)[0] ?? '';
   const trades = me?.trades ?? [];
   const recent = (projects.data ?? []).slice(0, 4);
   const m = metrics.data;
 
-  const newEstimate = () => navigate(routes.newEstimate);
+  const newEstimate = () => {
+    if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
+    navigate(routes.newEstimate);
+  };
 
   const isEmpty = projects.isSuccess && projects.data.length === 0;
 
@@ -74,10 +84,20 @@ export function DashboardPage() {
             )}
           </h1>
         </div>
-        <Button onClick={newEstimate} className="hidden lg:inline-flex">
+        <Button
+          onClick={newEstimate}
+          disabled={atProjectLimit}
+          className="hidden lg:inline-flex"
+        >
           {t('common.addEstimate')}
         </Button>
       </div>
+
+      {atProjectLimit && (
+        <div className="mb-5">
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+        </div>
+      )}
 
       {/* Metrics: 2 on mobile, 3 on desktop. An error shows an honest compact
           strip — silently rendering "0 активних" during an outage would lie. */}
@@ -131,7 +151,12 @@ export function DashboardPage() {
       )}
 
       {/* Mobile CTA */}
-      <Button onClick={newEstimate} fullWidth className="mb-6 py-4 text-base shadow-cta lg:hidden">
+      <Button
+        onClick={newEstimate}
+        disabled={atProjectLimit}
+        fullWidth
+        className="mb-6 py-4 text-base shadow-cta lg:hidden"
+      >
         {t('common.addEstimate')}
       </Button>
 
@@ -184,6 +209,7 @@ export function DashboardPage() {
                 title={t('dashboard.quickNewEstimate')}
                 sub={t('dashboard.quickNewEstimateSub')}
                 onClick={newEstimate}
+                disabled={atProjectLimit}
               />
               <QuickAction
                 icon="📖"
@@ -210,17 +236,20 @@ function QuickAction({
   title,
   sub,
   onClick,
+  disabled = false,
 }: {
   icon: string;
   title: string;
   sub: string;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-3 rounded-xl bg-surface-sunken p-3 text-left transition-colors hover:bg-border"
+      disabled={disabled}
+      className="flex items-center gap-3 rounded-xl bg-surface-sunken p-3 text-left transition-colors hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface-sunken"
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-border bg-surface text-base">
         {icon}

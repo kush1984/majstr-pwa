@@ -1,51 +1,55 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
 import { FormField } from '@/components/FormField.tsx';
-import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { initials } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { routes } from '@/lib/config.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
-import { useClients, useCreateClient } from '@/features/clients/useClients.ts';
+import { useCreateClient } from '@/features/clients/useClients.ts';
+import {
+  ClientPicker,
+  clientDraftError,
+  emptyClientDraft,
+  resolveClientId,
+  type ClientDraft,
+} from '@/features/clients/ClientPicker.tsx';
 import { useCreateProject, useProjects } from '@/features/projects/useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
+import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
+import type { EstimateTemplateSummary } from '@/api/types.ts';
 
 /**
- * Inline-creation flow: pick or create a client, name the object, then we
- * create client (if new) → project → empty estimate and open the editor.
- * One screen, no wizard.
+ * "Object + estimate" flow: optionally pick/create a client, name the object,
+ * then we create client (if new) → project → estimate and open the editor.
+ * The client is OPTIONAL here (you can add one later, before sending). One
+ * screen, no wizard. This screen always creates a NEW project, so the FREE
+ * object cap applies.
  */
 export function NewEstimatePage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const clients = useClients();
   const createClient = useCreateClient();
   const createProject = useCreateProject();
-  // This screen always creates a NEW project, so the FREE object cap applies.
   // Guard here too (besides the disabled button on the list) for direct nav.
   const projects = useProjects();
   const limits = usePlanLimits();
   const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
 
-  const [mode, setMode] = useState<'existing' | 'new'>('existing');
-  const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [newClient, setNewClient] = useState({ fullName: '', phone: '', email: '' });
+  const [clientDraft, setClientDraft] = useState<ClientDraft>(emptyClientDraft);
   const [project, setProject] = useState({ name: '', address: '' });
   const [estName, setEstName] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    const list = clients.data ?? [];
-    return needle ? list.filter((c) => c.fullName.toLowerCase().includes(needle)) : list;
-  }, [clients.data, search]);
+  // Empty estimate vs. start from a template (positions pre-filled, prices from
+  // the master's catalog). The picker hands back the chosen template summary.
+  const [template, setTemplate] = useState<EstimateTemplateSummary | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const applyTemplate = useApplyTemplate();
 
   const submit = async () => {
     if (busy) return;
@@ -54,12 +58,9 @@ export function NewEstimatePage() {
       return;
     }
 
-    if (mode === 'new' && (!newClient.fullName.trim() || !newClient.phone.trim())) {
-      toast.error(t('estimate.enterClientNamePhone'));
-      return;
-    }
-    if (mode === 'existing' && !selectedId) {
-      toast.error(t('estimate.chooseOrCreateClient'));
+    const clientErr = clientDraftError(clientDraft);
+    if (clientErr) {
+      toast.error(t(clientErr));
       return;
     }
     if (!project.name.trim() || !project.address.trim()) {
@@ -69,23 +70,16 @@ export function NewEstimatePage() {
 
     setBusy(true);
     try {
-      let clientId = selectedId;
-      if (mode === 'new') {
-        const c = await createClient.mutateAsync({
-          fullName: newClient.fullName.trim(),
-          phone: newClient.phone.trim(),
-          email: newClient.email.trim() || undefined,
-        });
-        clientId = c.id;
-      }
+      const clientId = await resolveClientId(clientDraft, createClient);
       const proj = await createProject.mutateAsync({
         name: project.name.trim(),
         address: project.address.trim(),
-        clientId: clientId ?? undefined,
+        clientId,
       });
-      const estimate = await estimatesApi.createForProject(proj.id, {
-        name: estName.trim() || undefined,
-      });
+      const req = { name: estName.trim() || undefined };
+      const estimate = template
+        ? await applyTemplate.mutateAsync({ projectId: proj.id, templateId: template.id, req })
+        : await estimatesApi.createForProject(proj.id, req);
       navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -108,95 +102,41 @@ export function NewEstimatePage() {
           <h1 className="text-xl font-extrabold tracking-tight text-primary">{t('estimate.newTitle')}</h1>
         </div>
 
-        {/* Client */}
+        {/* Lead choice: empty estimate vs. start from a template (defaults + my own). */}
         <section className="mb-5">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">{t('estimate.client')}</h2>
+          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
+            {t('templates.chooseType')}
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => {
-                setMode((m) => (m === 'existing' ? 'new' : 'existing'));
-                setSelectedId(null);
-              }}
-              className="text-[13px] font-semibold text-brand"
+              onClick={() => setTemplate(null)}
+              className={cn(
+                'rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
+                !template ? 'border-brand bg-brand-soft text-brand' : 'border-border bg-surface text-primary',
+              )}
             >
-              {mode === 'existing' ? t('estimate.newClient') : t('estimate.chooseExisting')}
+              {t('templates.emptyEstimate')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className={cn(
+                'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
+                template ? 'border-brand bg-brand-soft text-brand' : 'border-border bg-surface text-primary',
+              )}
+            >
+              {template ? t('templates.chosen', { name: template.name }) : t('templates.fromTemplate')}
             </button>
           </div>
+        </section>
 
-          {mode === 'new' ? (
-            <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-              <FormField label={t('common.fullName')} htmlFor="nc-name" required>
-                <Input
-                  id="nc-name"
-                  value={newClient.fullName}
-                  onChange={(e) => setNewClient((s) => ({ ...s, fullName: e.target.value }))}
-                />
-              </FormField>
-              <FormField label={t('common.phone')} htmlFor="nc-phone" required>
-                <Input
-                  id="nc-phone"
-                  type="tel"
-                  inputMode="tel"
-                  placeholder={t('auth.phonePlaceholder')}
-                  value={newClient.phone}
-                  onChange={(e) => setNewClient((s) => ({ ...s, phone: e.target.value }))}
-                />
-              </FormField>
-              <FormField label={t('common.email')} htmlFor="nc-email" hint={t('estimate.emailHint')}>
-                <Input
-                  id="nc-email"
-                  type="email"
-                  inputMode="email"
-                  placeholder="client@example.com"
-                  value={newClient.email}
-                  onChange={(e) => setNewClient((s) => ({ ...s, email: e.target.value }))}
-                />
-              </FormField>
-            </div>
-          ) : (
-            <div>
-              <Input
-                placeholder={t('estimate.searchClient')}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="mb-2"
-              />
-              {clients.isPending ? (
-                <div className="flex justify-center py-4 text-brand">
-                  <Spinner />
-                </div>
-              ) : filtered.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border py-4 text-center text-sm text-muted">
-                  {t('estimate.noClients')}
-                </p>
-              ) : (
-                <div className="max-h-[34dvh] space-y-1.5 overflow-y-auto">
-                  {filtered.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setSelectedId(c.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-xl border bg-surface px-3.5 py-2.5 text-left transition-colors',
-                        selectedId === c.id ? 'border-brand bg-brand-soft' : 'border-border',
-                      )}
-                    >
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand">
-                        {initials(c.fullName)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-primary">
-                          {c.fullName}
-                        </span>
-                        <span className="block text-xs text-muted">{c.phone}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Client — optional; can be added later, before sending the estimate. */}
+        <section className="mb-5">
+          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
+            {t('estimate.client')}
+          </h2>
+          <ClientPicker value={clientDraft} onChange={setClientDraft} />
         </section>
 
         {/* Object */}
@@ -243,6 +183,15 @@ export function NewEstimatePage() {
           {t('estimate.createEstimate')}
         </Button>
       </div>
+
+      <TemplatePickerSheet
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={(tpl) => {
+          setTemplate(tpl);
+          setPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

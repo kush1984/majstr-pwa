@@ -9,7 +9,9 @@ import { FormField } from '@/components/FormField.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import type { CatalogItemRequest, CatalogItemResponse } from '@/api/types.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
+import type { CatalogItemRequest, CatalogItemResponse, Trade } from '@/api/types.ts';
 import {
   catalogItemSchema,
   parsePrice,
@@ -30,9 +32,12 @@ import {
  */
 export function CatalogItemForm({
   initial,
+  defaultTrade,
   onDone,
 }: {
   initial: CatalogItemResponse | null;
+  /** Pre-select this trade on create (the catalog's active trade filter). */
+  defaultTrade?: Trade;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
@@ -41,7 +46,18 @@ export function CatalogItemForm({
   const update = useUpdateCatalogItem();
   const del = useDeleteCatalogItem();
   const categories = useCatalogCategories();
+  const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Only worth choosing a trade when the master has more than one.
+  const showTrade = (me?.trades.length ?? 0) >= 2;
+  // Always offer the item's CURRENT trade as an option, even if the master no
+  // longer works in it (removed from profile) — otherwise editing the item would
+  // silently fall back to the first option and wipe its trade on save.
+  const tradeOptions = (() => {
+    const opts = [...(me?.trades ?? [])];
+    if (initial?.trade && !opts.includes(initial.trade)) opts.unshift(initial.trade);
+    return opts.length > 0 ? opts : TRADE_VALUES;
+  })();
 
   const {
     register,
@@ -55,9 +71,10 @@ export function CatalogItemForm({
           type: initial.type,
           unit: initial.unit,
           category: initial.category ?? '',
+          trade: initial.trade ?? '',
           defaultPrice: String(initial.defaultPrice),
         }
-      : { name: '', type: 'WORK', unit: 'PIECE', category: '', defaultPrice: '' },
+      : { name: '', type: 'WORK', unit: 'PIECE', category: '', trade: defaultTrade ?? '', defaultPrice: '' },
   });
 
   const submitting = create.isPending || update.isPending;
@@ -68,6 +85,9 @@ export function CatalogItemForm({
       type: v.type,
       unit: v.unit,
       category: v.category.trim() || undefined,
+      // When the trade picker is hidden (single-trade master), preserve the
+      // existing trade rather than risk overwriting it from a stale form value.
+      trade: showTrade ? v.trade || null : initial?.trade ?? null,
       defaultPrice: parsePrice(v.defaultPrice),
     };
     try {
@@ -142,6 +162,19 @@ export function CatalogItemForm({
             ))}
           </datalist>
         </FormField>
+
+        {showTrade && (
+          <FormField label={t('catalog.tradeLabel')} htmlFor="ci-trade">
+            <Select id="ci-trade" {...register('trade')}>
+              <option value="">{t('catalog.otherTrade')}</option>
+              {tradeOptions.map((tr) => (
+                <option key={tr} value={tr}>
+                  {t('trades.' + tr)}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        )}
 
         <FormField
           label={t('catalog.priceLabel')}

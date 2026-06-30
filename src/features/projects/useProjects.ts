@@ -35,6 +35,18 @@ export function useCreateProject() {
   });
 }
 
+export function useUpdateProject() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateProjects();
+  return useMutation({
+    mutationFn: ({ id, req }: { id: string; req: ProjectRequest }) => projectsApi.update(id, req),
+    onSuccess: (_data, vars) => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: [...PROJECTS_KEY, 'detail', vars.id] });
+    },
+  });
+}
+
 export function useDeleteProject() {
   const invalidate = useInvalidateProjects();
   return useMutation({

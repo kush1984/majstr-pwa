@@ -34,8 +34,10 @@ export const routes = {
   home: '/',
   projects: '/projects',
   catalog: '/catalog',
+  templates: '/templates',
   profile: '/profile',
   newEstimate: '/new',
+  newObject: '/projects/new',
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
 } as const;

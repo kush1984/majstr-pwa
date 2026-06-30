@@ -19,11 +19,13 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
 import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
-import type { EstimateSummary } from '@/api/types.ts';
+import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
+import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
+import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 
@@ -91,6 +93,12 @@ export function ProjectDetailPage() {
     onError: (err) => toast.error(toAppError(err).message),
   });
 
+  // New estimate here is a choice: empty, or start from a template (defaults +
+  // own). Applying a template reuses the backend apply-to-project endpoint.
+  const applyTemplate = useApplyTemplate();
+  const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+
   if (project.isPending) {
     return (
       <div className="flex min-h-[60dvh] items-center justify-center text-brand">
@@ -121,8 +129,23 @@ export function ProjectDetailPage() {
   // frees a slot (count is live). Backend still enforces it.
   const atEstimateLimit = isAtLimit(list.length, limits.data?.maxEstimatesPerProject);
   const addEstimate = () => {
-    if (atEstimateLimit || createEstimate.isPending) return;
+    if (atEstimateLimit || createEstimate.isPending || applyTemplate.isPending) return;
+    setEstimateChoiceOpen(true);
+  };
+  const createEmpty = () => {
+    setEstimateChoiceOpen(false);
     createEstimate.mutate();
+  };
+  const onPickTemplate = async (tpl: EstimateTemplateSummary) => {
+    setTemplatePickerOpen(false);
+    setEstimateChoiceOpen(false);
+    try {
+      const e = await applyTemplate.mutateAsync({ projectId: id, templateId: tpl.id, req: {} });
+      qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+      navigate(routes.estimate(e.id));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
   };
   // The project-level share CTA targets the NEWEST estimate — the same
   // "latest" notion the backend uses for the project card (latestEstimateTotal
@@ -204,6 +227,33 @@ export function ProjectDetailPage() {
           else rowDelete.mutate(confirm.est.id);
         }}
         onClose={() => setConfirm(null)}
+      />
+
+      <Modal
+        open={estimateChoiceOpen}
+        onClose={() => setEstimateChoiceOpen(false)}
+        title={t('templates.chooseType')}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
+            {t('templates.emptyEstimate')}
+          </Button>
+          <Button
+            onClick={() => {
+              setEstimateChoiceOpen(false);
+              setTemplatePickerOpen(true);
+            }}
+          >
+            {t('templates.fromTemplate')}
+          </Button>
+        </div>
+      </Modal>
+
+      <TemplatePickerSheet
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        onPick={onPickTemplate}
+        applying={applyTemplate.isPending}
       />
 
       <div className="mb-3 flex items-center gap-3">
@@ -316,7 +366,10 @@ export function ProjectDetailPage() {
               title={t('projects.noEstimatesTitle')}
               text={t('projects.noEstimatesText')}
               action={
-                <Button onClick={() => createEstimate.mutate()} loading={createEstimate.isPending}>
+                <Button
+                  onClick={addEstimate}
+                  loading={createEstimate.isPending || applyTemplate.isPending}
+                >
                   {t('common.newEstimate')}
                 </Button>
               }

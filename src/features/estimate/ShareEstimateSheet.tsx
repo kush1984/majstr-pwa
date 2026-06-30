@@ -8,7 +8,14 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import type { ProjectResponse } from '@/api/types.ts';
-import { useClient, useUpdateClient } from '@/features/clients/useClients.ts';
+import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
+import { useUpdateProject } from '@/features/projects/useProjects.ts';
+import {
+  ClientPicker,
+  clientDraftError,
+  resolveClientId,
+  type ClientDraft,
+} from '@/features/clients/ClientPicker.tsx';
 
 /**
  * "Поділитися з клієнтом" sheet. Offers email + copy-link when the client has
@@ -34,11 +41,24 @@ export function ShareEstimateSheet({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const client = useClient(project.clientId ?? '', open && Boolean(project.clientId));
+  // A client just attached in this sheet (project prop is from the parent and
+  // won't update until it refetches) — fold it in so email becomes available.
+  const [attachedClientId, setAttachedClientId] = useState<string | null>(null);
+  const clientId = project.clientId ?? attachedClientId;
+  const client = useClient(clientId ?? '', open && Boolean(clientId));
   const updateClient = useUpdateClient();
+  const createClient = useCreateClient();
+  const updateProject = useUpdateProject();
   const [busy, setBusy] = useState<'copy' | 'email' | null>(null);
   const [showAddEmail, setShowAddEmail] = useState(false);
   const [emailInput, setEmailInput] = useState('');
+  // No-client prompt: reveal a picker to attach an existing/new client.
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clientDraft, setClientDraft] = useState<ClientDraft>({
+    mode: 'existing',
+    selectedId: null,
+    newClient: { fullName: '', phone: '', email: '' },
+  });
 
   const email = client.data?.email ?? null;
 
@@ -107,16 +127,44 @@ export function ShareEstimateSheet({
     }
   };
 
+  /** Attach an existing/new client to the object so the estimate can be sent. */
+  const onAttachClient = async () => {
+    const err = clientDraftError(clientDraft);
+    if (err) {
+      toast.error(t(err));
+      return;
+    }
+    try {
+      const newClientId = await resolveClientId(clientDraft, createClient);
+      if (!newClientId) return;
+      await updateProject.mutateAsync({
+        id: project.id,
+        req: {
+          name: project.name,
+          address: project.address,
+          description: project.description ?? undefined,
+          clientId: newClientId,
+        },
+      });
+      setAttachedClientId(newClientId);
+      setShowClientPicker(false);
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success(t('estimate.clientAttached'));
+    } catch (err2) {
+      toast.error(toAppError(err2).message);
+    }
+  };
+
   const onSaveEmail = async () => {
     const c = client.data;
-    if (!c || !project.clientId) return;
+    if (!c || !clientId) return;
     if (!emailInput.includes('@')) {
       toast.error(t('estimate.enterValidEmail'));
       return;
     }
     try {
       await updateClient.mutateAsync({
-        id: project.clientId,
+        id: clientId,
         req: {
           fullName: c.fullName,
           phone: c.phone,
@@ -150,7 +198,38 @@ export function ShareEstimateSheet({
           {t('estimate.copyLink')}
         </Button>
 
-        {!email && project.clientId && (
+        {!clientId && (
+          <div className="rounded-xl bg-surface-sunken p-3">
+            <p className="mb-2 text-xs text-muted">{t('estimate.noClientShareHint')}</p>
+            {showClientPicker ? (
+              <div className="space-y-2">
+                <ClientPicker value={clientDraft} onChange={setClientDraft} allowNone={false} />
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    onClick={() => setShowClientPicker(false)}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    fullWidth
+                    loading={createClient.isPending || updateProject.isPending}
+                    onClick={onAttachClient}
+                  >
+                    {t('estimate.addClientToShare')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="secondary" fullWidth onClick={() => setShowClientPicker(true)}>
+                {t('estimate.addClientToShare')}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {!email && clientId && (
           <div className="rounded-xl bg-surface-sunken p-3">
             <p className="mb-2 text-xs text-muted">
               {t('estimate.addClientEmailHint')}

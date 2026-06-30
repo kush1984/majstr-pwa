@@ -282,6 +282,8 @@ export interface CatalogItemResponse {
   id: string;
   name: string;
   category: string | null;
+  /** Trade this position belongs to (for the catalog filter); null = "Інше". */
+  trade: Trade | null;
   type: ItemType;
   unit: Unit;
   defaultPrice: number;
@@ -291,9 +293,18 @@ export interface CatalogItemResponse {
 export interface CatalogItemRequest {
   name: string;
   category?: string;
+  /** Optional — which trade this position belongs to. */
+  trade?: Trade | null;
   type: ItemType;
   unit: Unit;
   defaultPrice: number;
+}
+
+/** One entry in a batch add-from-catalog request. */
+export interface BatchCatalogItemEntry {
+  catalogItemId: string;
+  quantity: number;
+  sortOrder?: number;
 }
 
 export interface CatalogResetResponse {
@@ -305,4 +316,45 @@ export interface CatalogResetResponse {
  *  catalog" button would add. Drives the preview ("Знайдено N нових позицій"). */
 export interface TemplateUpdatesResponse {
   available: number;
+}
+
+// ---------------------------------------------------------------------------
+// Estimate templates — ready-made bundles of works for a typical job.
+// `isDefault` separates the 88 system templates from the master's own.
+// ---------------------------------------------------------------------------
+
+export interface EstimateTemplateSummary {
+  id: string;
+  name: string;
+  trade: Trade | null;
+  isDefault: boolean;
+  itemCount: number;
+}
+
+export interface EstimateTemplateItemView {
+  id: string;
+  name: string;
+  type: ItemType;
+  unit: Unit;
+  sortOrder: number;
+}
+
+/** Add a position to my own template (no quantity/price). */
+export interface TemplateItemRequest {
+  name: string;
+  type: ItemType;
+  unit: Unit;
+}
+
+export interface EstimateTemplateDetail {
+  id: string;
+  name: string;
+  trade: Trade | null;
+  isDefault: boolean;
+  items: EstimateTemplateItemView[];
+}
+
+/** Body for "save the current estimate as a template" / rename. */
+export interface SaveAsTemplateRequest {
+  name: string;
 }

@@ -25,10 +25,13 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      // Show the app shell as a PWA in dev too — handy for testing install
-      // and offline behaviour without a production build each time.
+      // SW is DISABLED in dev: an active dev service worker precaches the app
+      // shell and serves stale JS/CSS, defeating HMR (changes don't show until
+      // you manually unregister it). Production builds still ship the SW.
+      // To test install / web-push behaviour, run a production build + preview
+      // (`vite build && vite preview`) instead of flipping this back on.
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module',
         navigateFallback: 'index.html',
       },

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import i18n from '@/lib/i18n.ts';
+import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
 /** Option value lists; labels are rendered via i18n (`itemType.*` / `unitOptions.*`). */
@@ -42,6 +43,8 @@ export const catalogItemSchema = z.object({
     message: i18n.t('validation.chooseUnit'),
   }),
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),
+  // '' = no trade ("Інше"); otherwise one of the master's trades.
+  trade: z.enum(TRADE_VALUES).or(z.literal('')),
   defaultPrice: priceString,
 });
 

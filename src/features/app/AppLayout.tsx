@@ -45,8 +45,10 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-canvas lg:flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-surface lg:p-3.5">
+      {/* Desktop sidebar — pinned to the viewport so the profile (bottom) is
+          always visible; only the main content scrolls. Scrolls internally if
+          the nav ever exceeds the viewport height. */}
+      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-60 lg:flex-col lg:self-start lg:overflow-y-auto lg:border-r lg:border-border lg:bg-surface lg:p-3.5">
         <div className="px-3 pb-5 pt-2 text-[22px] font-extrabold tracking-tight text-brand">
           Majstr
         </div>
