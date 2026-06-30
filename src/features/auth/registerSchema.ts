@@ -39,6 +39,8 @@ export const registerSchema = z.object({
     .string()
     .min(1, i18n.t('validation.enterCompanyName'))
     .max(255, i18n.t('validation.valueTooLong')),
+  // Explicit privacy-policy consent — submit is blocked until ticked.
+  consent: z.boolean().refine((v) => v, { message: i18n.t('validation.consentRequired') }),
 });
 
 export type RegisterFormValues = z.infer<typeof registerSchema>;

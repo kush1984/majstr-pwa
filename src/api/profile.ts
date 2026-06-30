@@ -30,4 +30,14 @@ export const profileApi = {
   deleteLogo(): Promise<void> {
     return api.delete('/api/profile/logo').then(() => undefined);
   },
+
+  /** Record privacy-policy consent (one-time login modal for pre-existing users). */
+  consent(): Promise<UserResponse> {
+    return api.post<UserResponse>('/api/profile/consent').then((r) => r.data);
+  },
+
+  /** Acknowledge responsibility for entering client data (shown once). */
+  acknowledgeClientData(): Promise<UserResponse> {
+    return api.post<UserResponse>('/api/profile/acknowledge-client-data').then((r) => r.data);
+  },
 };

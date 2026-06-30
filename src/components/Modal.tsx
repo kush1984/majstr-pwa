@@ -13,6 +13,7 @@ export function Modal({
   title,
   children,
   size = 'md',
+  dismissable = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,12 +21,15 @@ export function Modal({
   children: ReactNode;
   /** Desktop width cap. Mobile is always a full-width bottom sheet. */
   size?: 'md' | 'lg';
+  /** When false, hide the ✕ and ignore backdrop/Escape — a required dialog the
+   *  user must resolve via an in-content action (e.g. consent). */
+  dismissable?: boolean;
 }) {
   const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (dismissable && e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -33,7 +37,7 @@ export function Modal({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open, onClose, dismissable]);
 
   if (!open) return null;
 
@@ -48,7 +52,8 @@ export function Modal({
         type="button"
         aria-label={t('common.close')}
         className="absolute inset-0 bg-black/40"
-        onClick={onClose}
+        onClick={dismissable ? onClose : undefined}
+        disabled={!dismissable}
       />
       <div
         className={cn(
@@ -58,14 +63,16 @@ export function Modal({
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-bold text-primary">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('common.close')}
-            className="text-lg text-faint hover:text-muted"
-          >
-            ✕
-          </button>
+          {dismissable && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('common.close')}
+              className="text-lg text-faint hover:text-muted"
+            >
+              ✕
+            </button>
+          )}
         </div>
         {children}
       </div>

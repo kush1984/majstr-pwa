@@ -40,8 +40,11 @@ export function SaveToCatalogPrompt({
   const categories = useCatalogCategories();
   const createCatalog = useCreateCatalogItem();
   const showTrade = (me?.trades.length ?? 0) >= 2;
+  // "Інше" (OTHER) is always an option and the default — the single catch-all.
+  const tradeOptions: Trade[] = [...(me?.trades ?? [])];
+  if (!tradeOptions.includes('OTHER')) tradeOptions.push('OTHER');
   const [category, setCategory] = useState(item.category ?? '');
-  const [trade, setTrade] = useState('');
+  const [trade, setTrade] = useState<Trade>('OTHER');
   const [price, setPrice] = useState(item.unitPrice != null ? String(item.unitPrice) : '');
 
   const onAdd = async () => {
@@ -49,7 +52,7 @@ export function SaveToCatalogPrompt({
       await createCatalog.mutateAsync({
         name: item.name,
         category: category.trim() || undefined,
-        trade: showTrade ? ((trade || null) as Trade | null) : null,
+        trade: showTrade ? trade : 'OTHER',
         type: item.type,
         unit: item.unit,
         defaultPrice: parseDecimal(price),
@@ -84,9 +87,8 @@ export function SaveToCatalogPrompt({
 
       {showTrade && (
         <FormField label={t('catalog.tradeLabel')} htmlFor="stc-trade">
-          <Select id="stc-trade" value={trade} onChange={(e) => setTrade(e.target.value)}>
-            <option value="">{t('catalog.otherTrade')}</option>
-            {(me?.trades ?? []).map((tr) => (
+          <Select id="stc-trade" value={trade} onChange={(e) => setTrade(e.target.value as Trade)}>
+            {tradeOptions.map((tr) => (
               <option key={tr} value={tr}>
                 {t('trades.' + tr)}
               </option>

@@ -494,6 +494,22 @@
     "new": "New",
     "noneHint": "You can add a client later — it's only needed to send the estimate."
   },
+  "consent": {
+    "registerPre": "I agree to the ",
+    "privacyLink": "Privacy Policy",
+    "registerPost": " and consent to the processing of my personal data (email, name, company name) for using the Majstr service.",
+    "loginTitle": "Consent to data processing",
+    "loginBody": "To keep using Majstr, please confirm your consent to the processing of your personal data per our policy.",
+    "loginReadPolicy": "Read the Privacy Policy",
+    "loginAgree": "I agree",
+    "clientDataTitle": "Client data",
+    "clientDataBody": "By entering client data (name, address, phone), I confirm that I have the right to enter it to prepare an estimate, and I instruct Majstr to store and process this data to operate the service. The master is responsible for having grounds to enter the client's data.",
+    "clientDataConfirm": "Understood, I confirm"
+  },
+  "privacy": {
+    "back": "Back",
+    "footerLink": "Privacy Policy"
+  },
   "clients": {
     "editTitle": "Edit client",
     "namePlaceholder": "Olena Petrenko",
@@ -544,6 +560,7 @@
     "enterFullName": "Enter your full name",
     "valueTooLong": "Value is too long",
     "chooseTrade": "Choose at least one type of work",
+    "consentRequired": "You must agree to the Privacy Policy",
     "enterPhone": "Enter a phone number",
     "enterCompanyName": "Enter the company name",
     "enterName": "Enter a name",

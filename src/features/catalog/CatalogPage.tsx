@@ -60,16 +60,15 @@ export function CatalogPage() {
   const [nothingNew, setNothingNew] = useState(false);
 
   // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it.
-  const hasUntagged = useMemo(() => (data ?? []).some((i) => i.trade == null), [data]);
+  const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const visible = useMemo(
     () => (data ?? []).filter((i) => tradeMatches(i.trade, tradeFilter)),
     [data, tradeFilter],
   );
   const groups = useMemo(() => groupByCategory(visible), [visible]);
-  // Prefill a new item's trade only when the filter narrows to exactly one real
-  // trade (ambiguous under a multi-trade or "Інше" selection).
-  const soleTrade = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
-  const defaultTrade = soleTrade && soleTrade !== 'NULL' ? soleTrade : undefined;
+  // Prefill a new item's trade when the filter narrows to exactly one trade
+  // (including "Інше"/OTHER — now a real trade). Ambiguous under a multi-select.
+  const defaultTrade = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
 
   const onReset = async () => {
     try {
@@ -118,7 +117,7 @@ export function CatalogPage() {
 
       <TradeFilterChips
         userTrades={me?.trades ?? []}
-        hasUntagged={hasUntagged}
+        hasOther={hasOther}
         value={tradeFilter}
         onChange={setTradeFilter}
       />

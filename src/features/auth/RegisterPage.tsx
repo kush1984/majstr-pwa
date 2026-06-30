@@ -37,6 +37,7 @@ export function RegisterPage() {
       trades: [],
       phone: '',
       companyName: '',
+      consent: false,
     },
   });
 
@@ -139,6 +140,31 @@ export function RegisterPage() {
             {...register('companyName')}
           />
         </FormField>
+
+        <div>
+          <label className="flex items-start gap-2.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-border text-brand focus:ring-brand"
+              {...register('consent')}
+            />
+            <span>
+              {t('consent.registerPre')}
+              <Link
+                to={routes.privacy}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand-700 underline"
+              >
+                {t('consent.privacyLink')}
+              </Link>
+              {t('consent.registerPost')}
+            </span>
+          </label>
+          {errors.consent && (
+            <span className="mt-1 block text-xs text-red-600">{errors.consent.message}</span>
+          )}
+        </div>
 
         <Button type="submit" fullWidth loading={isSubmitting || register$.isPending}>
           {t('auth.signUp')}

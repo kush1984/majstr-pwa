@@ -29,6 +29,10 @@ export interface UserResponse {
   role: Role;
   emailVerified: boolean;
   createdAt: string;
+  /** Null until the master consents / acknowledges — drive the one-time
+   *  privacy-consent and client-data prompts. */
+  consentedToPrivacyAt: string | null;
+  acknowledgedClientDataAt: string | null;
 }
 
 /** GET /api/plan/limits — the current user's plan caps (null = unlimited),
@@ -54,6 +58,8 @@ export interface RegisterRequest {
   trades: Trade[];
   phone: string;
   companyName: string;
+  /** Explicit privacy-policy consent (the registration checkbox). */
+  consent: boolean;
 }
 
 /** PUT /api/profile (#16). `email` is honoured only while the current email is

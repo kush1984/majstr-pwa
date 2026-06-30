@@ -84,7 +84,7 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
       quantity: 2, unitPrice: 90, lineTotal: 180, sortOrder: 5,
     } as never);
     vi.mocked(catalogApi.create).mockResolvedValue({
-      id: 'c9', name: 'Демонтаж розетки', category: 'Демонтаж', trade: null, type: 'WORK',
+      id: 'c9', name: 'Демонтаж розетки', category: 'Демонтаж', trade: 'OTHER', type: 'WORK',
       unit: 'PIECE', defaultPrice: 90, createdAt: '',
     } as never);
     const onClose = vi.fn();
@@ -107,7 +107,7 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Додати в каталог' }));
     await waitFor(() =>
       expect(catalogApi.create).toHaveBeenCalledWith({
-        name: 'Демонтаж розетки', category: 'Демонтаж', trade: null,
+        name: 'Демонтаж розетки', category: 'Демонтаж', trade: 'OTHER',
         type: 'WORK', unit: 'PIECE', defaultPrice: 90,
       }),
     );

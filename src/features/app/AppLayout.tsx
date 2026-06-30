@@ -8,6 +8,7 @@ import { setSentryUser } from '@/lib/sentry.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
 import { NotificationBell } from '@/components/NotificationBell.tsx';
+import { PrivacyConsentModal } from '@/features/legal/ConsentModals.tsx';
 import { NAV_ITEMS } from './navItems.ts';
 
 /**
@@ -123,6 +124,9 @@ export function AppLayout({ children }: { children?: ReactNode }) {
           </NavLink>
         ))}
       </nav>
+
+      {/* One-time privacy consent for users who predate the registration checkbox. */}
+      {me && me.consentedToPrivacyAt == null && <PrivacyConsentModal />}
     </div>
   );
 }

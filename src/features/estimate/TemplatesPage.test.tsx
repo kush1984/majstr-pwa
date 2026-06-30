@@ -126,7 +126,7 @@ describe('TemplatesPage — edit own template', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Додати в каталог' }));
     await waitFor(() =>
       expect(catalogApi.create).toHaveBeenCalledWith({
-        name: 'Нова робота', category: undefined, trade: null,
+        name: 'Нова робота', category: undefined, trade: 'OTHER',
         type: 'WORK', unit: 'M2', defaultPrice: 0,
       }),
     );

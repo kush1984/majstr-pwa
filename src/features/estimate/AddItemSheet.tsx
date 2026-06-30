@@ -133,7 +133,7 @@ function CatalogPicker({
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const hasUntagged = useMemo(() => (data ?? []).some((i) => i.trade == null), [data]);
+  const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (data ?? [])
@@ -169,7 +169,7 @@ function CatalogPicker({
     <div>
       <TradeFilterChips
         userTrades={me?.trades ?? []}
-        hasUntagged={hasUntagged}
+        hasOther={hasOther}
         value={tradeFilter}
         onChange={setTradeFilter}
       />

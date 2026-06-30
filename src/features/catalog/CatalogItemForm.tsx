@@ -10,7 +10,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import type { CatalogItemRequest, CatalogItemResponse, Trade } from '@/api/types.ts';
 import {
   catalogItemSchema,
@@ -55,8 +54,10 @@ export function CatalogItemForm({
   // silently fall back to the first option and wipe its trade on save.
   const tradeOptions = (() => {
     const opts = [...(me?.trades ?? [])];
+    // "Інше" (OTHER) is always offered — the single catch-all for no specific trade.
+    if (!opts.includes('OTHER')) opts.push('OTHER');
     if (initial?.trade && !opts.includes(initial.trade)) opts.unshift(initial.trade);
-    return opts.length > 0 ? opts : TRADE_VALUES;
+    return opts;
   })();
 
   const {
@@ -71,10 +72,10 @@ export function CatalogItemForm({
           type: initial.type,
           unit: initial.unit,
           category: initial.category ?? '',
-          trade: initial.trade ?? '',
+          trade: initial.trade ?? 'OTHER',
           defaultPrice: String(initial.defaultPrice),
         }
-      : { name: '', type: 'WORK', unit: 'PIECE', category: '', trade: defaultTrade ?? '', defaultPrice: '' },
+      : { name: '', type: 'WORK', unit: 'PIECE', category: '', trade: defaultTrade ?? 'OTHER', defaultPrice: '' },
   });
 
   const submitting = create.isPending || update.isPending;
@@ -85,9 +86,9 @@ export function CatalogItemForm({
       type: v.type,
       unit: v.unit,
       category: v.category.trim() || undefined,
-      // When the trade picker is hidden (single-trade master), preserve the
-      // existing trade rather than risk overwriting it from a stale form value.
-      trade: showTrade ? v.trade || null : initial?.trade ?? null,
+      // Always a trade (OTHER = "Інше" when unspecified); when the picker is hidden
+      // (single-trade master) the form value is the item's existing/default trade.
+      trade: v.trade,
       defaultPrice: parsePrice(v.defaultPrice),
     };
     try {
@@ -166,7 +167,6 @@ export function CatalogItemForm({
         {showTrade && (
           <FormField label={t('catalog.tradeLabel')} htmlFor="ci-trade">
             <Select id="ci-trade" {...register('trade')}>
-              <option value="">{t('catalog.otherTrade')}</option>
               {tradeOptions.map((tr) => (
                 <option key={tr} value={tr}>
                   {t('trades.' + tr)}

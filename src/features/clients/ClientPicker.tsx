@@ -6,6 +6,8 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useClients } from '@/features/clients/useClients.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { ClientDataAckModal } from '@/features/legal/ConsentModals.tsx';
 import type { ClientRequest, ClientResponse } from '@/api/types.ts';
 
 export type ClientMode = 'none' | 'existing' | 'new';
@@ -68,7 +70,11 @@ export function ClientPicker({
 }) {
   const { t } = useTranslation();
   const clients = useClients();
+  const { data: me } = useMe();
   const [search, setSearch] = useState('');
+  // First time the master enters NEW client data, confirm they're responsible
+  // for it (controller/operator distinction). Shown once (acknowledgedClientDataAt).
+  const [ackOpen, setAckOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -77,8 +83,16 @@ export function ClientPicker({
   }, [clients.data, search]);
 
   const modes: ClientMode[] = allowNone ? ['none', 'existing', 'new'] : ['existing', 'new'];
-  const setMode = (m: ClientMode) =>
+  const switchTo = (m: ClientMode) =>
     onChange({ ...value, mode: m, selectedId: m === 'existing' ? value.selectedId : null });
+  const setMode = (m: ClientMode) => {
+    // Gate the "Новий" tab on the one-time client-data acknowledgement.
+    if (m === 'new' && me && me.acknowledgedClientDataAt == null) {
+      setAckOpen(true);
+      return;
+    }
+    switchTo(m);
+  };
 
   return (
     <div>
@@ -180,6 +194,16 @@ export function ClientPicker({
             </div>
           )}
         </div>
+      )}
+
+      {ackOpen && (
+        <ClientDataAckModal
+          onResolved={() => {
+            setAckOpen(false);
+            switchTo('new');
+          }}
+          onCancel={() => setAckOpen(false)}
+        />
       )}
     </div>
   );

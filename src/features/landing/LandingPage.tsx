@@ -395,7 +395,13 @@ function LandingFooter() {
             {config.supportPhone}
           </a>
         </div>
-        <div className="font-mono text-sm text-landing-muted">{t('landing.footerCopyright')}</div>
+        <div className="flex items-center gap-3 font-mono text-sm text-landing-muted">
+          <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
+            {t('privacy.footerLink')}
+          </Link>
+          <span aria-hidden>·</span>
+          <span>{t('landing.footerCopyright')}</span>
+        </div>
       </div>
     </footer>
   );

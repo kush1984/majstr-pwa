@@ -6,15 +6,10 @@ import type { Trade } from '@/api/types.ts';
 
 const TRADES: Trade[] = ['ELECTRICAL', 'BUILDER'];
 
-function setup(value: Set<TradeKey>, hasUntagged = true) {
+function setup(value: Set<TradeKey>, hasOther = true) {
   const onChange = vi.fn();
   render(
-    <TradeFilterChips
-      userTrades={TRADES}
-      hasUntagged={hasUntagged}
-      value={value}
-      onChange={onChange}
-    />,
+    <TradeFilterChips userTrades={TRADES} hasOther={hasOther} value={value} onChange={onChange} />,
   );
   return onChange;
 }
@@ -25,25 +20,31 @@ describe('tradeMatches', () => {
     expect(tradeMatches(null, new Set())).toBe(true);
   });
 
-  it('matches the selected trades and NULL for untagged', () => {
-    const sel = new Set<TradeKey>(['ELECTRICAL', 'NULL']);
+  it('matches selected trades; a null trade counts as OTHER ("Інше")', () => {
+    const sel = new Set<TradeKey>(['ELECTRICAL', 'OTHER']);
     expect(tradeMatches('ELECTRICAL', sel)).toBe(true);
     expect(tradeMatches('BUILDER', sel)).toBe(false);
-    expect(tradeMatches(null, sel)).toBe(true); // untagged → 'NULL'
+    expect(tradeMatches('OTHER', sel)).toBe(true);
+    expect(tradeMatches(null, sel)).toBe(true); // null → OTHER
   });
 });
 
 describe('TradeFilterChips — multi-select', () => {
-  it('renders nothing for a single-trade master', () => {
+  it('renders nothing when fewer than two chips would show', () => {
     const { container } = render(
       <TradeFilterChips
         userTrades={['ELECTRICAL']}
-        hasUntagged
+        hasOther={false}
         value={new Set()}
         onChange={vi.fn()}
       />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('shows a single "Інше" (OTHER) chip — never two', () => {
+    setup(new Set<TradeKey>());
+    expect(screen.getAllByText(/Інше/)).toHaveLength(1);
   });
 
   it('adds a trade to the selection (others stay)', () => {
@@ -59,8 +60,8 @@ describe('TradeFilterChips — multi-select', () => {
   });
 
   it('collapses to "Усі трейди" once every chip is selected', () => {
-    // ELECTRICAL + BUILDER already on; clicking "Інше" would select all three →
-    // nothing is actually filtered, so it resets to the empty (all) selection.
+    // ELECTRICAL + BUILDER on; clicking "Інше" selects all three → nothing is
+    // actually filtered, so it resets to the empty (all) selection.
     const onChange = setup(new Set<TradeKey>(['ELECTRICAL', 'BUILDER']));
     fireEvent.click(screen.getByText(/Інше/));
     expect(onChange).toHaveBeenCalledWith(new Set());

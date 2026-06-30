@@ -13,6 +13,7 @@ import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
+import { PrivacyPage } from '@/features/legal/PrivacyPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
 import { tokens } from '@/lib/tokens.ts';
 import { routes } from '@/lib/config.ts';
@@ -54,6 +55,9 @@ export const router = createBrowserRouter([
   },
   // Public: the email-verification link works whether logged in or out.
   { path: routes.verifyEmail, element: <VerifyEmailPage /> },
+  // Public: the privacy policy is reachable without auth (landing footer, the
+  // registration consent link, robots-indexable).
+  { path: routes.privacy, element: <PrivacyPage /> },
   // Root: marketing landing for guests, dashboard for authed users.
   { path: routes.home, element: <HomeRoute /> },
   {

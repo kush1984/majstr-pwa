@@ -43,8 +43,8 @@ export const catalogItemSchema = z.object({
     message: i18n.t('validation.chooseUnit'),
   }),
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),
-  // '' = no trade ("Інше"); otherwise one of the master's trades.
-  trade: z.enum(TRADE_VALUES).or(z.literal('')),
+  // Always a trade — "no specific trade" is OTHER ("Інше"), the single catch-all.
+  trade: z.enum(TRADE_VALUES),
   defaultPrice: priceString,
 });
 
