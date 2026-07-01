@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
+import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { ProfileEditModal } from './ProfileEditModal.tsx';
 import { useDeleteLogo, useUploadLogo } from './useProfile.ts';
 import { usePush } from '@/hooks/usePush.ts';
@@ -35,6 +37,7 @@ export function ProfilePage() {
   const { data: me } = useMe();
   const logout = useLogout();
   const [editOpen, setEditOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // Used object count for the limit bar — the real list, not a guess.
   const projects = useQuery({
@@ -98,7 +101,10 @@ export function ProfilePage() {
         {!isPro && (
           <button
             type="button"
-            onClick={() => toast.info(t('profile.subscriptionSoon'))}
+            onClick={() => {
+              void upgradeApi.click('PROFILE');
+              setUpgradeOpen(true);
+            }}
             className="w-full rounded-xl bg-brand py-3 text-sm font-bold text-white"
           >
             {t('profile.upgradeToPro')}
@@ -106,6 +112,7 @@ export function ProfilePage() {
         )}
       </div>
 
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
 
       {/* Menu */}

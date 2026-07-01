@@ -494,6 +494,16 @@
     "new": "New",
     "noneHint": "You can add a client later — it's only needed to send the estimate."
   },
+  "upgrade": {
+    "title": "PRO is on the way",
+    "body": "PRO isn't buyable yet — we're still building it. Want it? We'll write when it's ready and build it to your need.",
+    "reasonLabel": "What exactly do you need? (optional)",
+    "reasonPlaceholder": "e.g. team access, more objects, export…",
+    "notifyAt": "We'll write to {{email}}",
+    "yes": "Yes, I'm interested",
+    "thanksTitle": "Thank you!",
+    "thanksBody": "We'll let you know as soon as PRO is ready."
+  },
   "consent": {
     "registerPre": "I agree to the ",
     "privacyLink": "Privacy Policy",

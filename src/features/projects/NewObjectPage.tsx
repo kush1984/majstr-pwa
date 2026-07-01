@@ -118,7 +118,7 @@ export function NewObjectPage() {
         </section>
 
         {atProjectLimit && (
-          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
         )}
         <Button
           fullWidth

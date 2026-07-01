@@ -95,7 +95,7 @@ export function DashboardPage() {
 
       {atProjectLimit && (
         <div className="mb-5">
-          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
         </div>
       )}
 

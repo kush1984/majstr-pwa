@@ -355,6 +355,7 @@ export function ProjectDetailPage() {
           {atEstimateLimit && (
             <UpgradeBanner
               text={t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject })}
+              trigger="ESTIMATE_LIMIT"
             />
           )}
 

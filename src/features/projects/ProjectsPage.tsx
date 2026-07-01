@@ -96,7 +96,7 @@ export function ProjectsPage() {
       </div>
 
       {atProjectLimit && (
-        <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} />
+        <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
       )}
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
