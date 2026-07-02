@@ -17,6 +17,7 @@ import { AuthShell } from './LoginPage.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
+import { getStoredRef } from '@/lib/referral.ts';
 import type { Trade } from '@/api/types.ts';
 
 export function RegisterPage() {
@@ -38,6 +39,7 @@ export function RegisterPage() {
       phone: '',
       companyName: '',
       consent: false,
+      promoCode: '',
     },
   });
 
@@ -52,6 +54,10 @@ export function RegisterPage() {
       await register$.mutateAsync({
         ...values,
         trades: values.trades as Trade[],
+        // First-touch attribution: the stored ?ref= wins, the typed promo code is
+        // a fallback. Absent → the backend attributes DIRECT.
+        ref: getStoredRef(),
+        promoCode: values.promoCode?.trim() || undefined,
       });
     } catch (err) {
       const e = toAppError(err);
@@ -140,6 +146,21 @@ export function RegisterPage() {
             {...register('companyName')}
           />
         </FormField>
+
+        <details className="text-sm">
+          <summary className="cursor-pointer text-gray-600">{t('auth.havePromo')}</summary>
+          <div className="mt-2">
+            <FormField label={t('auth.promoCode')} htmlFor="promoCode" error={errors.promoCode?.message}>
+              <Input
+                id="promoCode"
+                autoComplete="off"
+                placeholder={t('auth.promoPlaceholder')}
+                invalid={Boolean(errors.promoCode)}
+                {...register('promoCode')}
+              />
+            </FormField>
+          </div>
+        </details>
 
         <div>
           <label className="flex items-start gap-2.5 text-sm text-gray-700">

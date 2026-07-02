@@ -63,6 +63,10 @@ export interface RegisterRequest {
   companyName: string;
   /** Explicit privacy-policy consent (the registration checkbox). */
   consent: boolean;
+  /** First-touch attribution: stored ?ref= value + optional typed promo code.
+   *  Both optional; absent → the backend attributes DIRECT. */
+  ref?: string;
+  promoCode?: string;
 }
 
 /** PUT /api/profile (#16). `email` is honoured only while the current email is

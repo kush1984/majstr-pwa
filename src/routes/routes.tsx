@@ -18,6 +18,17 @@ import { BillingReturnPage } from '@/features/billing/BillingReturnPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
 import { tokens } from '@/lib/tokens.ts';
 import { routes } from '@/lib/config.ts';
+import { storeRef } from '@/lib/referral.ts';
+
+/**
+ * Partner alias: /liga stores the referral first-touch (ref=liga) then drops the
+ * visitor on the normal landing. A clean URL a partner can print/share; the same
+ * shape works for any future partner via ?ref=<code>.
+ */
+function LigaRoute() {
+  storeRef('liga');
+  return <Navigate to={routes.home} replace />;
+}
 
 /**
  * The root "/" gate. A logged-OUT visitor (no token in storage) gets the public
@@ -59,6 +70,8 @@ export const router = createBrowserRouter([
   // Public: the privacy policy is reachable without auth (landing footer, the
   // registration consent link, robots-indexable).
   { path: routes.privacy, element: <PrivacyPage /> },
+  // Public partner alias: stores ref=liga first-touch, then → landing.
+  { path: routes.liga, element: <LigaRoute /> },
   // Root: marketing landing for guests, dashboard for authed users.
   { path: routes.home, element: <HomeRoute /> },
   {

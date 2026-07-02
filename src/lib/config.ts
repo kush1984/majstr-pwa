@@ -32,6 +32,7 @@ export const routes = {
   register: '/register',
   verifyEmail: '/verify-email',
   privacy: '/privacy',
+  liga: '/liga',
   home: '/',
   projects: '/projects',
   catalog: '/catalog',

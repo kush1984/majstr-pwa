@@ -5,6 +5,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
+import { captureRefFromUrl } from './lib/referral.ts';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import './lib/i18n.ts';
 import './styles/index.css';
@@ -12,6 +13,9 @@ import './styles/index.css';
 // Start error reporting before anything else so even early crashes are caught.
 // No-op unless VITE_SENTRY_DSN is set.
 initSentry();
+
+// First-touch referral capture from ?ref= on the entry URL (stored once).
+captureRefFromUrl(window.location.search);
 
 // One shared QueryClient. Sensible defaults for this app:
 //   - staleTime 30s: avoid hammering /me on every navigation
