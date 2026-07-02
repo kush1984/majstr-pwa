@@ -75,6 +75,13 @@ export function ProfilePage() {
           <div>
             <div className="text-[13px] text-white/65">{t('profile.currentPlan')}</div>
             <div className="text-lg font-extrabold">{plan}</div>
+            {isPro && me?.planExpiresAt && (
+              <div className="text-[11px] text-white/65">
+                {t('profile.planActiveUntil', {
+                  date: new Date(me.planExpiresAt).toLocaleDateString('uk-UA'),
+                })}
+              </div>
+            )}
           </div>
           <span className="rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold uppercase">
             {plan === 'FREE' ? t('profile.planFree') : t('profile.planActive')}

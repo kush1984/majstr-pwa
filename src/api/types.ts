@@ -33,6 +33,9 @@ export interface UserResponse {
    *  privacy-consent and client-data prompts. */
   consentedToPrivacyAt: string | null;
   acknowledgedClientDataAt: string | null;
+  /** When a billing-granted PRO ends (null = FREE, or admin-granted with no
+   *  expiry). Drives the "PRO активний до DD.MM" badge. */
+  planExpiresAt: string | null;
 }
 
 /** GET /api/plan/limits — the current user's plan caps (null = unlimited),

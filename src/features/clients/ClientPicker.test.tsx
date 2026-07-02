@@ -22,6 +22,7 @@ function meWith(ackAt: string | null): UserResponse {
     id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
     companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
     createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: ackAt,
+    planExpiresAt: null,
   };
 }
 

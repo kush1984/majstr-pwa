@@ -4,76 +4,40 @@ import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { useMe } from '@/features/auth/useMe.ts';
-import { upgradeApi } from '@/api/upgrade.ts';
+import { billingApi } from '@/api/billing.ts';
 
 /**
- * Painted-door PRO modal. HONEST — no fake checkout: PRO isn't buyable yet, so we
- * say so and capture interest ("we'll write when it's ready, built to your need").
- * The optional reason is the most valuable signal. The CLICK is recorded by the
- * caller (the CTA); this modal records INTEREST on "Так, цікавить".
+ * PRO purchase modal. Shows what PRO gives + the monthly price, then "Оплатити"
+ * starts a monobank checkout and redirects the browser to the hosted payment
+ * page. (Replaced the V34 painted-door "чи цікавить" once real billing shipped;
+ * the caller still records the analytics click by trigger before opening this.)
  */
 export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
-  const { data: me } = useMe();
-  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
 
-  const close = () => {
-    setReason('');
-    setSent(false);
-    onClose();
-  };
-
-  const submit = async () => {
+  const pay = async () => {
     setBusy(true);
     try {
-      await upgradeApi.interest(reason.trim() || undefined);
-      setSent(true);
+      const { pageUrl } = await billingApi.checkout();
+      // Leaves the app for the monobank hosted page (or the dev return URL).
+      window.location.href = pageUrl;
     } catch (err) {
       toast.error(toAppError(err).message);
-    } finally {
-      setBusy(false);
+      setBusy(false); // stay on the modal so the user can retry
     }
   };
 
   return (
-    <Modal open={open} onClose={close} title={t('upgrade.title')}>
-      {sent ? (
-        <div className="space-y-3">
-          <p className="text-2xl">🙌</p>
-          <p className="text-sm font-semibold text-primary">{t('upgrade.thanksTitle')}</p>
-          <p className="text-sm text-secondary">{t('upgrade.thanksBody')}</p>
-          <Button fullWidth onClick={close}>
-            {t('common.close')}
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-secondary">{t('upgrade.body')}</p>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted" htmlFor="upgrade-reason">
-              {t('upgrade.reasonLabel')}
-            </label>
-            <textarea
-              id="upgrade-reason"
-              rows={3}
-              maxLength={2000}
-              placeholder={t('upgrade.reasonPlaceholder')}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-primary focus:border-brand focus:outline-none"
-            />
-          </div>
-          {me?.email && (
-            <p className="text-xs text-muted">{t('upgrade.notifyAt', { email: me.email })}</p>
-          )}
-          <Button fullWidth loading={busy} onClick={submit}>
-            {t('upgrade.yes')}
-          </Button>
-        </div>
-      )}
+    <Modal open={open} onClose={onClose} title={t('billing.proTitle')}>
+      <div className="space-y-4">
+        <p className="text-sm text-secondary">{t('billing.proBody')}</p>
+        <p className="text-2xl font-extrabold text-primary">{t('billing.price')}</p>
+        <Button fullWidth loading={busy} onClick={pay}>
+          {t('billing.pay')}
+        </Button>
+        <p className="text-center text-xs text-muted">{t('billing.securedBy')}</p>
+      </div>
     </Modal>
   );
 }

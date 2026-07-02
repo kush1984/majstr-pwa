@@ -14,6 +14,7 @@ import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { PrivacyPage } from '@/features/legal/PrivacyPage.tsx';
+import { BillingReturnPage } from '@/features/billing/BillingReturnPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
 import { tokens } from '@/lib/tokens.ts';
 import { routes } from '@/lib/config.ts';
@@ -83,6 +84,8 @@ export const router = createBrowserRouter([
       // Static '/projects/new' ranks above the '/projects/:id' detail route.
       { path: routes.newObject, element: <NewObjectPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
+      // Post-payment landing — polls /me until the webhook grants PRO.
+      { path: routes.billingReturn, element: <BillingReturnPage /> },
     ],
   },
   // Unknown route → home; ProtectedRoute bounces to /login if needed.

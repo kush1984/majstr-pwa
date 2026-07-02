@@ -442,6 +442,7 @@
     "currentPlan": "Current plan",
     "planFree": "Free",
     "planActive": "Active",
+    "planActiveUntil": "Active until {{date}}",
     "objects": "Objects",
     "unlimited": "Unlimited",
     "usedOfLimit": "{{used}} of {{limit}}",
@@ -493,6 +494,19 @@
     "existing": "Existing",
     "new": "New",
     "noneHint": "You can add a client later — it's only needed to send the estimate."
+  },
+  "billing": {
+    "proTitle": "Upgrade to PRO",
+    "proBody": "Unlimited objects and estimates, your logo on estimate PDFs.",
+    "price": "299 ₴ / month",
+    "pay": "Pay",
+    "securedBy": "Payment via monobank",
+    "processing": "Processing payment…",
+    "successTitle": "PRO activated!",
+    "successBody": "Thank you! Your PRO subscription is active.",
+    "successUntil": "Thank you! PRO is active until {{date}}.",
+    "pending": "Payment is still processing. This can take a minute — refresh this page shortly.",
+    "toDashboard": "Home"
   },
   "upgrade": {
     "title": "PRO is on the way",
