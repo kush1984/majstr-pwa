@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
+import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
@@ -168,6 +169,8 @@ export function ProfilePage() {
         )}
       </div>
 
+      {me && <ReferralCard code={me.referralCode} />}
+
       <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
 
@@ -235,6 +238,85 @@ export function ProfilePage() {
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * "Запроси майстра" — the master's personal invite link + a three-number summary
+ * (invited / paid / months earned). Sharing uses the native Share sheet on mobile
+ * and falls back to clipboard on desktop.
+ */
+function ReferralCard({ code }: { code: string }) {
+  const { t } = useTranslation();
+  const link = `${window.location.origin}/?ref=m-${code}`;
+  const stats = useQuery({
+    queryKey: ['referrals', 'me'],
+    queryFn: () => billingApi.referralStats(),
+  });
+
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: t('referral.shareText'), url: link });
+      } else {
+        await navigator.clipboard.writeText(link);
+        toast.success(t('referral.copied'));
+      }
+    } catch {
+      // User dismissed the native share sheet — not an error.
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(t('referral.copied'));
+    } catch {
+      toast.error(t('referral.copyFailed'));
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded-card border border-border bg-surface p-4">
+      <h2 className="text-sm font-bold text-primary">{t('referral.title')}</h2>
+      <p className="mt-1 text-xs text-secondary">{t('referral.explainer')}</p>
+
+      <div className="mt-3 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-surface-sunken px-3 py-2 text-xs text-secondary">
+          {link}
+        </code>
+        <button
+          type="button"
+          onClick={copy}
+          className="flex-shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-primary"
+        >
+          {t('referral.copy')}
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={share}
+        className="mt-2 w-full rounded-xl bg-brand py-2.5 text-sm font-bold text-white"
+      >
+        {t('referral.share')}
+      </button>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <ReferralStat label={t('referral.invited')} value={stats.data?.invited ?? 0} />
+        <ReferralStat label={t('referral.paid')} value={stats.data?.paid ?? 0} />
+        <ReferralStat label={t('referral.monthsEarned')} value={stats.data?.monthsEarned ?? 0} />
+      </div>
+    </div>
+  );
+}
+
+function ReferralStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-surface-sunken p-2.5">
+      <div className="text-lg font-extrabold text-primary">{value}</div>
+      <div className="mt-0.5 text-[11px] leading-tight text-muted">{label}</div>
+    </div>
   );
 }
 

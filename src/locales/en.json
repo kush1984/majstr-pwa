@@ -449,7 +449,7 @@
     "objects": "Objects",
     "unlimited": "Unlimited",
     "usedOfLimit": "{{used}} of {{limit}}",
-    "upgradeToPro": "⭐ Upgrade to PRO · 299 ₴/mo",
+    "upgradeToPro": "⭐ Upgrade to PRO",
     "subscriptionSoon": "Subscription payment will be available soon",
     "settings": "Settings",
     "settingsSub": "Profile, contacts",
@@ -518,7 +518,26 @@
     "disableAutoRenew": "Turn off auto-renewal",
     "enableAutoRenew": "Turn on auto-renewal",
     "autoRenewOn": "Auto-renewal enabled",
-    "autoRenewOff": "Auto-renewal off. PRO active until {{date}}"
+    "autoRenewOff": "Auto-renewal off. PRO active until {{date}}",
+    "autoRenewHintHalfYear": "We'll charge 1494 ₴ from this card every 6 months. Cancel anytime in your profile.",
+    "periodMonth": "1 month",
+    "periodMonthPrice": "299 ₴",
+    "periodHalfYear": "6 months",
+    "periodHalfYearPrice": "1494 ₴",
+    "periodHalfYearNote": "249 ₴/mo · save 300 ₴",
+    "periodBadge": "Best value"
+  },
+  "referral": {
+    "title": "Invite a pro",
+    "explainer": "An invited pro subscribes to PRO → you get a free month of PRO.",
+    "copy": "Copy",
+    "share": "Share link",
+    "copied": "Link copied",
+    "copyFailed": "Couldn't copy. Please try again.",
+    "shareText": "I run my estimates in Majstr — it's handy. Join me:",
+    "invited": "invited",
+    "paid": "paid",
+    "monthsEarned": "months"
   },
   "upgrade": {
     "title": "PRO is on the way",

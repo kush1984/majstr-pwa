@@ -40,6 +40,20 @@ export interface UserResponse {
    *  profile "Підписка" section. */
   autoRenew: boolean;
   cardMask: string | null;
+  /** This master's personal referral code — the invite link is
+   *  majstr.pro/?ref=m-<referralCode>. */
+  referralCode: string;
+}
+
+/** PRO subscription period — the client sends this; the server owns the price. */
+export type BillingPeriod = 'MONTH' | 'HALF_YEAR';
+
+/** GET /api/referrals/me — the "Запроси майстра" panel stats. */
+export interface ReferralStatsResponse {
+  referralCode: string;
+  invited: number;
+  paid: number;
+  monthsEarned: number;
 }
 
 /** GET /api/plan/limits — the current user's plan caps (null = unlimited),

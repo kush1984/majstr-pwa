@@ -449,7 +449,7 @@
     "objects": "Об'єкти",
     "unlimited": "Без обмежень",
     "usedOfLimit": "{{used}} з {{limit}}",
-    "upgradeToPro": "⭐ Оновити до PRO · 299 ₴/міс",
+    "upgradeToPro": "⭐ Оновити до PRO",
     "subscriptionSoon": "Оплата підписки буде доступна найближчим часом",
     "settings": "Налаштування",
     "settingsSub": "Профіль, контакти",
@@ -518,7 +518,26 @@
     "disableAutoRenew": "Вимкнути автопродовження",
     "enableAutoRenew": "Увімкнути автопродовження",
     "autoRenewOn": "Автопродовження увімкнено",
-    "autoRenewOff": "Автопродовження вимкнено. PRO активний до {{date}}"
+    "autoRenewOff": "Автопродовження вимкнено. PRO активний до {{date}}",
+    "autoRenewHintHalfYear": "Кожні 6 місяців списуватимемо 1494 ₴ з цієї картки. Вимкнути можна будь-коли в профілі.",
+    "periodMonth": "1 місяць",
+    "periodMonthPrice": "299 ₴",
+    "periodHalfYear": "6 місяців",
+    "periodHalfYearPrice": "1494 ₴",
+    "periodHalfYearNote": "249 ₴/міс · економія 300 ₴",
+    "periodBadge": "Вигідно"
+  },
+  "referral": {
+    "title": "Запроси майстра",
+    "explainer": "Запрошений майстер оформив PRO → тобі місяць PRO безкоштовно.",
+    "copy": "Копіювати",
+    "share": "Поділитися посиланням",
+    "copied": "Посилання скопійовано",
+    "copyFailed": "Не вдалося скопіювати. Спробуйте ще раз.",
+    "shareText": "Веду кошториси в Majstr — зручно. Приєднуйся:",
+    "invited": "запрошено",
+    "paid": "оплатили",
+    "monthsEarned": "місяців"
   },
   "upgrade": {
     "title": "PRO ще готуємо",
