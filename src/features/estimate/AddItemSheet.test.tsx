@@ -74,6 +74,25 @@ describe('AddItemSheet — catalog multi-select', () => {
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
+
+  it('filters the catalog list by type (works / materials)', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(catalog);
+    renderSheet(vi.fn());
+
+    // Default: both the work and the material show.
+    expect(await screen.findAllByTestId('catalog-row')).toHaveLength(2);
+
+    // "Матеріали" → only the MATERIAL (Кабель ВВГ) remains.
+    fireEvent.click(screen.getByRole('button', { name: 'Матеріали' }));
+    await waitFor(() => expect(screen.getAllByTestId('catalog-row')).toHaveLength(1));
+    expect(screen.getByText('Кабель ВВГ')).toBeTruthy();
+    expect(screen.queryByText('Розетка')).toBeNull();
+
+    // "Роботи" → only the WORK (Розетка) remains.
+    fireEvent.click(screen.getByRole('button', { name: 'Роботи' }));
+    await waitFor(() => expect(screen.getAllByTestId('catalog-row')).toHaveLength(1));
+    expect(screen.getByText('Розетка')).toBeTruthy();
+  });
 });
 
 describe('AddItemSheet — manual add → save-to-catalog prompt', () => {

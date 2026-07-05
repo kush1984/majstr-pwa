@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Chip } from '@/components/Chip.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
@@ -20,8 +21,16 @@ import {
 } from '@/features/catalog/SaveToCatalogPrompt.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { useAddItem, useAddItemsFromCatalogBatch } from './useEstimate.ts';
+import type { ItemType } from '@/api/types.ts';
 
 type Tab = 'catalog' | 'manual';
+
+type TypeFilter = ItemType | 'ALL';
+const TYPE_FILTERS: { value: TypeFilter; labelKey: string }[] = [
+  { value: 'ALL', labelKey: 'common.all' },
+  { value: 'WORK', labelKey: 'catalog.filterWorks' },
+  { value: 'MATERIAL', labelKey: 'catalog.filterMaterials' },
+];
 
 export function AddItemSheet({
   estimateId,
@@ -130,6 +139,7 @@ function CatalogPicker({
   const { data: me } = useMe();
   const batch = useAddItemsFromCatalogBatch(estimateId);
   const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -137,9 +147,10 @@ function CatalogPicker({
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (data ?? [])
+      .filter((i) => typeFilter === 'ALL' || i.type === typeFilter)
       .filter((i) => tradeMatches(i.trade, tradeFilter))
       .filter((i) => !needle || i.name.toLowerCase().includes(needle));
-  }, [data, q, tradeFilter]);
+  }, [data, q, typeFilter, tradeFilter]);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -173,6 +184,17 @@ function CatalogPicker({
         value={tradeFilter}
         onChange={setTradeFilter}
       />
+      <div className="mb-3 flex gap-2">
+        {TYPE_FILTERS.map((f) => (
+          <Chip
+            key={f.value}
+            active={typeFilter === f.value}
+            onClick={() => setTypeFilter(f.value)}
+          >
+            {t(f.labelKey)}
+          </Chip>
+        ))}
+      </div>
       <Input
         placeholder={t('estimate.searchCatalog')}
         value={q}
