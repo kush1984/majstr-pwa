@@ -517,6 +517,7 @@
     "off": "off",
     "disableAutoRenew": "Turn off auto-renewal",
     "enableAutoRenew": "Turn on auto-renewal",
+    "enableAutoRenewNoCardHint": "No saved card yet. Paying for the next period saves it for auto-renewal — you can cancel anytime after.",
     "autoRenewOn": "Auto-renewal enabled",
     "autoRenewOff": "Auto-renewal off. PRO active until {{date}}",
     "autoRenewHintHalfYear": "We'll charge 1494 ₴ from this card every 6 months. Cancel anytime in your profile.",

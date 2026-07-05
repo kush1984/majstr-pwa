@@ -151,7 +151,22 @@ export function ProfilePage() {
               >
                 {t('billing.enableAutoRenew')}
               </button>
-            ) : null}
+            ) : (
+              // No saved card (upgraded without opting in) — enabling needs to
+              // tokenize a card, which monobank only does during a payment. Route
+              // through checkout (auto-renew pre-checked); the copy is honest that
+              // it charges for the next period and saves the card.
+              <>
+                <button
+                  type="button"
+                  onClick={() => setUpgradeOpen(true)}
+                  className="mt-2 font-semibold text-brand"
+                >
+                  {t('billing.enableAutoRenew')}
+                </button>
+                <p className="mt-1 text-white/50">{t('billing.enableAutoRenewNoCardHint')}</p>
+              </>
+            )}
           </div>
         )}
 
