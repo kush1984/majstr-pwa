@@ -509,7 +509,16 @@
     "successBody": "Thank you! Your PRO subscription is active.",
     "successUntil": "Thank you! PRO is active until {{date}}.",
     "pending": "Payment is still processing. This can take a minute — refresh this page shortly.",
-    "toDashboard": "Home"
+    "toDashboard": "Home",
+    "autoRenewLabel": "Renew automatically",
+    "autoRenewHint": "We'll charge 299 ₴ from this card each month. Cancel anytime in your profile.",
+    "autoRenew": "Auto-renewal",
+    "on": "on",
+    "off": "off",
+    "disableAutoRenew": "Turn off auto-renewal",
+    "enableAutoRenew": "Turn on auto-renewal",
+    "autoRenewOn": "Auto-renewal enabled",
+    "autoRenewOff": "Auto-renewal off. PRO active until {{date}}"
   },
   "upgrade": {
     "title": "PRO is on the way",

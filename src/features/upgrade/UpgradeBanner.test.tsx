@@ -23,7 +23,7 @@ const me: UserResponse = {
   id: 'u1', email: 'master@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
   companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
   createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
-  planExpiresAt: null,
+  planExpiresAt: null, autoRenew: false, cardMask: null,
 };
 
 function renderBanner() {

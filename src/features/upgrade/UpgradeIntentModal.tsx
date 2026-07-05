@@ -15,11 +15,14 @@ import { billingApi } from '@/api/billing.ts';
 export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  // Default ON — the price + period are shown right next to it (honest opt-in),
+  // and it's cancellable in one tap in the profile.
+  const [autoRenew, setAutoRenew] = useState(true);
 
   const pay = async () => {
     setBusy(true);
     try {
-      const { pageUrl } = await billingApi.checkout();
+      const { pageUrl } = await billingApi.checkout(autoRenew);
       // Leaves the app for the monobank hosted page (or the dev return URL).
       window.location.href = pageUrl;
     } catch (err) {
@@ -33,6 +36,18 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
       <div className="space-y-4">
         <p className="text-sm text-secondary">{t('billing.proBody')}</p>
         <p className="text-2xl font-extrabold text-primary">{t('billing.price')}</p>
+        <label className="flex items-start gap-2.5 rounded-xl bg-surface p-3 text-sm text-primary">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-border text-brand focus:ring-brand"
+            checked={autoRenew}
+            onChange={(e) => setAutoRenew(e.target.checked)}
+          />
+          <span>
+            {t('billing.autoRenewLabel')}
+            <span className="mt-0.5 block text-xs text-muted">{t('billing.autoRenewHint')}</span>
+          </span>
+        </label>
         <Button fullWidth loading={busy} onClick={pay}>
           {t('billing.pay')}
         </Button>

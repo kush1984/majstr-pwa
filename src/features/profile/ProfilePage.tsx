@@ -1,7 +1,8 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useMe } from '@/features/auth/useMe.ts';
+import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { profileApi } from '@/api/profile.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
@@ -49,6 +50,25 @@ export function ProfilePage() {
   const limit = PROJECT_LIMIT[plan];
   const used = projects.data?.length ?? 0;
   const isPro = plan !== 'FREE';
+
+  const qc = useQueryClient();
+  const toggleAutoRenew = async (enabled: boolean) => {
+    try {
+      const updated = await profileApi.setAutoRenew(enabled);
+      qc.setQueryData(ME_QUERY_KEY, updated);
+      toast.success(
+        enabled
+          ? t('billing.autoRenewOn')
+          : t('billing.autoRenewOff', {
+              date: updated.planExpiresAt
+                ? new Date(updated.planExpiresAt).toLocaleDateString('uk-UA')
+                : '',
+            }),
+      );
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
 
   return (
     <>
@@ -104,6 +124,35 @@ export function ProfilePage() {
             </div>
           )}
         </div>
+
+        {isPro && (
+          <div className="mb-3 rounded-xl bg-white/[0.08] p-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-white/70">{t('billing.autoRenew')}</span>
+              <span className="font-semibold">
+                {me?.autoRenew ? t('billing.on') : t('billing.off')}
+                {me?.cardMask ? ` · ${me.cardMask}` : ''}
+              </span>
+            </div>
+            {me?.autoRenew ? (
+              <button
+                type="button"
+                onClick={() => toggleAutoRenew(false)}
+                className="mt-2 text-white/70 underline"
+              >
+                {t('billing.disableAutoRenew')}
+              </button>
+            ) : me?.cardMask ? (
+              <button
+                type="button"
+                onClick={() => toggleAutoRenew(true)}
+                className="mt-2 font-semibold text-brand"
+              >
+                {t('billing.enableAutoRenew')}
+              </button>
+            ) : null}
+          </div>
+        )}
 
         {!isPro && (
           <button

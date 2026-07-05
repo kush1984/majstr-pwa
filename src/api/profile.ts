@@ -40,4 +40,11 @@ export const profileApi = {
   acknowledgeClientData(): Promise<UserResponse> {
     return api.post<UserResponse>('/api/profile/acknowledge-client-data').then((r) => r.data);
   },
+
+  /** Toggle subscription auto-renewal. Disabling is instant; enabling needs a saved card. */
+  setAutoRenew(enabled: boolean): Promise<UserResponse> {
+    return api
+      .patch<UserResponse>(`/api/profile/auto-renew?enabled=${enabled}`)
+      .then((r) => r.data);
+  },
 };

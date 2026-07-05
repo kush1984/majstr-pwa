@@ -36,6 +36,10 @@ export interface UserResponse {
   /** When a billing-granted PRO ends (null = FREE, or admin-granted with no
    *  expiry). Drives the "PRO активний до DD.MM" badge. */
   planExpiresAt: string | null;
+  /** Subscription auto-renew state + masked card (never the raw token) for the
+   *  profile "Підписка" section. */
+  autoRenew: boolean;
+  cardMask: string | null;
 }
 
 /** GET /api/plan/limits — the current user's plan caps (null = unlimited),

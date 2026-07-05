@@ -8,7 +8,8 @@ export interface CheckoutResponse {
 
 /** PRO subscription billing (monobank acquiring). */
 export const billingApi = {
-  checkout(): Promise<CheckoutResponse> {
-    return api.post<CheckoutResponse>('/api/billing/checkout').then((r) => r.data);
+  /** Start a PRO checkout. `autoRenew` opts into card tokenization + auto-renewal. */
+  checkout(autoRenew: boolean): Promise<CheckoutResponse> {
+    return api.post<CheckoutResponse>('/api/billing/checkout', { autoRenew }).then((r) => r.data);
   },
 };
