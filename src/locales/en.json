@@ -353,6 +353,35 @@
     "addClientEmailHint": "Add the client's email to send the estimate by mail.",
     "addClientEmail": "+ Add client's email"
   },
+  "import": {
+    "title": "Import price list",
+    "intro": "Move your price list into Majstr: upload a file or paste rows from a table. The columns you need are name, price, unit (fix the rest on the next step).",
+    "uploadTitle": "Upload a file",
+    "uploadHint": "Excel (.xlsx, .xls) or .csv, up to 2 MB",
+    "chooseFile": "Choose file",
+    "pasteTitle": "Paste from a table",
+    "pasteHint": "Copy rows in Excel / Google Sheets and paste them here",
+    "pastePlaceholder": "Wall chase\tlin.m\t120\nTile removal\tsq.m\t150",
+    "recognize": "Recognize",
+    "parsing": "Recognizing…",
+    "emptyResult": "Couldn't recognize any positions. Try pasting rows manually.",
+    "skipped": "Skipped {{count}} service rows",
+    "columns": "Columns",
+    "col": {
+      "nameCol": "Name",
+      "priceCol": "Price",
+      "unitCol": "Unit"
+    },
+    "tradeLabel": "Trade for all positions",
+    "dedupLabel": "If a position already exists",
+    "dedupUpdate": "Update price",
+    "dedupSkip": "Skip",
+    "pickUnit": "Unit…",
+    "removeRow": "Remove row",
+    "fixHighlighted": "Fix the highlighted rows (unit / price)",
+    "importN": "Import {{count}} positions",
+    "done": "Created {{created}}, updated {{updated}}, skipped {{skipped}}"
+  },
   "catalog": {
     "title": "Catalog",
     "addItem": "+ Add item",
@@ -364,6 +393,7 @@
     "emptyTitle": "The catalog is empty",
     "emptyText": "Add items manually or start with the starter set for your lines of work.",
     "starterSet": "Starter set",
+    "importPrice": "Import price list",
     "addItemShort": "Add item",
     "loadErrorTitle": "Couldn't load the catalog",
     "loadErrorText": "Check your connection and try again.",

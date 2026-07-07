@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { routes } from '@/lib/config.ts';
 import { Chip } from '@/components/Chip.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Modal } from '@/components/Modal.tsx';
@@ -43,6 +45,7 @@ function groupByCategory(items: CatalogItemResponse[]): [string, CatalogItemResp
 
 export function CatalogPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<TypeFilter>('ALL');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const { data: me } = useMe();
@@ -148,13 +151,23 @@ export function CatalogPage() {
               <Button variant="secondary" onClick={onReset} loading={reset.isPending}>
                 {t('catalog.starterSet')}
               </Button>
+              <Button variant="secondary" onClick={() => navigate(routes.catalogImport)}>
+                {t('catalog.importPrice')}
+              </Button>
               <Button onClick={() => setEditing(null)}>{t('catalog.addItemShort')}</Button>
             </div>
           }
         />
       ) : (
         <div className={isFetching ? 'opacity-60 transition-opacity' : undefined}>
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end gap-4">
+            <button
+              type="button"
+              onClick={() => navigate(routes.catalogImport)}
+              className="text-xs font-semibold text-brand"
+            >
+              ⬆ {t('catalog.importPrice')}
+            </button>
             <button
               type="button"
               onClick={onCheckUpdates}

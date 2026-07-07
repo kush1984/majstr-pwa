@@ -36,6 +36,7 @@ export const routes = {
   home: '/',
   projects: '/projects',
   catalog: '/catalog',
+  catalogImport: '/catalog/import',
   templates: '/templates',
   profile: '/profile',
   newEstimate: '/new',

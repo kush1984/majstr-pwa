@@ -338,6 +338,59 @@ export interface BatchCatalogItemEntry {
   sortOrder?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Price-list import (parse → review → commit)
+// ---------------------------------------------------------------------------
+
+export type DedupPolicy = 'UPDATE_PRICE' | 'SKIP';
+
+/** Zero-based column indices the parser guessed (any may be null). */
+export interface ImportMapping {
+  nameCol: number | null;
+  priceCol: number | null;
+  unitCol: number | null;
+}
+
+/** One candidate position from the parse; `issues` (e.g. "unit", "price") flags a
+ *  cell that needs the master's attention on the review screen. */
+export interface ImportParsedRow {
+  gridRow: number;
+  name: string;
+  unit: Unit | null;
+  price: number | null;
+  type: ItemType;
+  issues: string[];
+}
+
+export interface CatalogImportParseResponse {
+  /** Raw cell matrix — lets the review screen re-map columns locally, no re-upload. */
+  grid: string[][];
+  rows: ImportParsedRow[];
+  skippedRows: number;
+  guessedMapping: ImportMapping;
+}
+
+/** A confirmed row; `policy` null = use the batch defaultPolicy when the name exists. */
+export interface CatalogImportCommitItem {
+  name: string;
+  unit: Unit;
+  price: number;
+  type: ItemType;
+  policy: DedupPolicy | null;
+}
+
+export interface CatalogImportCommitRequest {
+  items: CatalogImportCommitItem[];
+  trade: Trade | null;
+  defaultPolicy: DedupPolicy;
+}
+
+export interface CatalogImportCommitResponse {
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
 export interface CatalogResetResponse {
   itemsAdded: number;
 }
