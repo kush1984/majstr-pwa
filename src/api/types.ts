@@ -339,6 +339,37 @@ export interface BatchCatalogItemEntry {
 }
 
 // ---------------------------------------------------------------------------
+// Object economy (PRO) — expenses + real profit. Owner-only, never in the portal.
+// ---------------------------------------------------------------------------
+
+export type ExpenseCategory = 'MATERIALS' | 'LABOR' | 'OTHER';
+
+export interface ExpenseResponse {
+  id: string;
+  amount: number;
+  category: ExpenseCategory;
+  note: string | null;
+  spentAt: string; // ISO date (YYYY-MM-DD)
+  createdAt: string;
+}
+
+export interface ExpenseRequest {
+  amount: number;
+  category: ExpenseCategory;
+  note?: string | null;
+  spentAt?: string | null;
+}
+
+export interface ObjectEconomyResponse {
+  incomeTotal: number;
+  incomeSigned: number;
+  expensesTotal: number;
+  expensesByCategory: Partial<Record<ExpenseCategory, number>>;
+  profit: number;
+  profitSigned: number;
+}
+
+// ---------------------------------------------------------------------------
 // Price-list import (parse → review → commit)
 // ---------------------------------------------------------------------------
 

@@ -28,6 +28,7 @@ import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx
 import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
+import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 
 type Tab = 'estimate' | 'photos' | 'changes' | 'act';
 const TABS: { key: Tab; labelKey: string }[] = [
@@ -389,6 +390,8 @@ export function ProjectDetailPage() {
           )}
         </>
       )}
+
+      <ObjectEconomySection objectId={id} />
 
       <QuestionsSection projectId={id} />
     </>
