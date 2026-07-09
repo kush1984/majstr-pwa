@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
@@ -24,10 +24,12 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const register$ = useRegister();
+  const [emailTaken, setEmailTaken] = useState(false);
   const {
     register,
     handleSubmit,
     setError,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -50,6 +52,7 @@ export function RegisterPage() {
   }, [register$.isSuccess, navigate]);
 
   const onSubmit = handleSubmit(async (values) => {
+    setEmailTaken(false);
     try {
       await register$.mutateAsync({
         ...values,
@@ -61,9 +64,10 @@ export function RegisterPage() {
       });
     } catch (err) {
       const e = toAppError(err);
-      if (e.status === 409) {
-        // Backend returns "Email is already registered: foo@example.com"
+      if (e.code === 'EMAIL_ALREADY_REGISTERED' || e.status === 409) {
+        // Dup email — show a clear field error + a "log in" shortcut (email prefilled).
         setError('email', { message: t('auth.emailAlreadyRegistered') });
+        setEmailTaken(true);
       } else if (e.status === 400) {
         toast.error(e.message); // server-side validation details
       } else {
@@ -71,6 +75,9 @@ export function RegisterPage() {
       }
     }
   });
+
+  const goToLogin = () =>
+    navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
 
   return (
     <AuthShell title={t('auth.registerTitle')}>
@@ -84,6 +91,15 @@ export function RegisterPage() {
             invalid={Boolean(errors.email)}
             {...register('email')}
           />
+          {emailTaken && (
+            <button
+              type="button"
+              onClick={goToLogin}
+              className="mt-1.5 text-sm font-semibold text-brand underline"
+            >
+              {t('auth.emailTakenLogin')}
+            </button>
+          )}
         </FormField>
 
         <FormField label={t('auth.password')} htmlFor="password" required error={errors.password?.message} hint={t('auth.passwordHint')}>

@@ -200,7 +200,8 @@
     "tooManyAttempts": "Забагато спроб. Спробуйте знову{{retry}}.",
     "retryAfter": " через {{seconds}} с",
     "wrongCredentials": "Невірний email або пароль",
-    "emailAlreadyRegistered": "Цей email вже зареєстрований"
+    "emailAlreadyRegistered": "Цей email вже зареєстрований",
+    "emailTakenLogin": "Ця пошта вже зареєстрована — Увійти"
   },
   "dashboard": {
     "metricsError": "Не вдалося завантажити показники",

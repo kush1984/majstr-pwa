@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
@@ -14,15 +14,18 @@ import { routes } from '@/lib/config.ts';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const login = useLogin();
+  // Prefill the email when arriving from the "already registered → log in" shortcut.
+  const prefillEmail = (location.state as { email?: string } | null)?.email ?? '';
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: prefillEmail, password: '' },
   });
 
   useEffect(() => {

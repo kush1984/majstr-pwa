@@ -200,7 +200,8 @@
     "tooManyAttempts": "Too many attempts. Try again{{retry}}.",
     "retryAfter": " in {{seconds}} s",
     "wrongCredentials": "Wrong email or password",
-    "emailAlreadyRegistered": "This email is already registered"
+    "emailAlreadyRegistered": "This email is already registered",
+    "emailTakenLogin": "This email is already registered — Log in"
   },
   "dashboard": {
     "metricsError": "Could not load the metrics",

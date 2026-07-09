@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { RegisterPage } from './RegisterPage.tsx';
 import { authApi } from '@/api/auth.ts';
+import { routes } from '@/lib/config.ts';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -64,5 +65,24 @@ describe('RegisterPage — privacy consent', () => {
 
     await waitFor(() => expect(authApi.register).toHaveBeenCalled());
     expect(vi.mocked(authApi.register).mock.calls[0][0]).toMatchObject({ consent: true });
+  });
+});
+
+describe('RegisterPage — duplicate email', () => {
+  it('shows a "log in" shortcut (email prefilled) on a 409 EMAIL_ALREADY_REGISTERED', async () => {
+    vi.mocked(authApi.register).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { status: 409, message: 'taken', code: 'EMAIL_ALREADY_REGISTERED' } },
+    });
+
+    const { container } = renderPage();
+    fillValid(container);
+    fireEvent.click(container.querySelector('input[name="consent"]')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    // The shortcut appears; clicking it goes to login with the email prefilled.
+    const cta = await screen.findByRole('button', { name: /Увійти/ });
+    fireEvent.click(cta);
+    expect(navigateMock).toHaveBeenCalledWith(routes.login, { state: { email: 'a@b.com' } });
   });
 });
