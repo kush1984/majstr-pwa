@@ -248,6 +248,7 @@ function EditModal({
   const removeItem = useRemoveTemplateItem(template.id);
   const [name, setName] = useState(template.name);
   const [tab, setTab] = useState<AddTab>('catalog');
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
 
   const items = data?.items ?? [];
   const trimmed = name.trim();
@@ -304,7 +305,7 @@ function EditModal({
                 <span className="text-xs text-muted">{t('units.' + item.unit)}</span>
                 <button
                   type="button"
-                  onClick={() => onRemove(item.id)}
+                  onClick={() => setRemoving({ id: item.id, name: item.name })}
                   aria-label={t('common.delete')}
                   className="text-base text-muted"
                 >
@@ -342,6 +343,21 @@ function EditModal({
           <ManualAdd templateId={template.id} />
         )}
       </div>
+
+      <ConfirmDialog
+        open={removing !== null}
+        title={t('templates.removeItemTitle')}
+        message={t('templates.removeItemConfirm', { name: removing?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        loading={removeItem.isPending}
+        onConfirm={async () => {
+          if (removing) {
+            await onRemove(removing.id);
+            setRemoving(null);
+          }
+        }}
+        onClose={() => setRemoving(null)}
+      />
     </Modal>
   );
 }

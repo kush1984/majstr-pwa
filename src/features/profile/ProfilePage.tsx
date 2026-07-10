@@ -38,6 +38,7 @@ export function ProfilePage() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const logout = useLogout();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -207,7 +208,7 @@ export function ProfilePage() {
         />
         <button
           type="button"
-          onClick={logout}
+          onClick={() => setLogoutConfirmOpen(true)}
           className="flex w-full items-center gap-3 p-3.5 text-left"
         >
           <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-danger-soft text-base text-danger">
@@ -215,6 +216,17 @@ export function ProfilePage() {
           </span>
           <span className="text-sm font-medium text-danger">{t('profile.logout')}</span>
         </button>
+        <ConfirmDialog
+          open={logoutConfirmOpen}
+          title={t('profile.logout')}
+          message={t('profile.logoutConfirm')}
+          confirmLabel={t('profile.logout')}
+          onConfirm={() => {
+            setLogoutConfirmOpen(false);
+            logout();
+          }}
+          onClose={() => setLogoutConfirmOpen(false)}
+        />
       </div>
 
       {/* Help / support contacts (#17) — values come from config (env-overridable) */}
