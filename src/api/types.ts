@@ -266,6 +266,10 @@ export interface EstimateResponse {
   worksSubtotal: number;
   materialsSubtotal: number;
   total: number;
+  /** Deposit paid up front (завдаток); null/absent = none. */
+  depositAmount?: number | null;
+  /** total − deposit, clamped at 0 (залишок). Equals total when no deposit. */
+  balance: number;
 }
 
 export interface EstimateCreateRequest {
@@ -279,6 +283,8 @@ export interface EstimateUpdateRequest {
   validUntil?: string;
   notes?: string;
   name?: string;
+  /** Deposit (завдаток); null clears it. Balance is computed server-side. */
+  depositAmount?: number | null;
 }
 
 export interface EstimateItemRequest {

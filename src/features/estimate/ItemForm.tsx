@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +15,7 @@ import {
 import { useCatalogCategories } from '@/features/catalog/useCatalog.ts';
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
+import { MeasureCalculator } from './MeasureCalculator.tsx';
 
 /**
  * Manual line-item form. Used both for adding a new item and editing one.
@@ -41,10 +43,12 @@ export function ItemForm({
 }) {
   const { t } = useTranslation();
   const categories = useCatalogCategories();
+  const [calcOpen, setCalcOpen] = useState(false);
   const {
     register,
     control,
     setValue,
+    watch,
     handleSubmit,
     formState: { errors },
   } = useForm<ItemFormValues>({
@@ -171,6 +175,23 @@ export function ItemForm({
             {...register('unitPrice')}
           />
         </FormField>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setCalcOpen((o) => !o)}
+          className="text-xs font-semibold text-brand"
+        >
+          📐 {t('estimate.measureCalc')}
+        </button>
+        {calcOpen && (
+          <MeasureCalculator
+            unit={watch('unit')}
+            onApply={(q) => setValue('quantity', String(q), { shouldValidate: true })}
+            onClose={() => setCalcOpen(false)}
+          />
+        )}
       </div>
 
       <div className="flex gap-2 pt-1">

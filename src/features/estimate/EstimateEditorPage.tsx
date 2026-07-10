@@ -13,6 +13,8 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
+import { parseDecimal } from '@/lib/decimal.ts';
+import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import i18n from '@/lib/i18n.ts';
 import { routes } from '@/lib/config.ts';
@@ -61,11 +63,14 @@ export function EstimateEditorPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
+  const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositValue, setDepositValue] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -113,25 +118,24 @@ export function EstimateEditorPage() {
   const goBack = () => navigate(projectId ? routes.project(projectId) : routes.projects);
 
   const onPdf = async () => {
-    setPdfLoading(true);
     try {
       const { url, revoke } = await estimatesApi.fetchPdf(id);
       window.open(url, '_blank');
       setTimeout(revoke, 60_000);
     } catch {
       toast.error(t('estimate.pdfFailed'));
-    } finally {
-      setPdfLoading(false);
     }
   };
 
   const onShare = () => setShareOpen(true);
 
-  const openActions = () => {
+  const openEdit = () => {
     setRenameValue(est.name ?? '');
-    setActionsOpen(true);
+    setEditOpen(true);
   };
 
+  // Name + deposit share one PUT — always send BOTH so saving one never clears
+  // the other. Name edits keep the current deposit; deposit edits keep the name.
   const saveName = async () => {
     try {
       await updateEstimate.mutateAsync({
@@ -139,12 +143,39 @@ export function EstimateEditorPage() {
         validUntil: est.validUntil ?? undefined,
         notes: est.notes ?? undefined,
         name: renameValue.trim() || undefined,
+        depositAmount: est.depositAmount ?? null,
       });
       toast.success(t('estimate.saved'));
-      setActionsOpen(false);
+      setEditOpen(false);
     } catch (err) {
       toast.error(toAppError(err).message);
     }
+  };
+
+  const openDeposit = () => {
+    setDepositValue(est.depositAmount != null ? String(est.depositAmount) : '');
+    setDepositOpen(true);
+  };
+
+  const saveDeposit = async (clear = false) => {
+    try {
+      await updateEstimate.mutateAsync({
+        status: est.status,
+        validUntil: est.validUntil ?? undefined,
+        notes: est.notes ?? undefined,
+        name: est.name ?? undefined,
+        depositAmount: clear || depositValue.trim() === '' ? null : parseDecimal(depositValue),
+      });
+      toast.success(t('estimate.saved'));
+      setDepositOpen(false);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const openSaveTemplate = () => {
+    setTemplateName(est.name ?? '');
+    setSaveTemplateOpen(true);
   };
 
   const saveTemplate = async () => {
@@ -155,6 +186,19 @@ export function EstimateEditorPage() {
       setSaveTemplateOpen(false);
     } catch (err) {
       toast.error(toAppError(err).message);
+    }
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!deletingItem) return;
+    try {
+      await removeItem.mutateAsync(deletingItem.id);
+      toast.success(t('estimate.deleted'));
+      setEditing(null); // close the edit form only after a successful delete
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setDeletingItem(null);
     }
   };
 
@@ -176,6 +220,11 @@ export function EstimateEditorPage() {
     } catch (err) {
       toast.error(toAppError(err).message);
     }
+  };
+
+  const runFab = (fn: () => void) => {
+    setFabOpen(false);
+    fn();
   };
 
   return (
@@ -205,11 +254,11 @@ export function EstimateEditorPage() {
           {!signed && (
             <button
               type="button"
-              onClick={openActions}
-              aria-label={t('estimate.actions')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-xl leading-none text-primary"
+              onClick={openEdit}
+              aria-label={t('estimate.edit')}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-base leading-none text-primary"
             >
-              ⋮
+              ✏️
             </button>
           )}
         </div>
@@ -245,47 +294,46 @@ export function EstimateEditorPage() {
             ) : (
               <>
                 {groups.map(([category, items]) => (
-                  <section key={category} className="mb-4">
-                    <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                      {category}
-                    </div>
-                    <div className="space-y-1.5">
-                      {items.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => !signed && setEditing(item)}
-                          disabled={signed}
-                          title={signed ? t('estimate.signedNoEdit') : undefined}
-                          className="w-full rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-sm font-medium text-primary">{item.name}</span>
-                            <span className="whitespace-nowrap text-sm font-bold text-primary">
-                              {formatMoney(item.lineTotal)}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                            <span>
-                              {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
-                            </span>
-                            <span className="h-[3px] w-[3px] rounded-full bg-faint" />
-                            <span>
-                              {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
+                <section key={category} className="mb-4">
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                    {category}
+                  </div>
+                  <div className="space-y-1.5">
+                    {items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => !signed && setEditing(item)}
+                        disabled={signed}
+                        title={signed ? t('estimate.signedNoEdit') : undefined}
+                        className="w-full rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-medium text-primary">{item.name}</span>
+                          <span className="whitespace-nowrap text-sm font-bold text-primary">
+                            {formatMoney(item.lineTotal)}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                          <span>
+                            {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
+                          </span>
+                          <span className="h-[3px] w-[3px] rounded-full bg-faint" />
+                          <span>
+                            {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
                 ))}
-
                 {!signed && (
                   <button
                     type="button"
                     onClick={() => setAddOpen(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
+                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
                   >
                     {t('estimate.addItem')}
                   </button>
@@ -299,17 +347,15 @@ export function EstimateEditorPage() {
             <SummaryCard
               est={est}
               project={project.data}
-              onPdf={onPdf}
-              onShare={onShare}
-              pdfLoading={pdfLoading}
+              onEditDeposit={signed ? undefined : openDeposit}
             />
           </div>
         </div>
       </div>
 
-      {/* Mobile sticky total bar */}
+      {/* Mobile sticky total bar — totals only; actions live in the FAB */}
       <div className="fixed inset-x-0 bottom-0 z-40 bg-ink px-5 pb-7 pt-3.5 text-white lg:hidden">
-        <div className="mb-2.5 flex items-end justify-between">
+        <div className="flex items-end justify-between">
           <div>
             <div className="text-xs text-white/60">{t('estimate.toPay')}</div>
             <div data-testid="estimate-total" className="text-2xl font-extrabold tracking-tight">
@@ -322,23 +368,40 @@ export function EstimateEditorPage() {
             {t('estimate.materials')}: {formatMoney(est.materialsSubtotal)}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onPdf}
-            disabled={pdfLoading}
-            className="rounded-[10px] bg-white/[0.12] py-3 text-sm font-semibold disabled:opacity-60"
-          >
-            {t('estimate.pdf')}
-          </button>
-          <button
-            type="button"
-            onClick={onShare}
-            className="rounded-[10px] bg-brand py-3 text-sm font-semibold"
-          >
-            {t('estimate.share')}
-          </button>
-        </div>
+        <DepositRow est={est} onEdit={signed ? undefined : openDeposit} />
+      </div>
+
+      {/* Floating actions (speed-dial) — always in reach on every screen size */}
+      {fabOpen && (
+        <button
+          type="button"
+          aria-label={t('common.close')}
+          className="fixed inset-0 z-40 cursor-default"
+          onClick={() => setFabOpen(false)}
+        />
+      )}
+      <div className="fixed bottom-32 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
+        {fabOpen && (
+          <>
+            {!signed && (
+              <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => runFab(() => setAddOpen(true))} />
+            )}
+            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(onShare)} />
+            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(() => void onPdf())} />
+            {est.items.length > 0 && (
+              <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => runFab(openSaveTemplate)} />
+            )}
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setFabOpen((o) => !o)}
+          aria-label={t('estimate.actionsMenu')}
+          aria-expanded={fabOpen}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-card-lg transition-transform active:scale-95"
+        >
+          <span className={cn('text-3xl leading-none transition-transform', fabOpen && 'rotate-45')}>＋</span>
+        </button>
       </div>
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
@@ -376,21 +439,18 @@ export function EstimateEditorPage() {
                 toast.error(toAppError(err).message);
               }
             }}
-            onDelete={async () => {
-              try {
-                await removeItem.mutateAsync(editing.id);
-                toast.success(t('estimate.deleted'));
-                setEditing(null);
-              } catch (err) {
-                toast.error(toAppError(err).message);
-              }
+            onDelete={() => {
+              // Ask before deleting, but KEEP the edit form open (the confirm
+              // stacks on top): Cancel returns to it with the user's changes
+              // intact; only a confirmed delete closes it.
+              setDeletingItem(editing);
             }}
           />
         )}
       </Modal>
 
-      {/* Estimate actions — rename + delete. Hidden for SIGNED (⋮ not shown). */}
-      <Modal open={actionsOpen} onClose={() => setActionsOpen(false)} title={t('estimate.actionsTitle')}>
+      {/* Edit estimate (pencil) — rename + delete only. */}
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={t('estimate.editTitle')}>
         <label htmlFor="est-name" className="mb-1.5 block text-[13px] font-semibold text-muted">
           {t('estimate.nameLabel')}
         </label>
@@ -402,31 +462,47 @@ export function EstimateEditorPage() {
           onChange={(e) => setRenameValue(e.target.value)}
         />
         <Button fullWidth loading={updateEstimate.isPending} onClick={saveName} className="mt-3">
-          {t('estimate.saveName')}
+          {t('common.save')}
         </Button>
-        {est.items.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setTemplateName(est.name ?? '');
-              setActionsOpen(false);
-              setSaveTemplateOpen(true);
-            }}
-            className="mt-3 w-full rounded-lg border border-border py-2.5 text-sm font-semibold text-primary"
-          >
-            {t('templates.saveAsTemplate')}
-          </button>
-        )}
         <button
           type="button"
           onClick={() => {
-            setActionsOpen(false);
+            setEditOpen(false);
             setDeleteConfirmOpen(true);
           }}
           className="mt-4 w-full rounded-lg border border-danger/40 py-2.5 text-sm font-semibold text-danger"
         >
           {t('estimate.deleteEstimate')}
         </button>
+      </Modal>
+
+      {/* Deposit — edited here from the summary card / total bar. */}
+      <Modal open={depositOpen} onClose={() => setDepositOpen(false)} title={t('estimate.depositTitle')}>
+        <label htmlFor="est-deposit" className="mb-1.5 block text-[13px] font-semibold text-muted">
+          {t('estimate.depositLabel')}
+        </label>
+        <Input
+          id="est-deposit"
+          inputMode="decimal"
+          value={depositValue}
+          placeholder="0"
+          onChange={(e) => setDepositValue(e.target.value)}
+        />
+        <div className="mt-4 flex gap-2">
+          {est.depositAmount != null && (
+            <Button
+              variant="secondary"
+              fullWidth
+              loading={updateEstimate.isPending}
+              onClick={() => void saveDeposit(true)}
+            >
+              {t('estimate.depositRemove')}
+            </Button>
+          )}
+          <Button fullWidth loading={updateEstimate.isPending} onClick={() => void saveDeposit()}>
+            {t('common.save')}
+          </Button>
+        </div>
       </Modal>
 
       <Modal
@@ -471,7 +547,60 @@ export function EstimateEditorPage() {
         onConfirm={confirmReopen}
         onClose={() => setReopenConfirmOpen(false)}
       />
+
+      <ConfirmDialog
+        open={deletingItem !== null}
+        title={t('estimate.deleteItemTitle')}
+        message={t('estimate.deleteItemConfirm', { name: deletingItem?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        loading={removeItem.isPending}
+        onConfirm={confirmDeleteItem}
+        onClose={() => setDeletingItem(null)}
+      />
     </div>
+  );
+}
+
+function FabAction({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-full bg-surface py-2.5 pl-4 pr-5 text-sm font-semibold text-primary shadow-card-lg active:scale-95"
+    >
+      <span className="text-base leading-none">{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+/** Deposit line for the mobile total bar: shows завдаток/залишок or an "add
+ *  deposit" affordance; tapping opens the deposit editor. Read-only when signed. */
+function DepositRow({ est, onEdit }: { est: EstimateResponse; onEdit?: () => void }) {
+  const { t } = useTranslation();
+  if (est.depositAmount == null && !onEdit) return null;
+
+  const content =
+    est.depositAmount != null ? (
+      <>
+        <span className="text-white/70">
+          {t('estimate.deposit')}: {formatMoney(est.depositAmount)}
+        </span>
+        <span className="font-semibold text-white">
+          {t('estimate.balance')}: {formatMoney(est.balance)}
+        </span>
+      </>
+    ) : (
+      <span className="font-semibold text-brand">＋ {t('estimate.depositAdd')}</span>
+    );
+
+  const cls = 'mt-2 flex w-full items-center justify-between border-t border-white/10 pt-2 text-[12px]';
+  return onEdit ? (
+    <button type="button" onClick={onEdit} className={cls}>
+      {content}
+    </button>
+  ) : (
+    <div className={cls}>{content}</div>
   );
 }
 
@@ -495,15 +624,12 @@ function ClientBanner({ project }: { project: ProjectResponse }) {
 function SummaryCard({
   est,
   project,
-  onPdf,
-  onShare,
-  pdfLoading,
+  onEditDeposit,
 }: {
   est: EstimateResponse;
   project: ProjectResponse | undefined;
-  onPdf: () => void;
-  onShare: () => void;
-  pdfLoading: boolean;
+  /** Undefined when the estimate is signed (read-only) — hides deposit editing. */
+  onEditDeposit?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -530,25 +656,36 @@ function SummaryCard({
         <span>{formatMoney(est.materialsSubtotal)}</span>
       </div>
       <div className="mt-1 border-t border-white/10 pt-3 text-[13px] font-semibold">{t('estimate.toPay')}</div>
-      <div
-        data-testid="estimate-total"
-        className="my-1.5 text-2xl font-extrabold tracking-tight"
-      >
+      <div data-testid="estimate-total" className="my-1.5 text-2xl font-extrabold tracking-tight">
         {formatMoney(est.total)}
       </div>
-      <div className="mt-3 flex flex-col gap-2">
-        <Button onClick={onShare} fullWidth>
-          {t('estimate.shareWithClientBtn')}
-        </Button>
-        <button
-          type="button"
-          onClick={onPdf}
-          disabled={pdfLoading}
-          className="rounded-[10px] bg-white/[0.12] py-3 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {t('estimate.generatePdf')}
-        </button>
-      </div>
+      {est.depositAmount != null ? (
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <div className="flex justify-between text-[13px] text-white/75">
+            <span>{t('estimate.deposit')}</span>
+            <span>{formatMoney(est.depositAmount)}</span>
+          </div>
+          <div className="flex justify-between text-[13px] font-semibold text-white">
+            <span>{t('estimate.balance')}</span>
+            <span>{formatMoney(est.balance)}</span>
+          </div>
+          {onEditDeposit && (
+            <button type="button" onClick={onEditDeposit} className="mt-2 text-xs font-semibold text-brand">
+              {t('estimate.depositEdit')}
+            </button>
+          )}
+        </div>
+      ) : (
+        onEditDeposit && (
+          <button
+            type="button"
+            onClick={onEditDeposit}
+            className="mt-3 w-full rounded-[10px] border border-white/25 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+          >
+            ＋ {t('estimate.depositAdd')}
+          </button>
+        )
+      )}
     </div>
   );
 }
