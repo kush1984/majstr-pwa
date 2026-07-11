@@ -145,7 +145,8 @@ export type Unit =
   | 'M3'
   | 'T'
   | 'POINT'
-  | 'PERCENT';
+  | 'PERCENT'
+  | 'KM';
 
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)
@@ -430,6 +431,55 @@ export interface CatalogImportCommitResponse {
 
 export interface CatalogResetResponse {
   itemsAdded: number;
+}
+
+// ---- estimate import (LLM: Excel/CSV or photo → a ready estimate) ------------
+
+/** One extracted position from the LLM parse. `issues` (e.g. "unit", "quantity",
+ *  "price") flags a value that was unreadable/unrecognized — highlighted for review
+ *  (important for hand-written photos). `unit`/`quantity`/`unitPrice` may be null. */
+export interface EstimateImportParsedItem {
+  name: string;
+  unit: Unit | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  type: ItemType;
+  category: string | null;
+  issues: string[];
+}
+
+export interface EstimateImportParseResponse {
+  items: EstimateImportParsedItem[];
+  /** Deposit (завдаток) the model found on the sheet, or null. */
+  depositAmount: number | null;
+}
+
+/** A confirmed row for commit. `toCatalog` = also add/keep it in the catalog;
+ *  `catalogPolicy` (UPDATE_PRICE/SKIP, null → SKIP) resolves a name conflict there. */
+export interface EstimateImportCommitItem {
+  name: string;
+  unit: Unit;
+  quantity: number;
+  unitPrice: number;
+  type: ItemType;
+  category: string | null;
+  toCatalog: boolean;
+  catalogPolicy: DedupPolicy | null;
+}
+
+export interface EstimateImportCommitRequest {
+  projectId: string;
+  estimateName?: string;
+  depositAmount?: number | null;
+  items: EstimateImportCommitItem[];
+}
+
+export interface EstimateImportCommitResponse {
+  estimateId: string;
+  total: number;
+  catalogCreated: number;
+  catalogUpdated: number;
+  catalogSkipped: number;
 }
 
 /** GET /api/catalog/template-updates — how many NEW default-catalog items

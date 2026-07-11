@@ -12,6 +12,7 @@ import { CatalogImportPage } from '@/features/catalog/CatalogImportPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
+import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { PrivacyPage } from '@/features/legal/PrivacyPage.tsx';
@@ -100,6 +101,8 @@ export const router = createBrowserRouter([
       // Static '/catalog/import' ranks above nothing dynamic, but keep it here as a
       // full-screen wizard (its own back button), not inside the tab shell.
       { path: routes.catalogImport, element: <CatalogImportPage /> },
+      // Static '/estimates/import' ranks above the dynamic '/estimates/:id'.
+      { path: routes.estimateImport, element: <EstimateImportPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },

@@ -13,7 +13,7 @@ export const itemFormSchema = z.object({
     .min(1, i18n.t('validation.enterName'))
     .max(255, i18n.t('validation.nameTooLong')),
   category: z.string().max(100, i18n.t('validation.categoryTooLongShort')),
-  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT']),
+  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM']),
   quantity: decimalString(i18n.t('validation.enterQuantity')),
   unitPrice: decimalString(i18n.t('validation.enterPrice')),
   saveToCatalog: z.boolean(),

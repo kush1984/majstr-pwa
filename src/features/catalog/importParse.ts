@@ -8,11 +8,13 @@ import type { ItemType, Unit } from '@/api/types.ts';
  */
 
 const UNIT_SYNONYMS: Record<string, Unit> = {
-  м2: 'M2', квм: 'M2', 'm2': 'M2', кв: 'M2',
+  м2: 'M2', квм: 'M2', мкв: 'M2', 'm2': 'M2', кв: 'M2',
   м3: 'M3', кубм: 'M3', 'm3': 'M3', куб: 'M3',
   мп: 'LINEAR_METER', погм: 'LINEAR_METER', пм: 'LINEAR_METER', рм: 'LINEAR_METER',
   м: 'M', метр: 'M', 'm': 'M',
+  км: 'KM', 'km': 'KM',
   шт: 'PIECE', штук: 'PIECE', штука: 'PIECE',
+  кількість: 'PIECE', кількості: 'PIECE', ксть: 'PIECE', кть: 'PIECE',
   кг: 'KG', 'kg': 'KG',
   т: 'T', тонн: 'T', тон: 'T',
   год: 'HOUR', ч: 'HOUR', час: 'HOUR',
@@ -32,7 +34,7 @@ export function guessUnit(raw: string | null | undefined): Unit | null {
     .toLowerCase()
     .replace(/²/g, '2')
     .replace(/³/g, '3')
-    .replace(/[.\s'"]/g, '');
+    .replace(/[.\s'"-]/g, '');
   return UNIT_SYNONYMS[token] ?? null;
 }
 

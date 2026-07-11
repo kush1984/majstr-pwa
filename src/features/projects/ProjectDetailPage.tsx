@@ -235,17 +235,30 @@ export function ProjectDetailPage() {
         onClose={() => setEstimateChoiceOpen(false)}
         title={t('templates.chooseType')}
       >
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
-            {t('templates.emptyEstimate')}
-          </Button>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
+              {t('templates.emptyEstimate')}
+            </Button>
+            <Button
+              onClick={() => {
+                setEstimateChoiceOpen(false);
+                setTemplatePickerOpen(true);
+              }}
+            >
+              {t('templates.fromTemplate')}
+            </Button>
+          </div>
+          {/* Import a ready estimate onto this object (Excel/photo → LLM, PRO). */}
           <Button
+            fullWidth
+            variant="secondary"
             onClick={() => {
               setEstimateChoiceOpen(false);
-              setTemplatePickerOpen(true);
+              navigate(routes.importEstimate(id));
             }}
           >
-            {t('templates.fromTemplate')}
+            {t('templates.fromFile')}
           </Button>
         </div>
       </Modal>

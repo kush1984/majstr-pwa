@@ -114,7 +114,8 @@
     "M3": "m³",
     "T": "t",
     "POINT": "point",
-    "PERCENT": "%"
+    "PERCENT": "%",
+    "KM": "km"
   },
   "unitOptions": {
     "M2": "m² (square metre)",
@@ -127,7 +128,8 @@
     "M3": "m³ (cubic metre)",
     "T": "t (tonne)",
     "POINT": "point",
-    "PERCENT": "% (percent)"
+    "PERCENT": "% (percent)",
+    "KM": "km (kilometre)"
   },
   "unitPer": "per {{unit}}",
   "trades": {
@@ -432,6 +434,31 @@
     "importN": "Import {{count}} positions",
     "done": "Created {{created}}, updated {{updated}}, skipped {{skipped}}"
   },
+  "estimateImport": {
+    "title": "Import estimate",
+    "intro": "Upload an Excel/CSV file or a photo of an estimate (even hand-written) — Majstr extracts the positions and you review and confirm.",
+    "uploadTitle": "File or photo",
+    "uploadHint": "Excel (.xlsx, .xls), .csv, or a photo (JPEG/PNG), up to 10 MB",
+    "chooseFile": "Choose file",
+    "takePhoto": "Take a photo",
+    "privacyNote": "The file is used only for extraction and is not stored.",
+    "parsing": "Reading the estimate…",
+    "emptyResult": "Couldn't recognize any positions. Try a clearer photo or enter them manually.",
+    "namePlaceholder": "Position name",
+    "qtyPlaceholder": "Qty",
+    "depositLabel": "Deposit (optional)",
+    "dedupLabel": "If the position already exists in the catalog",
+    "reviewHint": "Review the positions. Quantity and price can stay 0 — fill them in later. For highlighted rows, pick a unit.",
+    "toCatalog": "Add to my catalog",
+    "removeRow": "Remove row",
+    "fixHighlighted": "Pick a unit for the highlighted rows",
+    "createN": "Create estimate ({{count}})",
+    "done": "Estimate created",
+    "noObject": "No object to import into. Open an object and choose \"New → From file/photo\".",
+    "proTitle": "Estimate import — in PRO",
+    "proPitch": "Upload an Excel file or a photo of an estimate — Majstr turns it into a ready estimate on the object and adds the positions to your catalog.",
+    "proHint": "Available on the PRO plan"
+  },
   "catalog": {
     "title": "Catalog",
     "addItem": "+ Add item",
@@ -468,6 +495,7 @@
   },
   "templates": {
     "fromTemplate": "From template",
+    "fromFile": "From file / photo",
     "emptyEstimate": "Empty",
     "chooseType": "Estimate type",
     "pickTitle": "Choose a template",
