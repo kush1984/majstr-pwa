@@ -232,11 +232,12 @@ export function EstimateImportPage() {
             <div className="rounded-card border border-border bg-surface p-4">
               <h2 className="mb-1 text-sm font-bold text-primary">{t('estimateImport.uploadTitle')}</h2>
               <p className="mb-3 text-xs text-muted">{t('estimateImport.uploadHint')}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" onClick={() => fileRef.current?.click()}>
+              {/* Stack on a phone (full-width taps, no label wrap), side-by-side on ≥sm. */}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button fullWidth variant="secondary" onClick={() => fileRef.current?.click()}>
                   {t('estimateImport.chooseFile')}
                 </Button>
-                <Button variant="secondary" onClick={() => cameraRef.current?.click()}>
+                <Button fullWidth variant="secondary" onClick={() => cameraRef.current?.click()}>
                   {t('estimateImport.takePhoto')}
                 </Button>
               </div>
@@ -322,7 +323,9 @@ export function EstimateImportPage() {
                       </button>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+                    {/* 2×2 on phones (comfortable tap targets), not four cramped columns:
+                        row 1 = quantity + unit, row 2 = price + type toggle. */}
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       <Input
                         value={d.quantity}
                         inputMode="decimal"
@@ -346,7 +349,7 @@ export function EstimateImportPage() {
                       <button
                         type="button"
                         onClick={() => patch(d.key, { type: d.type === 'WORK' ? 'MATERIAL' : 'WORK' })}
-                        className="rounded-lg border border-border px-2 text-xs font-semibold text-primary"
+                        className="w-full rounded-lg border border-border px-3 py-2.5 text-sm font-semibold text-primary"
                       >
                         {t('itemType.' + d.type)}
                       </button>
