@@ -13,9 +13,11 @@ import {
   UNIT_OPTIONS,
 } from '@/features/catalog/catalogItemSchema.ts';
 import { useCatalogCategories } from '@/features/catalog/useCatalog.ts';
+import { useMe } from '@/features/auth/useMe.ts';
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
 import { MeasureCalculator } from './MeasureCalculator.tsx';
+import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx';
 
 /**
  * Manual line-item form. Used both for adding a new item and editing one.
@@ -23,6 +25,7 @@ import { MeasureCalculator } from './MeasureCalculator.tsx';
  */
 export function ItemForm({
   initial,
+  objectId,
   showSaveToCatalog = false,
   enableAutocomplete = false,
   submitLabel,
@@ -32,6 +35,9 @@ export function ItemForm({
   deleting = false,
 }: {
   initial?: EstimateItemResponse | null;
+  /** The object (project) id — enables "Вибрати з замірів" when it has measurements.
+   *  Pass undefined for a SIGNED estimate (measurements can't change a signed line). */
+  objectId?: string;
   showSaveToCatalog?: boolean;
   /** Turn the name field into a catalog type-ahead (add-new flow only). */
   enableAutocomplete?: boolean;
@@ -43,7 +49,13 @@ export function ItemForm({
 }) {
   const { t } = useTranslation();
   const categories = useCatalogCategories();
+  const { data: me } = useMe();
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE'; // measurements are PRO — only then offer the picker
   const [calcOpen, setCalcOpen] = useState(false);
+  // Measurement substitution (Stage 2): selection memory + manual-edit priority.
+  const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
+  const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const {
     register,
     control,
@@ -76,6 +88,8 @@ export function ItemForm({
         },
   });
 
+  const qtyReg = register('quantity');
+
   const submit = handleSubmit((v) => {
     const req: EstimateItemRequest = {
       type: v.type,
@@ -84,6 +98,8 @@ export function ItemForm({
       unit: v.unit,
       quantity: parseDecimal(v.quantity),
       unitPrice: parseDecimal(v.unitPrice),
+      measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
+      quantityManual,
     };
     onSubmit(req, v.saveToCatalog);
   });
@@ -163,7 +179,11 @@ export function ItemForm({
             inputMode="decimal"
             placeholder="0"
             invalid={Boolean(errors.quantity)}
-            {...register('quantity')}
+            {...qtyReg}
+            onChange={(e) => {
+              qtyReg.onChange(e); // keep react-hook-form in sync
+              setQuantityManual(true); // a hand-typed quantity is no longer a live measurement sum
+            }}
           />
         </FormField>
         <FormField label={t('estimate.unitPrice')} htmlFor="it-price" required error={errors.unitPrice?.message}>
@@ -177,19 +197,53 @@ export function ItemForm({
         </FormField>
       </div>
 
-      <div>
-        <button
-          type="button"
-          onClick={() => setCalcOpen((o) => !o)}
-          className="text-xs font-semibold text-brand"
-        >
-          📐 {t('estimate.measureCalc')}
-        </button>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <button
+            type="button"
+            onClick={() => { setCalcOpen((o) => !o); setPickerOpen(false); }}
+            className="text-xs font-semibold text-brand"
+          >
+            📐 {t('estimate.measureCalc')}
+          </button>
+          {/* "Вибрати з замірів" — only when the object has measurements and the line is
+              in a measurable unit (m² / м.пог). Hidden on a SIGNED estimate (objectId undefined). */}
+          {objectId && isPro && (watch('unit') === 'M2' || watch('unit') === 'LINEAR_METER') && (
+            <button
+              type="button"
+              onClick={() => { setPickerOpen((o) => !o); setCalcOpen(false); }}
+              className="text-xs font-semibold text-brand"
+            >
+              📋 {t('measurePick.button')}
+              {measurementRefs.length > 0 && (
+                <span className="ml-1 text-muted">({measurementRefs.length})</span>
+              )}
+            </button>
+          )}
+        </div>
         {calcOpen && (
           <MeasureCalculator
             unit={watch('unit')}
-            onApply={(q) => setValue('quantity', String(q), { shouldValidate: true })}
+            onApply={(q) => {
+              setValue('quantity', String(q), { shouldValidate: true });
+              setQuantityManual(true); // the single-line calc is a manual number, not object measurements
+            }}
             onClose={() => setCalcOpen(false)}
+          />
+        )}
+        {pickerOpen && objectId && (
+          <MeasurementPicker
+            objectId={objectId}
+            unit={watch('unit')}
+            selectedIds={measurementRefs}
+            quantityManual={quantityManual}
+            onApply={(ids, s) => {
+              setMeasurementRefs(ids);
+              setQuantityManual(false);
+              setValue('quantity', String(s), { shouldValidate: true });
+              setPickerOpen(false);
+            }}
+            onClose={() => setPickerOpen(false)}
           />
         )}
       </div>

@@ -252,6 +252,10 @@ export interface EstimateItemResponse {
   unitPrice: number;
   lineTotal: number;
   sortOrder: number;
+  /** Measurement elements this line's quantity was summed from (empty = none). */
+  measurementRefs: string[];
+  /** True when the master edited the quantity by hand (drives the overwrite warning). */
+  quantityManual: boolean;
 }
 
 export interface EstimateResponse {
@@ -296,6 +300,10 @@ export interface EstimateItemRequest {
   quantity: number;
   unitPrice: number;
   sortOrder?: number;
+  /** Selected measurement elements. When present and `quantityManual` is false, the
+   *  server recomputes `quantity` from these (authoritative, unit-checked). */
+  measurementRefs?: string[];
+  quantityManual?: boolean;
 }
 
 export interface EstimateItemFromCatalogRequest {
@@ -431,6 +439,64 @@ export interface CatalogImportCommitResponse {
 
 export interface CatalogResetResponse {
   itemsAdded: number;
+}
+
+// ---- object measurements (Заміри) -------------------------------------------
+
+export type MeasurementType = 'SURFACE' | 'PARTITION' | 'LINEAR';
+
+/** Payload shapes (must mirror the backend calculator). */
+export interface SurfacePayload {
+  segments: { l: number; w: number }[];
+  openings: { w: number; h: number; n: number }[];
+}
+export interface PartitionPayload {
+  height: number;
+  width: number;
+  depth: number;
+  faces: { left: boolean; right: boolean; end: boolean; top: boolean };
+}
+export interface LinearPayload {
+  height: number;
+  width: number;
+  sides: { left: boolean; right: boolean; top: boolean; bottom: boolean };
+  qty: number;
+}
+export type MeasurementPayload = SurfacePayload | PartitionPayload | LinearPayload;
+
+export interface MeasurementItem {
+  id: string;
+  name: string;
+  type: MeasurementType;
+  unit: Unit;
+  /** Computed server-side (m² or м.пог) — the source of truth. */
+  result: number;
+  /** Raw entered data for re-editing (shape depends on `type`). */
+  payload: MeasurementPayload;
+  sortOrder: number;
+}
+export interface MeasurementRoom {
+  id: string;
+  name: string;
+  sortOrder: number;
+  items: MeasurementItem[];
+  areaTotal: number;
+  linearTotal: number;
+}
+export interface MeasurementsResponse {
+  rooms: MeasurementRoom[];
+  areaTotal: number;
+  linearTotal: number;
+}
+export interface MeasurementRoomRequest {
+  name: string;
+  sortOrder?: number;
+}
+export interface MeasurementItemRequest {
+  name: string;
+  type: MeasurementType;
+  payload: MeasurementPayload;
+  sortOrder?: number;
 }
 
 // ---- estimate import (LLM: Excel/CSV or photo → a ready estimate) ------------

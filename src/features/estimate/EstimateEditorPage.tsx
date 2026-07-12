@@ -417,6 +417,7 @@ export function EstimateEditorPage() {
 
       <AddItemSheet
         estimateId={id}
+        objectId={signed ? undefined : projectId}
         nextSortOrder={nextSortOrder}
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -427,6 +428,7 @@ export function EstimateEditorPage() {
           <ItemForm
             key={editing.id}
             initial={editing}
+            objectId={signed ? undefined : projectId}
             submitLabel={t('common.save')}
             submitting={updateItem.isPending}
             deleting={removeItem.isPending}

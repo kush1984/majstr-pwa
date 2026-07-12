@@ -29,10 +29,12 @@ import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
+import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 
-type Tab = 'estimate' | 'photos' | 'changes' | 'act';
+type Tab = 'estimate' | 'measurements' | 'photos' | 'changes' | 'act';
 const TABS: { key: Tab; labelKey: string }[] = [
   { key: 'estimate', labelKey: 'projects.tabEstimate' },
+  { key: 'measurements', labelKey: 'projects.tabMeasurements' },
   { key: 'photos', labelKey: 'projects.tabPhotos' },
   { key: 'changes', labelKey: 'projects.tabChanges' },
   { key: 'act', labelKey: 'projects.tabAct' },
@@ -332,7 +334,9 @@ export function ProjectDetailPage() {
         ))}
       </div>
 
-      {tab !== 'estimate' ? (
+      {tab === 'measurements' ? (
+        <MeasurementsSection objectId={id} />
+      ) : tab !== 'estimate' ? (
         <EmptyState icon="🚧" title={t('common.soon')} text={t('projects.sectionSoonText')} />
       ) : (
         <>

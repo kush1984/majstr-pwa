@@ -34,11 +34,14 @@ const TYPE_FILTERS: { value: TypeFilter; labelKey: string }[] = [
 
 export function AddItemSheet({
   estimateId,
+  objectId,
   nextSortOrder,
   open,
   onClose,
 }: {
   estimateId: string;
+  /** The object (project) id — enables "Вибрати з замірів" in the manual tab. */
+  objectId?: string;
   nextSortOrder: number;
   open: boolean;
   onClose: () => void;
@@ -85,6 +88,7 @@ export function AddItemSheet({
             <CatalogPicker estimateId={estimateId} nextSortOrder={nextSortOrder} onDone={close} />
           ) : (
             <ItemForm
+              objectId={objectId}
               showSaveToCatalog
               enableAutocomplete
               submitLabel={t('common.add')}
