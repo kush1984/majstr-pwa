@@ -22,6 +22,22 @@ This PWA is one half of a two-repo project; the shared docs drift fast, so **upd
 
 The backend lives in `C:\Work\majstr-backend\`; mirror any backend DTO change into `src/api/types.ts` in lockstep.
 
+## Mobile-first — priority #1 (verify on every change)
+
+**~95% of masters use this PWA on a phone.** Mobile is the primary target, not an
+afterthought — this holds for **every** change, from a headline feature down to a
+one-line fix.
+
+- Design and build every UI/UX change for a **narrow phone viewport first**
+  (≈375px), then let it scale up — never desktop-first.
+- **Verify the mobile layout before finishing UI work**: open the Browser pane and
+  `resize_window` to preset `mobile` (375×812). Check: no horizontal overflow,
+  tap targets big enough, text readable, primary actions in the thumb zone, and
+  modals rendered as fitting sheets (prefer bottom sheets / full-width controls
+  over desktop dialogs).
+- If a change touches the UI but can't be mobile-verified in the moment, say so
+  explicitly instead of assuming desktop is enough.
+
 ## Architecture
 
 ### What this repo is

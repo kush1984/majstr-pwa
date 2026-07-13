@@ -7,6 +7,9 @@ import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
+import { Modal } from '@/components/Modal.tsx';
+import { Button } from '@/components/Button.tsx';
 import { ProfileEditModal } from './ProfileEditModal.tsx';
 import { useDeleteLogo, useUploadLogo } from './useProfile.ts';
 import { usePush } from '@/hooks/usePush.ts';
@@ -41,6 +44,8 @@ export function ProfilePage() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const [proVerifyOpen, setProVerifyOpen] = useState(false);
 
   // Used object count for the limit bar — the real list, not a guess.
   const projects = useQuery({
@@ -53,7 +58,41 @@ export function ProfilePage() {
   const used = projects.data?.length ?? 0;
   const isPro = plan !== 'FREE';
 
+  // Trial offer is visible to any FREE master who hasn't used it. Activation still
+  // requires a verified email (anti-abuse) — but the button stays visible and an
+  // unverified click explains the verify step (with a "pay now instead" option).
+  const canStartTrial = plan === 'FREE' && !me?.trialStartedAt;
+
+  // Any PRO path (trial OR paid) requires a verified email. Unverified → the
+  // verify reminder; verified → the real action.
+  const onTrialClick = () => {
+    if (me?.emailVerified) void startTrial();
+    else setProVerifyOpen(true);
+  };
+
+  const onUpgradeClick = () => {
+    void upgradeApi.click('PROFILE');
+    if (me?.emailVerified) setUpgradeOpen(true);
+    else setProVerifyOpen(true);
+  };
+
   const qc = useQueryClient();
+  const startTrial = async () => {
+    try {
+      const updated = await billingApi.startTrial();
+      qc.setQueryData(ME_QUERY_KEY, updated);
+      toast.success(
+        t('billing.trialStarted', {
+          date: updated.planExpiresAt
+            ? new Date(updated.planExpiresAt).toLocaleDateString('uk-UA')
+            : '',
+        }),
+      );
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
   const toggleAutoRenew = async (enabled: boolean) => {
     try {
       const updated = await profileApi.setAutoRenew(enabled);
@@ -174,13 +213,20 @@ export function ProfilePage() {
         {!isPro && (
           <button
             type="button"
-            onClick={() => {
-              void upgradeApi.click('PROFILE');
-              setUpgradeOpen(true);
-            }}
+            onClick={onUpgradeClick}
             className="w-full rounded-xl bg-brand py-3 text-sm font-bold text-white"
           >
             {t('profile.upgradeToPro')}
+          </button>
+        )}
+
+        {canStartTrial && (
+          <button
+            type="button"
+            onClick={onTrialClick}
+            className="mt-2 w-full rounded-xl border border-brand py-2.5 text-sm font-bold text-brand"
+          >
+            {t('billing.tryTrial')}
           </button>
         )}
       </div>
@@ -188,7 +234,27 @@ export function ProfilePage() {
       {me && <ReferralCard code={me.referralCode} />}
 
       <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
+
+      {/* Unverified master tapped a PRO CTA (trial or upgrade): no PRO without a
+          verified email, so route them to verification — no pay-now bypass. */}
+      <Modal
+        open={proVerifyOpen}
+        onClose={() => setProVerifyOpen(false)}
+        title={t('billing.proVerifyTitle')}
+      >
+        <p className="mb-5 text-sm text-muted">{t('billing.proVerifyMessage')}</p>
+        <Button
+          fullWidth
+          onClick={() => {
+            setProVerifyOpen(false);
+            setEmailGateOpen(true);
+          }}
+        >
+          {t('billing.verifyEmailCta')}
+        </Button>
+      </Modal>
 
       {/* Menu */}
       <div className="overflow-hidden rounded-card border border-border bg-surface">

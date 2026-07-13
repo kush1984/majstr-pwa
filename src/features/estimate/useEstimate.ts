@@ -24,6 +24,9 @@ function useInvalidateEstimate(estimateId: string) {
     // project cards + dashboard show estimate-derived sums/status.
     qc.invalidateQueries({ queryKey: ['projects'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
+    // object economy is derived from estimate totals + deposits — refresh it too
+    // (deposit or item edits must recompute contracted / received / cash live).
+    qc.invalidateQueries({ queryKey: ['object-economy'] });
   };
 }
 

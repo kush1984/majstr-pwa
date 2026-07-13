@@ -12,6 +12,7 @@ export type Trade =
   | 'DRYWALL'
   | 'FLOORING'
   | 'DEMOLITION'
+  | 'METAL'
   | 'GENERAL'
   | 'OTHER';
 export type Plan = 'FREE' | 'PRO' | 'TEAM';
@@ -40,6 +41,9 @@ export interface UserResponse {
    *  profile "Підписка" section. */
   autoRenew: boolean;
   cardMask: string | null;
+  /** When the one-time self-serve PRO trial was activated (null = never used).
+   *  The "try PRO free" button shows only when this is null and plan is FREE. */
+  trialStartedAt: string | null;
   /** This master's personal referral code — the invite link is
    *  majstr.pro/?ref=m-<referralCode>. */
   referralCode: string;
@@ -244,6 +248,8 @@ export interface EstimateSummary {
   validUntil: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Whether this estimate counts toward the object's economy (income). */
+  countInEconomy: boolean;
 }
 
 export interface EstimateItemResponse {
@@ -362,11 +368,14 @@ export interface BatchCatalogItemEntry {
 // ---------------------------------------------------------------------------
 
 export type ExpenseCategory = 'MATERIALS' | 'LABOR' | 'OTHER';
+/** RECEIPT = logged from a receipt import (material cost); MANUAL = hand-entered (unforeseen). */
+export type ExpenseSource = 'RECEIPT' | 'MANUAL';
 
 export interface ExpenseResponse {
   id: string;
   amount: number;
   category: ExpenseCategory;
+  source: ExpenseSource;
   note: string | null;
   spentAt: string; // ISO date (YYYY-MM-DD)
   createdAt: string;
@@ -377,15 +386,25 @@ export interface ExpenseRequest {
   category: ExpenseCategory;
   note?: string | null;
   spentAt?: string | null;
+  /** Only the receipt flow sends RECEIPT; a hand-entered expense omits it → MANUAL. */
+  source?: ExpenseSource;
 }
 
 export interface ObjectEconomyResponse {
-  incomeTotal: number;
-  incomeSigned: number;
-  expensesTotal: number;
-  expensesByCategory: Partial<Record<ExpenseCategory, number>>;
+  /** Works (labour) subtotal of counted estimates — the master's earnings base. */
+  works: number;
+  /** Materials subtotal of counted estimates — passthrough, reference only. */
+  materials: number;
+  /** Deposits received from the client. */
+  received: number;
+  /** Real material cost (receipt-logged expenses). */
+  spentReceipts: number;
+  /** Unforeseen (hand-entered) expenses. */
+  spentManual: number;
+  /** works − spentManual (+ leftover materials cash once the object is COMPLETED). */
   profit: number;
-  profitSigned: number;
+  /** received − spentReceipts (materials pot); NOT clamped — negative = out of pocket. */
+  cashBalance: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -9,9 +9,11 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
+import { economyApi } from '@/api/economy.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
+import { formatMoney } from '@/lib/format.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_KEY } from './useEstimate.ts';
@@ -62,6 +64,8 @@ export function ReceiptImportSheet({
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
   const heldFile = useRef<File | null>(null);
+  const receiptTotal = useRef(0);
+  const [expenseOpen, setExpenseOpen] = useState(false);
   const [savePhotoOpen, setSavePhotoOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -70,7 +74,9 @@ export function ReceiptImportSheet({
     setStep('source');
     setDrafts([]);
     heldFile.current = null;
+    receiptTotal.current = 0;
     setCommitting(false);
+    setExpenseOpen(false);
     setSavePhotoOpen(false);
   };
 
@@ -137,12 +143,35 @@ export function ReceiptImportSheet({
       );
       qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
       toast.success(t('receipt.added', { count: included.length }));
-      // Offer to keep the receipt photo (private, on the object).
-      setSavePhotoOpen(true);
+      // The receipt is also the master's real cost — offer to log it as an object expense
+      // (closes the cash-flow loop). Then offer to keep the receipt photo.
+      receiptTotal.current = included.reduce((s, d) => s + num(d.quantity) * num(d.price), 0);
+      if (receiptTotal.current > 0) setExpenseOpen(true);
+      else setSavePhotoOpen(true);
     } catch (err) {
       toast.error(toAppError(err).message);
       setCommitting(false);
     }
+  };
+
+  const saveExpense = async (save: boolean) => {
+    setExpenseOpen(false);
+    if (save && receiptTotal.current > 0) {
+      try {
+        await economyApi.addExpense(projectId, {
+          amount: receiptTotal.current,
+          category: 'MATERIALS',
+          note: t('receipt.expenseNote'),
+          spentAt: null,
+          source: 'RECEIPT',
+        });
+        qc.invalidateQueries({ queryKey: ['object-economy', projectId] });
+        toast.success(t('receipt.expenseSaved'));
+      } catch (err) {
+        toast.error(toAppError(err).message); // fail-soft — the estimate lines already committed
+      }
+    }
+    setSavePhotoOpen(true);
   };
 
   const saveReceiptPhoto = async (save: boolean) => {
@@ -292,6 +321,15 @@ export function ReceiptImportSheet({
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={expenseOpen}
+        title={t('receipt.expenseTitle')}
+        message={t('receipt.expenseMessage', { amount: formatMoney(receiptTotal.current) })}
+        confirmLabel={t('receipt.expenseYes')}
+        onConfirm={() => void saveExpense(true)}
+        onClose={() => void saveExpense(false)}
+      />
 
       <ConfirmDialog
         open={savePhotoOpen}

@@ -17,6 +17,7 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
+import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
@@ -84,6 +85,14 @@ export function ProjectDetailPage() {
     onSuccess: () => {
       invalidateAfterRowAction();
       toast.success(t('estimate.reopened'));
+    },
+    onError: (err) => toast.error(toAppError(err).message),
+  });
+  const rowEconomyToggle = useMutation({
+    mutationFn: (v: { estId: string; value: boolean }) => estimatesApi.setCountInEconomy(v.estId, v.value),
+    onSuccess: () => {
+      invalidateAfterRowAction();
+      qc.invalidateQueries({ queryKey: ['object-economy', id] });
     },
     onError: (err) => toast.error(toAppError(err).message),
   });
@@ -432,6 +441,7 @@ export function ProjectDetailPage() {
                   summary={s}
                   onClick={() => navigate(routes.estimate(s.id))}
                   onMenu={() => setMenuFor(s)}
+                  onToggleEconomy={(value) => rowEconomyToggle.mutate({ estId: s.id, value })}
                 />
               ))}
             </div>
@@ -453,44 +463,66 @@ function EstimateRow({
   summary,
   onClick,
   onMenu,
+  onToggleEconomy,
 }: {
   summary: EstimateSummary;
   onClick: () => void;
   onMenu: () => void;
+  onToggleEconomy: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const full = useEstimate(summary.id);
   return (
-    <div className="flex items-stretch rounded-card border border-border bg-surface">
+    <div className="rounded-card border border-border bg-surface">
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          onClick={onClick}
+          className="min-w-0 flex-1 px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-sm font-medium text-primary">
+              {estimateName(summary.name, summary.createdAt)}
+            </span>
+            <span className="whitespace-nowrap text-sm font-bold text-primary">
+              {full.data ? formatMoney(full.data.total) : '—'}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <Badge variant={ESTIMATE_STATUS_VARIANT[summary.status]}>
+              {t('status.estimate.' + summary.status)}
+            </Badge>
+            <span className="ml-auto text-xs text-muted">
+              {full.data ? t('projects.itemsCount', { count: full.data.items.length }) : '…'}
+            </span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={onMenu}
+          aria-label={t('estimate.actions')}
+          className="flex w-11 flex-shrink-0 items-center justify-center text-xl leading-none text-muted"
+        >
+          ⋮
+        </button>
+      </div>
+      {/* Visible economy checkbox — much clearer than hiding it in the ⋮ menu. */}
       <button
         type="button"
-        onClick={onClick}
-        className="min-w-0 flex-1 px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
+        onClick={() => onToggleEconomy(!summary.countInEconomy)}
+        className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2 text-left"
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-sm font-medium text-primary">
-            {estimateName(summary.name, summary.createdAt)}
-          </span>
-          <span className="whitespace-nowrap text-sm font-bold text-primary">
-            {full.data ? formatMoney(full.data.total) : '—'}
-          </span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-2">
-          <Badge variant={ESTIMATE_STATUS_VARIANT[summary.status]}>
-            {t('status.estimate.' + summary.status)}
-          </Badge>
-          <span className="ml-auto text-xs text-muted">
-            {full.data ? t('projects.itemsCount', { count: full.data.items.length }) : '…'}
-          </span>
-        </div>
-      </button>
-      <button
-        type="button"
-        onClick={onMenu}
-        aria-label={t('estimate.actions')}
-        className="flex w-11 flex-shrink-0 items-center justify-center text-xl leading-none text-muted"
-      >
-        ⋮
+        <span
+          className={cn(
+            'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border text-[10px]',
+            summary.countInEconomy ? 'border-brand bg-brand text-white' : 'border-border text-transparent',
+          )}
+        >
+          ✓
+        </span>
+        <span className={cn('text-xs', summary.countInEconomy ? 'font-semibold text-primary' : 'text-muted')}>
+          {t('estimate.countInEconomy')}
+        </span>
       </button>
     </div>
   );

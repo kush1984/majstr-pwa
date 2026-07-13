@@ -14,7 +14,16 @@ import { ExpenseSheet } from './ExpenseSheet.tsx';
 import type { ExpenseCategory, ExpenseResponse } from '@/api/types.ts';
 
 const CAT_ICON: Record<ExpenseCategory, string> = { MATERIALS: '🧱', LABOR: '🔨', OTHER: '•' };
-const CAT_ORDER: ExpenseCategory[] = ['MATERIALS', 'LABOR', 'OTHER'];
+
+/** A small reference figure (label + amount) in the economy breakdown. */
+function EcoRef({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-sm font-bold text-primary">{formatMoney(value)}</div>
+      <div className="mt-0.5 text-[11px] text-muted">{label}</div>
+    </div>
+  );
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
@@ -80,12 +89,8 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
   // ---- PRO panel -----------------------------------------------------------
   const eco = economy.data;
   const list = expenses.data ?? [];
-  const profitNegative = (eco?.profit ?? 0) < 0;
-
-  const breakdown = CAT_ORDER
-    .filter((c) => (eco?.expensesByCategory?.[c] ?? 0) > 0)
-    .map((c) => `${t('economy.cat.' + c)} ${formatMoney(eco!.expensesByCategory[c]!)}`)
-    .join(' · ');
+  const profit = eco?.profit ?? 0;
+  const cash = eco?.cashBalance ?? 0;
 
   return (
     <section className="mt-6">
@@ -109,27 +114,34 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-2 rounded-card border border-border bg-surface p-3 text-center">
-            <div>
-              <div className="text-sm font-bold text-primary">{formatMoney(eco?.incomeTotal ?? 0)}</div>
-              <div className="mt-0.5 text-[11px] text-muted">{t('economy.income')}</div>
-              <div className="mt-0.5 text-[10px] text-muted">
-                {t('economy.ofWhichSigned', { amount: formatMoney(eco?.incomeSigned ?? 0) })}
+          <div className="rounded-card border border-border bg-surface p-3">
+            {/* The two figures that matter: earnings (labour − unforeseen) and the
+                materials cash pot (deposit − receipts, red when out of pocket). */}
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl bg-surface-sunken p-2">
+                <div className={cn('text-base font-extrabold', profit < 0 ? 'text-danger' : 'text-brand')}>
+                  {formatMoney(profit)}
+                </div>
+                <div className="mt-0.5 text-[11px] font-semibold text-primary">{t('economy.profit')}</div>
+              </div>
+              <div className="rounded-xl bg-surface-sunken p-2">
+                <div className={cn('text-base font-extrabold', cash < 0 ? 'text-danger' : 'text-primary')}>
+                  {formatMoney(cash)}
+                </div>
+                <div className="mt-0.5 text-[11px] font-semibold text-primary">{t('economy.cash')}</div>
               </div>
             </div>
-            <div>
-              <div className="text-sm font-bold text-primary">{formatMoney(eco?.expensesTotal ?? 0)}</div>
-              <div className="mt-0.5 text-[11px] text-muted">{t('economy.expenses')}</div>
-            </div>
-            <div>
-              <div className={cn('text-base font-extrabold', profitNegative ? 'text-danger' : 'text-brand')}>
-                {formatMoney(eco?.profit ?? 0)}
-              </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-primary">{t('economy.profit')}</div>
+
+            {/* Reference breakdown. */}
+            <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-2 text-center">
+              <EcoRef label={t('economy.contracted')} value={(eco?.works ?? 0) + (eco?.materials ?? 0)} />
+              <EcoRef label={t('economy.works')} value={eco?.works ?? 0} />
+              <EcoRef label={t('economy.materials')} value={eco?.materials ?? 0} />
+              <EcoRef label={t('economy.received')} value={eco?.received ?? 0} />
+              <EcoRef label={t('economy.spentReceipts')} value={eco?.spentReceipts ?? 0} />
+              <EcoRef label={t('economy.spentManual')} value={eco?.spentManual ?? 0} />
             </div>
           </div>
-
-          {breakdown && <p className="mt-2 text-center text-[11px] text-muted">{breakdown}</p>}
 
           <div className="mt-3 space-y-1.5">
             {list.map((e) => (

@@ -68,6 +68,9 @@ export function RegisterPage() {
         // Dup email — show a clear field error + a "log in" shortcut (email prefilled).
         setError('email', { message: t('auth.emailAlreadyRegistered') });
         setEmailTaken(true);
+      } else if (e.code === 'EMAIL_DOMAIN_BLOCKED') {
+        // Disposable / non-mail domain — inline under the email field (server message is localized).
+        setError('email', { message: e.message });
       } else if (e.status === 400) {
         toast.error(e.message); // server-side validation details
       } else {

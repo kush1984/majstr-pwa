@@ -126,16 +126,36 @@ export function EstimateEditorPage() {
   const goBack = () => navigate(projectId ? routes.project(projectId) : routes.projects);
 
   const onPdf = async () => {
+    // The PDF is a client-facing deliverable and now requires a verified email
+    // (anti-abuse). Bounce an unverified master straight to the verify modal
+    // instead of firing a doomed request.
+    if (me && !me.emailVerified) {
+      setEmailGateOpen(true);
+      return;
+    }
     try {
       const { url, revoke } = await estimatesApi.fetchPdf(id);
       window.open(url, '_blank');
       setTimeout(revoke, 60_000);
-    } catch {
-      toast.error(t('estimate.pdfFailed'));
+    } catch (err) {
+      if (toAppError(err).code === 'EMAIL_NOT_VERIFIED') {
+        setEmailGateOpen(true);
+      } else {
+        toast.error(t('estimate.pdfFailed'));
+      }
     }
   };
 
-  const onShare = () => setShareOpen(true);
+  const onShare = () => {
+    // Sharing reaches a client and requires a verified email — check upfront so an
+    // unverified master gets the verify prompt immediately, not a share dialog that
+    // dead-ends on every option.
+    if (me && !me.emailVerified) {
+      setEmailGateOpen(true);
+      return;
+    }
+    setShareOpen(true);
+  };
 
   const openEdit = () => {
     setRenameValue(est.name ?? '');

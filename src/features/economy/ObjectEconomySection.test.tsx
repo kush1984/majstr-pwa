@@ -26,7 +26,7 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
     id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
     companyName: 'C', logoUrl: null, plan, role: 'USER', emailVerified: true,
     createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
-    planExpiresAt: null, autoRenew: false, cardMask: null, referralCode: 'refcode1',
+    planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'refcode1',
   };
 }
 
@@ -53,21 +53,23 @@ describe('ObjectEconomySection', () => {
     expect(upgradeApi.click).toHaveBeenCalledWith('OBJECT_PROFIT');
   });
 
-  it('PRO: fetches and shows income / expenses / profit and the expense list', async () => {
+  it('PRO: shows profit / negative cash + the works/materials breakdown and the expense list', async () => {
+    // Store-run: deposit 3000, receipts 5000 → materials cash −2000; profit = works − manual.
     vi.mocked(economyApi.economy).mockResolvedValue({
-      incomeTotal: 10000, incomeSigned: 6000, expensesTotal: 4000,
-      expensesByCategory: { MATERIALS: 3000, LABOR: 1000 }, profit: 6000, profitSigned: 2000,
+      works: 15000, materials: 6000, received: 3000,
+      spentReceipts: 5000, spentManual: 0, profit: 15000, cashBalance: -2000,
     });
     vi.mocked(economyApi.listExpenses).mockResolvedValue([
-      { id: 'e1', amount: 450, category: 'MATERIALS', note: 'клей', spentAt: '2026-07-01', createdAt: '' },
+      { id: 'e1', amount: 450, category: 'MATERIALS', source: 'MANUAL', note: 'клей', spentAt: '2026-07-01', createdAt: '' },
     ]);
 
     renderSection('PRO');
 
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
     // Panel renders once the summary resolves (Spinner → figures).
-    expect(await screen.findByText('Дохід')).toBeTruthy();
-    expect(screen.getByText('Заробіток')).toBeTruthy();
+    expect(await screen.findByText('Заробіток')).toBeTruthy();
+    expect(screen.getByText('Каса (матеріали)')).toBeTruthy();
+    expect(screen.getByText('Роботи')).toBeTruthy();
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
     // The logged expense (its note) appears in the journal.

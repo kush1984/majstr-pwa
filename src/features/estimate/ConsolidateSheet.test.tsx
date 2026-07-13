@@ -15,8 +15,8 @@ vi.mock('@/hooks/useToast.ts', () => ({
 }));
 
 const estimates: EstimateSummary[] = [
-  { id: 'e1', projectId: 'p1', name: 'Економ', status: 'DRAFT', validUntil: null, createdAt: '2026-01-01', updatedAt: '' },
-  { id: 'e2', projectId: 'p1', name: 'Преміум', status: 'SENT', validUntil: null, createdAt: '2026-01-02', updatedAt: '' },
+  { id: 'e1', projectId: 'p1', name: 'Економ', status: 'DRAFT', validUntil: null, createdAt: '2026-01-01', updatedAt: '', countInEconomy: false },
+  { id: 'e2', projectId: 'p1', name: 'Преміум', status: 'SENT', validUntil: null, createdAt: '2026-01-02', updatedAt: '', countInEconomy: false },
 ];
 
 function renderSheet(onDone: (id: string) => void) {

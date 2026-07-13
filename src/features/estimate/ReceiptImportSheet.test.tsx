@@ -6,12 +6,16 @@ import '@/lib/i18n.ts';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
+import { economyApi } from '@/api/economy.ts';
 
 vi.mock('@/api/receiptImport.ts', () => ({
   receiptImportApi: { parse: vi.fn(), commit: vi.fn() },
 }));
 vi.mock('@/api/photos.ts', () => ({
   photosApi: { upload: vi.fn() },
+}));
+vi.mock('@/api/economy.ts', () => ({
+  economyApi: { addExpense: vi.fn(() => Promise.resolve()) },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -63,7 +67,14 @@ describe('ReceiptImportSheet', () => {
         { name: 'Цемент М500', unit: 'PIECE', quantity: 2, unitPrice: 180, type: 'MATERIAL', category: null },
       ]),
     );
-    // After commit the "save receipt photo?" prompt appears.
+    // After commit the "log as expense?" prompt appears first (receipt total 2×180 = 360).
+    await waitFor(() => expect(screen.getByText(/Записати у витрати/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /^Записати$/ }));
+    await waitFor(() =>
+      expect(economyApi.addExpense).toHaveBeenCalledWith('p1', expect.objectContaining({ amount: 360, category: 'MATERIALS' })),
+    );
+
+    // Then the "save receipt photo?" prompt appears.
     await waitFor(() => expect(screen.getByText(/Зберегти фото чека/i)).toBeTruthy());
   });
 });

@@ -64,6 +64,13 @@ export const estimatesApi = {
     return api.post<EstimateResponse>(`/api/estimates/${id}/reopen`).then((r) => r.data);
   },
 
+  /** Toggle whether this estimate counts toward the object's economy (income). */
+  setCountInEconomy(id: string, countInEconomy: boolean): Promise<EstimateResponse> {
+    return api
+      .patch<EstimateResponse>(`/api/estimates/${id}/count-in-economy`, { countInEconomy })
+      .then((r) => r.data);
+  },
+
   // ---- items ----
   addItem(estimateId: string, req: EstimateItemRequest): Promise<EstimateItemResponse> {
     return api

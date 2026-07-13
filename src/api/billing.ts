@@ -1,5 +1,5 @@
 import { api } from './client.ts';
-import type { BillingPeriod, ReferralStatsResponse } from './types.ts';
+import type { BillingPeriod, ReferralStatsResponse, UserResponse } from './types.ts';
 
 export interface CheckoutResponse {
   /** monobank hosted payment page to redirect to (or the dev return URL when the
@@ -18,6 +18,15 @@ export const billingApi = {
     return api
       .post<CheckoutResponse>('/api/billing/checkout', { period, autoRenew })
       .then((r) => r.data);
+  },
+
+  /**
+   * Activate the one-time self-serve 5-day PRO trial (FREE only, no card).
+   * Returns the updated profile; the caller refreshes `me`. 409 TRIAL_UNAVAILABLE
+   * if already used or not on FREE.
+   */
+  startTrial(): Promise<UserResponse> {
+    return api.post<UserResponse>('/api/billing/trial').then((r) => r.data);
   },
 
   /** Master→master referral stats for the "Запроси майстра" profile panel. */
