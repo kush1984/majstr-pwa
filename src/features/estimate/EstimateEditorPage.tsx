@@ -24,6 +24,10 @@ import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { ShareEstimateSheet } from './ShareEstimateSheet.tsx';
+import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
+import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { useMe } from '@/features/auth/useMe.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
 import { estimateName } from './estimateName.ts';
 import {
   useEstimate,
@@ -76,6 +80,10 @@ export function EstimateEditorPage() {
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const saveAsTemplate = useSaveAsTemplate(id);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const { data: me } = useMe();
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
 
   if (estimate.isPending) {
     return (
@@ -386,6 +394,22 @@ export function EstimateEditorPage() {
             {!signed && (
               <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => runFab(() => setAddOpen(true))} />
             )}
+            {!signed && (
+              <FabAction
+                icon="🧾"
+                label={t('receipt.fabLabel')}
+                onClick={() =>
+                  runFab(() => {
+                    if (isPro) {
+                      setReceiptOpen(true);
+                    } else {
+                      void upgradeApi.click('RECEIPT_IMPORT');
+                      setUpgradeOpen(true);
+                    }
+                  })
+                }
+              />
+            )}
             <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(onShare)} />
             <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(() => void onPdf())} />
             {est.items.length > 0 && (
@@ -422,6 +446,16 @@ export function EstimateEditorPage() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
       />
+
+      {projectId && (
+        <ReceiptImportSheet
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          estimateId={id}
+          projectId={projectId}
+        />
+      )}
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
 
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={t('estimate.editItem')}>
         {editing && (

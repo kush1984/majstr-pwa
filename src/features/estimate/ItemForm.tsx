@@ -71,8 +71,11 @@ export function ItemForm({
           name: initial.name,
           category: initial.category ?? '',
           unit: initial.unit,
-          quantity: String(initial.quantity),
-          unitPrice: String(initial.unitPrice),
+          // A 0 (e.g. an imported line the master hasn't filled) opens EMPTY, not "0",
+          // so there's nothing to erase on mobile. Save still requires a positive number
+          // (itemFormSchema → decimalString: empty and 0 are both rejected).
+          quantity: initial.quantity ? String(initial.quantity) : '',
+          unitPrice: initial.unitPrice ? String(initial.unitPrice) : '',
           saveToCatalog: false,
         }
       : {

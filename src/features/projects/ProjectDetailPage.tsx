@@ -24,7 +24,9 @@ import { useProject } from './useProjects.ts';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
+import { ConsolidateSheet } from '@/features/estimate/ConsolidateSheet.tsx';
 import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
+import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
 import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
@@ -101,6 +103,7 @@ export function ProjectDetailPage() {
   const applyTemplate = useApplyTemplate();
   const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [consolidateOpen, setConsolidateOpen] = useState(false);
 
   if (project.isPending) {
     return (
@@ -272,6 +275,19 @@ export function ProjectDetailPage() {
         applying={applyTemplate.isPending}
       />
 
+      <ConsolidateSheet
+        open={consolidateOpen}
+        onClose={() => setConsolidateOpen(false)}
+        projectId={id}
+        estimates={list}
+        onDone={(newId) => {
+          setConsolidateOpen(false);
+          qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+          qc.invalidateQueries({ queryKey: ['projects'] });
+          navigate(routes.estimate(newId));
+        }}
+      />
+
       <div className="mb-3 flex items-center gap-3">
         <button
           type="button"
@@ -336,6 +352,8 @@ export function ProjectDetailPage() {
 
       {tab === 'measurements' ? (
         <MeasurementsSection objectId={id} />
+      ) : tab === 'photos' ? (
+        <PhotosSection projectId={id} />
       ) : tab !== 'estimate' ? (
         <EmptyState icon="🚧" title={t('common.soon')} text={t('projects.sectionSoonText')} />
       ) : (
@@ -359,15 +377,28 @@ export function ProjectDetailPage() {
             <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">
               {t('projects.estimatesCount', { count: list.length })}
             </h2>
-            <button
-              type="button"
-              onClick={addEstimate}
-              disabled={createEstimate.isPending || atEstimateLimit}
-              title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
-              className="text-[13px] font-semibold text-brand disabled:opacity-60"
-            >
-              {t('projects.addNew')}
-            </button>
+            <div className="flex items-center gap-3">
+              {list.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={() => setConsolidateOpen(true)}
+                  disabled={atEstimateLimit}
+                  title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
+                  className="text-[13px] font-semibold text-brand disabled:opacity-60"
+                >
+                  {t('consolidate.addButton')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={addEstimate}
+                disabled={createEstimate.isPending || atEstimateLimit}
+                title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
+                className="text-[13px] font-semibold text-brand disabled:opacity-60"
+              >
+                {t('projects.addNew')}
+              </button>
+            </div>
           </div>
 
           {atEstimateLimit && (

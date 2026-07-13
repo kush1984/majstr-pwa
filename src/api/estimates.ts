@@ -2,6 +2,7 @@ import { api, ensureAccessToken } from './client.ts';
 import { config } from '@/lib/config.ts';
 import type {
   BatchCatalogItemEntry,
+  EstimateConsolidateRequest,
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
@@ -31,6 +32,16 @@ export const estimatesApi = {
   ): Promise<EstimateResponse> {
     return api
       .post<EstimateResponse>(`/api/projects/${projectId}/estimates`, req)
+      .then((r) => r.data);
+  },
+
+  /** Fold several of the object's estimates into one new DRAFT estimate. */
+  consolidate(
+    projectId: string,
+    req: EstimateConsolidateRequest,
+  ): Promise<EstimateResponse> {
+    return api
+      .post<EstimateResponse>(`/api/projects/${projectId}/estimates/consolidate`, req)
       .then((r) => r.data);
   },
 

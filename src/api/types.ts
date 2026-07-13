@@ -62,6 +62,10 @@ export interface PlanLimits {
   plan: Plan;
   maxProjects: number | null;
   maxEstimatesPerProject: number | null;
+  /** Progress photos per object (null = unlimited). */
+  maxPhotosPerObject: number | null;
+  /** Receipt photos per object — a separate budget (null = unlimited). */
+  maxReceiptPhotosPerObject: number | null;
 }
 
 export interface AuthResponse {
@@ -553,6 +557,50 @@ export interface EstimateImportCommitResponse {
  *  catalog" button would add. Drives the preview ("Знайдено N нових позицій"). */
 export interface TemplateUpdatesResponse {
   available: number;
+}
+
+// ---------------------------------------------------------------------------
+// Consolidated estimate — fold several of an object's estimates into one.
+// ---------------------------------------------------------------------------
+
+export interface EstimateConsolidateRequest {
+  name?: string;
+  estimateIds: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Receipt import — add lines to an open estimate from a receipt photo (PRO).
+// Reuses EstimateImportParseResponse for the review; commit is lighter (no
+// catalog, no deposit).
+// ---------------------------------------------------------------------------
+
+export interface ReceiptItemsCommitItem {
+  name: string;
+  unit: Unit;
+  quantity: number;
+  unitPrice: number;
+  type: ItemType;
+  category: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Object photos — private receipts + progress photos shareable with the client.
+// ---------------------------------------------------------------------------
+
+export type PhotoSource = 'RECEIPT' | 'MANUAL';
+export type PhotoVisibility = 'PRIVATE' | 'SHARED';
+
+export interface ProjectPhotoResponse {
+  id: string;
+  source: PhotoSource;
+  visibility: PhotoVisibility;
+  caption: string | null;
+  estimateId: string | null;
+  estimateName: string | null;
+  /** Path of the authenticated stream (relative). The client prefixes apiBaseUrl
+   *  and sends the bearer token — the storage key is never exposed. */
+  fileUrl: string;
+  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
