@@ -431,6 +431,9 @@
     "receiptOf": "Receipt: {{name}}",
     "showToClient": "Show to client",
     "shownToClient": "✓ Visible to client",
+    "loadFailed": "Couldn't load the photo",
+    "prev": "Previous photo",
+    "next": "Next photo",
     "limitReached": "Photo limit reached for this object",
     "limitHint": "You've added the maximum photos ({{max}}) for this object. Upgrade to PRO for more."
   },

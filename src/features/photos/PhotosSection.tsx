@@ -28,6 +28,7 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   const limits = usePlanLimits();
   const fileRef = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<ProjectPhotoResponse | null>(null);
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
   const del = useDeletePhoto(projectId);
 
   const manualCount = (photos.data ?? []).filter((p) => p.source === 'MANUAL').length;
@@ -105,15 +106,25 @@ export function PhotosSection({ projectId }: { projectId: string }) {
         <EmptyState icon="📷" title={t('photos.emptyTitle')} text={t('photos.emptyText')} />
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {list.map((photo) => (
+          {list.map((photo, i) => (
             <PhotoTile
               key={photo.id}
               projectId={projectId}
               photo={photo}
+              onView={() => setViewIndex(i)}
               onDelete={() => setDeleting(photo)}
             />
           ))}
         </div>
+      )}
+
+      {viewIndex !== null && list[viewIndex] && (
+        <PhotoLightbox
+          list={list}
+          index={viewIndex}
+          onIndex={setViewIndex}
+          onClose={() => setViewIndex(null)}
+        />
       )}
 
       <ConfirmDialog
@@ -132,10 +143,12 @@ export function PhotosSection({ projectId }: { projectId: string }) {
 function PhotoTile({
   projectId,
   photo,
+  onView,
   onDelete,
 }: {
   projectId: string;
   photo: ProjectPhotoResponse;
+  onView: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -152,7 +165,7 @@ function PhotoTile({
 
   return (
     <div className="overflow-hidden rounded-card border border-border bg-surface">
-      <AuthPhoto fileUrl={photo.fileUrl} alt={photo.caption ?? t('photos.title')} />
+      <AuthPhoto fileUrl={photo.fileUrl} alt={photo.caption ?? t('photos.title')} onView={onView} />
       <div className="p-2">
         {isReceipt ? (
           <p className="truncate text-[11px] text-muted">
@@ -187,14 +200,16 @@ function PhotoTile({
   );
 }
 
-/** Fetches an authenticated photo as an object URL and renders it, revoking on unmount. */
-function AuthPhoto({ fileUrl, alt }: { fileUrl: string; alt: string }) {
+/** Fetches an authenticated photo (bearer token) as a blob object URL, revoking on unmount. */
+function usePhotoBlobUrl(fileUrl: string) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let revoked = false;
     let objectUrl: string | null = null;
+    setUrl(null);
+    setFailed(false);
     photosApi
       .fetchBlobUrl(fileUrl)
       .then((u) => {
@@ -212,6 +227,13 @@ function AuthPhoto({ fileUrl, alt }: { fileUrl: string; alt: string }) {
     };
   }, [fileUrl]);
 
+  return { url, failed };
+}
+
+/** A thumbnail; tapping it opens the full-screen viewer (no download needed). */
+function AuthPhoto({ fileUrl, alt, onView }: { fileUrl: string; alt: string; onView: () => void }) {
+  const { url, failed } = usePhotoBlobUrl(fileUrl);
+
   if (failed) {
     return <div className="flex aspect-square items-center justify-center bg-surface-sunken text-faint">⚠️</div>;
   }
@@ -222,5 +244,108 @@ function AuthPhoto({ fileUrl, alt }: { fileUrl: string; alt: string }) {
       </div>
     );
   }
-  return <img src={url} alt={alt} className="aspect-square w-full object-cover" />;
+  return (
+    <button type="button" onClick={onView} className="block w-full" aria-label={alt}>
+      <img src={url} alt={alt} className="aspect-square w-full cursor-zoom-in object-cover" />
+    </button>
+  );
+}
+
+/** Full-screen photo viewer (lightbox). Tap the backdrop / ✕ / Esc to close; arrows or
+ *  the on-screen chevrons to move between the object's photos. Built for phones — 99% of users. */
+function PhotoLightbox({
+  list,
+  index,
+  onIndex,
+  onClose,
+}: {
+  list: ProjectPhotoResponse[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const photo = list[index];
+  const { url, failed } = usePhotoBlobUrl(photo.fileUrl);
+  const hasPrev = index > 0;
+  const hasNext = index < list.length - 1;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft' && hasPrev) onIndex(index - 1);
+      else if (e.key === 'ArrowRight' && hasNext) onIndex(index + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    // Lock body scroll while open.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [index, hasPrev, hasNext, onClose, onIndex]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-black/90"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="flex items-center justify-between p-3 text-white">
+        <span className="text-sm text-white/70">
+          {index + 1} / {list.length}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl leading-none"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden px-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {failed ? (
+          <p className="text-white/80">⚠️ {t('photos.loadFailed')}</p>
+        ) : !url ? (
+          <Spinner />
+        ) : (
+          <img src={url} alt={photo.caption ?? ''} className="max-h-full max-w-full object-contain" />
+        )}
+
+        {hasPrev && (
+          <button
+            type="button"
+            onClick={() => onIndex(index - 1)}
+            aria-label={t('photos.prev')}
+            className="absolute left-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl leading-none text-white"
+          >
+            ‹
+          </button>
+        )}
+        {hasNext && (
+          <button
+            type="button"
+            onClick={() => onIndex(index + 1)}
+            aria-label={t('photos.next')}
+            className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl leading-none text-white"
+          >
+            ›
+          </button>
+        )}
+      </div>
+
+      {photo.caption && (
+        <p className="px-4 pb-4 pt-2 text-center text-sm text-white/80" onClick={(e) => e.stopPropagation()}>
+          {photo.caption}
+        </p>
+      )}
+    </div>
+  );
 }
