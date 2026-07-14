@@ -51,17 +51,34 @@ export function TemplatesPage() {
   const [editing, setEditing] = useState<EstimateTemplateSummary | null>(null);
   const [deleting, setDeleting] = useState<EstimateTemplateSummary | null>(null);
 
-  const own = useMemo(() => (data ?? []).filter((x) => !x.isDefault), [data]);
+  // Trade filter chips over the whole list — same pattern as the catalog. Built
+  // from the trades actually present (what the master sees), so it never shows an
+  // empty filter. Hidden by the chip component when fewer than two would appear.
+  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
+  const matchTrade = (trade: string | null) =>
+    tradeFilter.size === 0 || tradeFilter.has((trade ?? 'GENERAL') as TradeKey);
+
+  const presentTrades = useMemo<TradeKey[]>(() => {
+    const set = new Set<TradeKey>();
+    for (const tpl of data ?? []) set.add((tpl.trade ?? 'GENERAL') as TradeKey);
+    return [...set];
+  }, [data]);
+
+  const own = useMemo(
+    () => (data ?? []).filter((x) => !x.isDefault && matchTrade(x.trade)),
+    [data, tradeFilter],
+  );
   const defaultsByTrade = useMemo(() => {
     const groups = new Map<string, EstimateTemplateSummary[]>();
-    for (const tpl of (data ?? []).filter((x) => x.isDefault)) {
+    for (const tpl of (data ?? []).filter((x) => x.isDefault && matchTrade(x.trade))) {
       const key = tpl.trade ?? 'GENERAL';
       const bucket = groups.get(key);
       if (bucket) bucket.push(tpl);
       else groups.set(key, [tpl]);
     }
     return [...groups.entries()];
-  }, [data]);
+  }, [data, tradeFilter]);
+  const hasOwnTemplates = (data ?? []).some((x) => !x.isDefault);
 
   const confirmDelete = async () => {
     if (!deleting) return;
@@ -89,12 +106,18 @@ export function TemplatesPage() {
         <ErrorState error={error} title={t('templates.loadError')} onRetry={() => void refetch()} />
       ) : (
         <div className="space-y-6">
+          <TradeFilterChips
+            userTrades={presentTrades.filter((tr) => tr !== 'OTHER')}
+            hasOther={presentTrades.includes('OTHER')}
+            value={tradeFilter}
+            onChange={setTradeFilter}
+          />
           {/* My templates */}
           <section>
             <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
               {t('templates.myTemplates')}
             </h2>
-            {own.length === 0 ? (
+            {!hasOwnTemplates ? (
               <EmptyState icon="📋" title={t('templates.myTemplates')} text={t('templates.emptyMy')} />
             ) : (
               <div className="space-y-1.5">

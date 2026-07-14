@@ -33,6 +33,7 @@ import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
+import { useMe } from '@/features/auth/useMe.ts';
 
 type Tab = 'estimate' | 'measurements' | 'photos' | 'changes' | 'act';
 const TABS: { key: Tab; labelKey: string }[] = [
@@ -48,6 +49,8 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { data: me } = useMe();
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
   const [shareOpen, setShareOpen] = useState(false);
@@ -439,6 +442,7 @@ export function ProjectDetailPage() {
                 <EstimateRow
                   key={s.id}
                   summary={s}
+                  economyLocked={!isPro}
                   onClick={() => navigate(routes.estimate(s.id))}
                   onMenu={() => setMenuFor(s)}
                   onToggleEconomy={(value) => rowEconomyToggle.mutate({ estId: s.id, value })}
@@ -461,17 +465,23 @@ export function ProjectDetailPage() {
  *  row's main button to avoid invalid nested buttons. */
 function EstimateRow({
   summary,
+  economyLocked,
   onClick,
   onMenu,
   onToggleEconomy,
 }: {
   summary: EstimateSummary;
+  economyLocked: boolean;
   onClick: () => void;
   onMenu: () => void;
   onToggleEconomy: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const full = useEstimate(summary.id);
+  // FREE can't use the economy, so its checkbox reads unchecked (and is disabled).
+  // On PRO it shows the real stored flag — default-on for every estimate except a
+  // consolidated one — so upgrading immediately reflects them all in the economy.
+  const checked = economyLocked ? false : summary.countInEconomy;
   return (
     <div className="rounded-card border border-border bg-surface">
       <div className="flex items-stretch">
@@ -506,23 +516,32 @@ function EstimateRow({
           ⋮
         </button>
       </div>
-      {/* Visible economy checkbox — much clearer than hiding it in the ⋮ menu. */}
+      {/* Visible economy checkbox — much clearer than hiding it in the ⋮ menu.
+          FREE can't see the object economy, so it's disabled (kept, not removed).
+          Generous 44px tap target — the old one was hard to hit on a phone. */}
       <button
         type="button"
-        onClick={() => onToggleEconomy(!summary.countInEconomy)}
-        className="flex w-full items-center gap-2 border-t border-border px-3.5 py-2 text-left"
+        disabled={economyLocked}
+        aria-checked={checked}
+        role="checkbox"
+        onClick={() => onToggleEconomy(!checked)}
+        className={cn(
+          'flex min-h-[44px] w-full items-center gap-2.5 border-t border-border px-3.5 py-2.5 text-left',
+          economyLocked ? 'cursor-not-allowed opacity-55' : 'active:bg-surface-sunken',
+        )}
       >
         <span
           className={cn(
-            'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border text-[10px]',
-            summary.countInEconomy ? 'border-brand bg-brand text-white' : 'border-border text-transparent',
+            'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border text-xs',
+            checked ? 'border-brand bg-brand text-white' : 'border-border text-transparent',
           )}
         >
           ✓
         </span>
-        <span className={cn('text-xs', summary.countInEconomy ? 'font-semibold text-primary' : 'text-muted')}>
+        <span className={cn('text-xs', checked ? 'font-semibold text-primary' : 'text-muted')}>
           {t('estimate.countInEconomy')}
         </span>
+        {economyLocked && <span className="ml-auto text-xs text-muted">🔒 PRO</span>}
       </button>
     </div>
   );

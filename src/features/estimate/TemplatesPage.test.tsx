@@ -145,3 +145,26 @@ describe('TemplatesPage — edit own template', () => {
     expect(screen.queryByText('Додати позицію')).toBeNull();
   });
 });
+
+describe('TemplatesPage — trade filter chips', () => {
+  const defaults: EstimateTemplateSummary[] = [
+    { id: 'd1', name: 'Електрика квартири', trade: 'ELECTRICAL', isDefault: true, itemCount: 3 },
+    { id: 'd2', name: 'Санвузол сантехніка', trade: 'PLUMBING', isDefault: true, itemCount: 4 },
+  ];
+
+  it('narrows the list to the picked trade', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...defaults]);
+
+    renderPage();
+
+    // Both defaults visible with no filter.
+    expect(await screen.findByText('Електрика квартири')).toBeTruthy();
+    expect(screen.getByText('Санвузол сантехніка')).toBeTruthy();
+
+    // Pick the "Сантехніка" chip (capital С matches only the chip label, not the
+    // lowercase row name) → the electrical default drops out.
+    fireEvent.click(screen.getByRole('button', { name: /Сантехніка/ }));
+    await waitFor(() => expect(screen.queryByText('Електрика квартири')).toBeNull());
+    expect(screen.getByText('Санвузол сантехніка')).toBeTruthy();
+  });
+});
