@@ -47,6 +47,16 @@
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "UAH" }
     }
     </script>
+    <!-- Structured data: the publisher, so brand queries resolve to the site. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Majstr",
+      "url": "https://majstr.pro/",
+      "logo": "https://majstr.pro/icons/icon-512.png"
+    }
+    </script>
 
     <!-- Theme + manifest -->
     <meta name="theme-color" content="#F26B1F" />
@@ -70,7 +80,29 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 </head>
 <body class="bg-gray-50">
-    <div id="root"></div>
+    <!-- The landing is a client-rendered SPA, so the crawlable body content lives
+         here as a static first-paint shell inside #root. React (createRoot) replaces
+         it on mount — same HTML is served to every visitor (no cloaking); this only
+         guarantees crawlers and no-JS clients still get the real copy + headings. -->
+    <div id="root">
+      <main style="max-width:780px;margin:0 auto;padding:56px 24px;font-family:Inter,system-ui,sans-serif;color:#1a120b;line-height:1.55">
+        <p style="font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.18em;font-size:12px;color:#c2560f;margin:0 0 12px">Кошториси для майстрів</p>
+        <h1 style="font-size:36px;font-weight:800;line-height:1.12;margin:0 0 16px">Професійний кошторис для майстра — без зайвого</h1>
+        <p style="font-size:18px;color:#4a3b2e;margin:0 0 24px">Склади кошторис клієнту за кілька хвилин прямо з телефона. Надішли посиланням — клієнт перегляне й підпише онлайн. Для електриків, плиточників, сантехніків, малярів і будь-якого ремонту.</p>
+        <p style="margin:0 0 32px">
+          <a href="/register" style="display:inline-block;background:#F26B1F;color:#fff;font-weight:600;text-decoration:none;padding:12px 22px;border-radius:10px">Почати безкоштовно</a>
+          <a href="/login" style="margin-left:16px;color:#1a120b;font-weight:600;text-decoration:underline">Увійти</a>
+        </p>
+        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Що всередині</h2>
+        <ul style="padding-left:20px;color:#4a3b2e;margin:0">
+          <li style="margin-bottom:8px"><strong>Кошторис за хвилини</strong> — клієнт, об'єкт і роботи в одному простому потоці, без зайвих полів.</li>
+          <li style="margin-bottom:8px"><strong>Свій каталог робіт і цін</strong> — вносиш розцінки один раз, далі додаєш у кошторис у два дотики.</li>
+          <li style="margin-bottom:8px"><strong>Портал для клієнта</strong> — клієнт відкриває посилання, переглядає кошторис і підписує онлайн, нічого не встановлюючи.</li>
+          <li style="margin-bottom:8px"><strong>PDF з логотипом</strong> — акуратний документ, у якому клієнт бачить професіонала.</li>
+        </ul>
+        <p style="color:#8a7a6b;font-size:14px;margin-top:28px">Перші об'єкти — безкоштовно, без картки.</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
