@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { billingApi } from '@/api/billing.ts';
@@ -17,6 +18,7 @@ import type { BillingPeriod } from '@/api/types.ts';
 export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [period, setPeriod] = useState<BillingPeriod>('MONTH');
   // Default ON — the price + cadence are shown right next to it (honest opt-in),
   // and it's cancellable in one tap in the profile.
@@ -29,8 +31,15 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
       // Leaves the app for the monobank hosted page (or the dev return URL).
       window.location.href = pageUrl;
     } catch (err) {
-      toast.error(toAppError(err).message);
       setBusy(false); // stay on the modal so the user can retry
+      // No PRO without a verified email — route to the verify modal (consistent
+      // with the trial/share/PDF gates) instead of a bare, out-of-context toast.
+      if (toAppError(err).code === 'EMAIL_NOT_VERIFIED') {
+        onClose();
+        setVerifyOpen(true);
+      } else {
+        toast.error(toAppError(err).message);
+      }
     }
   };
 
@@ -45,6 +54,7 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
   ];
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={t('billing.proTitle')}>
       <div className="space-y-4">
         <p className="text-sm text-secondary">{t('billing.proBody')}</p>
@@ -93,5 +103,9 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
         <p className="text-center text-xs text-muted">{t('billing.securedBy')}</p>
       </div>
     </Modal>
+    {verifyOpen && (
+      <EmailVerifyModal open onClose={() => setVerifyOpen(false)} />
+    )}
+    </>
   );
 }
