@@ -2,39 +2,52 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
+import { ShapeInput } from '@/components/ShapeInput.tsx';
 import { cn } from '@/lib/cn.ts';
+import {
+  LENGTH_FACTOR,
+  LENGTH_UNITS,
+  newDraft,
+  numOf,
+  planesAreaM2,
+  toPlane,
+  type LengthUnit,
+  type PlaneDraft,
+} from '@/lib/shapes.ts';
 import type { Unit } from '@/api/types.ts';
 
 /**
- * Measure → quantity helper. The master enters side lengths and the panel
- * computes a quantity to drop into the line's quantity field — mirrors how
- * contractors size a job in Excel (length × width → m², or summed lengths →
- * linear metres, minus window/door openings). Dimensions are NOT persisted;
- * only the resulting number is applied.
+ * Measure → quantity helper. The master enters side lengths and the panel computes a
+ * quantity to drop into the line's quantity field — mirrors how contractors size a job
+ * in Excel (area → m², or summed lengths → linear metres, minus openings).
+ *
+ * Area is built from planes of any shape via the shared `shapes` module — the same one
+ * the object-measurements SURFACE editor uses, so the two always agree. Dimensions are
+ * NOT persisted here; only the resulting number is applied.
  */
 
 type Mode = 'area' | 'length';
-type Seg = { l: string; w: string };
+type Seg = { l: string };
 type Opening = { w: string; h: string; n: string };
 
-const num = (s: string): number => {
-  const n = Number(String(s).replace(',', '.').replace(/\s/g, ''));
-  return Number.isFinite(n) ? n : 0;
-};
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 
-/** Pure calc, exported for tests. area = Σ(l·w) − Σ(w·h·n); length = Σl. Never negative. */
-export function computeMeasure(mode: Mode, segs: Seg[], openings: Opening[]): number {
-  const base = segs.reduce((s, r) => s + (mode === 'area' ? num(r.l) * num(r.w) : num(r.l)), 0);
-  const sub =
-    mode === 'area'
-      ? openings.reduce((s, o) => s + num(o.w) * num(o.h) * (num(o.n) || 1), 0)
-      : 0;
-  return round3(Math.max(0, base - sub));
+/** Σ lengths, converted to metres. Openings never apply to a length. */
+export function sumLengths(segs: Seg[], unit: LengthUnit): number {
+  const f = LENGTH_FACTOR[unit] ?? 1;
+  return round3(Math.max(0, segs.reduce((s, r) => s + numOf(r.l), 0) * f));
+}
+
+/** Σ openings (w × h × count), converted to m². */
+export function openingsAreaM2(openings: Opening[], unit: LengthUnit): number {
+  const f = LENGTH_FACTOR[unit] ?? 1;
+  return round3(
+    openings.reduce((s, o) => s + numOf(o.w) * numOf(o.h) * (numOf(o.n) || 1) * f * f, 0),
+  );
 }
 
 export function MeasureCalculator({
-  unit,
+  unit: lineUnit,
   onApply,
   onClose,
 }: {
@@ -44,15 +57,24 @@ export function MeasureCalculator({
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>(
-    unit === 'M' || unit === 'LINEAR_METER' ? 'length' : 'area',
+    lineUnit === 'M' || lineUnit === 'LINEAR_METER' ? 'length' : 'area',
   );
-  const [segs, setSegs] = useState<Seg[]>([{ l: '', w: '' }]);
+  // Metres by default — what every dimension in this panel meant before units existed.
+  const [dimUnit, setDimUnit] = useState<LengthUnit>('M');
+  const [planes, setPlanes] = useState<PlaneDraft[]>([newDraft('rect')]);
+  const [segs, setSegs] = useState<Seg[]>([{ l: '' }]);
   const [openings, setOpenings] = useState<Opening[]>([]);
 
-  const result = useMemo(() => computeMeasure(mode, segs, openings), [mode, segs, openings]);
+  const planesM2 = useMemo(() => planesAreaM2(planes.map(toPlane), dimUnit), [planes, dimUnit]);
+  const openingsM2 = useMemo(() => openingsAreaM2(openings, dimUnit), [openings, dimUnit]);
+  const result = useMemo(
+    () =>
+      mode === 'area'
+        ? round3(Math.max(0, planesM2 - openingsM2))
+        : sumLengths(segs, dimUnit),
+    [mode, planesM2, openingsM2, segs, dimUnit],
+  );
 
-  const setSeg = (i: number, k: keyof Seg, v: string) =>
-    setSegs((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
   const setOpening = (i: number, k: keyof Opening, v: string) =>
     setOpenings((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
 
@@ -74,51 +96,100 @@ export function MeasureCalculator({
         ))}
       </div>
 
-      <div className="space-y-2">
-        {segs.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Input
-              inputMode="decimal"
-              placeholder={t('estimate.measureLen')}
-              value={r.l}
-              onChange={(e) => setSeg(i, 'l', e.target.value)}
-            />
-            {mode === 'area' && (
-              <>
-                <span className="text-muted">×</span>
-                <Input
-                  inputMode="decimal"
-                  placeholder={t('estimate.measureWidth')}
-                  value={r.w}
-                  onChange={(e) => setSeg(i, 'w', e.target.value)}
-                />
-              </>
+      {/* One unit for everything typed below. */}
+      <div className="mb-3 flex justify-center gap-1.5">
+        {LENGTH_UNITS.map((u) => (
+          <button
+            key={u}
+            type="button"
+            onClick={() => setDimUnit(u)}
+            className={cn(
+              'min-h-[44px] rounded-lg border px-3.5 text-xs font-semibold transition-colors',
+              dimUnit === u ? 'border-brand bg-brand-soft text-brand' : 'border-border text-muted',
             )}
-            {segs.length > 1 && (
-              <button
-                type="button"
-                aria-label={t('common.delete')}
-                onClick={() => setSegs((p) => p.filter((_, idx) => idx !== i))}
-                className="px-1 text-muted"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+          >
+            {t(`lengthUnit.${u}`)}
+          </button>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={() => setSegs((p) => [...p, { l: '', w: '' }])}
-        className="mt-2 text-xs font-semibold text-brand"
-      >
-        {t('estimate.measureAddRow')}
-      </button>
+
+      {mode === 'area' ? (
+        <>
+          <p className="mb-2 text-xs text-muted">{t('shape.hintTape')}</p>
+          <div className="space-y-3">
+            {planes.map((p, i) => (
+              <div key={i} className="rounded-xl border border-border bg-surface p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted">
+                    {t('shape.plane', { n: i + 1 })}
+                  </span>
+                  {planes.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label={t('common.delete')}
+                      className="px-1 text-muted"
+                      onClick={() => setPlanes((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <ShapeInput
+                  draft={p}
+                  unit={dimUnit}
+                  onChange={(d) => setPlanes((prev) => prev.map((x, idx) => (idx === i ? d : x)))}
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPlanes((p) => [...p, newDraft('rect')])}
+            className="mt-2 text-xs font-semibold text-brand"
+          >
+            {t('shape.addPlane')}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {segs.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  inputMode="decimal"
+                  placeholder={t('estimate.measureLen')}
+                  value={r.l}
+                  onChange={(e) =>
+                    setSegs((p) => p.map((x, idx) => (idx === i ? { l: e.target.value } : x)))
+                  }
+                />
+                {segs.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={t('common.delete')}
+                    onClick={() => setSegs((p) => p.filter((_, idx) => idx !== i))}
+                    className="px-1 text-muted"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setSegs((p) => [...p, { l: '' }])}
+            className="mt-2 text-xs font-semibold text-brand"
+          >
+            {t('estimate.measureAddRow')}
+          </button>
+        </>
+      )}
 
       {mode === 'area' && (
         <div className="mt-3 border-t border-border pt-3">
           <div className="mb-1.5 text-xs font-semibold text-muted">
-            {t('estimate.measureOpenings')}
+            {t('estimate.measureOpenings')} ({t(`lengthUnit.${dimUnit}`)})
           </div>
           <div className="space-y-2">
             {openings.map((o, i) => (

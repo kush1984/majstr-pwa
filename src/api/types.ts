@@ -469,8 +469,25 @@ export interface CatalogResetResponse {
 export type MeasurementType = 'SURFACE' | 'PARTITION' | 'LINEAR';
 
 /** Payload shapes (must mirror the backend calculator). */
+/**
+ * A surface is Σ planes − Σ openings. Each plane is a shape + its dimensions; the
+ * unit is chosen once for the whole element and applies to planes and openings alike.
+ * Pre-shapes rows are bare `{l, w}` rectangles with no unit — the backend reads a
+ * shape-less segment as a rectangle and a missing unit as metres, so there's no
+ * migration and old measurements keep their numbers.
+ */
+export interface SurfaceSegment {
+  /** Legacy rectangle sides, in metres. Present only on rows written before shapes. */
+  l?: number;
+  w?: number;
+  shape?: 'rect' | 'trap' | 'attic' | 'tri' | 'cut';
+  mode?: string;
+  values?: Record<string, number>;
+}
 export interface SurfacePayload {
-  segments: { l: number; w: number }[];
+  /** Length unit of every dimension below. Absent = metres (pre-shapes payloads). */
+  unit?: 'MM' | 'CM' | 'M';
+  segments: SurfaceSegment[];
   openings: { w: number; h: number; n: number }[];
 }
 export interface PartitionPayload {
@@ -520,6 +537,40 @@ export interface MeasurementItemRequest {
   type: MeasurementType;
   payload: MeasurementPayload;
   sortOrder?: number;
+}
+
+// ---- sketch import (LLM vision: a hand-drawn room sketch photo → measurements) -
+
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** One recognised element — a DRAFT verified against our redrawn schema before commit.
+ *  `result` is null when a size was unreadable (the field is left blank + flagged). */
+export interface SketchParseItem {
+  type: MeasurementType;
+  name: string;
+  unit: Unit;
+  confidence: Confidence;
+  note: string | null;
+  payload: MeasurementPayload;
+  result: number | null;
+}
+export interface SketchParseRoom {
+  name: string;
+  confidence: Confidence;
+  items: SketchParseItem[];
+}
+export interface SketchParseResponse {
+  rooms: SketchParseRoom[];
+  /** The unit the sketch's numbers are in — the review's default (a wrong guess is fixable). */
+  unitGuess: 'MM' | 'CM' | 'M';
+  warnings: string[];
+}
+export interface SketchCommitRoom {
+  name: string;
+  items: MeasurementItemRequest[];
+}
+export interface SketchCommitRequest {
+  rooms: SketchCommitRoom[];
 }
 
 // ---- estimate import (LLM: Excel/CSV or photo → a ready estimate) ------------

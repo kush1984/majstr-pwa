@@ -602,6 +602,120 @@
     "manualWarning": "The quantity was edited by hand. Applying will recompute it from measurements.",
     "noneForUnit": "No measurements in {{unit}}. Add them on the Measurements tab."
   },
+  "lengthUnit": {
+    "MM": "mm",
+    "CM": "cm",
+    "M": "m"
+  },
+  "sketch": {
+    "button": "📷 Recognise a sketch",
+    "title": "Room sketch",
+    "sourceHint": "Photograph a hand-drawn room plan with sizes — we read the shape and numbers, you verify.",
+    "takePhoto": "Take a photo",
+    "upload": "Choose a photo",
+    "parsing": "Reading the sketch…",
+    "reviewHint": "Compare our schema with your sketch and fix anything off. Nothing is saved until you confirm.",
+    "photoTap": "Tap to enlarge",
+    "unitHint": "Units on the sketch",
+    "roomNamePlaceholder": "Room name",
+    "roomEmpty": "All elements removed.",
+    "deleteRoom": "Delete room",
+    "deleteItem": "Delete element",
+    "needsAttention": "check",
+    "fixFirst": "Fix or remove the highlighted elements ({{count}})",
+    "commit": "Add to measurements ({{count}})",
+    "nothingFound": "Couldn't read the sketch. Try a straighter, closer shot — or enter measurements manually.",
+    "tryAgain": "Try again",
+    "added": "Measurements added: {{rooms}} room(s), {{items}} element(s).",
+    "photoCaption": "Room sketch",
+    "savePhotoTitle": "Save the sketch?",
+    "savePhotoMessage": "Attach the sketch photo to the object (private, not shown to the client)?",
+    "savePhotoYes": "Save",
+    "photoSaved": "Sketch saved"
+  },
+  "shape": {
+    "enterDims": "enter the dimensions",
+    "impossible": "impossible figure",
+    "diagCheck": "Slope (diagonal) to cross-check ≈ {{value}} {{unit}}",
+    "planesTotal": "Planes total",
+    "openingsTotal": "Minus openings",
+    "addPlane": "+ Add plane",
+    "plane": "Plane {{n}}",
+    "hintTape": "Measure what the letter marks on the drawing and type it into the field with the same letter.",
+    "warn": {
+      "apexBelowWall": "The apex is lower than the wall",
+      "triImpossible": "Such a triangle is impossible — check the sides",
+      "cutTopLonger": "The top side is longer than the bottom",
+      "cutRightLonger": "The right side is longer than the left"
+    },
+    "note": {
+      "trapIsRect": "The sides are equal — this is a rectangle."
+    },
+    "rect": {
+      "name": "Rectangle",
+      "d": {
+        "hint": "A plain wall",
+        "formula": "Area = a × b",
+        "field": { "a": "width", "b": "height" }
+      }
+    },
+    "trap": {
+      "name": "Trapezoid",
+      "d": {
+        "hint": "A sloped wall: two parallel sides",
+        "formula": "Area = (a + b) / 2 × h",
+        "field": { "a": "top side", "b": "bottom side", "h": "height" }
+      }
+    },
+    "attic": {
+      "name": "Mansard",
+      "sym": {
+        "label": "Symmetric",
+        "hint": "A house-shaped wall, side walls equal",
+        "formula": "Area = a × (b + h) / 2",
+        "field": { "a": "width", "b": "side wall height", "h": "height to the apex" }
+      },
+      "asym": {
+        "label": "Different walls",
+        "hint": "Side walls of different height. Measure left and right separately.",
+        "formula": "Area = trapezoid (bottom) + triangle (top)",
+        "field": {
+          "a": "width",
+          "b": "left wall",
+          "c": "right wall",
+          "h": "height to the apex"
+        }
+      }
+    },
+    "tri": {
+      "name": "Triangle",
+      "bh": {
+        "label": "Base + height",
+        "hint": "When the height (perpendicular to the base) is easy to measure",
+        "formula": "Area = b × h / 2",
+        "field": { "b": "base", "h": "height" }
+      },
+      "sss": {
+        "label": "Three sides",
+        "hint": "A skewed triangle — measure all three sides",
+        "formula": "Heron's formula (from three sides)",
+        "field": { "c": "side c (base)", "a": "side a", "b": "side b" }
+      }
+    },
+    "cut": {
+      "name": "Cut corner",
+      "d": {
+        "hint": "Corner shower / cut corner of a room. Measure all 4 sides.",
+        "formula": "Area = a × b − (a−c)(b−d) / 2",
+        "field": {
+          "a": "bottom side",
+          "b": "left side",
+          "c": "top short side",
+          "d": "right short side"
+        }
+      }
+    }
+  },
   "templates": {
     "fromTemplate": "From template",
     "fromFile": "From file / photo",

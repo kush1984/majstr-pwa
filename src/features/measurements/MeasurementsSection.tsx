@@ -11,6 +11,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { MeasurementItemForm } from './MeasurementItemForm.tsx';
+import { SketchReviewSheet } from './SketchReviewSheet.tsx';
 import { useMeasurements, useMeasurementActions } from './useMeasurements.ts';
 import type { MeasurementItem, MeasurementItemRequest } from '@/api/types.ts';
 
@@ -34,6 +35,7 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const [editing, setEditing] = useState<{ roomId: string; item?: MeasurementItem } | null>(null);
   const [removingRoom, setRemovingRoom] = useState<{ id: string; name: string } | null>(null);
   const [removingItem, setRemovingItem] = useState<{ roomId: string; item: MeasurementItem } | null>(null);
+  const [sketchOpen, setSketchOpen] = useState(false);
 
   if (!isPro) {
     return (
@@ -97,9 +99,14 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
           {' · '}
           <span className="font-bold text-primary">{fmtNum(data.linearTotal)} {t('units.LINEAR_METER')}</span>
         </div>
-        <button type="button" onClick={() => setRoomModalOpen(true)} className="text-[13px] font-semibold text-brand">
-          {t('measure.addRoom')}
-        </button>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setSketchOpen(true)} className="text-[13px] font-semibold text-brand">
+            {t('sketch.button')}
+          </button>
+          <button type="button" onClick={() => setRoomModalOpen(true)} className="text-[13px] font-semibold text-brand">
+            {t('measure.addRoom')}
+          </button>
+        </div>
       </div>
 
       {data.rooms.length === 0 ? (
@@ -107,7 +114,12 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
           icon="📐"
           title={t('measure.emptyTitle')}
           text={t('measure.emptyText')}
-          action={<Button onClick={() => setRoomModalOpen(true)}>{t('measure.addRoom')}</Button>}
+          action={
+            <div className="flex flex-col gap-2">
+              <Button onClick={() => setSketchOpen(true)}>{t('sketch.button')}</Button>
+              <Button variant="secondary" onClick={() => setRoomModalOpen(true)}>{t('measure.addRoom')}</Button>
+            </div>
+          }
         />
       ) : (
         <div className="space-y-3">
@@ -209,6 +221,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
         }}
         onClose={() => setRemovingItem(null)}
       />
+
+      <SketchReviewSheet open={sketchOpen} onClose={() => setSketchOpen(false)} objectId={objectId} />
     </div>
   );
 }
