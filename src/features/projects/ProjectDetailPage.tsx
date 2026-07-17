@@ -33,14 +33,15 @@ import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
+import { NotesSection } from '@/features/notes/NotesSection.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 
-type Tab = 'estimate' | 'measurements' | 'photos' | 'changes' | 'act';
+type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
 const TABS: { key: Tab; labelKey: string }[] = [
   { key: 'estimate', labelKey: 'projects.tabEstimate' },
   { key: 'measurements', labelKey: 'projects.tabMeasurements' },
   { key: 'photos', labelKey: 'projects.tabPhotos' },
-  { key: 'changes', labelKey: 'projects.tabChanges' },
+  { key: 'notes', labelKey: 'projects.tabNotes' },
   { key: 'act', labelKey: 'projects.tabAct' },
 ];
 
@@ -366,6 +367,8 @@ export function ProjectDetailPage() {
         <MeasurementsSection objectId={id} />
       ) : tab === 'photos' ? (
         <PhotosSection projectId={id} />
+      ) : tab === 'notes' ? (
+        <NotesSection objectId={id} />
       ) : tab !== 'estimate' ? (
         <EmptyState icon="🚧" title={t('common.soon')} text={t('projects.sectionSoonText')} />
       ) : (

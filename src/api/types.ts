@@ -674,6 +674,25 @@ export interface ProjectPhotoResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Object notes — free text + optional title/phone a master keeps against an object.
+// PRIVATE (never in the portal/PDF/share); no PRO gate. Only `body` is required.
+// ---------------------------------------------------------------------------
+
+export interface NoteResponse {
+  id: string;
+  title: string | null;
+  phone: string | null;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface NoteRequest {
+  title?: string | null;
+  phone?: string | null;
+  body: string;
+}
+
+// ---------------------------------------------------------------------------
 // Estimate templates — ready-made bundles of works for a typical job.
 // `isDefault` separates the 88 system templates from the master's own.
 // ---------------------------------------------------------------------------

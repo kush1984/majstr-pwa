@@ -170,25 +170,35 @@ function MockRow({ name, amount }: { name: string; amount: string }) {
 
 function TradesStrip() {
   const { t } = useTranslation();
+  // The nine trades the default catalogue actually ships (Trade enum, minus GENERAL/OTHER).
   const trades = [
-    t('landing.tradeElectric'),
     t('landing.tradeTile'),
+    t('landing.tradeElectric'),
     t('landing.tradePlumb'),
     t('landing.tradePaint'),
-    t('landing.tradeAny'),
+    t('landing.tradeBuilder'),
+    t('landing.tradeDrywall'),
+    t('landing.tradeFloor'),
+    t('landing.tradeDemo'),
+    t('landing.tradeMetal'),
   ];
   return (
     <div className="border-y border-landing-line bg-white">
-      <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-center gap-x-10 gap-y-3.5 px-6 py-5">
-        {trades.map((trade) => (
-          <span
-            key={trade}
-            className="flex items-center gap-2.5 font-mono text-[13px] font-medium text-landing-ink"
-          >
-            <b className="text-landing-amber-deep">//</b>
-            {trade}
-          </span>
-        ))}
+      <div className="mx-auto max-w-[1120px] px-6 py-5">
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+          {trades.map((trade) => (
+            <span
+              key={trade}
+              className="flex items-center gap-2 font-mono text-[13px] font-medium text-landing-ink"
+            >
+              <b className="text-landing-amber-deep">//</b>
+              {trade}
+            </span>
+          ))}
+        </div>
+        <p className="mt-3 text-center font-mono text-[11px] text-landing-muted">
+          {t('landing.tradesNote')}
+        </p>
       </div>
     </div>
   );
@@ -281,11 +291,14 @@ function PsItem({
 
 function Features() {
   const { t } = useTranslation();
+  // `pro` marks what a FREE plan genuinely can't reach (PlanConfig: FREE has only
+  // CLIENT_PORTAL / ONLINE_SIGNATURE / PHOTO_REPORTS). Saying it here, up front, is the
+  // point — a master who signs up and hits an unannounced paywall doesn't come back.
   const feats = [
-    { n: '01', title: t('landing.feature1Title'), text: t('landing.feature1Text') },
-    { n: '02', title: t('landing.feature2Title'), text: t('landing.feature2Text') },
-    { n: '03', title: t('landing.feature3Title'), text: t('landing.feature3Text') },
-    { n: '04', title: t('landing.feature4Title'), text: t('landing.feature4Text') },
+    { n: '01', title: t('landing.feature1Title'), text: t('landing.feature1Text'), pro: true },
+    { n: '02', title: t('landing.feature2Title'), text: t('landing.feature2Text'), pro: true },
+    { n: '03', title: t('landing.feature3Title'), text: t('landing.feature3Text'), pro: false },
+    { n: '04', title: t('landing.feature4Title'), text: t('landing.feature4Text'), pro: true },
   ];
   return (
     <section className="px-6 pb-16 sm:pb-[84px]">
@@ -301,7 +314,14 @@ function Features() {
               key={f.n}
               className="rounded-[14px] border border-landing-line bg-white p-[30px] transition hover:-translate-y-0.5 hover:border-landing-ink"
             >
-              <div className="font-mono text-[13px] font-bold text-landing-amber-deep">{f.n}</div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[13px] font-bold text-landing-amber-deep">{f.n}</span>
+                {f.pro && (
+                  <span className="rounded-full border border-landing-line px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-landing-muted">
+                    {t('landing.proBadge')}
+                  </span>
+                )}
+              </div>
               <h3 className="mb-2.5 mt-3.5 text-xl font-bold tracking-[-0.01em]">{f.title}</h3>
               <p className="text-[15px] text-landing-muted">{f.text}</p>
             </div>
