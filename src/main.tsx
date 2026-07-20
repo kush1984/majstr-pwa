@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { registerSW } from 'virtual:pwa-register';
+import { markUpdateReady } from '@/lib/swUpdate.ts';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
@@ -33,20 +34,19 @@ const queryClient = new QueryClient({
   },
 });
 
-// Service worker registration. `autoUpdate` means the SW will replace
-// itself when a new build is deployed; we trigger a reload so the user
-// sees the new code on next navigation.
+// Service worker registration. A new build's SW installs and waits; instead of
+// reloading silently (which would drop unsaved form input), we surface a banner
+// («нова версія — оновити») and let the master reload when ready.
 if ('serviceWorker' in navigator) {
-  registerSW({
+  const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
-      // Quiet auto-update: a more polished version would show a toast
-      // ("Доступна нова версія — оновити") with a manual reload button.
-      // For now, autoUpdate handles it.
+      // A new version is waiting — tell the UI. Clicking «Оновити» activates it + reloads.
+      markUpdateReady(() => updateSW(true));
     },
     onOfflineReady() {
       // PWA is cached and ready to work offline (app shell only — API
-      // calls still need network).
+      // calls still need network). No prompt needed.
     },
   });
 }

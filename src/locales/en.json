@@ -198,6 +198,7 @@
     "signUp": "Create account",
     "noAccount": "No account yet?",
     "registerLink": "Sign up",
+    "forgotPassword": "Forgot password?",
     "haveAccount": "Already registered?",
     "tradeType": "Type of work",
     "chooseSeveral": "you can pick several",
@@ -211,6 +212,27 @@
     "wrongCredentials": "Wrong email or password",
     "emailAlreadyRegistered": "This email is already registered",
     "emailTakenLogin": "This email is already registered — Log in"
+  },
+  "reset": {
+    "forgotTitle": "Reset password",
+    "forgotText": "Enter your account email — we'll send a link to set a new password.",
+    "sendLink": "Send link",
+    "backToLogin": "← Back to login",
+    "checkEmailTitle": "Check your email",
+    "checkEmailText": "If that email is registered, we've sent a link to set a new password. Check your inbox (and spam).",
+    "newPasswordTitle": "New password",
+    "newPassword": "New password",
+    "confirmPassword": "Repeat password",
+    "setPassword": "Set password",
+    "doneToast": "Password changed. Log in with your new password.",
+    "expiredTitle": "Link expired",
+    "expiredText": "This reset link is invalid or already used. Request a new one.",
+    "requestNew": "Reset password again",
+    "tooMany": "Too many requests. Try again a bit later."
+  },
+  "update": {
+    "available": "A new version is available",
+    "reload": "Update"
   },
   "dashboard": {
     "metricsError": "Could not load the metrics",
@@ -971,6 +993,7 @@
     "enterPassword": "Enter your password",
     "passwordTooShort": "Password must be at least 8 characters",
     "passwordTooLong": "Password is too long",
+    "passwordsMismatch": "Passwords don't match",
     "enterFullName": "Enter your full name",
     "valueTooLong": "Value is too long",
     "chooseTrade": "Choose at least one type of work",

@@ -15,6 +15,8 @@ import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage.tsx';
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage.tsx';
 import { PrivacyPage } from '@/features/legal/PrivacyPage.tsx';
 import { BillingReturnPage } from '@/features/billing/BillingReturnPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
@@ -69,6 +71,9 @@ export const router = createBrowserRouter([
   },
   // Public: the email-verification link works whether logged in or out.
   { path: routes.verifyEmail, element: <VerifyEmailPage /> },
+  // Public: password reset — request a link, then set a new password from the emailed token.
+  { path: routes.forgotPassword, element: <ForgotPasswordPage /> },
+  { path: routes.resetPassword, element: <ResetPasswordPage /> },
   // Public: the privacy policy is reachable without auth (landing footer, the
   // registration consent link, robots-indexable).
   { path: routes.privacy, element: <PrivacyPage /> },

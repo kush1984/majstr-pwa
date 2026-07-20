@@ -58,4 +58,24 @@ export const authApi = {
   resendVerification(): Promise<void> {
     return api.post('/api/auth/resend-verification').then(() => undefined);
   },
+
+  /** Public — request a password-reset link. Always resolves (the backend answers a
+   *  neutral 200 whether or not the account exists — anti-enumeration). Rate-limited. */
+  forgotPassword(email: string): Promise<void> {
+    return rawApi({
+      method: 'POST',
+      url: '/api/auth/forgot',
+      data: { email },
+    }).then(() => undefined);
+  },
+
+  /** Public — set a new password using the token from the reset link. Bad/expired token
+   *  → 400 `INVALID_OR_EXPIRED_TOKEN` (handled by the caller). */
+  resetPassword(token: string, newPassword: string): Promise<void> {
+    return rawApi({
+      method: 'POST',
+      url: '/api/auth/reset',
+      data: { token, newPassword },
+    }).then(() => undefined);
+  },
 };

@@ -88,8 +88,11 @@ export function LoginPage() {
           </Link>
         </p>
 
-        {/* TODO(open-questions: "Password reset flow"): add "Забули пароль?" link
-            here once backend exposes /api/auth/forgot-password + /reset. */}
+        <p className="text-center text-sm">
+          <Link to={routes.forgotPassword} className="text-gray-500 hover:underline">
+            {t('auth.forgotPassword')}
+          </Link>
+        </p>
       </form>
     </AuthShell>
   );

@@ -31,6 +31,8 @@ export const routes = {
   login: '/login',
   register: '/register',
   verifyEmail: '/verify-email',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
   privacy: '/privacy',
   liga: '/liga',
   home: '/',
