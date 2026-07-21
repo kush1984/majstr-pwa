@@ -84,4 +84,50 @@ describe('MeasurementItemForm', () => {
     const save = screen.getByRole('button', { name: 'Зберегти' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
   });
+
+  it('builds a SHTROBA payload (explicit bus + per-drop chase) as the chase/cable calculator', () => {
+    const onSave = vi.fn();
+    render(<MeasurementItemForm allowedTypes={['SHTROBA']} onSave={onSave} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Стеля/), { target: { value: 'Вітальня' } });
+    // Explicit bus length (mm) — the fix for the wrongly-guessed «магістраль». One default
+    // socket drop (h=300), bus level 2600, both chased, 10% reserve.
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1000' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      name: 'Вітальня',
+      type: 'SHTROBA',
+      payload: {
+        busLevel: 2600,
+        busFromTop: true,
+        busLength: 1000,
+        busChase: true,
+        reservePct: 10,
+        points: [{ kind: 'socket', h: 300, qty: 1, chase: true }],
+      },
+    });
+  });
+
+  it('lets a drop be wired but NOT chased (un-plastered wall) via its per-drop toggle', () => {
+    const onSave = vi.fn();
+    render(<MeasurementItemForm allowedTypes={['SHTROBA']} onSave={onSave} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Стеля/), { target: { value: 'Гараж' } });
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
+    // Untick «Штробити» on the single drop — the point stays in the cable, drops out of the chase.
+    fireEvent.click(screen.getByRole('button', { name: 'Штробити' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'SHTROBA',
+        payload: expect.objectContaining({
+          points: [{ kind: 'socket', h: 300, qty: 1, chase: false }],
+        }),
+      }),
+    );
+  });
 });

@@ -12,9 +12,10 @@ vi.mock('@/api/measurements.ts', () => ({ measurementsApi: { tree: vi.fn() } }))
 const tree: MeasurementsResponse = {
   areaTotal: 30,
   linearTotal: 5,
+  pieceTotal: 0,
   rooms: [
     {
-      id: 'r1', name: 'Спальня', sortOrder: 0, areaTotal: 30, linearTotal: 5,
+      id: 'r1', name: 'Спальня', sortOrder: 0, areaTotal: 30, linearTotal: 5, pieceTotal: 0,
       items: [
         { id: 'i1', name: 'Стеля', type: 'SURFACE', unit: 'M2', result: 20, sortOrder: 0, payload: { segments: [], openings: [] } },
         { id: 'i2', name: 'Підлога', type: 'SURFACE', unit: 'M2', result: 10, sortOrder: 1, payload: { segments: [], openings: [] } },

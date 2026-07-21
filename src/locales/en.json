@@ -606,6 +606,7 @@
     "proHint": "Available on the PRO plan",
     "loadError": "Couldn't load the measurements",
     "addRoom": "+ Room",
+    "areaHeader": "Rooms · areas",
     "roomNamePlaceholder": "e.g. Bedroom, Bathroom",
     "emptyTitle": "No measurements yet",
     "emptyText": "Add a room and measure surfaces, partitions and reveals.",
@@ -634,7 +635,12 @@
     "sideLeft": "Left",
     "sideRight": "Right",
     "sideTop": "Top",
-    "sideBottom": "Bottom"
+    "sideBottom": "Bottom",
+    "typePoints": "Points (pcs)",
+    "typeShtroba": "Chasing",
+    "pointsHint": "Points from a plan: legend type + count. No lengths are computed here.",
+    "pointTypePlaceholder": "e.g. Socket",
+    "addPointType": "+ Point type"
   },
   "measurePick": {
     "button": "Pick from measurements",
@@ -697,7 +703,10 @@
       "d": {
         "hint": "A plain wall",
         "formula": "Area = a × b",
-        "field": { "a": "width", "b": "height" }
+        "field": {
+          "a": "width",
+          "b": "height"
+        }
       }
     },
     "trap": {
@@ -705,7 +714,11 @@
       "d": {
         "hint": "A sloped wall: two parallel sides",
         "formula": "Area = (a + b) / 2 × h",
-        "field": { "a": "top side", "b": "bottom side", "h": "height" }
+        "field": {
+          "a": "top side",
+          "b": "bottom side",
+          "h": "height"
+        }
       }
     },
     "attic": {
@@ -714,7 +727,11 @@
         "label": "Symmetric",
         "hint": "A house-shaped wall, side walls equal",
         "formula": "Area = a × (b + h) / 2",
-        "field": { "a": "width", "b": "side wall height", "h": "height to the apex" }
+        "field": {
+          "a": "width",
+          "b": "side wall height",
+          "h": "height to the apex"
+        }
       },
       "asym": {
         "label": "Different walls",
@@ -734,13 +751,20 @@
         "label": "Base + height",
         "hint": "When the height (perpendicular to the base) is easy to measure",
         "formula": "Area = b × h / 2",
-        "field": { "b": "base", "h": "height" }
+        "field": {
+          "b": "base",
+          "h": "height"
+        }
       },
       "sss": {
         "label": "Three sides",
         "hint": "A skewed triangle — measure all three sides",
         "formula": "Heron's formula (from three sides)",
-        "field": { "c": "side c (base)", "a": "side a", "b": "side b" }
+        "field": {
+          "c": "side c (base)",
+          "a": "side a",
+          "b": "side b"
+        }
       }
     },
     "cut": {
@@ -1010,5 +1034,68 @@
     "enterPrice": "Enter a price",
     "priceTooLow": "Price must be greater than 0",
     "valueTooLow": "Value must be greater than 0"
+  },
+  "shtroba": {
+    "hint": "Cable = bus + all drops (+ reserve). Chase = only what you actually cut. Millimetres.",
+    "busSection": "Bus",
+    "busManual": "By hand",
+    "busPlan": "On a plan",
+    "roomW": "Width, mm",
+    "roomL": "Length, mm",
+    "planHint": "Draw the bus along the walls — we measure its length off the drawing. Drag the entry and the points.",
+    "busAddVertex": "＋ vertex",
+    "busDelVertex": "－ vertex",
+    "busLength": "Bus length, mm",
+    "busLevel": "Bus level, mm",
+    "busChase": "Chase the bus",
+    "pointChase": "Chase it",
+    "reserve": "Reserve, %",
+    "fromTop": "▔ from top",
+    "fromBottom": "▁ from floor",
+    "addPoint": "+ Point",
+    "busTotal": "Bus",
+    "dropsTotal": "Drops (all)",
+    "cableTotal": "Cable",
+    "chaseTotal": "Chase",
+    "bus": "bus",
+    "floor": "floor",
+    "addPointsHint": "add points below",
+    "diagramAlt": "Wall chasing diagram",
+    "kindSocket": "Socket",
+    "kindSwitch": "Switch",
+    "kindLight": "Light",
+    "kindOutlet": "Outlet",
+    "field_h": "height, mm",
+    "field_qty": "qty"
+  },
+  "plan": {
+    "alt": "Room plan — bus and points",
+    "entry": "panel"
+  },
+  "electrical": {
+    "button": "📐 Read a plan",
+    "title": "Electrical plan",
+    "sourceHint": "Upload a PDF or photo of the sockets/lighting plan — we count the points from its legend.",
+    "pick": "Choose plan",
+    "parsing": "Counting points from the legend…",
+    "reviewHint": "Check the counts against the plan. The model only counts points and reads heights — the calculator does the metres.",
+    "ledHint": "The plan has LED strip. Add its metres by hand — a length off a drawing is not measured.",
+    "nothing": "Could not read the plan. Try a clearer photo or the PDF.",
+    "check": "check",
+    "applyHint": "The points go into the chase/cable calculator — set the bus and what to chase there.",
+    "apply": "To calculator ({{points}} pts)",
+    "roomName": "Electrics",
+    "sectionTitle": "⚡ Electrical",
+    "sectionHint": "Electrical measurements: points from a plan + chase/cable calculator",
+    "calcButton": "🧮 Chase / cable",
+    "calcTitle": "Chase / cable calculator",
+    "calcSeedName": "Electrical (from plan)",
+    "pointsName": "Points from plan",
+    "chaseItemName": "Chase · {{name}}",
+    "cableItemName": "Cable · {{name}}",
+    "pdfPages": "PDF has {{count}} pages. Which are the socket/lighting plan? (e.g. 3 or 3-4)",
+    "pagePlaceholder": "e.g. 3 or 3-4",
+    "pageParse": "Recognise pages",
+    "pageEmpty": "Enter a page number"
   }
 }

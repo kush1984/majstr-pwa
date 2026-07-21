@@ -466,7 +466,16 @@ export interface CatalogResetResponse {
 
 // ---- object measurements (Заміри) -------------------------------------------
 
-export type MeasurementType = 'SURFACE' | 'PARTITION' | 'LINEAR';
+export type MeasurementType =
+  | 'SURFACE'
+  | 'PARTITION'
+  | 'LINEAR'
+  /** Electrical points off a plan (шт). */
+  | 'ELECTRICAL_POINTS'
+  /** Chase length (м.пог) — WORK. Deterministic: bus (if chased) + flagged drops. */
+  | 'SHTROBA'
+  /** Cable length (м) — MATERIAL. Deterministic: bus + every drop + reserve %. */
+  | 'CABLE';
 
 /** Payload shapes (must mirror the backend calculator). */
 /**
@@ -502,7 +511,45 @@ export interface LinearPayload {
   sides: { left: boolean; right: boolean; top: boolean; bottom: boolean };
   qty: number;
 }
-export type MeasurementPayload = SurfacePayload | PartitionPayload | LinearPayload;
+/** Electrical points counted off a plan, grouped by the legend's own wording. */
+export interface PointsPayload {
+  points: { type: string; count: number; heights: number[]; note?: string | null }[];
+}
+/**
+ * Chase/cable input. ONE payload drives BOTH results (кабель = material, штроба = work),
+ * so a `SHTROBA` and a `CABLE` item share this shape. All lengths in MILLIMETRES — that's
+ * how plans annotate (h=300 socket, h=900 switch, h=2600 A/C outlet).
+ *
+ * - CABLE  = busLength + Σ every drop, then × (1 + reserve%). The wire reaches every point.
+ * - SHTROBA (chase) = (busLength if busChase) + Σ drops whose point has `chase` — only what
+ *   is actually cut. A ceiling bus or an un-plastered wall is left unflagged. No reserve.
+ */
+export interface ShtrobaPayload {
+  /** Height of the horizontal bus above the finished floor. */
+  busLevel: number;
+  /** true = bus along the top (level = busLevel); false = along the floor (level 0). Per room. */
+  busFromTop: boolean;
+  /** Explicit length of the horizontal bus (магістраль), mm — set by the master, never guessed. */
+  busLength: number;
+  /** Whether the bus itself is chased (false when it runs along the ceiling). */
+  busChase: boolean;
+  /** Slack added to the CABLE only (a chase is cut to size). */
+  reservePct: number;
+  points: {
+    kind: string;
+    name?: string;
+    h: number;
+    qty: number;
+    /** Whether THIS drop is chased (false for an un-plastered wall). */
+    chase: boolean;
+  }[];
+}
+export type MeasurementPayload =
+  | SurfacePayload
+  | PartitionPayload
+  | LinearPayload
+  | PointsPayload
+  | ShtrobaPayload;
 
 export interface MeasurementItem {
   id: string;
@@ -522,11 +569,35 @@ export interface MeasurementRoom {
   items: MeasurementItem[];
   areaTotal: number;
   linearTotal: number;
+  /** Electrical points (шт) — kept out of the area figure. */
+  pieceTotal: number;
 }
 export interface MeasurementsResponse {
   rooms: MeasurementRoom[];
   areaTotal: number;
   linearTotal: number;
+  pieceTotal: number;
+}
+
+/** One point type read off a plan (LLM) — a draft to review, nothing persisted yet. */
+export interface ElectricalPlanPoint {
+  type: string;
+  count: number;
+  /** h= annotations, millimetres. */
+  heights: number[];
+  confidence: Confidence;
+  note: string | null;
+}
+/**
+ * A FLAT list of point types (variant 2) — the model only counts symbols and reads printed
+ * heights; it does NOT group by room or read room sizes. The master distributes the points
+ * across rooms himself in the calculator, where lengths are computed deterministically.
+ */
+export interface ElectricalPlanParseResponse {
+  points: ElectricalPlanPoint[];
+  /** LED strip is drawn as lines — flagged only, its length is never LLM-estimated. */
+  ledStripPresent: boolean;
+  warnings: string[];
 }
 export interface MeasurementRoomRequest {
   name: string;

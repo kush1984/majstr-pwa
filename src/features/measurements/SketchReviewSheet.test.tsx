@@ -97,7 +97,7 @@ describe('SketchReviewSheet', () => {
   });
 
   it('commits the confirmed rooms and seeds the measurement cache', async () => {
-    vi.mocked(sketchImportApi.commit).mockResolvedValue({ rooms: [], areaTotal: 7.5, linearTotal: 0 });
+    vi.mocked(sketchImportApi.commit).mockResolvedValue({ rooms: [], areaTotal: 7.5, linearTotal: 0, pieceTotal: 0 });
     renderSheet();
     await pickPhoto();
 
