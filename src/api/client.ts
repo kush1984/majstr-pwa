@@ -173,6 +173,18 @@ api.interceptors.request.use(async (req) => {
   if (token) {
     req.headers.Authorization = `Bearer ${token}`;
   }
+
+  // A file upload must go out as multipart/form-data with a boundary — and only the
+  // browser can generate that boundary. The instance-wide JSON default above would
+  // otherwise ride along on FormData bodies and Spring answers 415
+  // (HttpMediaTypeNotSupportedException). Dropping the header here lets the browser
+  // set it, and makes the rule impossible to forget on a new upload endpoint — which
+  // is exactly how sketch/parse shipped broken to production.
+  if (typeof FormData !== 'undefined' && req.data instanceof FormData) {
+    // `setContentType(false)` is the AxiosHeaders way to clear it — a plain
+    // `delete headers['Content-Type']` misses the class's normalised entry.
+    req.headers.setContentType(false);
+  }
   return req;
 });
 

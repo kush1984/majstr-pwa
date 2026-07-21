@@ -184,4 +184,36 @@ describe('api 401-retry interceptor', () => {
     expect(tokens.getAccess()).toBe('opaque-token'); // tokens kept
     expect(tokens.getRefresh()).toBe('refresh-1');
   });
+// Regression: a global JSON Content-Type used to ride along on FormData bodies, so every
+  // file upload reached Spring as application/json and died with 415. Real masters hit this
+  // on sketch/parse in production (Sentry JAVA-SPRING-BOOT-D).
+  it('drops the JSON Content-Type on FormData so the browser can set the multipart boundary', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    const form = new FormData();
+    form.append('file', new File(['x'], 'plan.pdf', { type: 'application/pdf' }));
+    await api.post('/api/projects/p1/measurements/sketch/parse', form);
+
+    // axios uses `false` as "send no Content-Type" — the browser then fills in
+    // multipart/form-data with its boundary. What must never happen is application/json.
+    const sent = adapter.mock.calls[0][0];
+    expect(sent.headers['Content-Type']).not.toBe('application/json');
+    expect(sent.headers['Content-Type']).toBeFalsy();
+  });
+
+  it('still sends application/json for ordinary JSON bodies', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    await api.post('/api/estimates', { name: 'x' });
+
+    expect(adapter.mock.calls[0][0].headers['Content-Type']).toBe('application/json');
+  });
 });
