@@ -66,10 +66,7 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
   // ---- FREE teaser: locked, no real figures --------------------------------
   if (!isPro) {
     return (
-      <section className="mt-6">
-        <h2 className="mb-3 text-[13px] font-bold uppercase tracking-wide text-primary">
-          {t('economy.title')}
-        </h2>
+      <section>
         <button
           type="button"
           onClick={openTeaser}
@@ -93,9 +90,9 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
   const cash = eco?.cashBalance ?? 0;
 
   return (
-    <section className="mt-6">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">{t('economy.title')}</h2>
+    <section>
+      {/* The tab itself is named «Економіка об'єкту» — no in-body title needed. */}
+      <div className="mb-3 flex items-center justify-end">
         <button
           type="button"
           onClick={() => {

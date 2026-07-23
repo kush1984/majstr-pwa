@@ -22,9 +22,9 @@ import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
-import { useEstimate } from '@/features/estimate/useEstimate.ts';
+import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
-import { ShareEstimateSheet } from '@/features/estimate/ShareEstimateSheet.tsx';
+import { SharePortalSheet } from './SharePortalSheet.tsx';
 import { ConsolidateSheet } from '@/features/estimate/ConsolidateSheet.tsx';
 import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
 import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
@@ -37,12 +37,12 @@ import { NotesSection } from '@/features/notes/NotesSection.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 
 type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
-const TABS: { key: Tab; labelKey: string }[] = [
+const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
   { key: 'estimate', labelKey: 'projects.tabEstimate' },
   { key: 'measurements', labelKey: 'projects.tabMeasurements' },
   { key: 'photos', labelKey: 'projects.tabPhotos' },
   { key: 'notes', labelKey: 'projects.tabNotes' },
-  { key: 'act', labelKey: 'projects.tabAct' },
+  { key: 'act', labelKey: 'projects.tabAct', shortLabelKey: 'projects.tabActShort' },
 ];
 
 export function ProjectDetailPage() {
@@ -101,15 +101,16 @@ export function ProjectDetailPage() {
     onError: (err) => toast.error(toAppError(err).message),
   });
 
-  const createEstimate = useMutation({
-    mutationFn: () => estimatesApi.createForProject(id, {}),
-    onSuccess: (e) => {
-      qc.invalidateQueries({ queryKey: ['project-estimates', id] });
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      navigate(routes.estimate(e.id));
-    },
-    onError: (err) => toast.error(toAppError(err).message),
-  });
+  // Offline-first (useCreateEstimate handles optimistic cache + queueing); we just navigate.
+  const createEstimate = useCreateEstimate();
+  const createEmptyEstimate = () =>
+    createEstimate.mutate(
+      { projectId: id, req: {} },
+      {
+        onSuccess: (e) => navigate(routes.estimate(e.id)),
+        onError: (err) => toast.error(toAppError(err).message),
+      },
+    );
 
   // New estimate here is a choice: empty, or start from a template (defaults +
   // own). Applying a template reuses the backend apply-to-project endpoint.
@@ -153,7 +154,7 @@ export function ProjectDetailPage() {
   };
   const createEmpty = () => {
     setEstimateChoiceOpen(false);
-    createEstimate.mutate();
+    createEmptyEstimate();
   };
   const onPickTemplate = async (tpl: EstimateTemplateSummary) => {
     setTemplatePickerOpen(false);
@@ -166,13 +167,6 @@ export function ProjectDetailPage() {
       toast.error(toAppError(err).message);
     }
   };
-  // The project-level share CTA targets the NEWEST estimate — the same
-  // "latest" notion the backend uses for the project card (latestEstimateTotal
-  // / estimateStatus). Never blindly list[0]: the list order isn't guaranteed.
-  const latestEstimate = [...list].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  )[0];
-
   const openShare = () => {
     if (list.length === 0) {
       toast.info(t('projects.createEstimateFirst'));
@@ -184,10 +178,9 @@ export function ProjectDetailPage() {
   return (
     <>
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
-      <ShareEstimateSheet
+      <SharePortalSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
-        estimateId={latestEstimate?.id ?? ''}
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
       />
@@ -358,7 +351,15 @@ export function ProjectDetailPage() {
                 : 'border-transparent text-muted')
             }
           >
-            {t(tabItem.labelKey)}
+            {tabItem.shortLabelKey ? (
+              <>
+                {/* «Економіка об'єкту» doesn't fit five 375px tabs — phones get the short form. */}
+                <span className="sm:hidden">{t(tabItem.shortLabelKey)}</span>
+                <span className="hidden sm:inline">{t(tabItem.labelKey)}</span>
+              </>
+            ) : (
+              t(tabItem.labelKey)
+            )}
           </button>
         ))}
       </div>
@@ -369,8 +370,8 @@ export function ProjectDetailPage() {
         <PhotosSection projectId={id} />
       ) : tab === 'notes' ? (
         <NotesSection objectId={id} />
-      ) : tab !== 'estimate' ? (
-        <EmptyState icon="🚧" title={t('common.soon')} text={t('projects.sectionSoonText')} />
+      ) : tab === 'act' ? (
+        <ObjectEconomySection objectId={id} />
       ) : (
         <>
           <button
@@ -455,8 +456,6 @@ export function ProjectDetailPage() {
           )}
         </>
       )}
-
-      <ObjectEconomySection objectId={id} />
 
       <QuestionsSection projectId={id} />
     </>

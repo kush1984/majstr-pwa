@@ -19,8 +19,11 @@ export const projectsApi = {
     return api.get<ProjectResponse>(`/api/projects/${id}`).then((r) => r.data);
   },
 
-  create(req: ProjectRequest): Promise<ProjectResponse> {
-    return api.post<ProjectResponse>('/api/projects', req).then((r) => r.data);
+  /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
+  create(req: ProjectRequest, id?: string): Promise<ProjectResponse> {
+    return api
+      .post<ProjectResponse>('/api/projects', req, id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
   },
 
   update(id: string, req: ProjectRequest): Promise<ProjectResponse> {

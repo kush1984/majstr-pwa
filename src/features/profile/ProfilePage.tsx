@@ -5,6 +5,7 @@ import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
 import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
+import { useSyncStatus } from '@/lib/useOnline.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
@@ -41,6 +42,7 @@ export function ProfilePage() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const logout = useLogout();
+  const { pending: pendingSync } = useSyncStatus();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -285,7 +287,11 @@ export function ProfilePage() {
         <ConfirmDialog
           open={logoutConfirmOpen}
           title={t('profile.logout')}
-          message={t('profile.logoutConfirm')}
+          // Logout wipes the device's local copy — including any UNSYNCED offline changes. Warn
+          // clearly (with the count) when there are pending writes, so a master doesn't lose work.
+          message={pendingSync > 0
+            ? t('profile.logoutUnsyncedConfirm', { n: pendingSync })
+            : t('profile.logoutConfirm')}
           confirmLabel={t('profile.logout')}
           onConfirm={() => {
             setLogoutConfirmOpen(false);

@@ -40,6 +40,9 @@ beforeEach(() => {
   vi.mocked(clientsApi.list).mockResolvedValue([]);
 });
 
+// Online (the vitest default): creates go straight to the API — now with a client-generated UUID
+// as a 2nd arg (the X-Entity-Uuid for idempotent offline replay). Offline queueing is covered in
+// useProjects.test / useClients.test.
 describe('NewObjectPage', () => {
   it('creates an object with NO client (default) and opens it', async () => {
     vi.mocked(projectsApi.create).mockResolvedValue(proj);
@@ -50,11 +53,10 @@ describe('NewObjectPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
 
     await waitFor(() =>
-      expect(projectsApi.create).toHaveBeenCalledWith({
-        name: 'Хата', address: 'вул. 1', clientId: undefined,
-      }),
+      expect(projectsApi.create).toHaveBeenCalledWith(
+        { name: 'Хата', address: 'вул. 1', clientId: undefined }, expect.any(String),
+      ),
     );
-    // No client was created, and we navigate to the new object.
     expect(clientsApi.create).not.toHaveBeenCalled();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/projects/p9', { replace: true }));
   });
@@ -62,13 +64,12 @@ describe('NewObjectPage', () => {
   it('creates a NEW client inline when chosen, then the object', async () => {
     vi.mocked(clientsApi.create).mockResolvedValue({
       id: 'c5', fullName: 'Олег', phone: '0991112233', email: null, address: null, createdAt: '',
-    } as never);
+    });
     vi.mocked(projectsApi.create).mockResolvedValue(proj);
 
     const { container } = renderPage();
     fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Хата' } });
     fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
-    // Switch the client picker to "Новий" and fill the required fields.
     fireEvent.click(screen.getByRole('button', { name: 'Новий' }));
     fireEvent.change(container.querySelector('#cp-name')!, { target: { value: 'Олег' } });
     fireEvent.change(container.querySelector('#cp-phone')!, { target: { value: '0991112233' } });
@@ -76,9 +77,9 @@ describe('NewObjectPage', () => {
 
     await waitFor(() => expect(clientsApi.create).toHaveBeenCalled());
     await waitFor(() =>
-      expect(projectsApi.create).toHaveBeenCalledWith({
-        name: 'Хата', address: 'вул. 1', clientId: 'c5',
-      }),
+      expect(projectsApi.create).toHaveBeenCalledWith(
+        { name: 'Хата', address: 'вул. 1', clientId: 'c5' }, expect.any(String),
+      ),
     );
   });
 });

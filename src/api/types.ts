@@ -217,8 +217,29 @@ export interface QuestionResponse {
   message: string;
   authorName: string | null;
   authorPhone: string | null;
+  /** Which estimate the client asked about on the portal (null = unnamed). */
+  estimateName: string | null;
   isRead: boolean;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Object-level client portal: one link per object, the master picks which
+// estimates it shows (PortalShareSheet checkboxes mirror `visible`).
+// ---------------------------------------------------------------------------
+
+export interface PortalEstimateFlag {
+  id: string;
+  name: string | null;
+  status: EstimateStatus;
+  createdAt: string;
+  visible: boolean;
+}
+
+export interface PortalStateResponse {
+  /** Shareable portal URL; null until the first publish mints the link. */
+  url: string | null;
+  estimates: PortalEstimateFlag[];
 }
 
 // ---------------------------------------------------------------------------
@@ -319,15 +340,6 @@ export interface EstimateItemRequest {
 export interface EstimateItemFromCatalogRequest {
   quantity: number;
   sortOrder?: number;
-}
-
-export interface ShareLinkResponse {
-  id: string;
-  token: string;
-  url: string;
-  createdAt: string;
-  expiresAt: string | null;
-  revoked: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -58,13 +58,13 @@ describe('NewEstimatePage — optional client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
 
     await waitFor(() =>
-      expect(projectsApi.create).toHaveBeenCalledWith({
-        name: 'Хата', address: 'вул. 1', clientId: undefined,
-      }),
+      expect(projectsApi.create).toHaveBeenCalledWith(
+        { name: 'Хата', address: 'вул. 1', clientId: undefined }, expect.any(String),
+      ),
     );
     expect(clientsApi.create).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect(estimatesApi.createForProject).toHaveBeenCalledWith('p1', { name: undefined }),
+      expect(estimatesApi.createForProject).toHaveBeenCalledWith('p1', { name: undefined }, expect.any(String)),
     );
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/estimates/e1', { replace: true }));
   });

@@ -10,7 +10,6 @@ import type {
   EstimateResponse,
   EstimateSummary,
   EstimateUpdateRequest,
-  ShareLinkResponse,
 } from './types.ts';
 
 /**
@@ -26,12 +25,15 @@ export const estimatesApi = {
       .then((r) => r.data);
   },
 
+  /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
   createForProject(
     projectId: string,
     req: EstimateCreateRequest,
+    id?: string,
   ): Promise<EstimateResponse> {
     return api
-      .post<EstimateResponse>(`/api/projects/${projectId}/estimates`, req)
+      .post<EstimateResponse>(`/api/projects/${projectId}/estimates`, req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
       .then((r) => r.data);
   },
 
@@ -72,9 +74,11 @@ export const estimatesApi = {
   },
 
   // ---- items ----
-  addItem(estimateId: string, req: EstimateItemRequest): Promise<EstimateItemResponse> {
+  /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
+  addItem(estimateId: string, req: EstimateItemRequest, id?: string): Promise<EstimateItemResponse> {
     return api
-      .post<EstimateItemResponse>(`/api/estimates/${estimateId}/items`, req)
+      .post<EstimateItemResponse>(`/api/estimates/${estimateId}/items`, req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
       .then((r) => r.data);
   },
 
@@ -114,27 +118,6 @@ export const estimatesApi = {
   removeItem(estimateId: string, itemId: string): Promise<void> {
     return api
       .delete(`/api/estimates/${estimateId}/items/${itemId}`)
-      .then(() => undefined);
-  },
-
-  // ---- share link ----
-  createShareLink(id: string): Promise<ShareLinkResponse> {
-    return api
-      .post<ShareLinkResponse>(`/api/estimates/${id}/share`)
-      .then((r) => r.data);
-  },
-
-  /** Email the portal link to the estimate's client (creates a link if none yet).
-   *  400 CLIENT_EMAIL_MISSING when the client has no email on file. */
-  sendShareEmail(id: string): Promise<ShareLinkResponse> {
-    return api
-      .post<ShareLinkResponse>(`/api/estimates/${id}/share/send-email`)
-      .then((r) => r.data);
-  },
-
-  revokeShareLink(id: string, linkId: string): Promise<void> {
-    return api
-      .delete(`/api/estimates/${id}/share/${linkId}`)
       .then(() => undefined);
   },
 

@@ -9,7 +9,6 @@
     "loading": "Loading...",
     "retry": "Try again",
     "all": "All",
-    "soon": "Soon",
     "newEstimate": "New estimate",
     "newObject": "New object",
     "addEstimate": "Object & estimate",
@@ -183,11 +182,31 @@
     "withStatus": "Error {{status}}",
     "unavailableTitle": "Service temporarily unavailable",
     "unavailableText": "Could not load data. Please try again in a minute.",
-    "offlineBanner": "No internet connection",
     "boundaryTitle": "Something went wrong",
     "boundaryText": "An unexpected error occurred. Try reloading the page.",
     "boundaryReload": "Reload page",
     "sessionExpired": "Session ended — please sign in again"
+  },
+  "offline": {
+    "banner": "Offline — showing your saved copy. Some actions need a connection."
+  },
+  "sync": {
+    "pending": "Waiting to sync: {{n}}",
+    "syncing": "Syncing…",
+    "blocked": "Not saved to cloud: {{n}} — resolve",
+    "reviewTitle": "Action needed",
+    "reviewLimitBody": "These changes ({{n}}) don't fit your free plan. Upgrade to PRO to keep them in the cloud, or they'll stay only on this device and won't sync.",
+    "reviewBody": "The server didn't accept these changes ({{n}}). Try syncing again, or delete them.",
+    "upgradeHint": "PRO — unlimited objects and estimates",
+    "retry": "Try to sync",
+    "dropAll": "Delete these changes",
+    "later": "Later",
+    "entity": {
+      "client": "Client",
+      "project": "Object",
+      "estimate": "Estimate",
+      "estimateItem": "Line item"
+    }
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -276,8 +295,7 @@
     "tabMeasurements": "Measurements",
     "tabPhotos": "Photos",
     "tabNotes": "Notes",
-    "tabAct": "Act",
-    "sectionSoonText": "This section will appear in upcoming updates.",
+    "tabAct": "Object economy",
     "shareWithClient": "Share with the client",
     "clientPortalLink": "Link to the portal",
     "estimatesCount": "Estimates · {{count}}",
@@ -286,7 +304,8 @@
     "noEstimatesText": "Create the first estimate for this object.",
     "createEstimateFirst": "Create an estimate first",
     "estimateRowName": "Estimate",
-    "itemsCount": "{{count}} items"
+    "itemsCount": "{{count}} items",
+    "tabActShort": "Economy"
   },
   "estimate": {
     "newTitle": "Object & estimate",
@@ -457,7 +476,6 @@
   },
   "photos": {
     "title": "Object photos",
-    "add": "+ Photo",
     "uploading": "Uploading…",
     "uploaded": "Photo added",
     "deleted": "Photo deleted",
@@ -475,7 +493,10 @@
     "prev": "Previous photo",
     "next": "Next photo",
     "limitReached": "Photo limit reached for this object",
-    "limitHint": "You've added the maximum photos ({{max}}) for this object. Upgrade to PRO for more."
+    "limitHint": "You've added the maximum photos ({{max}}) for this object. Upgrade to PRO for more.",
+    "takePhoto": "Take a photo",
+    "fromGallery": "From gallery",
+    "addFile": "Add photos"
   },
   "notes": {
     "add": "+ Note",
@@ -854,6 +875,7 @@
     "settingsSoon": "Profile settings — coming soon",
     "logout": "Sign out",
     "logoutConfirm": "Log out on this device?",
+    "logoutUnsyncedConfirm": "You have {{n}} unsynced changes. Logging out will wipe them from this device. Better to connect and let them sync first. Log out anyway?",
     "limitReached": "Object limit reached. Upgrade your plan to create more.",
     "companyLogo": "Company logo",
     "companyLogoBranded": "For branded PDFs",
@@ -889,7 +911,8 @@
     "titleWithCount": "💬 Client questions · {{count}}",
     "loadError": "Couldn't load the questions.",
     "empty": "No questions yet",
-    "client": "Client"
+    "client": "Client",
+    "aboutEstimate": "about “{{name}}”"
   },
   "clientPicker": {
     "none": "No client",
@@ -1097,5 +1120,12 @@
     "pagePlaceholder": "e.g. 3 or 3-4",
     "pageParse": "Recognise pages",
     "pageEmpty": "Enter a page number"
+  },
+  "portal": {
+    "sheetTitle": "Client portal",
+    "pickHint": "Pick the estimates the client will see. They all share one page — each is signed separately.",
+    "loadError": "Could not load the estimates",
+    "hideAll": "Remove everything from the portal",
+    "hiddenAll": "Portal cleared — estimates hidden"
   }
 }

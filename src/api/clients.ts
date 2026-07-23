@@ -11,8 +11,15 @@ export const clientsApi = {
     return api.get<ClientResponse>(`/api/clients/${id}`).then((r) => r.data);
   },
 
-  create(req: ClientRequest): Promise<ClientResponse> {
-    return api.post<ClientResponse>('/api/clients', req).then((r) => r.data);
+  /**
+   * Create a client. `id` (a client-generated UUID) is sent in the X-Entity-Uuid header so an
+   * offline-authored create replays idempotently — the backend returns the existing client
+   * instead of duplicating on a retry.
+   */
+  create(req: ClientRequest, id?: string): Promise<ClientResponse> {
+    return api
+      .post<ClientResponse>('/api/clients', req, id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
   },
 
   update(id: string, req: ClientRequest): Promise<ClientResponse> {

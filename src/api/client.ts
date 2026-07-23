@@ -5,6 +5,8 @@ import axios, {
 } from 'axios';
 import { config, routes } from '@/lib/config.ts';
 import { tokens } from '@/lib/tokens.ts';
+import { clearPersistedCache } from '@/lib/offlinePersist.ts';
+import { clearOutbox } from '@/lib/outbox/outbox.ts';
 import i18n from '@/lib/i18n.ts';
 import type { AuthResponse } from './types.ts';
 
@@ -129,8 +131,15 @@ function forceLogin(): void {
   tokens.clear();
   if (!redirectingToLogin && window.location.pathname !== routes.login) {
     redirectingToLogin = true;
-    // Hard redirect drops in-memory React state + cached queries.
-    window.location.href = routes.login;
+    // A genuinely-dead session (server refused the refresh) — wipe the PERSISTED offline cache
+    // too, then hard-redirect. The reload alone drops in-memory state but NOT IndexedDB, so
+    // without this the next load would rehydrate the dead session's data. Reached only on a 4xx
+    // from /refresh — never when merely offline (that path keeps everything).
+    // Also drop the outbox — a dead token can't replay it anyway, and it must not linger for the
+    // next account. (Slice 3 will instead retain it, owner-tagged, to offer re-sync on re-login.)
+    void Promise.all([clearPersistedCache(), clearOutbox()]).finally(() => {
+      window.location.href = routes.login;
+    });
   }
 }
 

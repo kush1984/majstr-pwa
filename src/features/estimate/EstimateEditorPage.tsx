@@ -23,7 +23,7 @@ import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
-import { ShareEstimateSheet } from './ShareEstimateSheet.tsx';
+import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
@@ -450,11 +450,11 @@ export function EstimateEditorPage() {
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       {project.data && (
-        <ShareEstimateSheet
+        <SharePortalSheet
           open={shareOpen}
           onClose={() => setShareOpen(false)}
-          estimateId={id}
           project={project.data}
+          preselectEstimateId={id}
           onNeedEmailVerify={() => setEmailGateOpen(true)}
         />
       )}

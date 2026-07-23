@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
+import { clearPersistedCache } from '@/lib/offlinePersist.ts';
+import { clearOutbox } from '@/lib/outbox/outbox.ts';
 import { routes } from '@/lib/config.ts';
 
 /**
@@ -28,6 +30,8 @@ export function useLogout() {
     tokens.clear();
     setSentryUser(null);
     qc.clear();
+    void clearPersistedCache(); // the local copy is temporary — logout wipes it from the device
+    void clearOutbox();         // and any unsynced writes (Phase 1 slice 3 warns before this)
     navigate(routes.login, { replace: true });
   }, [qc, navigate]);
 }

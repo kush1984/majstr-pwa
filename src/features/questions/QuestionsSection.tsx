@@ -59,8 +59,13 @@ export function QuestionsSection({ projectId }: { projectId: string }) {
               >
                 <div className="flex items-center gap-2">
                   {isNew && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand" />}
-                  <span className="text-sm font-semibold text-primary">
+                  <span className="min-w-0 truncate text-sm font-semibold text-primary">
                     {item.authorName || t('questions.client')}
+                    {item.estimateName && (
+                      <span className="ml-1 font-normal text-muted">
+                        {t('questions.aboutEstimate', { name: item.estimateName })}
+                      </span>
+                    )}
                   </span>
                   <span className="ml-auto whitespace-nowrap text-[11px] text-muted">
                     {formatDateTime(item.createdAt)}

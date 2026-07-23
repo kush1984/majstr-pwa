@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
+import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { estimatesApi } from '@/api/estimates.ts';
+import { portalApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
+import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
 import { useUpdateProject } from '@/features/projects/useProjects.ts';
 import {
@@ -18,29 +20,52 @@ import {
 } from '@/features/clients/ClientPicker.tsx';
 
 /**
- * "Поділитися з клієнтом" sheet. Offers email + copy-link when the client has
- * an email, copy-only (plus an inline "add email") when they don't. Both
- * actions create/reuse the share link and flip the estimate DRAFT → SENT.
+ * "Поділитися з клієнтом" — the object's portal. The master ticks which
+ * estimates the client will see (one link shows them all as sections), then
+ * copies the link or emails it. Copy/email always PUBLISH first (PUT the
+ * ticked set), so the URL matches what was just chosen — nothing is shared
+ * implicitly.
  *
- * Gate handling: an unverified contractor (403 EMAIL_NOT_VERIFIED) is bounced
- * to the parent's verify modal; a missing client email (400 CLIENT_EMAIL_MISSING)
- * reveals the inline add-email field.
+ * Gate handling mirrors the old per-estimate sheet: an unverified contractor
+ * (403 EMAIL_NOT_VERIFIED) bounces to the parent's verify modal; a missing
+ * client email (400 CLIENT_EMAIL_MISSING) reveals the inline add-email field.
  */
-export function ShareEstimateSheet({
+export function SharePortalSheet({
   open,
   onClose,
-  estimateId,
   project,
+  preselectEstimateId,
   onNeedEmailVerify,
 }: {
   open: boolean;
   onClose: () => void;
-  estimateId: string;
   project: ProjectResponse;
+  /** Ticked in addition to the already-visible set (the editor's own estimate). */
+  preselectEstimateId?: string;
   onNeedEmailVerify: () => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const portal = useQuery({
+    queryKey: ['portal', project.id],
+    queryFn: () => portalApi.state(project.id),
+    enabled: open,
+  });
+
+  // null = "not initialised yet" — seeded from the server state once loaded.
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setSelected(null);
+      return;
+    }
+    if (portal.data && selected === null) {
+      const initial = new Set(portal.data.estimates.filter((e) => e.visible).map((e) => e.id));
+      if (preselectEstimateId) initial.add(preselectEstimateId);
+      setSelected(initial);
+    }
+  }, [open, portal.data, selected, preselectEstimateId]);
+
   // A client just attached in this sheet (project prop is from the parent and
   // won't update until it refetches) — fold it in so email becomes available.
   const [attachedClientId, setAttachedClientId] = useState<string | null>(null);
@@ -49,10 +74,9 @@ export function ShareEstimateSheet({
   const updateClient = useUpdateClient();
   const createClient = useCreateClient();
   const updateProject = useUpdateProject();
-  const [busy, setBusy] = useState<'copy' | 'email' | null>(null);
+  const [busy, setBusy] = useState<'copy' | 'email' | 'hide' | null>(null);
   const [showAddEmail, setShowAddEmail] = useState(false);
   const [emailInput, setEmailInput] = useState('');
-  // No-client prompt: reveal a picker to attach an existing/new client.
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [clientDraft, setClientDraft] = useState<ClientDraft>({
     mode: 'existing',
@@ -61,12 +85,27 @@ export function ShareEstimateSheet({
   });
 
   const email = client.data?.email ?? null;
+  const list = portal.data?.estimates ?? [];
+  const ticked = selected ?? new Set<string>();
+  const serverVisibleCount = list.filter((e) => e.visible).length;
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev ?? []);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const invalidateAfterShare = () => {
+    qc.invalidateQueries({ queryKey: ['portal', project.id] });
+    // Publishing flips newly-visible DRAFTs to SENT — refresh everything that
+    // shows an estimate status.
     qc.invalidateQueries({ queryKey: ['projects'] });
     qc.invalidateQueries({ queryKey: ['dashboard'] });
     qc.invalidateQueries({ queryKey: ['project-estimates'] });
-    qc.invalidateQueries({ queryKey: ['estimate', estimateId] });
+    qc.invalidateQueries({ queryKey: ['estimate'] });
   };
 
   /** Translate a share error to UX; handles all the gates in one place. */
@@ -90,20 +129,18 @@ export function ShareEstimateSheet({
   const onCopy = async () => {
     setBusy('copy');
     try {
-      const link = await estimatesApi.createShareLink(estimateId);
+      const state = await portalApi.update(project.id, [...ticked]);
       // Clipboard can legitimately fail (no permission, non-secure context,
-      // Safari focus rules) while the share link itself was created fine —
-      // never show "скопійовано" unless it actually landed in the clipboard.
-      const copied = navigator.clipboard
-        ? await navigator.clipboard.writeText(link.url).then(() => true, () => false)
+      // Safari focus rules) while the portal itself published fine — never
+      // show "скопійовано" unless it actually landed in the clipboard.
+      const copied = state.url && navigator.clipboard
+        ? await navigator.clipboard.writeText(state.url).then(() => true, () => false)
         : false;
       invalidateAfterShare();
       if (copied) {
         toast.success(t('estimate.linkCopied'));
         onClose();
       } else {
-        // Link exists but isn't in the buffer — tell the truth and keep the
-        // sheet open so the user can try again.
         toast.error(t('estimate.linkCopyFailed'));
       }
     } catch (err) {
@@ -116,7 +153,8 @@ export function ShareEstimateSheet({
   const onEmail = async () => {
     setBusy('email');
     try {
-      await estimatesApi.sendShareEmail(estimateId);
+      await portalApi.update(project.id, [...ticked]);
+      await portalApi.sendEmail(project.id);
       invalidateAfterShare();
       toast.success(t('estimate.emailSent'));
       onClose();
@@ -127,7 +165,22 @@ export function ShareEstimateSheet({
     }
   };
 
-  /** Attach an existing/new client to the object so the estimate can be sent. */
+  /** Unpublish everything — the portal page then tells the client the master removed the estimates. */
+  const onHideAll = async () => {
+    setBusy('hide');
+    try {
+      await portalApi.update(project.id, []);
+      invalidateAfterShare();
+      toast.success(t('portal.hiddenAll'));
+      onClose();
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Attach an existing/new client to the object so the portal can be emailed. */
   const onAttachClient = async () => {
     const err = clientDraftError(clientDraft);
     if (err) {
@@ -181,10 +234,40 @@ export function ShareEstimateSheet({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={t('estimate.shareSheetTitle')}>
+    <Modal open={open} onClose={onClose} title={t('portal.sheetTitle')}>
       <div className="space-y-3">
+        <p className="text-sm text-muted">{t('portal.pickHint')}</p>
+
+        {portal.isPending ? (
+          <div className="py-6 text-center"><Spinner /></div>
+        ) : portal.isError ? (
+          <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {list.map((e) => (
+              <label key={e.id}
+                className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={ticked.has(e.id)}
+                  onChange={() => toggle(e.id)}
+                  className="h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-primary">
+                  {estimateName(e.name, e.createdAt)}
+                </span>
+                {e.status === 'SIGNED' && (
+                  <span className="whitespace-nowrap text-[11px] font-semibold text-success">
+                    ✓ {t('status.estimate.SIGNED')}
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+        )}
+
         {email && (
-          <Button fullWidth loading={busy === 'email'} onClick={onEmail}>
+          <Button fullWidth disabled={ticked.size === 0} loading={busy === 'email'} onClick={onEmail}>
             {t('estimate.sendToEmail', { email })}
           </Button>
         )}
@@ -192,11 +275,18 @@ export function ShareEstimateSheet({
         <Button
           variant={email ? 'secondary' : 'primary'}
           fullWidth
+          disabled={ticked.size === 0}
           loading={busy === 'copy'}
           onClick={onCopy}
         >
           {t('estimate.copyLink')}
         </Button>
+
+        {ticked.size === 0 && serverVisibleCount > 0 && (
+          <Button variant="secondary" fullWidth loading={busy === 'hide'} onClick={onHideAll}>
+            {t('portal.hideAll')}
+          </Button>
+        )}
 
         {!clientId && (
           <div className="rounded-xl bg-surface-sunken p-3">

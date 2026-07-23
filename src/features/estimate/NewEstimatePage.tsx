@@ -8,7 +8,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
 import { routes } from '@/lib/config.ts';
-import { estimatesApi } from '@/api/estimates.ts';
+import { useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { useCreateClient } from '@/features/clients/useClients.ts';
 import {
@@ -36,6 +36,7 @@ export function NewEstimatePage() {
   const { t } = useTranslation();
   const createClient = useCreateClient();
   const createProject = useCreateProject();
+  const createEstimate = useCreateEstimate();
   // Guard here too (besides the disabled button on the list) for direct nav.
   const projects = useProjects();
   const limits = usePlanLimits();
@@ -86,7 +87,7 @@ export function NewEstimatePage() {
       const req = { name: estName.trim() || undefined };
       const estimate = template
         ? await applyTemplate.mutateAsync({ projectId: proj.id, templateId: template.id, req })
-        : await estimatesApi.createForProject(proj.id, req);
+        : await createEstimate.mutateAsync({ projectId: proj.id, req });
       navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);

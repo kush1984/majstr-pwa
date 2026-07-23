@@ -15,6 +15,9 @@ import type { ProjectPhotoResponse } from '@/api/types.ts';
 
 const MAX_BYTES = 10 * 1024 * 1024; // pre-check on the original; downscale shrinks it further
 
+/** Touch = a device that plausibly has a camera; a desktop file dialog ignores `capture` anyway. */
+const canCapture = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
+
 /**
  * «Фото» tab: the object's photos. Manual progress photos can be shown to the
  * client (SHARED → they appear on the portal); receipt photos are private and
@@ -26,7 +29,8 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   const photos = usePhotos(projectId);
   const upload = useUploadPhoto(projectId);
   const limits = usePlanLimits();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<ProjectPhotoResponse | null>(null);
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const del = useDeletePhoto(projectId);
@@ -40,11 +44,14 @@ export function PhotosSection({ projectId }: { projectId: string }) {
       toast.error(t('photos.badType'));
       return;
     }
-    if (file.size > MAX_BYTES) {
+    // Size-check AFTER downscaling — a raw camera shot can exceed 10 MB and still
+    // compress to a few hundred KB; rejecting it up front would break the
+    // take-a-photo-on-site flow on modern phones.
+    const compact = await downscaleImage(file);
+    if (compact.size > MAX_BYTES) {
       toast.error(t('photos.tooLarge'));
       return;
     }
-    const compact = await downscaleImage(file);
     upload.mutate(
       { file: compact, source: 'MANUAL' },
       {
@@ -69,19 +76,45 @@ export function PhotosSection({ projectId }: { projectId: string }) {
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">{t('photos.title')}</h2>
+      {/* Two explicit paths: `capture` guarantees the camera opens on the object; a plain
+          picker with a concrete MIME list often shows no camera option on Android. On a
+          desktop (no touch) the camera button is meaningless — gallery goes full-width. */}
+      <div className={cn('mb-3 grid gap-2', canCapture ? 'grid-cols-2' : 'grid-cols-1')}>
+        {canCapture && (
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            disabled={upload.isPending || atPhotoLimit}
+            title={atPhotoLimit ? t('photos.limitReached') : undefined}
+            className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand disabled:opacity-60"
+          >
+            📷 {t('photos.takePhoto')}
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => galleryRef.current?.click()}
           disabled={upload.isPending || atPhotoLimit}
           title={atPhotoLimit ? t('photos.limitReached') : undefined}
-          className="text-[13px] font-semibold text-brand disabled:opacity-60"
+          className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand disabled:opacity-60"
         >
-          {upload.isPending ? t('photos.uploading') : t('photos.add')}
+          {upload.isPending
+            ? t('photos.uploading')
+            : <>🖼 {canCapture ? t('photos.fromGallery') : t('photos.addFile')}</>}
         </button>
         <input
-          ref={fileRef}
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            void onPick(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={galleryRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
           className="hidden"
