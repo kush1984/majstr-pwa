@@ -27,6 +27,13 @@ export const TRADE_EMOJI: Record<Trade, string> = {
   OTHER: '📦',
 };
 
+/** Trades a template can be filed under — mirrors the backend CHECK on
+ *  `estimate_templates.trade` (METAL is intentionally not among them). */
+export const TEMPLATE_TRADES: Trade[] = [
+  'ELECTRICAL', 'PLUMBING', 'TILING', 'BUILDER', 'PAINTER',
+  'DRYWALL', 'FLOORING', 'DEMOLITION', 'GENERAL', 'OTHER',
+];
+
 export const PROJECT_STATUS_VARIANT: Record<ProjectStatus, BadgeVariant> = {
   DRAFT: 'draft',
   ESTIMATING: 'pending',

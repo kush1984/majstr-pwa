@@ -18,7 +18,8 @@ import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import i18n from '@/lib/i18n.ts';
 import { routes } from '@/lib/config.ts';
-import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
+import type { EstimateItemResponse, EstimateResponse, ProjectResponse, Trade } from '@/api/types.ts';
+import { TradeSelect } from './TradeSelect.tsx';
 import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
@@ -79,6 +80,7 @@ export function EstimateEditorPage() {
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [templateTrade, setTemplateTrade] = useState<Trade | null>(null);
   const saveAsTemplate = useSaveAsTemplate(id);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -209,7 +211,7 @@ export function EstimateEditorPage() {
   const saveTemplate = async () => {
     if (!templateName.trim()) return;
     try {
-      await saveAsTemplate.mutateAsync(templateName.trim());
+      await saveAsTemplate.mutateAsync({ name: templateName.trim(), trade: templateTrade });
       toast.success(t('templates.saved'));
       setSaveTemplateOpen(false);
     } catch (err) {
@@ -572,8 +574,11 @@ export function EstimateEditorPage() {
           maxLength={255}
           placeholder={t('templates.namePlaceholder')}
           onChange={(e) => setTemplateName(e.target.value)}
-          className="mb-4"
+          className="mb-3"
         />
+        <div className="mb-4">
+          <TradeSelect value={templateTrade} onChange={setTemplateTrade} label={t('templates.tradeLabel')} />
+        </div>
         <div className="flex gap-2">
           <Button variant="secondary" fullWidth onClick={() => setSaveTemplateOpen(false)}>
             {t('common.cancel')}

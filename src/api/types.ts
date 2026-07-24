@@ -501,7 +501,7 @@ export interface SurfaceSegment {
   /** Legacy rectangle sides, in metres. Present only on rows written before shapes. */
   l?: number;
   w?: number;
-  shape?: 'rect' | 'trap' | 'attic' | 'tri' | 'cut';
+  shape?: 'rect' | 'lshape' | 'trap' | 'attic' | 'tri' | 'cut' | 'direct';
   mode?: string;
   values?: Record<string, number>;
 }
@@ -577,6 +577,8 @@ export interface MeasurementItem {
 export interface MeasurementRoom {
   id: string;
   name: string;
+  /** Free-text floor label («1», «цоколь»); null = ungrouped. */
+  floor: string | null;
   sortOrder: number;
   items: MeasurementItem[];
   areaTotal: number;
@@ -613,7 +615,75 @@ export interface ElectricalPlanParseResponse {
 }
 export interface MeasurementRoomRequest {
   name: string;
+  floor?: string | null;
   sortOrder?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Project-documentation import (designer's PDFs/photos → rooms with a package
+// of measurements). Mirrors ProjectImportParseResponse / -CommitRequest.
+// ---------------------------------------------------------------------------
+
+export interface ProjectImportOpening {
+  kind: string;
+  wMm: number;
+  hMm: number;
+  sillMm: number | null;
+  note: string | null;
+}
+
+export interface ProjectImportRoom {
+  number: string | null;
+  name: string | null;
+  areaM2: number | null;
+  perimeterMm: number | null;
+  wallSegmentsMm: number[] | null;
+  /** Overall gabarits off the dimension chains, mm — trusted only after the checksum. */
+  widthMm: number | null;
+  lengthMm: number | null;
+  /** L-shaped room: the cut-out corner, mm (null = not applicable / not read). */
+  cutWidthMm: number | null;
+  cutDepthMm: number | null;
+  /** Per-room ceiling height from the plan's printed «H=…мм» (never Нпр/Нпд). */
+  ceilingHmm: number | null;
+  openings: ProjectImportOpening[];
+  confidence: Confidence;
+  note: string | null;
+}
+
+export interface ProjectImportFloor {
+  floor: string | null;
+  /** Room numbers actually MARKED on this sheet — the only reliable floor signal when
+   *  the schedule table is printed identically on every floor's sheet. */
+  roomsOnThisSheet: string[];
+  rooms: ProjectImportRoom[];
+}
+
+export interface ProjectImportCovering {
+  name: string;
+  kind: string | null;
+  qty: number;
+  unit: 'M2' | 'LINEAR_METER';
+}
+
+export interface ProjectImportParseResponse {
+  floors: ProjectImportFloor[];
+  coverings: ProjectImportCovering[];
+  /** «Загальна площа» from the schedule footer — the cross-check anchor. */
+  totalAreaM2: number | null;
+  /** Absolute ceiling height per floor label, mm. */
+  ceilingHeightsMm: Record<string, number>;
+  warnings: string[];
+}
+
+export interface ProjectImportCommitRoom {
+  name: string;
+  floor: string | null;
+  items: MeasurementItemRequest[];
+}
+
+export interface ProjectImportCommitRequest {
+  rooms: ProjectImportCommitRoom[];
 }
 export interface MeasurementItemRequest {
   name: string;
@@ -814,4 +884,11 @@ export interface EstimateTemplateDetail {
 /** Body for "save the current estimate as a template" / rename. */
 export interface SaveAsTemplateRequest {
   name: string;
+  /** Trade to file it under; null/absent = general (shown under every trade). */
+  trade?: Trade | null;
+}
+
+/** Re-file a template under a trade; null = general. */
+export interface TemplateTradeRequest {
+  trade: Trade | null;
 }

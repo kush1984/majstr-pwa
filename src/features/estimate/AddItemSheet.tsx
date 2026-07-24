@@ -234,7 +234,7 @@ function CatalogPicker({
                     ✓
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-primary">
+                    <span className="block break-words text-sm font-medium text-primary">
                       {item.name}
                     </span>
                     <span className="block text-xs text-muted">

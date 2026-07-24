@@ -194,6 +194,11 @@ api.interceptors.request.use(async (req) => {
     // `delete headers['Content-Type']` misses the class's normalised entry.
     req.headers.setContentType(false);
   }
+
+  // Backend error messages localise by Accept-Language, and without this header the
+  // BROWSER's language rides along — an English-OS master got «Too many PDF pages…»
+  // in English. Always speak the app's own language instead.
+  req.headers.set('Accept-Language', i18n.language || 'uk');
   return req;
 });
 

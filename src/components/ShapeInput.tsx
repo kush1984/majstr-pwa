@@ -83,6 +83,15 @@ export function ShapeInput({
 
       <p className="text-xs text-muted">{t(`shape.${draft.shape}.${draft.mode}.hint`)}</p>
 
+      {/* An imported «direct area» is a single number — offer the one-tap way to make it
+          a real editable figure instead of leaving the master to hunt through the chips. */}
+      {draft.shape === 'direct' && (
+        <button type="button" onClick={() => pickShape('rect')}
+          className="text-xs font-semibold text-brand">
+          {t('shape.direct.toSizes')}
+        </button>
+      )}
+
       <ShapeDiagram built={built} outline={outline} />
 
       <div className="grid grid-cols-2 gap-2">

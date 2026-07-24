@@ -25,7 +25,8 @@ import {
   SaveToCatalogPrompt,
   type CatalogSaveDraft,
 } from '@/features/catalog/SaveToCatalogPrompt.tsx';
-import type { EstimateTemplateSummary, ItemType, Unit } from '@/api/types.ts';
+import type { EstimateTemplateSummary, ItemType, Trade, Unit } from '@/api/types.ts';
+import { TradeSelect } from './TradeSelect.tsx';
 import {
   useAddTemplateItem,
   useDeleteTemplate,
@@ -33,6 +34,7 @@ import {
   useEstimateTemplates,
   useRemoveTemplateItem,
   useRenameTemplate,
+  useSetTemplateTrade,
 } from './useEstimateTemplates.ts';
 
 /**
@@ -162,7 +164,15 @@ export function TemplatesPage() {
         onClose={() => setPreview(null)}
         title={preview?.name ?? t('templates.viewTitle')}
       >
-        {preview && <Preview templateId={preview.id} />}
+        {preview && (
+          <>
+            {/* Re-file into any trade — the master's own setting, for own AND system templates. */}
+            <div className="mb-3">
+              <TradeMove template={preview} onMoved={(next) => setPreview(next)} />
+            </div>
+            <Preview templateId={preview.id} />
+          </>
+        )}
       </Modal>
 
       {editing && <EditModal template={editing} onClose={() => setEditing(null)} />}
@@ -194,7 +204,7 @@ function Row({
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-sm font-medium text-primary">{template.name}</span>
+        <span className="block break-words text-sm font-medium text-primary">{template.name}</span>
         <span className="block text-xs text-muted">
           {t('templates.itemsCount', { count: template.itemCount })}
         </span>
@@ -223,6 +233,41 @@ function Row({
   );
 }
 
+/** Re-file a template into a trade — an instant save on change, per-master. */
+function TradeMove({
+  template,
+  onMoved,
+}: {
+  template: EstimateTemplateSummary;
+  onMoved: (next: EstimateTemplateSummary) => void;
+}) {
+  const { t } = useTranslation();
+  const setTrade = useSetTemplateTrade();
+  return (
+    <div className="flex items-end gap-2">
+      <div className="flex-1">
+        <TradeSelect
+          value={(template.trade as Trade | null) ?? null}
+          label={t('templates.tradeLabel')}
+          onChange={(trade) => {
+            setTrade.mutate(
+              { id: template.id, trade },
+              {
+                onSuccess: () => {
+                  onMoved({ ...template, trade });
+                  toast.success(t('templates.tradeMoved'));
+                },
+                onError: (err) => toast.error(toAppError(err).message),
+              },
+            );
+          }}
+        />
+      </div>
+      {setTrade.isPending && <Spinner size="sm" />}
+    </div>
+  );
+}
+
 /** Read-only composition — what a row tap shows (own and default alike). */
 function Preview({ templateId }: { templateId: string }) {
   const { t } = useTranslation();
@@ -247,7 +292,7 @@ function Preview({ templateId }: { templateId: string }) {
           key={item.id}
           className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
         >
-          <span className="min-w-0 truncate text-primary">{item.name}</span>
+          <span className="min-w-0 break-words text-primary">{item.name}</span>
           <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
         </div>
       ))}
@@ -323,7 +368,7 @@ function EditModal({
               key={item.id}
               className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
             >
-              <span className="min-w-0 truncate text-primary">{item.name}</span>
+              <span className="min-w-0 break-words text-primary">{item.name}</span>
               <span className="flex flex-shrink-0 items-center gap-2">
                 <span className="text-xs text-muted">{t('units.' + item.unit)}</span>
                 <button
@@ -495,7 +540,7 @@ function CatalogPicker({
                     ✓
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-primary">
+                    <span className="block break-words text-sm font-medium text-primary">
                       {item.name}
                     </span>
                     <span className="block text-xs text-muted">

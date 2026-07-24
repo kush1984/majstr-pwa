@@ -6,6 +6,7 @@ import type {
   EstimateTemplateSummary,
   SaveAsTemplateRequest,
   TemplateItemRequest,
+  TemplateTradeRequest,
 } from './types.ts';
 
 /**
@@ -28,6 +29,13 @@ export const estimateTemplatesApi = {
   /** Rename my own template (defaults are read-only). */
   rename(id: string, req: SaveAsTemplateRequest): Promise<EstimateTemplateSummary> {
     return api.patch<EstimateTemplateSummary>(`/api/estimate-templates/${id}`, req).then((r) => r.data);
+  },
+
+  /** File a template under a trade (mine directly; a system default → my own override). */
+  setTrade(id: string, req: TemplateTradeRequest): Promise<EstimateTemplateSummary> {
+    return api
+      .patch<EstimateTemplateSummary>(`/api/estimate-templates/${id}/trade`, req)
+      .then((r) => r.data);
   },
 
   /** Delete my own template. */

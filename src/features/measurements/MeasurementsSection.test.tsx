@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { MeasurementsSection } from './MeasurementsSection.tsx';
@@ -12,6 +12,7 @@ vi.mock('@/api/measurements.ts', () => ({
   measurementsApi: {
     tree: vi.fn(),
     addRoom: vi.fn(),
+    updateRoom: vi.fn(),
     addItem: vi.fn(),
     updateItem: vi.fn(),
     deleteRoom: vi.fn(),
@@ -87,5 +88,20 @@ describe('MeasurementsSection — площі vs ⚡ Електрика', () => {
     expect(screen.queryByText('⚡ Електрика')).toBeNull();
     expect(screen.queryByText('Штроба · кухня')).toBeNull();
     expect(screen.queryByText('Кабель · кухня')).toBeNull();
+  });
+
+  it('tapping a room name opens a rename dialog and saves name + floor', async () => {
+    vi.mocked(measurementsApi.updateRoom).mockResolvedValue(tree);
+    renderSection(['TILING']);
+
+    // Tap the room name (was: only 🗑 — no way to fix a typo).
+    fireEvent.click(await screen.findByText(/Спальня/));
+    const nameInput = await screen.findByDisplayValue('Спальня');
+    fireEvent.change(nameInput, { target: { value: 'Спальня велика' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(measurementsApi.updateRoom).toHaveBeenCalledWith(
+      'p1', 'r1', { name: 'Спальня велика', floor: null },
+    ));
   });
 });

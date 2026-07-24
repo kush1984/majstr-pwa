@@ -129,7 +129,7 @@ function TemplateRow({
       className="flex w-full items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-left"
     >
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-primary">{template.name}</span>
+        <span className="block break-words text-sm font-medium text-primary">{template.name}</span>
         <span className="block text-xs text-muted">
           {t('templates.itemsCount', { count: template.itemCount })}
         </span>
@@ -169,7 +169,7 @@ function TemplatePreview({
               key={i}
               className="flex items-center justify-between gap-3 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
             >
-              <span className="min-w-0 truncate text-primary">{item.name}</span>
+              <span className="min-w-0 break-words text-primary">{item.name}</span>
               <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
             </div>
           ))}

@@ -5,6 +5,7 @@ import {
   planeFromLegacy,
   planesAreaM2,
   shoelace,
+  toDraft,
   toPlane,
   type Plane,
 } from './shapes.ts';
@@ -165,6 +166,45 @@ describe('cut corner', () => {
     expect(buildPlane(plane('cut', 'd', { a: 88, b: 50, c: 40, d: 60 })).warnKey).toBe(
       'shape.warn.cutRightLonger',
     );
+  });
+});
+
+describe('toDraft mode normalisation', () => {
+  it('an empty/unknown stored mode becomes the variant default (no «shape.direct..hint» keys)', () => {
+    expect(toDraft({ shape: 'direct', mode: '', values: { s: 30 } }).mode).toBe('d');
+    expect(toDraft({ shape: 'rect', mode: 'nope', values: {} }).mode).toBe('d');
+  });
+});
+
+describe('lshape', () => {
+  it('area = A·B − a·b, and the perimeter is the bounding rectangle\'s', () => {
+    // 5×4 with a 1.5×2 corner cut: 20 − 3 = 17
+    const built = buildPlane(plane('lshape', 'd', { A: 500, B: 400, a: 150, b: 200 }));
+    expect(built.ok).toBe(true);
+    expect(built.area).toBe(170000); // cm² → 17 m²
+    // The cut removes segments a and b from the outline and adds two identical ones
+    // inside, so walls/skirting are computed on 2(A+B) — same as a plain rectangle.
+    const perimeter = built.pts.reduce((s, p, i) => {
+      const q = built.pts[(i + 1) % built.pts.length];
+      return s + Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]);
+    }, 0);
+    expect(perimeter).toBe(2 * (500 + 400));
+  });
+
+  it('rejects a cut bigger than the room', () => {
+    expect(buildPlane(plane('lshape', 'd', { A: 500, B: 400, a: 600, b: 200 })).ok).toBe(false);
+  });
+});
+
+describe('direct', () => {
+  it('returns the entered area EXACTLY (no sqrt round-trip drift)', () => {
+    const built = buildPlane(plane('direct', 'd', { s: 30.33 }));
+    expect(built.ok).toBe(true);
+    expect(built.area).toBe(30.33);
+  });
+
+  it('zero/negative area is not a figure', () => {
+    expect(buildPlane(plane('direct', 'd', { s: 0 })).ok).toBe(false);
   });
 });
 

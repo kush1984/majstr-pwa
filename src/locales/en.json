@@ -18,7 +18,8 @@
     "phone": "Phone",
     "email": "Email",
     "address": "Address",
-    "fullName": "Full name"
+    "fullName": "Full name",
+    "next": "Next"
   },
   "nav": {
     "home": "Home",
@@ -661,7 +662,10 @@
     "typeShtroba": "Chasing",
     "pointsHint": "Points from a plan: legend type + count. No lengths are computed here.",
     "pointTypePlaceholder": "e.g. Socket",
-    "addPointType": "+ Point type"
+    "addPointType": "+ Point type",
+    "floorPlaceholder": "Floor (optional)",
+    "floorAreaLabel": "· floor area",
+    "editRoom": "Edit room"
   },
   "measurePick": {
     "button": "Pick from measurements",
@@ -714,7 +718,8 @@
       "apexBelowWall": "The apex is lower than the wall",
       "triImpossible": "Such a triangle is impossible — check the sides",
       "cutTopLonger": "The top side is longer than the bottom",
-      "cutRightLonger": "The right side is longer than the left"
+      "cutRightLonger": "The right side is longer than the left",
+      "cutTooBig": "The cut is bigger than the gabarit — check a and b"
     },
     "note": {
       "trapIsRect": "The sides are equal — this is a rectangle."
@@ -800,6 +805,30 @@
           "d": "right short side"
         }
       }
+    },
+    "direct": {
+      "name": "Direct area",
+      "d": {
+        "hint": "The area is already known (from the project or a measurement) — enter it as is.",
+        "formula": "S = s",
+        "field": {
+          "s": "Area (s)"
+        }
+      },
+      "toSizes": "📐 Enter sizes (a×b)"
+    },
+    "lshape": {
+      "name": "L-shaped",
+      "d": {
+        "hint": "A rectangle with one corner cut out. A×B are the overall gabarits, a×b the cut. The perimeter equals that of the A×B rectangle.",
+        "formula": "S = A·B − a·b",
+        "field": {
+          "A": "Overall width (A)",
+          "B": "Overall length (B)",
+          "a": "Cut width (a)",
+          "b": "Cut depth (b)"
+        }
+      }
     }
   },
   "templates": {
@@ -818,7 +847,7 @@
     "chosen": "Template: {{name}}",
     "saveAsTemplate": "Save as template",
     "saveAsTemplatePrompt": "Template name. Quantities and prices aren't stored — they're filled in on apply.",
-    "namePlaceholder": "E.g. Full bathroom",
+    "namePlaceholder": "e.g. Bathroom turnkey",
     "saved": "Template saved",
     "rename": "Rename",
     "renameTitle": "Rename template",
@@ -839,7 +868,10 @@
     "emptyMy": "You haven't saved any templates yet. In an estimate, tap \"Save as template\".",
     "emptyNone": "No templates available for your lines of work",
     "pricesHint": "Prices are filled from your catalog on creation",
-    "loadError": "Couldn't load templates"
+    "loadError": "Couldn't load templates",
+    "tradeLabel": "Trade",
+    "tradeGeneral": "General (all trades)",
+    "tradeMoved": "Moved"
   },
   "profile": {
     "title": "Profile",
@@ -1127,5 +1159,83 @@
     "loadError": "Could not load the estimates",
     "hideAll": "Remove everything from the portal",
     "hiddenAll": "Portal cleared — estimates hidden"
+  },
+  "projectImport": {
+    "button": "📁 Import project",
+    "title": "Project documentation import",
+    "sourceHint": "Drop the designer’s folder as is: a zip archive, several PDFs or drawing photos. The useful sheets are picked out automatically.",
+    "pick": "Choose files",
+    "zipFailed": "Could not read the archive",
+    "nothingUseful": "No PDFs or photos found in the selection",
+    "filesHint": "Will recognise {{n}} of {{m}} files. Ticks are editable — add a missed one or untick noise.",
+    "untickNoise": "Pick a type for every ticked file (schedule / measure plan / coverings)",
+    "recognise": "Recognise {{n}} file(s)",
+    "parsing": "Reading the drawings…",
+    "heightsHint": "No ceiling height found in the drawings. Enter one per floor — walls can’t be computed without it (leave blank to skip).",
+    "heightsSkipHint": "Blank floor = no walls created, only floor/ceiling/skirting",
+    "noFloor": "No floor",
+    "floorLabel": "Floor {{floor}}",
+    "floorPlaceholder": "floor",
+    "nothing": "Nothing recognised. Try other sheets — a room schedule, measure plan or coverings spec.",
+    "crossCheck": "⚠️ Room sum {{sum}} m² doesn’t match the schedule total {{total}} m² — some rooms were likely missed. Check the list.",
+    "honesty": "Project data is a high-quality draft, not a substitute for a tape measure. Designers themselves write “verify on site”.",
+    "coveringsTitle": "Coverings specification",
+    "coveringsHint": "Reference quantities from the project, not tied to rooms. Ticked ones are added as a separate group.",
+    "coveringsRoom": "From the coverings spec",
+    "reserve": "Reserve",
+    "add": "Add {{rooms}} rooms ({{items}} elements)",
+    "saved": "Rooms added: {{rooms}}",
+    "kind": {
+      "ROOM_SCHEDULE": "Room schedule",
+      "PLAN_MEASURE": "Measure plan",
+      "COVERINGS": "Coverings spec",
+      "ELECTRICAL": "Electrical (separate step)",
+      "OTHER": "Not for measurements"
+    },
+    "missing": {
+      "no-area": "no area in the documents",
+      "no-perimeter": "perimeter needed — enter manually",
+      "no-height": "ceiling height needed"
+    },
+    "needOnline": "Recognition needs the internet. Try again when you are back online.",
+    "archiveTooLarge": "Archive is too large (up to 100 MB). Unpack it and send individual PDFs.",
+    "sevenZipFailed": "Could not unpack the 7z. Unpack the archive and drop the PDFs (several are fine), or re-pack as .zip.",
+    "tooManySelected": "Too many pages at once — pick up to {{max}}. Recognise the rest in another run.",
+    "makeCeilings": "Create a ceiling for every room",
+    "ceilingsHint": "A separate ceiling mostly matters on a mansard with several planes. For a rectangular room it duplicates the floor.",
+    "wallsNoHeight": "Walls not computed: no height for “{{floor}}” — enter the height and re-run the import, or add walls manually",
+    "wallsNoPerimeter": "Walls and skirting not computed for {{n}} rooms: the documents only give areas — add a measure plan",
+    "canFull": "The selected files will give: floor, walls (with a height), skirting, reveals.",
+    "canAreas": "The selected files will give: rooms with areas (floor). Add a measure plan for walls and skirting.",
+    "coveringsOnly": "⚠️ A coverings spec gives ONLY areas — no sizes or walls will come out of it. Add a measure plan to compute walls, skirting and reveals.",
+    "selectRoom": "Select room",
+    "moveSelected": "{{n}} selected → to floor:",
+    "moveApply": "Move",
+    "widthField": "Width, m",
+    "lengthField": "Length, m",
+    "heightField": "Ceiling height, m",
+    "perimeterField": "Perimeter, m",
+    "src": {
+      "doc": "from the document",
+      "calc": "computed",
+      "manual": "entered manually",
+      "empty": "type it — we compute the rest"
+    },
+    "rejectedHint": "From the drawing: {{w}}×{{l}} m — does not match the area, so it was not used.",
+    "rejectedTake": "use anyway",
+    "lshapeDetected": "L-shaped (cut confirmed by the area)",
+    "openingsTitle": "Openings (w × h, m)",
+    "openingKind": "Opening type",
+    "openingW": "Opening width",
+    "openingH": "Opening height",
+    "window": "window",
+    "door": "door",
+    "addOpening": "+ Opening",
+    "wallsBreakdown": "Walls: {{gross}} gross − {{openings}} openings = {{net}} m²",
+    "openingsUnknown": "openings not accounted for",
+    "autoPicked": "Recognised from: {{what}}",
+    "pickOther": "pick other pages",
+    "heightsFound": "For {{n}} rooms the height came from the drawing (H=…) — only the rest are asked about.",
+    "coveringsSkipped": "The coverings spec is skipped — it gives no per-room measurements (only material totals)."
   }
 }

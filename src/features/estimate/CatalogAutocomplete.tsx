@@ -159,7 +159,7 @@ export function CatalogAutocomplete({
                   )}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-primary">
+                    <span className="block break-words text-sm font-medium text-primary">
                       {item.name}
                     </span>
                     <span className="mt-0.5 flex items-center gap-1.5">

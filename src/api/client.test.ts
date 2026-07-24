@@ -216,4 +216,18 @@ describe('api 401-retry interceptor', () => {
 
     expect(adapter.mock.calls[0][0].headers['Content-Type']).toBe('application/json');
   });
+
+  // Backend messages localise by Accept-Language; the BROWSER's own header (en on an
+  // English OS) used to ride along, so a master saw «Too many PDF pages…» in English.
+  it('always sends the app language as Accept-Language', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    await api.get('/api/projects');
+
+    expect(adapter.mock.calls[0][0].headers['Accept-Language']).toBe('uk');
+  });
 });

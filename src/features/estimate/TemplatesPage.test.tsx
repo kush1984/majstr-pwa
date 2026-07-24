@@ -19,6 +19,7 @@ vi.mock('@/api/estimateTemplates.ts', () => ({
     list: vi.fn(),
     get: vi.fn(),
     rename: vi.fn(),
+    setTrade: vi.fn(),
     remove: vi.fn(),
     addItem: vi.fn(),
     removeItem: vi.fn(),
@@ -143,6 +144,22 @@ describe('TemplatesPage — edit own template', () => {
     expect(await screen.findByText('Розетка')).toBeTruthy();
     // ...but there is no "add position" control in read-only preview.
     expect(screen.queryByText('Додати позицію')).toBeNull();
+  });
+
+  it('re-files a SYSTEM template into another trade from the preview (own setting)', async () => {
+    const sys: EstimateTemplateSummary = { id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', isDefault: true, itemCount: 5 };
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', isDefault: true, items: [] });
+    vi.mocked(estimateTemplatesApi.setTrade).mockResolvedValue({ ...sys, trade: 'PAINTER' });
+
+    renderPage();
+    fireEvent.click(await screen.findByText('ГІПСОКАРТОН'));
+
+    // The trade select in the preview → move to a different trade.
+    const select = await screen.findByDisplayValue(/Гіпсокартон/);
+    fireEvent.change(select, { target: { value: 'PAINTER' } });
+
+    await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith('s1', { trade: 'PAINTER' }));
   });
 });
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
-import type { EstimateCreateRequest, EstimateTemplateDetail, TemplateItemRequest } from '@/api/types.ts';
+import type { EstimateCreateRequest, EstimateTemplateDetail, TemplateItemRequest, Trade } from '@/api/types.ts';
 
 export const ESTIMATE_TEMPLATE_KEY = ['estimate-templates'] as const;
 
@@ -31,7 +31,18 @@ function useInvalidateTemplates() {
 export function useSaveAsTemplate(estimateId: string) {
   const invalidate = useInvalidateTemplates();
   return useMutation({
-    mutationFn: (name: string) => estimateTemplatesApi.saveFromEstimate(estimateId, { name }),
+    mutationFn: (req: { name: string; trade: Trade | null }) =>
+      estimateTemplatesApi.saveFromEstimate(estimateId, req),
+    onSuccess: invalidate,
+  });
+}
+
+/** Re-file a template into another trade (master's own setting). */
+export function useSetTemplateTrade() {
+  const invalidate = useInvalidateTemplates();
+  return useMutation({
+    mutationFn: ({ id, trade }: { id: string; trade: Trade | null }) =>
+      estimateTemplatesApi.setTrade(id, { trade }),
     onSuccess: invalidate,
   });
 }

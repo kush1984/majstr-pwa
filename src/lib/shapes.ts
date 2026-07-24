@@ -11,7 +11,7 @@
  */
 
 export type Pt = [number, number];
-export type ShapeKey = 'rect' | 'trap' | 'attic' | 'tri' | 'cut';
+export type ShapeKey = 'rect' | 'lshape' | 'trap' | 'attic' | 'tri' | 'cut' | 'direct';
 
 /** The unit the master types dimensions in; area converts to m² via the factor squared. */
 export type LengthUnit = 'MM' | 'CM' | 'M';
@@ -80,6 +80,38 @@ export const SHAPES: Record<ShapeKey, ShapeDef> = {
             edges: [{ tag: 'a', i: 0, j: 1 }, { tag: 'b', i: 1, j: 2 }],
             formulaKey: 'shape.rect.d.formula',
             ok: a > 0 && b > 0,
+          }),
+      },
+    },
+  },
+
+  // L-shaped room (Г-подібна): overall gabarits A×B with an a×b corner cut out.
+  // Area = A·B − a·b via the same shoelace; the PERIMETER equals the bounding
+  // rectangle's 2(A+B) — the cut removes segments a and b and adds two identical
+  // ones on the inner corner. So walls/skirting are unaffected by the L: only the
+  // floor/ceiling area differs.
+  lshape: {
+    variants: {
+      d: {
+        fields: [
+          { key: 'A', tag: 'A', def: 400 },
+          { key: 'B', tag: 'B', def: 300 },
+          { key: 'a', tag: 'a', def: 150 },
+          { key: 'b', tag: 'b', def: 100 },
+        ],
+        build: ({ A, B, a, b }) =>
+          withArea({
+            pts: [[0, 0], [A, 0], [A, B - b], [A - a, B - b], [A - a, B], [0, B]],
+            vnames: ['A', 'B', 'C', 'D', 'E', 'F'],
+            edges: [
+              { tag: 'A', i: 0, j: 1 },
+              { tag: 'B', i: 5, j: 0 },
+              { tag: 'a', i: 3, j: 4 },
+              { tag: 'b', i: 2, j: 3 },
+            ],
+            formulaKey: 'shape.lshape.d.formula',
+            ok: A > 0 && B > 0 && a > 0 && b > 0 && a < A && b < B,
+            warnKey: (a >= A && A > 0) || (b >= B && B > 0) ? 'shape.warn.cutTooBig' : undefined,
           }),
       },
     },
@@ -229,6 +261,28 @@ export const SHAPES: Record<ShapeKey, ShapeDef> = {
       },
     },
   },
+  // A KNOWN area entered directly (from a project's room schedule / an import) — no
+  // geometry. Drawn as an equivalent square for the diagram; the area is `s` exactly
+  // (never the sqrt-rounded square), mirroring the backend's Shapes."direct".
+  direct: {
+    variants: {
+      d: {
+        fields: [{ key: 's', tag: 's', def: 75000 }],
+        build: ({ s }) => {
+          const ok = s > 0;
+          const side = ok ? Math.sqrt(s) : 0;
+          return {
+            pts: [[0, 0], [side, 0], [side, side], [0, side]],
+            vnames: ['A', 'B', 'C', 'D'],
+            edges: [],
+            formulaKey: 'shape.direct.d.formula',
+            ok,
+            area: ok ? s : 0,
+          };
+        },
+      },
+    },
+  },
 };
 
 export const SHAPE_KEYS = Object.keys(SHAPES) as ShapeKey[];
@@ -283,12 +337,15 @@ export function toPlane(d: PlaneDraft): Plane {
 }
 
 export function toDraft(p: Plane): PlaneDraft {
+  // Normalise the mode to a REAL variant key: a stored ''/unknown mode computes fine
+  // (variantOf falls back) but leaks into i18n lookups («shape.direct..hint») if kept.
+  const mode = SHAPES[p.shape].variants[p.mode] ? p.mode : defaultMode(p.shape);
   const values: Record<string, string> = {};
-  for (const f of variantOf(p.shape, p.mode).fields) {
+  for (const f of variantOf(p.shape, mode).fields) {
     const v = p.values[f.key];
     values[f.key] = v == null ? '' : String(v);
   }
-  return { shape: p.shape, mode: p.mode, values };
+  return { shape: p.shape, mode, values };
 }
 
 export function buildPlane(p: Plane): Built {
