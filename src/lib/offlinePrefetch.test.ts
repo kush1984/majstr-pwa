@@ -10,6 +10,10 @@ import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { planApi } from '@/api/plan.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
+import { questionsApi } from '@/api/questions.ts';
+import { photosApi } from '@/api/photos.ts';
+import { economyApi } from '@/api/economy.ts';
+import { ESTIMATE_TEMPLATE_KEY } from '@/features/estimate/useEstimateTemplates.ts';
 import { PROJECTS_KEY } from '@/features/projects/useProjects.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
@@ -21,10 +25,15 @@ vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { listForProject: vi.fn(), 
 vi.mock('@/api/measurements.ts', () => ({ measurementsApi: { tree: vi.fn() } }));
 vi.mock('@/api/clients.ts', () => ({ clientsApi: { list: vi.fn() } }));
 vi.mock('@/api/catalog.ts', () => ({ catalogApi: { list: vi.fn(), categories: vi.fn() } }));
-vi.mock('@/api/estimateTemplates.ts', () => ({ estimateTemplatesApi: { list: vi.fn() } }));
+vi.mock('@/api/estimateTemplates.ts', () => ({
+  estimateTemplatesApi: { list: vi.fn(), get: vi.fn() },
+}));
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn() } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
 vi.mock('@/api/dashboard.ts', () => ({ dashboardApi: { metrics: vi.fn() } }));
+vi.mock('@/api/questions.ts', () => ({ questionsApi: { listForProject: vi.fn() } }));
+vi.mock('@/api/photos.ts', () => ({ photosApi: { list: vi.fn() } }));
+vi.mock('@/api/economy.ts', () => ({ economyApi: { economy: vi.fn(), listExpenses: vi.fn() } }));
 
 const project = { id: 'p1', name: 'Хата' };
 
@@ -35,7 +44,12 @@ beforeEach(() => {
   vi.mocked(clientsApi.list).mockResolvedValue([{ id: 'c1' }] as never);
   vi.mocked(catalogApi.list).mockResolvedValue([{ id: 'k1' }] as never);
   vi.mocked(catalogApi.categories).mockResolvedValue(['Стіни'] as never);
-  vi.mocked(estimateTemplatesApi.list).mockResolvedValue([] as never);
+  vi.mocked(estimateTemplatesApi.list).mockResolvedValue([{ id: 't1' }] as never);
+  vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ id: 't1', items: [{ name: 'Поз.' }] } as never);
+  vi.mocked(questionsApi.listForProject).mockResolvedValue([] as never);
+  vi.mocked(photosApi.list).mockResolvedValue([] as never);
+  vi.mocked(economyApi.economy).mockResolvedValue({} as never);
+  vi.mocked(economyApi.listExpenses).mockResolvedValue([] as never);
   vi.mocked(dashboardApi.metrics).mockResolvedValue({} as never);
   vi.mocked(projectsApi.list).mockResolvedValue([project] as never);
   vi.mocked(projectsApi.get).mockResolvedValue(project as never);
@@ -65,10 +79,21 @@ describe('prefetchForOffline', () => {
     expect(qc.getQueryData([...CATALOG_KEY, 'categories'])).toBeTruthy();
   });
 
-  it('skips PRO-only measurements on FREE (would just 403)', async () => {
+  it('caches each TEMPLATE composition (else offline it looked like "no positions")', async () => {
+    const qc = client();
+
+    await prefetchForOffline(qc, { isPro: true });
+
+    // Prod report: the list was cached but the composition was not, so tapping a template offline
+    // rendered an empty list — which the UI read as "this template has no positions".
+    expect(qc.getQueryData([...ESTIMATE_TEMPLATE_KEY, 't1'])).toBeTruthy();
+  });
+
+  it('skips PRO-only measurements and economy on FREE (would just 403)', async () => {
     const qc = client();
     await prefetchForOffline(qc, { isPro: false });
     expect(measurementsApi.tree).not.toHaveBeenCalled();
+    expect(economyApi.economy).not.toHaveBeenCalled();
   });
 
   it('keeps going when one request fails (best-effort warming)', async () => {

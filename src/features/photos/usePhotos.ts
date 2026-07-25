@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { photosApi } from '@/api/photos.ts';
 import type { PhotoSource, PhotoVisibility } from '@/api/types.ts';
 
-const key = (projectId: string) => ['project-photos', projectId] as const;
+/** Exported so the offline prefetch primes the SAME key this hook reads. */
+export const PHOTOS_KEY = (projectId: string) => ['project-photos', projectId] as const;
+const key = PHOTOS_KEY;
 
 /** The object's photos (owner). PHOTO_REPORTS is granted to all plans, so no gate here. */
 export function usePhotos(projectId: string, enabled = true) {

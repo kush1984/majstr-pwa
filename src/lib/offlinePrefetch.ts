@@ -9,6 +9,9 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
 import { notesApi } from '@/api/notes.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
+import { questionsApi } from '@/api/questions.ts';
+import { photosApi } from '@/api/photos.ts';
+import { economyApi } from '@/api/economy.ts';
 import { PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
 import { CLIENTS_KEY } from '@/features/clients/useClients.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
@@ -17,6 +20,9 @@ import { PROJECTS_KEY } from '@/features/projects/useProjects.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
 import { NOTES_KEY } from '@/features/notes/useNotes.ts';
+import { questionsKey } from '@/features/questions/useQuestions.ts';
+import { PHOTOS_KEY } from '@/features/photos/usePhotos.ts';
+import { economyKeys } from '@/features/economy/useEconomy.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 
 /**
@@ -113,15 +119,37 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: ['project-estimates', p.id], queryFn: () => estimatesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: NOTES_KEY(p.id), queryFn: () => notesApi.list(p.id) }));
+    // The object's other tabs, so none of them is blank on site.
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: questionsKey(p.id), queryFn: () => questionsApi.listForProject(p.id) }));
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: PHOTOS_KEY(p.id), queryFn: () => photosApi.list(p.id) }));
     if (opts.isPro) {
-      // Measurements are PRO-gated — prefetching them on FREE would just 403.
+      // Measurements + economy are PRO-gated — prefetching them on FREE would just 403.
       perProject.push(() =>
         qc.prefetchQuery({ queryKey: MEASUREMENTS_KEY(p.id), queryFn: () => measurementsApi.tree(p.id) }));
+      perProject.push(() =>
+        qc.prefetchQuery({ queryKey: economyKeys.economy(p.id), queryFn: () => economyApi.economy(p.id) }));
+      perProject.push(() =>
+        qc.prefetchQuery({ queryKey: economyKeys.expenses(p.id), queryFn: () => economyApi.listExpenses(p.id) }));
     }
   }
   total += perProject.length;
   report();
   await pool(perProject);
+
+  // ---- each TEMPLATE's composition -----------------------------------------
+  // Without this the list is cached but tapping a template offline shows nothing — which the UI
+  // used to render as "this template has no positions" (a lie about the master's own data).
+  const templates = qc.getQueryData<{ id: string }[]>(ESTIMATE_TEMPLATE_KEY) ?? [];
+  const perTemplate = templates.map((tpl) => () =>
+    qc.prefetchQuery({
+      queryKey: [...ESTIMATE_TEMPLATE_KEY, tpl.id],
+      queryFn: () => estimateTemplatesApi.get(tpl.id),
+    }));
+  total += perTemplate.length;
+  report();
+  await pool(perTemplate);
 
   // ---- each estimate's full detail (the items the master edits on site) ----
   const estimateIds = projects.flatMap((p) =>

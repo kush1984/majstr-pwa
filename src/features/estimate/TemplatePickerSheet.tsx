@@ -162,9 +162,13 @@ function TemplatePreview({
         <div className="flex justify-center py-6 text-brand">
           <Spinner />
         </div>
+      ) : !data ? (
+        // No cached composition (offline) — showing an empty list here reads as "this template has
+        // no positions", which is a lie about the master's own data.
+        <p className="mb-5 py-4 text-center text-sm text-muted">{t('templates.compositionOffline')}</p>
       ) : (
         <div className="mb-5 max-h-[40dvh] space-y-1 overflow-y-auto">
-          {(data?.items ?? []).map((item, i) => (
+          {(data.items ?? []).map((item, i) => (
             <div
               key={i}
               className="flex items-center justify-between gap-3 rounded-lg bg-surface-sunken px-3 py-2 text-sm"

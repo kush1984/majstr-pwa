@@ -876,6 +876,7 @@
     "addItem": "Add position",
     "addItemName": "Position name",
     "emptyComposition": "This template has no positions yet",
+    "compositionOffline": "The template composition is not downloaded. Connect to see its positions.",
     "emptyMy": "You haven't saved any templates yet. In an estimate, tap \"Save as template\".",
     "emptyNone": "No templates available for your lines of work",
     "pricesHint": "Prices are filled from your catalog on creation",

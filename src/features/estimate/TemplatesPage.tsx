@@ -280,8 +280,13 @@ function Preview({ templateId }: { templateId: string }) {
       </div>
     );
   }
+  // NO data (never cached, and we're offline / the request failed) is NOT "this template is empty" —
+  // saying so would be a lie about the master's own template. Be honest about what happened.
+  if (!data) {
+    return <p className="py-3 text-center text-xs text-muted">{t('templates.compositionOffline')}</p>;
+  }
 
-  const items = data?.items ?? [];
+  const items = data.items ?? [];
   if (items.length === 0) {
     return <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>;
   }
@@ -360,6 +365,9 @@ function EditModal({
           <div className="flex justify-center py-4 text-brand">
             <Spinner />
           </div>
+        ) : !data ? (
+          // No cached detail (offline) — don't claim the template is empty.
+          <p className="py-3 text-center text-xs text-muted">{t('templates.compositionOffline')}</p>
         ) : items.length === 0 ? (
           <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>
         ) : (
