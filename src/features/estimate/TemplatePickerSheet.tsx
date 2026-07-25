@@ -60,7 +60,7 @@ export function TemplatePickerSheet({
         <div className="flex justify-center py-8 text-brand">
           <Spinner />
         </div>
-      ) : isError ? (
+      ) : isError && !data ? (
         <p className="py-6 text-center text-sm text-muted">{t('templates.loadError')}</p>
       ) : (
         <div className="space-y-5">

@@ -47,8 +47,9 @@ export function DashboardPage() {
   const isEmpty = projects.isSuccess && projects.data.length === 0;
 
   // Full outage (both dashboard queries failed) → one page-level error with a
-  // single retry instead of two stacked error blocks.
-  if (metrics.isError && projects.isError) {
+  // single retry instead of two stacked error blocks. A query that failed but still HAS cached
+  // data (offline / backend blip) doesn't count as an outage — we show the cache instead.
+  if (metrics.isError && !metrics.data && projects.isError && !projects.data) {
     return (
       <ErrorState
         error={projects.error}
@@ -189,7 +190,9 @@ export function DashboardPage() {
                   <Skeleton key={i} className="h-[68px] rounded-card" />
                 ))}
               </div>
-            ) : projects.isError ? (
+            ) : projects.isError && !projects.data ? (
+              // Only when we have NOTHING to show. With cached objects we render them (offline /
+              // backend blip) instead of hiding the master's own data behind an error screen.
               <ErrorState error={projects.error} onRetry={() => void projects.refetch()} />
             ) : (
               <div className="space-y-2.5">

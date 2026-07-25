@@ -104,7 +104,7 @@ export function TemplatesPage() {
         <div className="flex justify-center py-10 text-brand">
           <Spinner />
         </div>
-      ) : isError ? (
+      ) : isError && !data ? (
         <ErrorState error={error} title={t('templates.loadError')} onRetry={() => void refetch()} />
       ) : (
         <div className="space-y-6">

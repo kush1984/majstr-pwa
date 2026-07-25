@@ -135,7 +135,8 @@ export function CatalogPage() {
 
       {isPending ? (
         <CatalogSkeleton />
-      ) : isError ? (
+      ) : isError && !data ? (
+        // Cached catalog stays usable offline (it's what estimates are built from).
         <ErrorState
           error={error}
           title={t('catalog.loadErrorTitle')}

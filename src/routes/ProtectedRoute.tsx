@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useMe } from '@/features/auth/useMe.ts';
 import { tokens } from '@/lib/tokens.ts';
+import { useOnline } from '@/lib/useOnline.ts';
 import { toAppError } from '@/api/errors.ts';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
@@ -28,6 +29,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const me = useMe();
 
   if (!hasToken) return <Navigate to={routes.login} replace />;
+  // A CACHED user (restored from the offline cache) is enough to open the app — the master must be
+  // able to work in a basement. Checked before isPending/isError so a failed refetch never locks
+  // them out of data they already have on the device.
+  if (me.data) return <>{children ?? <Outlet />}</>;
   if (me.isPending) return <FullPageSpinner />;
   if (me.isError) {
     const status = toAppError(me.error).status;
@@ -45,13 +50,19 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return <>{children ?? <Outlet />}</>;
 }
 
-/** Inverse of ProtectedRoute — used to bounce logged-in users away
- *  from /login and /register. */
+/**
+ * Inverse of ProtectedRoute — bounces logged-in users away from /login and /register.
+ *
+ * It must NEVER hold the login page behind a spinner: a master with leftover tokens who opens the
+ * app with no connection has to at least SEE the login screen (that hang was a real prod report).
+ * So we only wait while a `/me` check is genuinely in flight AND we're online.
+ */
 export function PublicOnlyRoute({ children }: ProtectedRouteProps) {
   const hasToken = tokens.hasAny();
+  const online = useOnline();
   const { data, isPending } = useMe();
-  if (hasToken && isPending) return <FullPageSpinner />;
   if (hasToken && data) return <Navigate to={routes.home} replace />;
+  if (hasToken && isPending && online) return <FullPageSpinner />;
   return <>{children}</>;
 }
 

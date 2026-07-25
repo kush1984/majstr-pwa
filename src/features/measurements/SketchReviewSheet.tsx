@@ -7,6 +7,7 @@ import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { cn } from '@/lib/cn.ts';
@@ -57,6 +58,7 @@ export function SketchReviewSheet({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { online } = useOnlineGuard(); // LLM recognition is server-side — no offline path
   const [step, setStep] = useState<Step>('source');
   const [rooms, setRooms] = useState<RoomDraft[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -118,6 +120,11 @@ export function SketchReviewSheet({
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;
+    // Recognition runs on the server (Claude vision) — impossible offline; say so up front.
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
+    }
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
       toast.error(t('photos.badType'));
       return;

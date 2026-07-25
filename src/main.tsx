@@ -30,14 +30,30 @@ captureRefFromUrl(window.location.search);
 // persister snapshots them — that snapshot IS the offline read cache. Without a long gcTime the
 // cache would be thin exactly when the master goes offline.
 const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
+/** Offline-cache schema version — bump ONLY on an incompatible change to cached DTO shapes. */
+const CACHE_SCHEMA = 'v1';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
       gcTime: WEEK_MS,
+      // 'offlineFirst' (not the default 'online'): serve the persisted cache and still FIRE the
+      // request when the browser reports no network. The default PAUSES a query offline, leaving
+      // it `pending` forever — that's what made the app hang on a spinner (and never render the
+      // login page) with no connection. Paired with `shouldRetryQuery` refusing to retry offline,
+      // a query now resolves fast: cached data, or a real error the UI can show.
+      networkMode: 'offlineFirst',
       retry: shouldRetryQuery,
       retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,
+    },
+    mutations: {
+      // NEVER let a mutation sit PAUSED offline. The default ('online') silently parks it until
+      // reconnect, so the button spins forever and the master can't tell saving from hanging —
+      // the same failure the offline spinner bug was. 'always' means a write either goes through
+      // or fails honestly; the ones that must survive offline are queued by `offlineMutate`
+      // (clients / objects / estimates / items), and the rest surface a real error.
+      networkMode: 'always',
     },
   },
 });
@@ -65,11 +81,14 @@ if ('serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      {/* Persist the query cache to IndexedDB so the app has data offline. `buster` ties the
-          cache to the build version (a new release starts fresh), `maxAge` caps its lifetime. */}
+      {/* Persist the query cache to IndexedDB so the app has data offline. `buster` must be a
+          CACHE-SCHEMA version, NOT the app version: tying it to __APP_VERSION__ meant every single
+          release wiped the master's offline data (update the app on the way to a site → nothing
+          works in the basement). Bump CACHE_SCHEMA only when cached DTO shapes change
+          incompatibly; `maxAge` still caps the cache's lifetime. */}
       <PersistQueryClientProvider
         client={queryClient}
-        persistOptions={{ persister: offlinePersister, maxAge: WEEK_MS, buster: __APP_VERSION__ }}
+        persistOptions={{ persister: offlinePersister, maxAge: WEEK_MS, buster: CACHE_SCHEMA }}
       >
         <App />
       </PersistQueryClientProvider>

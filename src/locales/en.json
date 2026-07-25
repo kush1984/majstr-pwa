@@ -189,7 +189,8 @@
     "sessionExpired": "Session ended — please sign in again"
   },
   "offline": {
-    "banner": "Offline — showing your saved copy. Some actions need a connection."
+    "banner": "Offline — showing your saved copy. Some actions need a connection.",
+    "needConnection": "This action needs an internet connection"
   },
   "sync": {
     "pending": "Waiting to sync: {{n}}",

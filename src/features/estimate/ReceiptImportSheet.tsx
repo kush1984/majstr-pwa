@@ -11,6 +11,7 @@ import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
 import { economyApi } from '@/api/economy.ts';
 import { toast } from '@/hooks/useToast.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { formatMoney } from '@/lib/format.ts';
@@ -60,6 +61,7 @@ export function ReceiptImportSheet({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { online } = useOnlineGuard(); // LLM recognition is server-side — no offline path
   const [step, setStep] = useState<Step>('source');
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
@@ -87,6 +89,11 @@ export function ReceiptImportSheet({
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;
+    // Recognition runs on the server (Claude vision) — impossible offline; say so up front.
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
+    }
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
       toast.error(t('photos.badType'));
       return;

@@ -35,6 +35,7 @@ import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.ts
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 import { NotesSection } from '@/features/notes/NotesSection.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
 const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
@@ -52,6 +53,7 @@ export function ProjectDetailPage() {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  const { guard } = useOnlineGuard(); // for the server-only actions (portal share)
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
   const [shareOpen, setShareOpen] = useState(false);
@@ -167,13 +169,14 @@ export function ProjectDetailPage() {
       toast.error(toAppError(err).message);
     }
   };
-  const openShare = () => {
+  // Sharing mints a portal link on the server — online-only, so say so plainly when offline.
+  const openShare = guard(() => {
     if (list.length === 0) {
       toast.info(t('projects.createEstimateFirst'));
       return;
     }
     setShareOpen(true);
-  };
+  });
 
   return (
     <>

@@ -113,7 +113,9 @@ export function ProjectsPage() {
             <Skeleton key={i} className="h-[68px] rounded-card" />
           ))}
         </div>
-      ) : isError ? (
+      ) : isError && !data ? (
+        // Only when there's nothing cached — offline (or a backend blip) must still show the
+        // master's own objects from the offline cache, not an error screen.
         <EmptyState
           icon="⚠️"
           title={t('projects.loadErrorTitle')}

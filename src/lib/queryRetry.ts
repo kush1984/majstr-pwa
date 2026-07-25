@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { onlineManager } from '@tanstack/react-query';
 
 /**
  * Shared React Query retry policy (queries only). Extracted from `main.tsx` so
@@ -10,10 +11,17 @@ import axios from 'axios';
  * deterministic (auth, validation, not-found, rate-limit) and retrying just
  * wastes time or hammers the server. Mutations keep React Query's default of
  * NO retry — we don't want to risk duplicate writes (POST/PUT).
+ *
+ * **Never retry while OFFLINE.** With `networkMode: 'offlineFirst'` a query fires once even
+ * with no network; if we then asked for a retry, React Query would PAUSE it until reconnect and
+ * the query would sit in `status: 'pending'` forever — which is exactly how the app used to hang
+ * on a spinner offline (the login page never rendered). Failing fast instead lets the UI fall
+ * back to the persisted cache, or show an honest "no connection" state.
  */
 export const MAX_QUERY_RETRIES = 3;
 
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (!onlineManager.isOnline()) return false; // offline → fail fast, never pause on a retry
   if (failureCount >= MAX_QUERY_RETRIES) return false;
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;

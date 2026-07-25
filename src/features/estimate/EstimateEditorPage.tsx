@@ -28,6 +28,7 @@ import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { estimateName } from './estimateName.ts';
 import {
@@ -86,6 +87,8 @@ export function EstimateEditorPage() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const { data: me } = useMe();
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  // Actions that genuinely need the server (PDF, sharing, LLM recognition) say so when offline.
+  const { guard } = useOnlineGuard();
 
   if (estimate.isPending) {
     return (
@@ -421,19 +424,20 @@ export function EstimateEditorPage() {
                 icon="🧾"
                 label={t('receipt.fabLabel')}
                 onClick={() =>
-                  runFab(() => {
+                  runFab(guard(() => { // LLM recognition — server-side, no offline path
                     if (isPro) {
                       setReceiptOpen(true);
                     } else {
                       void upgradeApi.click('RECEIPT_IMPORT');
                       setUpgradeOpen(true);
                     }
-                  })
+                  }))
                 }
               />
             )}
-            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(onShare)} />
-            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(() => void onPdf())} />
+            {/* Online-only: both reach the server (a rendered PDF / a link sent to a client). */}
+            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(guard(onShare))} />
+            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(guard(() => void onPdf()))} />
             {est.items.length > 0 && (
               <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => runFab(openSaveTemplate)} />
             )}

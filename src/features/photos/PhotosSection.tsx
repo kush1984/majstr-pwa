@@ -7,6 +7,7 @@ import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { photosApi } from '@/api/photos.ts';
 import { toast } from '@/hooks/useToast.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { cn } from '@/lib/cn.ts';
@@ -26,6 +27,7 @@ const canCapture = typeof navigator !== 'undefined' && navigator.maxTouchPoints 
  */
 export function PhotosSection({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
+  const { online } = useOnlineGuard(); // photo uploads have no offline queue yet
   const photos = usePhotos(projectId);
   const upload = useUploadPhoto(projectId);
   const limits = usePlanLimits();
@@ -40,6 +42,12 @@ export function PhotosSection({ projectId }: { projectId: string }) {
 
   const onPick = async (file: File | undefined) => {
     if (!file) return;
+    // A photo upload streams to the server — there's no offline queue for blobs yet, so tell the
+    // master plainly instead of letting the upload fail with a network error.
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
+    }
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
       toast.error(t('photos.badType'));
       return;
