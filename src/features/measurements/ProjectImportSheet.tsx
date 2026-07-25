@@ -25,20 +25,18 @@ import { extractPdfPages, pdfPageCount } from '@/lib/pdfPages.ts';
 import { projectImportApi } from '@/api/projectImport.ts';
 import { MEASUREMENTS_KEY } from './useMeasurements.ts';
 import {
+  buildRoomPackage,
   crossCheck,
-  deriveFromInputs,
-  ELEMENT_NAMES,
+  elementValue,
+  isLinearKind,
   mergeParses,
-  perimeterFrom,
   roomItems,
-  wallBreakdown,
-  type ElementKind,
   type MergedImport,
-  type RoomInputs,
+  type MergedRoom,
+  type PackageElement,
 } from './projectImportMerge.ts';
 import type {
   ProjectImportCommitRoom,
-  ProjectImportOpening,
   ProjectImportParseResponse,
 } from '@/api/types.ts';
 
@@ -54,15 +52,6 @@ interface DocRow extends ClassifiedDoc {
   page?: number;
 }
 
-interface ElementRow {
-  kind: ElementKind;
-  value: number;
-  enabled: boolean;
-}
-
-/** Where a number on the card came from — shown small under each field. */
-type FieldSource = 'doc' | 'calc' | 'manual';
-
 interface RoomRow {
   key: string;
   name: string;
@@ -70,15 +59,12 @@ interface RoomRow {
   areaM2: number | null;
   confidence: string;
   notes: string[];
-  elements: ElementRow[];
-  missing: { kind: ElementKind; reason: string }[];
-  /** Live inputs — every field is ALWAYS present, empty when nothing was recognised. */
-  inputs: RoomInputs;
-  sources: Partial<Record<'width' | 'length' | 'height' | 'perimeter', FieldSource>>;
-  /** Gabarits the model read but the checksum rejected — a greyed hint, never computed with. */
+  /** The room's package (v2): real per-element geometry, each independently editable. */
+  elements: PackageElement[];
+  /** The merged room this was seeded from — lets «take anyway» rebuild the whole package. */
+  src: MergedRoom;
+  /** Gabarits the model DID read but the checksum refused — shown, never silently dropped. */
   rejected: { widthMm: number; lengthMm: number } | null;
-  /** Confirmed L-shape (the checksum proved A×B−a×b) — the floor keeps its real shape. */
-  cut: { widthMm: number; depthMm: number } | null;
 }
 
 const IMPORT_KINDS: DocKind[] = ['ROOM_SCHEDULE', 'PLAN_MEASURE', 'COVERINGS'];
@@ -110,7 +96,6 @@ export function ProjectImportSheet({
   const [merged, setMerged] = useState<MergedImport | null>(null);
   const [rooms, setRooms] = useState<RoomRow[]>([]);
   const [heights, setHeights] = useState<Record<string, string>>({});
-  const [reserve, setReserve] = useState('0');
   const [saving, setSaving] = useState(false);
   /** What the auto-pick actually parsed — shown on the review so it's never a black box. */
   const [usedRows, setUsedRows] = useState<DocRow[]>([]);
@@ -128,7 +113,6 @@ export function ProjectImportSheet({
     setMerged(null);
     setRooms([]);
     setHeights({});
-    setReserve('0');
     setSaving(false);
     setMakeCeilings(false);
     setMovingRooms(new Set());
@@ -333,80 +317,41 @@ export function ProjectImportSheet({
   };
 
   const buildRooms = (m: MergedImport, h: Record<string, string>) => {
-    setRooms(m.rooms.map((room) => {
-      const heightMm = room.ceilingHmm ?? heightMmOf(h, room.floor);
-      const inputs: RoomInputs = {
-        areaM2: room.areaM2,
-        widthMm: room.widthMm,
-        lengthMm: room.lengthMm,
-        perimeterMm: room.perimeterMm,
-        heightMm,
-        openings: room.openings,
-      };
-      const { elements, missing } = deriveFromInputs(inputs);
-      return {
-        key: room.key,
-        name: room.name,
-        floor: room.floor,
-        areaM2: room.areaM2,
-        confidence: room.confidence,
-        notes: room.notes,
-        // Ceiling starts OFF: for a rectangular room it's a duplicate of the floor
-        // that doubles every total — the review checkbox enables it (mansards etc.).
-        elements: elements.map((e) => ({ kind: e.kind, value: e.value, enabled: e.kind !== 'ceiling' })),
-        missing,
-        inputs,
-        sources: {
-          width: room.widthMm != null ? 'doc' : undefined,
-          length: room.lengthMm != null ? 'doc' : undefined,
-          height: room.ceilingHmm != null ? 'doc' : heightMm != null ? 'manual' : undefined,
-          perimeter: room.perimeterMm != null ? (room.widthMm != null ? 'calc' : 'doc') : undefined,
-        },
-        rejected: room.rejected,
-        cut: room.cutWidthMm != null && room.cutDepthMm != null
-          ? { widthMm: room.cutWidthMm, depthMm: room.cutDepthMm }
-          : null,
-      };
-    }));
+    setRooms(m.rooms.map((room) => ({
+      key: room.key,
+      name: room.name,
+      floor: room.floor,
+      areaM2: room.areaM2,
+      confidence: room.confidence,
+      notes: room.notes,
+      elements: buildRoomPackage(room, heightMmOf(h, room.floor)),
+      src: room,
+      rejected: room.rejected,
+    })));
     setStep('review');
   };
 
   /**
-   * A field on the card changed → recompute the whole package right away. This is the
-   * cascade: width alone gives length (area ÷ width) → perimeter → and with a height,
-   * walls appear instead of a dead-end "введіть вручну".
+   * The master accepts gabarits the checksum refused («все одно взяти»): re-seed the WHOLE
+   * package from them — the floor gets its width×length and all four walls get their runs.
+   * Their edits in that room are replaced, which is the point of re-seeding.
    */
-  const patchInputs = (roomKey: string, patch: Partial<RoomInputs>, source: FieldSource = 'manual') =>
-    setRooms((prev) => prev.map((r) => {
-      if (r.key !== roomKey) return r;
-      const inputs: RoomInputs = { ...r.inputs, ...patch };
-      // A typed width invalidates a stale recognised length — recompute it from the area.
-      if (patch.widthMm !== undefined && patch.lengthMm === undefined && inputs.areaM2 != null) {
-        inputs.lengthMm = inputs.widthMm ? (inputs.areaM2 * 1_000_000) / inputs.widthMm : null;
-      }
-      inputs.perimeterMm = perimeterFrom(inputs);
-      const { elements, missing } = deriveFromInputs(inputs);
-      const enabledOf = (kind: ElementKind) =>
-        r.elements.find((e) => e.kind === kind)?.enabled ?? (kind === 'ceiling' ? makeCeilings : true);
-      const sources = { ...r.sources };
-      if (patch.widthMm !== undefined) {
-        sources.width = source;
-        sources.length = 'calc';
-        sources.perimeter = 'calc';
-      }
-      if (patch.lengthMm !== undefined) {
-        sources.length = source;
-        sources.perimeter = 'calc';
-      }
-      if (patch.heightMm !== undefined) sources.height = source;
-      if (patch.perimeterMm !== undefined) sources.perimeter = source;
-      return {
-        ...r,
-        inputs,
-        sources,
-        elements: elements.map((e) => ({ kind: e.kind, value: e.value, enabled: enabledOf(e.kind) })),
-        missing,
-      };
+  const takeRejected = (roomKey: string) => setRooms((prev) => prev.map((r) => {
+    if (r.key !== roomKey || !r.rejected) return r;
+    const src = { ...r.src, widthMm: r.rejected.widthMm, lengthMm: r.rejected.lengthMm };
+    return {
+      ...r,
+      elements: buildRoomPackage(src, heightMmOf(heights, r.floor)),
+      src,
+      rejected: null,
+    };
+  }));
+
+  /** Edit one element of a room (geometry / enable / take-area). */
+  const patchElement = (roomKey: string, elKey: string, patch: Partial<PackageElement>) =>
+    setRooms((prev) => prev.map((r) => r.key !== roomKey ? r : {
+      ...r,
+      elements: r.elements.map((e) => (e.key === elKey ? { ...e, ...patch } : e)),
     }));
 
   const toggleCeilings = (on: boolean) => {
@@ -417,37 +362,58 @@ export function ProjectImportSheet({
     })));
   };
 
-  /** What the import could NOT produce, aggregated — never a silent "nothing happened". */
+  /** A floor/ceiling with a doc area but no dimensions and not yet taken — the «взяти» targets. */
+  const isUntakenArea = (e: PackageElement): boolean =>
+    (e.kind === 'floor' || e.kind === 'ceiling') && e.enabled
+    && e.areaHintM2 != null && e.aMm == null && e.bMm == null && !e.takeArea;
+
+  const untakenAreas = useMemo(
+    () => rooms.reduce((n, r) => n + r.elements.filter(isUntakenArea).length, 0),
+    [rooms],
+  );
+
+  /** One tap: keep every recognised floor area from the document (opt-in, never forced). */
+  const takeAllAreas = () => setRooms((prev) => prev.map((r) => ({
+    ...r,
+    elements: r.elements.map((e) => (isUntakenArea(e) ? { ...e, takeArea: true } : e)),
+  })));
+
+  /** Rooms whose walls still need a height — an explicit report, never silence. */
   const gaps = useMemo(() => {
     const noHeightFloors: string[] = [];
-    let noPerimeter = 0;
     for (const r of rooms) {
-      for (const m of r.missing) {
-        if (m.kind === 'walls' && m.reason === 'no-height') {
-          const label = r.floor ?? '';
-          if (!noHeightFloors.includes(label)) noHeightFloors.push(label);
-        }
-        if (m.kind === 'walls' && m.reason === 'no-perimeter') noPerimeter++;
+      const wallsNeedHeight = r.elements.some((e) => e.kind === 'wall' && e.enabled && e.aMm != null && e.bMm == null);
+      if (wallsNeedHeight) {
+        const label = r.floor ?? '';
+        if (!noHeightFloors.includes(label)) noHeightFloors.push(label);
       }
     }
-    return { noHeightFloors, noPerimeter };
+    return { noHeightFloors };
   }, [rooms]);
+
+  // Honesty at a glance («Джерела/Відсутнє» in spirit): how complete the import is per source
+  // — площа (from the schedule), розміри (checksum-confirmed gabarits), висота (plan H= or the
+  // answered floor height). A metric below its total is itself the honest "звірити" signal.
+  const coverage = useMemo(() => {
+    const rs = merged?.rooms ?? [];
+    return {
+      total: rs.length,
+      withArea: rs.filter((r) => r.areaM2 != null).length,
+      withDims: rs.filter((r) => r.widthMm != null).length,
+      withHeight: rs.filter((r) => r.ceilingHmm != null || heightMmOf(heights, r.floor) != null).length,
+      // Read but refused by the checksum — the single most useful answer to «why zeros?».
+      mismatched: rs.filter((r) => r.rejected != null).length,
+    };
+  }, [merged, heights]);
 
   // ---- step 5: review + commit ------------------------------------------------
 
-  const setElement = (roomKey: string, kind: ElementKind, patch: Partial<ElementRow>) =>
-    setRooms((prev) => prev.map((r) => r.key !== roomKey ? r : {
-      ...r,
-      elements: r.elements.map((e) => (e.kind === kind ? { ...e, ...patch } : e)),
-    }));
-
   const removeRoom = (key: string) => setRooms((prev) => prev.filter((r) => r.key !== key));
 
-  const reservePct = Math.max(0, Number(reserve.replace(',', '.')) || 0);
   const commitRooms: ProjectImportCommitRoom[] = useMemo(() => {
     const out: ProjectImportCommitRoom[] = [];
     for (const r of rooms) {
-      const items = roomItems(r.elements, reservePct);
+      const items = roomItems(r.elements);
       if (items.length > 0) {
         out.push({ name: r.name, floor: r.floor, items });
       }
@@ -455,7 +421,7 @@ export function ProjectImportSheet({
     // A coverings spec deliberately creates NO measurements: its figures are material
     // totals for the whole object, not per-room geometry. It's reported as skipped.
     return out;
-  }, [rooms, reservePct]);
+  }, [rooms]);
 
   const totalItems = commitRooms.reduce((s, r) => s + r.items.length, 0);
   const areaSumOver = merged ? crossCheck(merged.rooms, merged.totalAreaM2) : null;
@@ -598,8 +564,25 @@ export function ProjectImportSheet({
           </div>
         ) : (
           <div className="space-y-4">
-            {(merged.warnings.length > 0 || areaSumOver != null
-              || gaps.noHeightFloors.length > 0 || gaps.noPerimeter > 0) && (
+            {/* Honesty summary — what was recognised vs what still needs the master, at a glance. */}
+            {coverage.total > 0 && (
+              <div className="rounded-xl bg-surface-sunken p-3">
+                <div className="text-xs font-semibold text-primary">
+                  {t('projectImport.coverage.title', { n: coverage.total })}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                  <CoverageMetric label={t('projectImport.coverage.area')} have={coverage.withArea} total={coverage.total} />
+                  <CoverageMetric label={t('projectImport.coverage.dims')} have={coverage.withDims} total={coverage.total} />
+                  <CoverageMetric label={t('projectImport.coverage.height')} have={coverage.withHeight} total={coverage.total} />
+                </div>
+                {coverage.mismatched > 0 && (
+                  <p className="mt-1.5 text-[11px] text-amber">
+                    {t('projectImport.coverage.mismatched', { n: coverage.mismatched })}
+                  </p>
+                )}
+              </div>
+            )}
+            {(merged.warnings.length > 0 || areaSumOver != null || gaps.noHeightFloors.length > 0) && (
               <div className="rounded-xl bg-amber-soft p-3 text-xs text-amber">
                 <ul className="list-disc space-y-0.5 pl-4">
                   {areaSumOver != null && (
@@ -607,17 +590,12 @@ export function ProjectImportSheet({
                       {t('projectImport.crossCheck', { sum: areaSumOver, total: merged.totalAreaM2 })}
                     </li>
                   )}
-                  {/* What the import could NOT compute — an explicit report, never silence. */}
+                  {/* Walls still needing a height — an explicit report, never silence. */}
                   {gaps.noHeightFloors.map((label) => (
                     <li key={`h-${label}`} className="font-semibold">
-                      {t('projectImport.wallsNoHeight', {
-                        floor: label || t('projectImport.noFloor'),
-                      })}
+                      {t('projectImport.wallsNoHeight', { floor: label || t('projectImport.noFloor') })}
                     </li>
                   ))}
-                  {gaps.noPerimeter > 0 && (
-                    <li className="font-semibold">{t('projectImport.wallsNoPerimeter', { n: gaps.noPerimeter })}</li>
-                  )}
                   {merged.warnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               </div>
@@ -633,6 +611,15 @@ export function ProjectImportSheet({
               </p>
             )}
             <p className="text-xs text-muted">{t('projectImport.honesty')}</p>
+
+            {/* Floors import EMPTY (the master measures). One tap keeps every recognised area
+                from the document instead of clearing it — an opt-in, never forced. */}
+            {untakenAreas > 0 && (
+              <button type="button" onClick={takeAllAreas}
+                className="min-h-[40px] w-full rounded-xl border border-border bg-surface px-3 text-left text-[13px] font-semibold text-brand">
+                {t('projectImport.takeAllAreas', { n: untakenAreas })}
+              </button>
+            )}
 
             {/* Ceiling = a floor duplicate for rectangular rooms — OFF by default. */}
             <label className="flex items-center gap-2">
@@ -699,86 +686,32 @@ export function ProjectImportSheet({
                           <button type="button" aria-label={t('common.delete')} className="px-1 text-muted"
                             onClick={() => removeRoom(room.key)}>🗑</button>
                         </div>
-                        {room.areaM2 != null && (
-                          <p className="mt-1 pl-6 text-xs text-muted">
-                            {room.areaM2.toLocaleString('uk-UA')} {t('units.M2')}
-                            {room.cut && ` · ${t('projectImport.lshapeDetected')}`}
-                          </p>
-                        )}
-
-                        {/* Always-visible inputs: recognised ones are filled in, the rest
-                            are EMPTY invitations to type — never a hidden dead end. */}
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          <MmField label={t('projectImport.widthField')} value={room.inputs.widthMm}
-                            source={room.sources.width} t={t}
-                            onChange={(mm) => patchInputs(room.key, { widthMm: mm })} />
-                          <MmField label={t('projectImport.lengthField')} value={room.inputs.lengthMm}
-                            source={room.sources.length} t={t}
-                            onChange={(mm) => patchInputs(room.key, { lengthMm: mm })} />
-                          <MmField label={t('projectImport.heightField')} value={room.inputs.heightMm}
-                            source={room.sources.height} t={t}
-                            onChange={(mm) => patchInputs(room.key, { heightMm: mm })} />
-                          <MmField label={t('projectImport.perimeterField')} value={room.inputs.perimeterMm}
-                            source={room.sources.perimeter} t={t}
-                            onChange={(mm) => patchInputs(room.key, { perimeterMm: mm })} />
-                        </div>
+                        {/* Sizes the model DID read but the checksum refused (their product
+                            doesn't match the table area). Never silently dropped — showing them
+                            is what turns «why is everything zero?» into a decision. */}
                         {room.rejected && (
-                          <p className="mt-1 text-xs text-muted">
+                          <p className="mt-1.5 rounded-lg bg-amber-soft px-2 py-1.5 text-xs text-amber">
                             {t('projectImport.rejectedHint', {
                               w: (room.rejected.widthMm / 1000).toLocaleString('uk-UA'),
                               l: (room.rejected.lengthMm / 1000).toLocaleString('uk-UA'),
+                              area: (room.areaM2 ?? 0).toLocaleString('uk-UA'),
                             })}
                             {' '}
-                            <button type="button" className="font-semibold text-brand"
-                              onClick={() => patchInputs(room.key, {
-                                widthMm: room.rejected!.widthMm, lengthMm: room.rejected!.lengthMm,
-                              }, 'doc')}>
+                            <button type="button" className="font-semibold underline"
+                              onClick={() => takeRejected(room.key)}>
                               {t('projectImport.rejectedTake')}
                             </button>
                           </p>
                         )}
 
-                        {/* Openings drive netto walls + reveals; editable, or added by hand. */}
-                        <OpeningsBlock room={room} t={t}
-                          onChange={(openings) => patchInputs(room.key, { openings })} />
-
-                        {(() => {
-                          const w = wallBreakdown(room.inputs);
-                          if (!w) return null;
-                          return (
-                            <p className="mt-1.5 text-xs text-muted">
-                              {t('projectImport.wallsBreakdown', {
-                                gross: w.grossM2.toLocaleString('uk-UA'),
-                                openings: w.openingsM2.toLocaleString('uk-UA'),
-                                net: w.netM2.toLocaleString('uk-UA'),
-                              })}
-                              {w.openingsUnknown && ` · ${t('projectImport.openingsUnknown')}`}
-                            </p>
-                          );
-                        })()}
-
-                        <div className="mt-2 space-y-1">
+                        {/* Every element is a REAL shape with visible fields — floor/ceiling and
+                            each of the 4 walls carry width×… ; plinth/reveals a plain length. */}
+                        <div className="mt-2 space-y-1.5">
                           {room.elements.map((e) => (
-                            <label key={e.kind} className="flex items-center gap-2">
-                              <input type="checkbox" checked={e.enabled}
-                                onChange={() => setElement(room.key, e.kind, { enabled: !e.enabled })}
-                                className="h-4 w-4 rounded border-border text-brand focus:ring-brand-200" />
-                              <span className="w-20 text-sm text-primary">{ELEMENT_NAMES[e.kind]}</span>
-                              <input inputMode="decimal" value={String(e.value)}
-                                onChange={(ev) => setElement(room.key, e.kind, { value: Number(ev.target.value.replace(',', '.')) || 0 })}
-                                className="w-24 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
-                              <span className="text-xs text-muted">
-                                {t(e.kind === 'plinth' || e.kind === 'reveals' ? 'units.LINEAR_METER' : 'units.M2')}
-                              </span>
-                            </label>
-                          ))}
-                          {room.missing.map((mi) => (
-                            <p key={mi.kind} className="pl-6 text-xs text-muted">
-                              {ELEMENT_NAMES[mi.kind]} — {t(`projectImport.missing.${mi.reason}`)}
-                            </p>
+                            <ElementEditor key={e.key} el={e} t={t}
+                              onChange={(patch) => patchElement(room.key, e.key, patch)} />
                           ))}
                         </div>
-
                         {(room.notes.length > 0) && (
                           <p className="mt-1.5 text-xs text-amber">{room.notes.join(' · ')}</p>
                         )}
@@ -807,14 +740,6 @@ export function ProjectImportSheet({
               )}
             </div>
 
-            <div className="flex items-center gap-2 border-t border-border pt-3">
-              <span className="text-sm text-primary">{t('projectImport.reserve')}</span>
-              <input inputMode="numeric" value={reserve}
-                onChange={(e) => setReserve(e.target.value)}
-                className="w-16 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
-              <span className="text-sm text-muted">%</span>
-            </div>
-
             <Button fullWidth loading={saving} disabled={commitRooms.length === 0}
               onClick={() => void commit()}>
               {t('projectImport.add', { rooms: commitRooms.length, items: totalItems })}
@@ -826,79 +751,113 @@ export function ProjectImportSheet({
   );
 }
 
-/** One always-present dimension field in METRES (stored mm), with its source badge. */
-function MmField({
-  label, value, source, t, onChange,
+/**
+ * One element of a room's package on the review card — real, editable geometry.
+ * A surface (floor / ceiling / each wall) shows a×b fields (EMPTY = "measure on
+ * site", never a hidden dead end); a floor/ceiling with only a document area
+ * offers a one-tap «взяти площу»; plinth/reveals a single running length.
+ */
+function ElementEditor({
+  el, t, onChange,
 }: {
-  label: string;
-  value: number | null;
-  source?: FieldSource;
-  t: (k: string) => string;
-  onChange: (mm: number | null) => void;
+  el: PackageElement;
+  t: (k: string, o?: Record<string, unknown>) => string;
+  onChange: (patch: Partial<PackageElement>) => void;
 }) {
-  const shown = value == null ? '' : String(Math.round(value) / 1000);
+  const isLinear = isLinearKind(el.kind);
+  const value = elementValue(el);
+  const unitKey = isLinear ? 'units.LINEAR_METER' : 'units.M2';
+
+  const mmShown = (mm: number | null) => (mm == null ? '' : String(Math.round(mm) / 1000));
+  const toMm = (raw: string): number | null => {
+    const v = Number(raw.replace(',', '.').trim());
+    return raw.trim() && Number.isFinite(v) && v > 0 ? Math.round(v * 1000) : null;
+  };
+  const labels = el.kind === 'wall'
+    ? { a: t('projectImport.el.length'), b: t('projectImport.el.height') }
+    : { a: t('projectImport.el.width'), b: t('projectImport.el.length') };
+
   return (
-    <label className="block">
-      <span className="mb-0.5 block text-[11px] text-muted">{label}</span>
-      <input inputMode="decimal" value={shown}
-        onChange={(e) => {
-          const raw = e.target.value.replace(',', '.').trim();
-          const v = Number(raw);
-          onChange(raw && Number.isFinite(v) && v > 0 ? Math.round(v * 1000) : null);
-        }}
-        className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
-      <span className="mt-0.5 block text-[10px] text-faint">
-        {value == null ? t('projectImport.src.empty') : t(`projectImport.src.${source ?? 'manual'}`)}
-      </span>
-    </label>
+    <div className={cn('rounded-lg border p-2',
+      el.enabled ? 'border-border bg-surface' : 'border-dashed border-border bg-surface-sunken')}>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={el.enabled} aria-label={el.name}
+          onChange={() => onChange({ enabled: !el.enabled })}
+          className="h-4 w-4 flex-shrink-0 rounded border-border text-brand focus:ring-brand-200" />
+        <span className="flex-1 text-sm font-medium text-primary">{el.name}</span>
+        <span className="whitespace-nowrap text-sm font-semibold text-primary">
+          {value > 0 ? value.toLocaleString('uk-UA') : '—'} {t(unitKey)}
+        </span>
+      </div>
+
+      {el.enabled && (
+        <div className="mt-1.5 pl-6">
+          {isLinear ? (
+            <label className="flex items-center gap-2">
+              <span className="text-xs text-muted">{t('projectImport.el.length')}</span>
+              <input inputMode="decimal" value={el.lengthM == null ? '' : String(el.lengthM)}
+                aria-label={t('projectImport.el.length')}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(',', '.').trim();
+                  const v = Number(raw);
+                  onChange({ lengthM: raw && Number.isFinite(v) && v > 0 ? Math.round(v * 1000) / 1000 : null });
+                }}
+                className="w-24 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
+              <span className="text-xs text-muted">{t('units.M')}</span>
+            </label>
+          ) : el.takeArea ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted">
+                {t('projectImport.el.areaTaken', { area: (el.areaHintM2 ?? 0).toLocaleString('uk-UA') })}
+              </span>
+              <button type="button" className="font-semibold text-brand"
+                onClick={() => onChange({ takeArea: false })}>
+                {t('projectImport.el.enterDims')}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5">
+                <input inputMode="decimal" value={mmShown(el.aMm)} aria-label={labels.a} placeholder={labels.a}
+                  onChange={(e) => onChange({ aMm: toMm(e.target.value) })}
+                  className="w-20 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
+                <span className="text-xs text-faint">×</span>
+                <input inputMode="decimal" value={mmShown(el.bMm)} aria-label={labels.b} placeholder={labels.b}
+                  onChange={(e) => onChange({ bMm: toMm(e.target.value) })}
+                  className="w-20 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-primary" />
+                <span className="text-xs text-muted">{t('units.M')}</span>
+              </div>
+              {/* A floor/ceiling whose gabarits weren't read: the doc area is one tap away. */}
+              {(el.kind === 'floor' || el.kind === 'ceiling')
+                && el.areaHintM2 != null && el.aMm == null && el.bMm == null && (
+                <p className="mt-1 text-xs text-muted">
+                  {t('projectImport.el.areaHint', { area: el.areaHintM2.toLocaleString('uk-UA') })}
+                  {' '}
+                  <button type="button" className="font-semibold text-brand"
+                    onClick={() => onChange({ takeArea: true })}>
+                    {t('projectImport.el.takeArea')}
+                  </button>
+                </p>
+              )}
+              {el.kind === 'wall' && el.aMm != null && el.bMm == null && (
+                <p className="mt-1 text-xs text-amber">{t('projectImport.el.needHeight')}</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-/** The room's openings: recognised or hand-added; every edit recomputes walls + reveals. */
-function OpeningsBlock({
-  room, t, onChange,
-}: {
-  room: RoomRow;
-  t: (k: string, o?: Record<string, unknown>) => string;
-  onChange: (openings: ProjectImportOpening[]) => void;
-}) {
-  const list = room.inputs.openings;
-  const patch = (i: number, p: Partial<ProjectImportOpening>) =>
-    onChange(list.map((o, j) => (j === i ? { ...o, ...p } : o)));
-  const num = (v: string) => {
-    const n = Number(v.replace(',', '.'));
-    return Number.isFinite(n) && n > 0 ? Math.round(n * 1000) : 0;
-  };
+/** One coverage metric «площа 3/4» — green tick when full, amber dot when partial. */
+function CoverageMetric({ label, have, total }: { label: string; have: number; total: number }) {
+  const full = have >= total;
   return (
-    <div className="mt-2">
-      <div className="mb-1 text-[11px] font-semibold text-muted">{t('projectImport.openingsTitle')}</div>
-      <div className="space-y-1">
-        {list.map((o, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <select value={o.kind} aria-label={t('projectImport.openingKind')}
-              onChange={(e) => patch(i, { kind: e.target.value })}
-              className="rounded-lg border border-border bg-surface px-1.5 py-1.5 text-xs text-primary">
-              <option value="вікно">{t('projectImport.window')}</option>
-              <option value="двері">{t('projectImport.door')}</option>
-            </select>
-            <input inputMode="decimal" value={String(o.wMm / 1000)} aria-label={t('projectImport.openingW')}
-              onChange={(e) => patch(i, { wMm: num(e.target.value) })}
-              className="w-14 rounded-lg border border-border bg-surface px-1.5 py-1.5 text-xs text-primary" />
-            <span className="text-xs text-faint">×</span>
-            <input inputMode="decimal" value={String(o.hMm / 1000)} aria-label={t('projectImport.openingH')}
-              onChange={(e) => patch(i, { hMm: num(e.target.value) })}
-              className="w-14 rounded-lg border border-border bg-surface px-1.5 py-1.5 text-xs text-primary" />
-            <span className="text-xs text-faint">{t('units.M')}</span>
-            <button type="button" aria-label={t('common.delete')} className="ml-auto px-1 text-muted"
-              onClick={() => onChange(list.filter((_, j) => j !== i))}>🗑</button>
-          </div>
-        ))}
-      </div>
-      <button type="button" className="mt-1 text-xs font-semibold text-brand"
-        onClick={() => onChange([...list, { kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null }])}>
-        {t('projectImport.addOpening')}
-      </button>
-    </div>
+    <span className={cn('inline-flex items-center gap-1', full ? 'text-success' : 'text-amber')}>
+      <span aria-hidden="true">{full ? '✓' : '•'}</span>
+      {label} {have}/{total}
+    </span>
   );
 }
 

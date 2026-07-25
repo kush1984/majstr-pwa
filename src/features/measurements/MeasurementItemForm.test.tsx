@@ -29,6 +29,26 @@ describe('MeasurementItemForm', () => {
     });
   });
 
+  it('LINEAR «Довжина» mode is a plain length (width × qty), no reveal sides', () => {
+    const onSave = vi.fn();
+    render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Стеля/), { target: { value: 'Плінтус' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Пагонаж' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Довжина' }));
+    // The reveal-side toggles are gone in length mode.
+    expect(screen.queryByRole('button', { name: 'Верх' })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Довжина, м'), { target: { value: '8.535' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      name: 'Плінтус',
+      type: 'LINEAR',
+      payload: { height: 0, width: 8.535, sides: { left: true, right: true, top: true, bottom: false }, qty: 1, mode: 'length' },
+    });
+  });
+
   it('builds a SURFACE payload of shaped planes in the chosen unit', () => {
     const onSave = vi.fn();
     render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
@@ -75,6 +95,23 @@ describe('MeasurementItemForm', () => {
     expect((screen.getByLabelText(/^a ширина/) as HTMLInputElement).value).toBe('5.31');
     expect((screen.getByLabelText(/^b висота/) as HTMLInputElement).value).toBe('3.69');
     expect(screen.getByRole('button', { name: 'м' }).className).toContain('border-brand');
+  });
+
+  it('opens an imported EMPTY (to-measure) surface as one blank rectangle, not «площа напряму»', () => {
+    render(
+      <MeasurementItemForm
+        initial={{
+          id: 'w1', name: 'Стіна 1', type: 'SURFACE', unit: 'M2', result: 0, sortOrder: 0,
+          payload: { segments: [], openings: [] },
+        }}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+    // A blank rectangle with empty a/b fields — ready to measure, never a locked direct area.
+    expect((screen.getByLabelText(/^a ширина/) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText(/^b висота/) as HTMLInputElement).value).toBe('');
+    expect(screen.getByRole('button', { name: 'Прямокутник' }).className).toContain('bg-primary');
   });
 
   it('keeps save disabled until there is a name and a positive result', () => {

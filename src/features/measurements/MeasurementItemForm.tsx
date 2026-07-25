@@ -91,12 +91,15 @@ export function MeasurementItemForm({
   const [internalUnit, setInternalUnit] = useState<LengthUnit>(initSurface?.unit ?? 'M');
   const unit = hostUnit ?? internalUnit;
   const [planes, setPlanes] = useState<PlaneDraft[]>(
-    initSurface?.segments.map((s) =>
-      // A shape-less segment is a pre-shapes rectangle stored in metres.
-      s.shape
-        ? toDraft({ shape: s.shape, mode: s.mode ?? 'd', values: s.values ?? {} })
-        : toDraft(planeFromLegacy(s.l ?? 0, s.w ?? 0)),
-    ) ?? [newDraft('rect')],
+    // An empty segments array is an imported "to-measure" element (skeleton) — open it as
+    // one blank rectangle to fill, exactly like a fresh element, not an empty editor.
+    initSurface && initSurface.segments.length > 0
+      ? initSurface.segments.map((s) =>
+        // A shape-less segment is a pre-shapes rectangle stored in metres.
+        s.shape
+          ? toDraft({ shape: s.shape, mode: s.mode ?? 'd', values: s.values ?? {} })
+          : toDraft(planeFromLegacy(s.l ?? 0, s.w ?? 0)))
+      : [newDraft('rect')],
   );
   const [openings, setOpenings] = useState<Opening[]>(
     initSurface?.openings.map((o) => ({ w: String(o.w), h: String(o.h), n: String(o.n) })) ?? [],
@@ -123,6 +126,9 @@ export function MeasurementItemForm({
   const [sides, setSides] = useState(
     initLin?.sides ?? { left: true, right: true, top: true, bottom: false },
   );
+  // 'length' = a plain running length (result = width × qty), for a skirting run or an
+  // imported reveal total — no reveal-side toggles. Manual LINEAR still defaults to reveal.
+  const [lengthMode, setLengthMode] = useState(initLin?.mode === 'length');
 
   // ELECTRICAL_POINTS — counts per legend type (шт).
   const initPoints = initial?.type === 'ELECTRICAL_POINTS' ? (initial.payload as PointsPayload) : undefined;
@@ -228,6 +234,7 @@ export function MeasurementItemForm({
       if (faces.top) r += w * d;
       return round3(Math.max(0, r));
     }
+    if (lengthMode) return round3(Math.max(0, num(lDims.width) * posInt(lDims.qty)));
     const h = num(lDims.height), w = num(lDims.width);
     let per = 0;
     if (sides.left) per += h;
@@ -235,7 +242,7 @@ export function MeasurementItemForm({
     if (sides.top) per += w;
     if (sides.bottom) per += w;
     return round3(Math.max(0, per * posInt(lDims.qty)));
-  }, [type, planesM2, openingsM2, pDims, faces, lDims, sides, pointsTotal, calc]);
+  }, [type, planesM2, openingsM2, pDims, faces, lDims, sides, lengthMode, pointsTotal, calc]);
 
   const unitKey =
     type === 'ELECTRICAL_POINTS' ? 'units.PIECE'
@@ -271,6 +278,9 @@ export function MeasurementItemForm({
     if (type === 'PARTITION') {
       return { height: num(pDims.height), width: num(pDims.width), depth: num(pDims.depth), faces };
     }
+    if (lengthMode) {
+      return { height: 0, width: num(lDims.width), sides, qty: posInt(lDims.qty), mode: 'length' as const };
+    }
     return { height: num(lDims.height), width: num(lDims.width), sides, qty: posInt(lDims.qty) };
   };
 
@@ -283,7 +293,7 @@ export function MeasurementItemForm({
     onLiveChange(canSave ? { name: name.trim(), type, payload: buildPayload() } : null);
     // buildPayload is derived from the same state listed here; excluded to avoid a re-run loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onLiveChange, canSave, name, type, planes, openings, pDims, faces, lDims, sides, unit]);
+  }, [onLiveChange, canSave, name, type, planes, openings, pDims, faces, lDims, sides, lengthMode, unit]);
 
   const Toggle = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
     <button
@@ -640,26 +650,55 @@ export function MeasurementItemForm({
         </div>
       )}
 
-      {/* LINEAR — H/W of the opening + sides + count. */}
+      {/* LINEAR — either a plain running length (plinth) or an opening's reveal perimeter. */}
       {type === 'LINEAR' && (
         <div className="rounded-xl border border-border bg-surface-sunken p-3 space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <Input inputMode="decimal" placeholder={t('measure.openingHeight')} value={lDims.height}
-              onChange={(e) => setLDims((s) => ({ ...s, height: e.target.value }))} />
-            <Input inputMode="decimal" placeholder={t('measure.openingWidth')} value={lDims.width}
-              onChange={(e) => setLDims((s) => ({ ...s, width: e.target.value }))} />
-            <Input inputMode="numeric" placeholder={t('measure.count')} value={lDims.qty}
-              onChange={(e) => setLDims((s) => ({ ...s, qty: e.target.value }))} />
+          <div className="inline-flex rounded-lg bg-surface p-0.5 text-xs font-semibold">
+            <button type="button" onClick={() => setLengthMode(true)}
+              className={cn('min-h-[36px] rounded-md px-3', lengthMode ? 'bg-primary text-canvas' : 'text-muted')}>
+              {t('measure.linearLength')}
+            </button>
+            <button type="button" onClick={() => setLengthMode(false)}
+              className={cn('min-h-[36px] rounded-md px-3', !lengthMode ? 'bg-primary text-canvas' : 'text-muted')}>
+              {t('measure.linearReveal')}
+            </button>
           </div>
-          <div>
-            <div className="mb-1.5 text-xs font-semibold text-muted">{t('measure.sidesHint')}</div>
-            <div className="grid grid-cols-4 gap-2">
-              <Toggle on={sides.left} label={t('measure.sideLeft')} onClick={() => setSides((s) => ({ ...s, left: !s.left }))} />
-              <Toggle on={sides.right} label={t('measure.sideRight')} onClick={() => setSides((s) => ({ ...s, right: !s.right }))} />
-              <Toggle on={sides.top} label={t('measure.sideTop')} onClick={() => setSides((s) => ({ ...s, top: !s.top }))} />
-              <Toggle on={sides.bottom} label={t('measure.sideBottom')} onClick={() => setSides((s) => ({ ...s, bottom: !s.bottom }))} />
+
+          {lengthMode ? (
+            // Plinth / imported reveal total — just metres × count, no reveal sides.
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">{t('measure.linearLengthField')}</span>
+                <Input inputMode="decimal" value={lDims.width}
+                  onChange={(e) => setLDims((s) => ({ ...s, width: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">{t('measure.count')}</span>
+                <Input inputMode="numeric" value={lDims.qty}
+                  onChange={(e) => setLDims((s) => ({ ...s, qty: e.target.value }))} />
+              </label>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <Input inputMode="decimal" placeholder={t('measure.openingHeight')} value={lDims.height}
+                  onChange={(e) => setLDims((s) => ({ ...s, height: e.target.value }))} />
+                <Input inputMode="decimal" placeholder={t('measure.openingWidth')} value={lDims.width}
+                  onChange={(e) => setLDims((s) => ({ ...s, width: e.target.value }))} />
+                <Input inputMode="numeric" placeholder={t('measure.count')} value={lDims.qty}
+                  onChange={(e) => setLDims((s) => ({ ...s, qty: e.target.value }))} />
+              </div>
+              <div>
+                <div className="mb-1.5 text-xs font-semibold text-muted">{t('measure.sidesHint')}</div>
+                <div className="grid grid-cols-4 gap-2">
+                  <Toggle on={sides.left} label={t('measure.sideLeft')} onClick={() => setSides((s) => ({ ...s, left: !s.left }))} />
+                  <Toggle on={sides.right} label={t('measure.sideRight')} onClick={() => setSides((s) => ({ ...s, right: !s.right }))} />
+                  <Toggle on={sides.top} label={t('measure.sideTop')} onClick={() => setSides((s) => ({ ...s, top: !s.top }))} />
+                  <Toggle on={sides.bottom} label={t('measure.sideBottom')} onClick={() => setSides((s) => ({ ...s, bottom: !s.bottom }))} />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

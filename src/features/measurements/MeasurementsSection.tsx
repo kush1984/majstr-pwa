@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cn } from '@/lib/cn.ts';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
@@ -105,6 +106,14 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
+  // Drag a room card onto another floor group. One Pointer Events path covers BOTH touch
+  // (phone — the primary case) and mouse (desktop); the rename dialog's floor field stays as
+  // the keyboard fallback. `overFloor` drives the drop-zone highlight (null = the no-floor group).
+  const [dragging, setDragging] = useState<{ id: string; name: string } | null>(null);
+  const [overFloor, setOverFloor] = useState<string | null | undefined>(undefined);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ roomId: string } | null>(null);
+
   if (!isPro) {
     return (
       <div className="rounded-card border border-border bg-surface p-4">
@@ -137,6 +146,50 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const cableTotal = sumBy(allItems, (i) => i.type === 'CABLE');
   const electrical = data.rooms.flatMap((r) => r.items.filter((i) => isElectrical(i.type)).map((item) => ({ roomId: r.id, item })));
   const electricalRoomId = data.rooms.find((r) => r.items.some((i) => isElectrical(i.type)))?.id;
+
+  // ---- drag a room between floor groups (touch + mouse) ----------------------
+
+  /** The floor of the group under (x,y): a string, `null` for the no-floor group,
+   *  or `undefined` when the point is over no group at all (a real "no drop"). */
+  const floorAt = (x: number, y: number): string | null | undefined => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-floor-group]');
+    if (!el) return undefined;
+    const raw = el.getAttribute('data-floor') ?? '';
+    return raw === '' ? null : raw;
+  };
+  const moveGhost = (x: number, y: number) => {
+    // Lift the label above the finger so it isn't hidden under the thumb.
+    if (ghostRef.current) ghostRef.current.style.transform = `translate(calc(${x}px - 50%), ${y - 40}px)`;
+    setOverFloor(floorAt(x, y));
+  };
+  const onDragStart = (e: React.PointerEvent, room: { id: string; name: string }) => {
+    e.preventDefault();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* older browsers */ }
+    dragRef.current = { roomId: room.id };
+    setDragging(room);
+    const { clientX, clientY } = e;
+    requestAnimationFrame(() => moveGhost(clientX, clientY));
+  };
+  const onDragMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    e.preventDefault();
+    moveGhost(e.clientX, e.clientY);
+  };
+  const onDragEnd = (e: React.PointerEvent) => {
+    const st = dragRef.current;
+    dragRef.current = null;
+    setDragging(null);
+    setOverFloor(undefined);
+    if (!st) return;
+    const target = floorAt(e.clientX, e.clientY);
+    if (target === undefined) return; // released outside any floor group → no move
+    const room = data.rooms.find((r) => r.id === st.roomId);
+    if (!room || (room.floor ?? null) === (target ?? null)) return;
+    actions.updateRoom.mutate(
+      { roomId: st.roomId, req: { name: room.name, floor: target } },
+      { onError: (err) => toast.error(toAppError(err).message) },
+    );
+  };
 
   const createRoom = () => {
     const name = roomName.trim();
@@ -276,6 +329,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
           }
           floors.sort((a, b) => floorSortKey(a) - floorSortKey(b));
           const grouped = floors.length > 1 || floors[0] !== null;
+          // Dragging a room between floors only makes sense once there is more than one group.
+          const canDrag = floors.length > 1;
 
           return (
             <div className="space-y-3">
@@ -284,7 +339,9 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
                 const groupArea = group.reduce((s, { room }) => s + roomPrimaryArea(room), 0);
                 const groupLinear = group.reduce((s, { areaItems }) => s + sumBy(areaItems, (i) => i.type === 'LINEAR'), 0);
                 return (
-                  <div key={floor ?? ''} className="space-y-3">
+                  <div key={floor ?? ''} data-floor-group="" data-floor={floor ?? ''}
+                    className={cn('space-y-3 rounded-xl transition-colors',
+                      dragging && overFloor === floor && 'bg-brand-soft ring-2 ring-brand/40')}>
                     {grouped && (
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
@@ -299,8 +356,21 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
                     {group.map(({ room, areaItems }) => {
                 const roomLinear = sumBy(areaItems, (i) => i.type === 'LINEAR');
                 return (
-                  <div key={room.id} className="rounded-card border border-border bg-surface p-3.5">
+                  <div key={room.id}
+                    className={cn('rounded-card border border-border bg-surface p-3.5 transition-opacity',
+                      dragging?.id === room.id && 'opacity-40')}>
                     <div className="mb-2 flex items-center justify-between gap-2">
+                      {/* Grip = drag this room onto another floor (touch or mouse). */}
+                      {canDrag && (
+                        <button type="button" aria-label={t('measure.moveRoom')} title={t('measure.moveRoom')}
+                          onPointerDown={(e) => onDragStart(e, { id: room.id, name: room.name })}
+                          onPointerMove={onDragMove}
+                          onPointerUp={onDragEnd}
+                          onPointerCancel={onDragEnd}
+                          className="-ml-1 flex-shrink-0 touch-none cursor-grab select-none px-1 text-lg leading-none text-muted">
+                          ⠿
+                        </button>
+                      )}
                       {/* Tap the name to rename the room (was: no way to fix a typo but delete). */}
                       <button type="button" onClick={() => setEditingRoom({ id: room.id, name: room.name, floor: room.floor })}
                         className="min-w-0 flex-1 text-left text-sm font-bold text-primary">
@@ -517,6 +587,15 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
         objectId={objectId}
         onApply={(result) => { setPlanOpen(false); void applyPlan(result); }}
       />
+
+      {/* Floating label that follows the finger while dragging a room to another floor.
+          pointer-events-none so `elementFromPoint` sees the floor group underneath it. */}
+      {dragging && (
+        <div ref={ghostRef} aria-hidden="true"
+          className="pointer-events-none fixed left-0 top-0 z-50 max-w-[60vw] truncate rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white shadow-lg">
+          {dragging.name}
+        </div>
+      )}
     </div>
   );
 }

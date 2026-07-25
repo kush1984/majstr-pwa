@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildPackage,
   checksum,
   crossCheck,
-  deriveElements,
-  deriveFromInputs,
-  elementPayload,
+  elementPayloadV2,
+  elementValue,
   mergeParses,
   perimeterFrom,
   roomItems,
-  wallBreakdown,
   type MergedRoom,
+  type PackageElement,
+  type RoomInputs,
 } from './projectImportMerge.ts';
 import type { ProjectImportParseResponse } from '@/api/types.ts';
 
@@ -206,6 +207,28 @@ describe('checksum — the proof that makes recognised sizes trustworthy', () =>
     expect(bad.perimeterMm).toBeNull();
     expect(bad.rejected).toEqual({ widthMm: 4990, lengthMm: 3200 }); // shown greyed
   });
+
+  it('NO table area → gabarits are accepted unverified, not thrown away', () => {
+    // A room the schedule never listed (or whose row the model missed) still has its
+    // dimension chains on the plan. The checksum has nothing to verify against — and
+    // discarding the sizes then left the master with a room of zeros.
+    const noArea: ProjectImportParseResponse = {
+      ...empty,
+      floors: [{ floor: null, roomsOnThisSheet: [], rooms: [{
+        number: '7', name: 'Хол', areaM2: null, perimeterMm: null, wallSegmentsMm: null,
+        widthMm: 5000, lengthMm: 4000, cutWidthMm: null, cutDepthMm: null, ceilingHmm: 2700,
+        openings: [], confidence: 'high', note: null,
+      }] }],
+    };
+    const room = mergeParses([{ fileFloor: null, resp: noArea }]).rooms[0];
+    expect(room.widthMm).toBe(5000);
+    expect(room.lengthMm).toBe(4000);
+    expect(room.perimeterMm).toBe(2 * (5000 + 4000)); // walls + plinth can be computed
+    expect(room.rejected).toBeNull();
+    // …but the master is told they were not cross-checked.
+    expect(room.confidence).toBe('medium');
+    expect(room.notes.some((n) => n.includes('площі в таблиці немає'))).toBe(true);
+  });
 });
 
 describe('crossCheck', () => {
@@ -222,104 +245,167 @@ describe('crossCheck', () => {
   });
 });
 
-describe('deriveElements — the room package', () => {
-  const room: MergedRoom = {
-    key: 'k', number: '4', name: 'Спальня', floor: '1',
-    areaM2: 30, perimeterMm: 22000, perimeterDerived: true,
-    widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, ceilingHmm: null,
-    openings: [
-      { kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null },
+describe('buildPackage — the room package (v2: real per-wall geometry)', () => {
+  const openings = [
+    { kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null },
+    { kind: 'двері', wMm: 900, hMm: 2100, sillMm: null, note: null },
+  ];
+  const byKey = (els: PackageElement[]) => Object.fromEntries(els.map((e) => [e.key, e]));
+
+  it('confirmed gabarits + height → real floor/ceiling rects and FOUR walls (2×w, 2×l)', () => {
+    const els = buildPackage({
+      areaM2: 30, widthMm: 5000, lengthMm: 6000, perimeterMm: 22000, heightMm: 2700, openings,
+    });
+    const by = byKey(els);
+    // Floor is a real 5×6 rect, not a "direct area"; ceiling duplicates it but starts OFF.
+    expect(by.floor).toMatchObject({ aMm: 5000, bMm: 6000, takeArea: false, enabled: true });
+    expect(elementValue(by.floor)).toBe(30);
+    expect(by.ceiling.enabled).toBe(false);
+    // Four separate walls, each width×height / length×height.
+    expect(els.filter((e) => e.kind === 'wall')).toHaveLength(4);
+    expect(by['wall-1']).toMatchObject({ aMm: 5000, bMm: 2700, name: 'Стіна 1' });
+    expect(by['wall-2']).toMatchObject({ aMm: 6000, bMm: 2700, name: 'Стіна 2' });
+    // Only wall-1 carries the openings to subtract: 5×2.7 − (1.4×1.5 + 0.9×2.1) = 9.51.
+    expect(elementValue(by['wall-1'])).toBe(9.51);
+    expect(elementValue(by['wall-2'])).toBe(16.2);
+    // Plinth = perimeter − doors; reveals = Σ(2h + w) per opening. Both as running metres.
+    expect(elementValue(by.plinth)).toBe(21.1); // 22 − 0.9
+    expect(elementValue(by.reveals)).toBe(9.5); // (2×1.5+1.4) + (2×2.1+0.9)
+  });
+
+  it('area only, no gabarits → floor imports EMPTY (never auto «площа напряму»); 4 empty walls', () => {
+    const els = buildPackage({
+      areaM2: 17.69, widthMm: null, lengthMm: null, perimeterMm: null, heightMm: 2850, openings: [],
+    });
+    const by = byKey(els);
+    // No sizes read → EMPTY fields, NOT a taken area. The doc area waits in areaHintM2 as a
+    // one-tap «взяти», and the element's value is 0 until the master measures or takes it.
+    expect(by.floor).toMatchObject({ aMm: null, bMm: null, takeArea: false, areaHintM2: 17.69 });
+    expect(elementValue(by.floor)).toBe(0);
+    // Four walls exist but only the height is known — the run is left EMPTY, never a dead end.
+    const walls = els.filter((e) => e.kind === 'wall');
+    expect(walls).toHaveLength(4);
+    expect(walls.every((w) => w.aMm === null && w.bMm === 2850)).toBe(true);
+    expect(elementValue(walls[0])).toBe(0);
+    // No perimeter → plinth/reveals have nothing to compute and start OFF.
+    expect(by.plinth.enabled).toBe(false);
+    expect(by.reveals.enabled).toBe(false);
+  });
+
+  it('gabarits but NO height → walls keep the run, wait on the height', () => {
+    const els = buildPackage({
+      areaM2: 30, widthMm: 5000, lengthMm: 6000, perimeterMm: 22000, heightMm: null, openings: [],
+    });
+    const walls = els.filter((e) => e.kind === 'wall');
+    // Run is set, height missing — the review card flags exactly these as needing a height.
+    expect(walls.every((w) => w.aMm != null && w.bMm === null)).toBe(true);
+    expect(walls.every((w) => elementValue(w) === 0)).toBe(true);
+    // The floor still computes, and the plinth still has its perimeter.
+    expect(elementValue(byKey(els).floor)).toBe(30);
+    expect(byKey(els).plinth.enabled).toBe(true);
+  });
+
+  it('a floor-reaching opening (toFloor) breaks the skirting; a window on a sill does not', () => {
+    const base = { areaM2: 30, widthMm: 5000, lengthMm: 6000, perimeterMm: 22000, heightMm: 2700 };
+    // A 2 m panoramic window to the floor + a 0.9 m door both cut the plinth.
+    const toFloor = buildPackage({ ...base, openings: [
+      { kind: 'вікно', wMm: 2000, hMm: 2400, sillMm: 0, toFloor: true, note: null },
       { kind: 'двері', wMm: 900, hMm: 2100, sillMm: null, note: null },
-    ],
-    confidence: 'high', notes: [],
-  };
-
-  it('derives the full package when perimeter AND height are known', () => {
-    const { elements, missing } = deriveElements(room, 2700);
-    const byKind = Object.fromEntries(elements.map((e) => [e.kind, e]));
-    expect(byKind.floor.value).toBe(30);
-    expect(byKind.ceiling.value).toBe(30);
-    // 22×2.7 − (1.4×1.5 + 0.9×2.1) = 59.4 − 3.99
-    expect(byKind.walls.value).toBe(55.41);
-    // 22 − 0.9 (the door)
-    expect(byKind.plinth.value).toBe(21.1);
-    // Reveals for BOTH openings (2×h + w each): window 2×1.5+1.4 = 4.4, door 2×2.1+0.9 = 5.1
-    expect(byKind.reveals.value).toBe(9.5);
-    expect(missing).toHaveLength(0);
+    ] });
+    expect(elementValue(byKey(toFloor).plinth)).toBe(19.1); // 22 − 2 − 0.9
+    // The same window on a sill (no toFloor) leaves the skirting running under it.
+    const onSill = buildPackage({ ...base, openings: [
+      { kind: 'вікно', wMm: 2000, hMm: 1500, sillMm: 900, note: null },
+      { kind: 'двері', wMm: 900, hMm: 2100, sillMm: null, note: null },
+    ] });
+    expect(elementValue(byKey(onSill).plinth)).toBe(21.1); // 22 − 0.9 (door only)
   });
 
-  it('creates NO walls without a height, and says why', () => {
-    const { elements, missing } = deriveElements(room, null);
-    expect(elements.map((e) => e.kind)).toEqual(['floor', 'ceiling', 'plinth', 'reveals']);
-    expect(missing).toEqual([{ kind: 'walls', reason: 'no-height' }]);
-  });
-
-  it('area-only room → floor+ceiling, walls/plinth marked as needing a perimeter', () => {
-    const bare = { ...room, perimeterMm: null, openings: [] };
-    const { elements, missing } = deriveElements(bare, 2700);
-    expect(elements.map((e) => e.kind)).toEqual(['floor', 'ceiling']);
-    expect(missing.map((m) => m.kind).sort()).toEqual(['plinth', 'walls']);
+  it('sills element = Σ window widths, OFF by default, commits as a length-mode LINEAR', () => {
+    const els = buildPackage({ areaM2: 30, widthMm: 5000, lengthMm: 6000, perimeterMm: 22000, heightMm: 2700, openings: [
+      { kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null },
+      { kind: 'вікно', wMm: 1000, hMm: 1500, sillMm: 900, note: null },
+      { kind: 'двері', wMm: 900, hMm: 2100, sillMm: null, note: null },
+    ] });
+    const sill = byKey(els).sill;
+    expect(sill).toMatchObject({ kind: 'sill', name: 'Підвіконня', enabled: false });
+    expect(elementValue(sill)).toBe(2.4); // 1.4 + 1.0 window widths (the door is not a sill)
+    // Off by default → not committed; enabling it emits a length-mode LINEAR like the plinth.
+    expect(roomItems(els).some((i) => i.name === 'Підвіконня')).toBe(false);
+    expect(elementPayloadV2({ ...sill, enabled: true })).toEqual({
+      height: 0, width: 2.4, sides: { left: false, right: false, top: true, bottom: false }, qty: 1, mode: 'length',
+    });
   });
 });
 
-describe('progressive card — the cascade that never dead-ends', () => {
-  const base = {
-    areaM2: 17.69, widthMm: null, lengthMm: null, perimeterMm: null,
-    heightMm: null, openings: [],
+describe('perimeterFrom — the cascade that never dead-ends', () => {
+  const base: RoomInputs = {
+    areaM2: 17.69, widthMm: null, lengthMm: null, perimeterMm: null, heightMm: null, openings: [],
   };
 
-  it('width alone gives length → perimeter → (with a height) walls', () => {
-    const widthOnly = { ...base, widthMm: 4990 };
-    expect(perimeterFrom(widthOnly)).toBeCloseTo(2 * (4990 + 3545), 0); // area ÷ width
-
-    const withHeight = { ...widthOnly, perimeterMm: perimeterFrom(widthOnly), heightMm: 2850 };
-    const { elements, missing } = deriveFromInputs(withHeight);
-    expect(missing).toHaveLength(0);
-    expect(elements.find((e) => e.kind === 'walls')!.value).toBeCloseTo(48.65, 1);
+  it('width alone gives length → perimeter (area ÷ width)', () => {
+    expect(perimeterFrom({ ...base, widthMm: 4990 })).toBeCloseTo(2 * (4990 + 3545), 0);
   });
 
-  it('shows the wall arithmetic and says out loud when openings are unknown', () => {
-    const noOpenings = { ...base, perimeterMm: 17070, heightMm: 2850 };
-    const w1 = wallBreakdown(noOpenings)!;
-    expect(w1.grossM2).toBeCloseTo(48.65, 1);
-    expect(w1.netM2).toBe(w1.grossM2);
-    expect(w1.openingsUnknown).toBe(true);
-
-    const w2 = wallBreakdown({
-      ...noOpenings,
-      openings: [{ kind: 'вікно', wMm: 1300, hMm: 1500, sillMm: 900, note: null }],
-    })!;
-    expect(w2.openingsM2).toBeCloseTo(1.95, 2);
-    expect(w2.netM2).toBeCloseTo(w1.grossM2 - 1.95, 1);
-    expect(w2.openingsUnknown).toBe(false);
+  it('confirmed gabarits give the exact perimeter; a printed one is used verbatim', () => {
+    expect(perimeterFrom({ ...base, widthMm: 5000, lengthMm: 6000 })).toBe(22000);
+    expect(perimeterFrom({ ...base, perimeterMm: 17070 })).toBe(17070);
   });
 });
 
-describe('roomItems / payloads', () => {
-  it('applies the reserve and emits payloads the server recomputes identically', () => {
-    const items = roomItems(
-      [
-        { kind: 'floor', value: 30, enabled: true },
-        { kind: 'plinth', value: 20, enabled: true },
-        { kind: 'walls', value: 50, enabled: false }, // unticked → dropped
-      ],
-      10,
-    );
-    expect(items).toHaveLength(2);
-    expect(items[0]).toMatchObject({
-      name: 'Підлога', type: 'SURFACE',
-      payload: { unit: 'M', segments: [{ shape: 'direct', mode: 'd', values: { s: 33 } }], openings: [] },
-    });
-    expect(items[1]).toMatchObject({
-      name: 'Плінтус', type: 'LINEAR',
-      payload: { width: 22, sides: { top: true, left: false, right: false, bottom: false }, qty: 1 },
+describe('elementValue / elementPayloadV2 / roomItems', () => {
+  const el = (over: Partial<PackageElement>): PackageElement => ({
+    key: 'x', kind: 'wall', name: 'X', unit: 'M2', enabled: true,
+    aMm: null, bMm: null, areaHintM2: null, takeArea: false, lengthM: null, openings: [],
+    ...over,
+  });
+
+  it('a blank floor reads 0, not its doc area — the area is a one-tap «взяти», never auto-shown', () => {
+    expect(elementValue(el({ kind: 'floor', areaHintM2: 18.3, takeArea: false }))).toBe(0);
+    // Taking it (the master's explicit choice) then uses the doc figure.
+    expect(elementValue(el({ kind: 'floor', areaHintM2: 18.3, takeArea: true }))).toBe(18.3);
+  });
+
+  it('a surface commits as a real rect (a×b) with its openings subtracted client- and server-side', () => {
+    expect(elementPayloadV2(el({
+      kind: 'wall', aMm: 5000, bMm: 2700,
+      openings: [{ kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null }],
+    }))).toEqual({
+      unit: 'M',
+      segments: [{ shape: 'rect', mode: 'd', values: { a: 5, b: 2.7 } }],
+      openings: [{ w: 1.4, h: 1.5, n: 1 }],
     });
   });
 
-  it('an edited value becomes a direct payload — what the master confirmed is what is computed', () => {
-    // mode is a REAL variant key: '' used to leak into i18n lookups (shape.direct..hint).
-    expect(elementPayload('walls', 48.5)).toEqual({
-      unit: 'M', segments: [{ shape: 'direct', mode: 'd', values: { s: 48.5 } }], openings: [],
+  it('a taken floor area commits as a direct payload; plinth/reveals as a length-mode LINEAR', () => {
+    expect(elementPayloadV2(el({ kind: 'floor', takeArea: true, areaHintM2: 18.3 }))).toEqual({
+      unit: 'M', segments: [{ shape: 'direct', mode: 'd', values: { s: 18.3 } }], openings: [],
     });
+    expect(elementPayloadV2(el({ kind: 'plinth', unit: 'LINEAR_METER', lengthM: 21.1 }))).toEqual({
+      height: 0, width: 21.1, sides: { left: false, right: false, top: true, bottom: false }, qty: 1, mode: 'length',
+    });
+  });
+
+  it('an empty SURFACE commits as an empty plane (skeleton to fill); an empty length commits nothing', () => {
+    // A wall with no committable dimensions is NOT dropped — it becomes an empty plane
+    // (segments: [] → server result 0) so the master gets the full 4-wall skeleton to fill in.
+    expect(elementPayloadV2(el({ kind: 'wall', aMm: null, bMm: 2700 })))
+      .toEqual({ unit: 'M', segments: [], openings: [] });
+    // Plinth/reveals/sill with no length genuinely have nothing to commit.
+    expect(elementPayloadV2(el({ kind: 'plinth', unit: 'LINEAR_METER', lengthM: null }))).toBeNull();
+  });
+
+  it('roomItems commits every enabled element (empty walls included), indexed by position', () => {
+    const items = roomItems([
+      el({ key: 'floor', kind: 'floor', name: 'Підлога', aMm: 5000, bMm: 6000 }),
+      el({ key: 'wall-1', kind: 'wall', name: 'Стіна 1', aMm: 5000, bMm: 2700 }),
+      el({ key: 'wall-2', kind: 'wall', name: 'Стіна 2', aMm: null, bMm: 2700 }), // empty → still kept
+      el({ key: 'plinth', kind: 'plinth', name: 'Плінтус', unit: 'LINEAR_METER', lengthM: 21.1 }),
+      el({ key: 'ceiling', kind: 'ceiling', name: 'Стеля', aMm: 5000, bMm: 6000, enabled: false }), // off → dropped
+    ]);
+    // The empty wall appears (skeleton), the disabled ceiling does not.
+    expect(items.map((i) => i.name)).toEqual(['Підлога', 'Стіна 1', 'Стіна 2', 'Плінтус']);
+    expect(items[2]).toMatchObject({ type: 'SURFACE', sortOrder: 2, payload: { segments: [] } });
+    expect(items[3]).toMatchObject({ type: 'LINEAR', sortOrder: 3 }); // keeps its original index
   });
 });

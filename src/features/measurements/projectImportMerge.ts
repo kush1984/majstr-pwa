@@ -157,10 +157,20 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
           room.perimeterMm = r.perimeterMm;
           room.perimeterDerived = false;
         }
-        // Gabarits are only trusted once the checksum proves them against the table area.
+        // Gabarits are verified against the table area when there IS one. When the room has
+        // no table area, the checksum has nothing to verify against — and throwing the sizes
+        // away then is wrong: the gabarits ARE the room (its area follows from w×l). So they
+        // are accepted unverified, and the room is flagged so the review shows it.
         if (room.widthMm == null && r.widthMm != null && r.lengthMm != null) {
           const area = room.areaM2 ?? r.areaM2;
-          const verdict = checksum(area, r.widthMm, r.lengthMm, r.cutWidthMm, r.cutDepthMm);
+          const verdict: ChecksumVerdict = area == null
+            ? { kind: 'rect' }
+            : checksum(area, r.widthMm, r.lengthMm, r.cutWidthMm, r.cutDepthMm);
+          if (area == null) {
+            const note = 'розміри з креслення (площі в таблиці немає) — звірте';
+            if (!room.notes.includes(note)) room.notes.push(note);
+            if (rank('medium') > rank(room.confidence)) room.confidence = 'medium';
+          }
           if (verdict.kind === 'reject') {
             room.rejected = { widthMm: r.widthMm, lengthMm: r.lengthMm };
           } else {
@@ -243,24 +253,15 @@ export function crossCheck(rooms: MergedRoom[], totalAreaM2: number | null): num
   return diff > 0.05 ? round3(sum) : null;
 }
 
-// ---- the element package ----------------------------------------------------
+// ---- the element package (v2: real geometry, per-wall) ----------------------
 
-export type ElementKind = 'floor' | 'ceiling' | 'walls' | 'plinth' | 'reveals';
+export type ElementKind = 'floor' | 'ceiling' | 'wall' | 'plinth' | 'reveals' | 'sill';
 
-export interface ElementDraft {
-  kind: ElementKind;
-  /** Computed value in the element's unit (m² or м.пог) BEFORE the reserve. */
-  value: number;
-  unit: 'M2' | 'LINEAR_METER';
-}
+/** Running-length elements (м.пог) — a plain length, not an area. */
+const LINEAR_KINDS: ReadonlySet<ElementKind> = new Set(['plinth', 'reveals', 'sill']);
+export const isLinearKind = (kind: ElementKind): boolean => LINEAR_KINDS.has(kind);
 
-/** Why an element of the package could not be derived (review shows the reason). */
-export interface MissingElement {
-  kind: ElementKind;
-  reason: 'no-area' | 'no-perimeter' | 'no-height';
-}
-
-/** The room's live numbers on the review card — recognised, computed or typed in. */
+/** The room's parsed numbers — the seed the package is built from once. */
 export interface RoomInputs {
   areaM2: number | null;
   widthMm: number | null;
@@ -270,26 +271,39 @@ export interface RoomInputs {
   openings: ProjectImportOpening[];
 }
 
-/** Wall arithmetic laid open, so the card can show «брутто − прорізи = нетто». */
-export interface WallBreakdown {
-  grossM2: number;
-  openingsM2: number;
-  netM2: number;
-  /** No openings known → the net IS the gross; the card must say so out loud. */
-  openingsUnknown: boolean;
+/**
+ * One element of a room's package. Surfaces (floor / ceiling / each wall) carry a REAL
+ * rect {@link aMm}×{@link bMm} so the master edits actual dimensions on site — never a
+ * "direct area". A floor/ceiling whose gabarits weren't read keeps the doc AREA as a hint
+ * ({@link areaHintM2}) that fills in one tap. Plinth/reveals are a plain running length.
+ */
+export interface PackageElement {
+  key: string;
+  kind: ElementKind;
+  name: string;
+  unit: 'M2' | 'LINEAR_METER';
+  enabled: boolean;
+  /** Surface rect (mm). Null side = to be measured. Floor: a=width,b=length. Wall: a=run,b=height. */
+  aMm: number | null;
+  bMm: number | null;
+  /** Floor/ceiling only: the doc area (m²), shown as a hint + a one-tap fill. */
+  areaHintM2: number | null;
+  /** Floor/ceiling: commit the area hint as a `direct` payload instead of the rect. */
+  takeArea: boolean;
+  /** Plinth/reveals: running length (m). */
+  lengthM: number | null;
+  /** Only wall-1 carries the openings to subtract. */
+  openings: ProjectImportOpening[];
 }
 
-export function wallBreakdown(inputs: RoomInputs): WallBreakdown | null {
-  if (inputs.perimeterMm == null || inputs.heightMm == null) return null;
-  const gross = (inputs.perimeterMm / 1000) * (inputs.heightMm / 1000);
-  const openingsM2 = inputs.openings.reduce((s, o) => s + (o.wMm / 1000) * (o.hMm / 1000), 0);
-  return {
-    grossM2: round3(gross),
-    openingsM2: round3(openingsM2),
-    netM2: round3(Math.max(0, gross - openingsM2)),
-    openingsUnknown: inputs.openings.length === 0,
-  };
-}
+export const ELEMENT_NAMES: Record<ElementKind, string> = {
+  floor: 'Підлога',
+  ceiling: 'Стеля',
+  wall: 'Стіна',
+  plinth: 'Плінтус',
+  reveals: 'Відкоси',
+  sill: 'Підвіконня',
+};
 
 /** Perimeter from whatever is known: gabarits → 2(w+l); else area ÷ width → 2(w+l). */
 export function perimeterFrom(inputs: RoomInputs): number | null {
@@ -303,107 +317,149 @@ export function perimeterFrom(inputs: RoomInputs): number | null {
   return inputs.perimeterMm;
 }
 
-export function deriveElements(
-  room: MergedRoom,
-  heightMm: number | null,
-): { elements: ElementDraft[]; missing: MissingElement[] } {
-  const inputs: RoomInputs = {
+/** Computed area/length of an element in its unit (0 = still needs input — never a guess). */
+export function elementValue(el: PackageElement): number {
+  if (isLinearKind(el.kind)) return round3(Math.max(0, el.lengthM ?? 0));
+  // Only a taken area (the master's explicit one-tap choice) uses the doc figure directly.
+  if (el.takeArea && el.areaHintM2 != null) return round3(el.areaHintM2);
+  if (el.aMm != null && el.bMm != null) {
+    const gross = (el.aMm / 1000) * (el.bMm / 1000);
+    const openings = el.openings.reduce((s, o) => s + (o.wMm / 1000) * (o.hMm / 1000), 0);
+    return round3(Math.max(0, gross - openings));
+  }
+  // Empty by default — the doc area lives in `areaHintM2` and is offered as a one-tap «взяти»,
+  // never shown as the element's value (that read as a locked «площа напряму»).
+  return 0;
+}
+
+/**
+ * Build a room's package ONCE from its parsed numbers. Every surface is a real rect;
+ * walls are FOUR (2×width, 2×length, each × height) from confirmed gabarits, or four
+ * empty walls (height filled where known) to measure on site. After this, the master
+ * edits each element's dimensions independently on the review card.
+ */
+export function buildPackage(inputs: RoomInputs): PackageElement[] {
+  const h = inputs.heightMm;
+  const w = inputs.widthMm;
+  const l = inputs.lengthMm;
+  const hasGabarits = w != null && l != null;
+  const els: PackageElement[] = [];
+
+  const floorCeil = (kind: 'floor' | 'ceiling', enabled: boolean): PackageElement => ({
+    key: kind, kind, name: ELEMENT_NAMES[kind], unit: 'M2', enabled,
+    aMm: hasGabarits ? w : null,
+    bMm: hasGabarits ? l : null,
+    areaHintM2: inputs.areaM2,
+    // NEVER auto-take the area — a floor with no gabarits imports with EMPTY width×length
+    // fields (the master measures), and the doc area is offered as a one-tap «взяти площу»
+    // hint. Defaulting to "take" produced a locked «площа напряму», which is not what we want.
+    takeArea: false,
+    lengthM: null, openings: [],
+  });
+  els.push(floorCeil('floor', true));
+  // Ceiling starts OFF — for a rectangular room it duplicates the floor.
+  els.push(floorCeil('ceiling', false));
+
+  const runs: (number | null)[] = hasGabarits ? [w, l, w, l] : [null, null, null, null];
+  runs.forEach((run, i) => {
+    els.push({
+      key: `wall-${i + 1}`, kind: 'wall', name: `${ELEMENT_NAMES.wall} ${i + 1}`, unit: 'M2',
+      enabled: true, aMm: run, bMm: h, areaHintM2: null, takeArea: false, lengthM: null,
+      openings: i === 0 ? inputs.openings : [],
+    });
+  });
+
+  const per = perimeterFrom(inputs);
+  // Any opening that reaches the floor breaks the skirting — doors, open passages and
+  // floor-to-ceiling/panoramic windows (the `toFloor` flag); a door is always floor-reaching
+  // even on an older payload with no flag.
+  const toFloorM = inputs.openings
+    .filter((o) => o.toFloor ?? o.kind === 'двері')
+    .reduce((s, o) => s + o.wMm / 1000, 0);
+  const plinthM = per != null ? Math.max(0, per / 1000 - toFloorM) : null;
+  els.push({
+    key: 'plinth', kind: 'plinth', name: ELEMENT_NAMES.plinth, unit: 'LINEAR_METER',
+    enabled: plinthM != null && plinthM > 0, aMm: null, bMm: null, areaHintM2: null, takeArea: false,
+    lengthM: plinthM, openings: [],
+  });
+
+  // Reveal run per opening: 2×height + width (window sill and door threshold aren't reveals).
+  const revealsM = inputs.openings.length
+    ? inputs.openings.reduce((s, o) => s + 2 * (o.hMm / 1000) + o.wMm / 1000, 0)
+    : null;
+  els.push({
+    key: 'reveals', kind: 'reveals', name: ELEMENT_NAMES.reveals, unit: 'LINEAR_METER',
+    enabled: revealsM != null && revealsM > 0, aMm: null, bMm: null, areaHintM2: null, takeArea: false,
+    lengthM: revealsM, openings: [],
+  });
+
+  // Window sills (підвіконня) = Σ window widths. OFF by default — only some trades finish/fit
+  // sills — but seeded so a one-tap enable already carries the running length.
+  const windowsM = inputs.openings
+    .filter((o) => o.kind === 'вікно')
+    .reduce((s, o) => s + o.wMm / 1000, 0);
+  els.push({
+    key: 'sill', kind: 'sill', name: ELEMENT_NAMES.sill, unit: 'LINEAR_METER',
+    enabled: false, aMm: null, bMm: null, areaHintM2: null, takeArea: false,
+    lengthM: windowsM > 0 ? windowsM : null, openings: [],
+  });
+
+  return els;
+}
+
+/** The room's package, seeded once from its parsed numbers. */
+export function buildRoomPackage(room: MergedRoom, floorHeightMm: number | null): PackageElement[] {
+  return buildPackage({
     areaM2: room.areaM2,
     widthMm: room.widthMm,
     lengthMm: room.lengthMm,
     perimeterMm: room.perimeterMm,
     // The plan's own «H=…мм» for this room wins over the per-floor answer.
-    heightMm: room.ceilingHmm ?? heightMm,
+    heightMm: room.ceilingHmm ?? floorHeightMm,
     openings: room.openings,
-  };
-  return deriveFromInputs(inputs);
-}
-
-/** The single derivation used by both the first build and every live edit on the card. */
-export function deriveFromInputs(
-  inputs: RoomInputs,
-): { elements: ElementDraft[]; missing: MissingElement[] } {
-  const elements: ElementDraft[] = [];
-  const missing: MissingElement[] = [];
-
-  if (inputs.areaM2 != null) {
-    elements.push({ kind: 'floor', value: round3(inputs.areaM2), unit: 'M2' });
-    // Ceiling = a COPY of the floor for a rectangular room — a duplicate that used to
-    // double every total. It's still derived (the review checkbox can enable it for
-    // mansards etc.) but is OFF by default; the sheet controls the `enabled` flag.
-    elements.push({ kind: 'ceiling', value: round3(inputs.areaM2), unit: 'M2' });
-  } else {
-    missing.push({ kind: 'floor', reason: 'no-area' });
-  }
-
-  const perimeterMm = perimeterFrom(inputs);
-  const pM = perimeterMm != null ? perimeterMm / 1000 : null;
-  const walls = wallBreakdown({ ...inputs, perimeterMm });
-  if (walls) {
-    elements.push({ kind: 'walls', value: walls.netM2, unit: 'M2' });
-  } else {
-    missing.push({ kind: 'walls', reason: pM == null ? 'no-perimeter' : 'no-height' });
-  }
-
-  if (pM != null) {
-    const doorsM = inputs.openings
-      .filter((o) => o.kind === 'двері')
-      .reduce((s, o) => s + o.wMm / 1000, 0);
-    elements.push({ kind: 'plinth', value: round3(Math.max(0, pM - doorsM)), unit: 'LINEAR_METER' });
-  } else {
-    missing.push({ kind: 'plinth', reason: 'no-perimeter' });
-  }
-
-  // Reveal run per opening: two heights + the top. A window's bottom is the sill, a
-  // door's is the floor — neither is a reveal, so both are 2×h + w.
-  if (inputs.openings.length > 0) {
-    const run = inputs.openings.reduce((s, o) => s + 2 * (o.hMm / 1000) + o.wMm / 1000, 0);
-    elements.push({ kind: 'reveals', value: round3(run), unit: 'LINEAR_METER' });
-  }
-
-  return { elements, missing };
+  });
 }
 
 /**
- * Payload for a (possibly master-edited) element value. Structured geometry is
- * NOT kept after an edit — an overridden number becomes a `direct`/length
- * payload, so what the master confirmed is exactly what the server computes.
+ * The commit payload for one element — REAL geometry the master keeps editing:
+ * a surface is a `rect` (a×b, mm→m); a floor/ceiling whose area the master TOOK becomes
+ * `direct`; plinth/reveals a length-mode LINEAR. A surface with nothing measured yet
+ * commits as an EMPTY plane (`segments: []` → result 0) so the master still gets the whole
+ * skeleton (all 4 walls, floor) to fill in on site — never dropped, never a guessed value.
  */
-export function elementPayload(kind: ElementKind, value: number): SurfacePayload | LinearPayload {
-  if (kind === 'floor' || kind === 'ceiling' || kind === 'walls') {
-    // mode MUST be a real variant key ('d') — an empty string leaks into i18n keys
-    // («shape.direct..hint») and breaks the shape editor's lookups.
-    return { unit: 'M', segments: [{ shape: 'direct', mode: 'd', values: { s: round3(value) } }], openings: [] };
+export function elementPayloadV2(el: PackageElement): SurfacePayload | LinearPayload | null {
+  if (isLinearKind(el.kind)) {
+    const m = el.lengthM ?? 0;
+    if (m <= 0) return null;
+    return { height: 0, width: round3(m), sides: { left: false, right: false, top: true, bottom: false }, qty: 1, mode: 'length' };
   }
-  // Linear run: width carries the whole length, top side only → result = width.
-  return {
-    height: 0,
-    width: round3(value),
-    sides: { left: false, right: false, top: true, bottom: false },
-    qty: 1,
-  };
+  if (el.aMm != null && el.bMm != null && el.aMm > 0 && el.bMm > 0) {
+    return {
+      unit: 'M',
+      segments: [{ shape: 'rect', mode: 'd', values: { a: round3(el.aMm / 1000), b: round3(el.bMm / 1000) } }],
+      openings: el.openings.map((o) => ({ w: round3(o.wMm / 1000), h: round3(o.hMm / 1000), n: 1 })),
+    };
+  }
+  if ((el.kind === 'floor' || el.kind === 'ceiling') && el.takeArea && el.areaHintM2 != null && el.areaHintM2 > 0) {
+    return { unit: 'M', segments: [{ shape: 'direct', mode: 'd', values: { s: round3(el.areaHintM2) } }], openings: [] };
+  }
+  // Enabled surface with no committable dimensions yet → an empty plane the master fills in.
+  return { unit: 'M', segments: [], openings: [] };
 }
 
-export const ELEMENT_NAMES: Record<ElementKind, string> = {
-  floor: 'Підлога',
-  ceiling: 'Стеля',
-  walls: 'Стіни',
-  plinth: 'Плінтус',
-  reveals: 'Відкоси',
-};
-
-/** Commit items for one room: enabled elements with the reserve applied. */
-export function roomItems(
-  drafts: { kind: ElementKind; value: number; enabled: boolean }[],
-  reservePct: number,
-): MeasurementItemRequest[] {
-  const f = 1 + Math.max(0, reservePct) / 100;
-  return drafts
-    .filter((d) => d.enabled && d.value > 0)
-    .map((d, i) => ({
-      name: ELEMENT_NAMES[d.kind],
-      type: d.kind === 'plinth' || d.kind === 'reveals' ? 'LINEAR' as const : 'SURFACE' as const,
-      payload: elementPayload(d.kind, round3(d.value * f)),
+/** Commit items for one room: enabled elements that resolve to a payload. */
+export function roomItems(elements: PackageElement[]): MeasurementItemRequest[] {
+  const out: MeasurementItemRequest[] = [];
+  elements.forEach((el, i) => {
+    if (!el.enabled) return;
+    const payload = elementPayloadV2(el);
+    if (!payload) return;
+    out.push({
+      name: el.name,
+      type: isLinearKind(el.kind) ? 'LINEAR' : 'SURFACE',
+      payload: payload as MeasurementItemRequest['payload'],
       sortOrder: i,
-    }));
+    });
+  });
+  return out;
 }

@@ -522,6 +522,9 @@ export interface LinearPayload {
   width: number;
   sides: { left: boolean; right: boolean; top: boolean; bottom: boolean };
   qty: number;
+  /** 'length' = a plain running length (result = width × qty), for a skirting run or an
+   *  imported reveal total — no reveal-side toggles. Absent = the reveal-sides formula. */
+  mode?: 'length';
 }
 /** Electrical points counted off a plan, grouped by the legend's own wording. */
 export interface PointsPayload {
@@ -629,6 +632,8 @@ export interface ProjectImportOpening {
   wMm: number;
   hMm: number;
   sillMm: number | null;
+  /** Reaches the floor (doors, open passages, panoramic windows) → interrupts the skirting. */
+  toFloor?: boolean;
   note: string | null;
 }
 

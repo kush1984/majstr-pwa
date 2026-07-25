@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { ShapeDiagram } from '@/components/ShapeDiagram.tsx';
@@ -39,9 +40,18 @@ export function ShapeInput({
   const modes = modesOf(draft.shape);
   const areaM2 = planeAreaM2(toPlane(draft), unit);
 
-  const pickShape = (shape: ShapeKey) =>
-    // A new shape has different letters — carry nothing over, it would be nonsense.
-    onChange({ shape, mode: defaultMode(shape), values: {} });
+  // Remember what was typed for each shape/mode so switching away and back RESTORES it
+  // instead of wiping (a real annoyance: «переключився і всі дані стерлись»). The cache is
+  // component-local and survives while this plane's editor is open.
+  const cache = useRef<Record<string, Record<string, string>>>({});
+  const key = (shape: ShapeKey, mode: string) => `${shape}:${mode}`;
+
+  const switchTo = (shape: ShapeKey, mode: string) => {
+    cache.current[key(draft.shape, draft.mode)] = draft.values; // stash the current entry
+    onChange({ shape, mode, values: cache.current[key(shape, mode)] ?? {} }); // restore or fresh
+  };
+
+  const pickShape = (shape: ShapeKey) => switchTo(shape, defaultMode(shape));
 
   return (
     <div className="space-y-3">
@@ -69,7 +79,7 @@ export function ShapeInput({
             <button
               key={m}
               type="button"
-              onClick={() => onChange({ ...draft, mode: m, values: {} })}
+              onClick={() => switchTo(draft.shape, m)}
               className={cn(
                 'min-h-[40px] rounded-md px-3.5 text-xs font-semibold transition-colors',
                 draft.mode === m ? 'bg-surface text-primary shadow-card' : 'text-muted',
