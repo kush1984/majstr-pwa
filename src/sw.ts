@@ -13,13 +13,30 @@
  * to the network.
  */
 
-import { precacheAndRoute } from 'workbox-precaching';
+import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
+import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 declare const self: ServiceWorkerGlobalScope;
 
 // `self.__WB_MANIFEST` is replaced at build time with the list of
 // files Vite produced. Workbox uses it to cache the app shell.
 precacheAndRoute(self.__WB_MANIFEST);
+
+/**
+ * SPA navigation fallback — REQUIRED for a deep route to open offline.
+ *
+ * Precaching alone only matches URLs that are IN the manifest: `/` resolves (directoryIndex →
+ * index.html), but `/projects/123`, `/estimates/abc`, `/profile` do not. Without this route those
+ * navigations fall through to the network and, with no signal, the master gets the browser's
+ * "no internet" page — the app appears completely broken offline the moment they aren't on the
+ * home screen (or simply pull-to-refresh). `navigateFallback` in vite.config only configures the
+ * DEV service worker (which is disabled), so with `injectManifest` we must register it ourselves.
+ *
+ * `/api/**` is denied so a same-origin API navigation is never answered with the app shell.
+ */
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/api\//] }),
+);
 
 // ---------- push ----------
 
