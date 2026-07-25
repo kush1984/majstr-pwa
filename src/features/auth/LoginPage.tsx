@@ -30,7 +30,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (login.isSuccess) {
-      navigate(routes.home, { replace: true });
+      void navigate(routes.home, { replace: true });
     }
   }, [login.isSuccess, navigate]);
 

@@ -82,7 +82,7 @@ export function EstimateImportPage() {
       setStep('source');
       return;
     }
-    navigate(projectId ? routes.project(projectId) : routes.projects);
+    void navigate(projectId ? routes.project(projectId) : routes.projects);
   };
 
   const onParsed = (res: EstimateImportParseResponse) => {
@@ -140,12 +140,12 @@ export function EstimateImportPage() {
           catalogPolicy: d.toCatalog ? catalogPolicy : null,
         })),
       });
-      qc.invalidateQueries({ queryKey: ['project-estimates', projectId] });
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      qc.invalidateQueries({ queryKey: CATALOG_KEY });
+      void qc.invalidateQueries({ queryKey: ['project-estimates', projectId] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
       toast.success(t('estimateImport.done'));
-      navigate(routes.estimate(res.estimateId), { replace: true });
+      void navigate(routes.estimate(res.estimateId), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
       setBusy(false);

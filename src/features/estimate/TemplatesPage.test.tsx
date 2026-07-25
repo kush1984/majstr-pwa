@@ -80,7 +80,7 @@ describe('TemplatesPage — edit own template', () => {
     expect(await screen.findByText('Редагувати шаблон')).toBeTruthy();
 
     // Catalog tab is default: both rows render; the one already in the template is disabled.
-    const rows = (await screen.findAllByTestId('catalog-row')) as HTMLButtonElement[];
+    const rows = (await screen.findAllByTestId('catalog-row'));
     expect(rows).toHaveLength(2);
     const presentRow = rows.find((r) => r.textContent?.includes('Розетка'))!;
     const freshRow = rows.find((r) => r.textContent?.includes('Кабель ВВГ'))!;

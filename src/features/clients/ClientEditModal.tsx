@@ -73,7 +73,7 @@ export function ClientEditModal({
         },
       });
       // The client's name shows on project cards / detail — refresh those too.
-      qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
       toast.success(t('clients.updated'));
       onClose();
     } catch (err) {

@@ -32,8 +32,8 @@ export function useProject(id: string) {
 function useInvalidateProjects() {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: PROJECTS_KEY });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: PROJECTS_KEY });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
   };
 }
 

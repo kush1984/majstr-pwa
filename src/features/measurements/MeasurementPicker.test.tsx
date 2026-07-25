@@ -54,7 +54,7 @@ describe('MeasurementPicker', () => {
     expect(screen.queryByText('Відкоси')).toBeNull();
 
     // i1 pre-checked (selection memory); tick i2 as well → 20 + 10 = 30.
-    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    const boxes = screen.getAllByRole('checkbox');
     expect(boxes[0].checked).toBe(true); // Стеля
     fireEvent.click(boxes[1]); // Підлога
 

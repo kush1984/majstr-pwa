@@ -41,7 +41,7 @@ export function DashboardPage() {
 
   const newEstimate = () => {
     if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
-    navigate(routes.newEstimate);
+    void navigate(routes.newEstimate);
   };
 
   const isEmpty = projects.isSuccess && projects.data.length === 0;

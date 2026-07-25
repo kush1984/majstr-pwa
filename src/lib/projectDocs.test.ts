@@ -94,7 +94,7 @@ describe('7z (lazy wasm)', () => {
     sz.FS.writeFile('/in/експлікація 1п.pdf', new TextEncoder().encode('%PDF-seven'));
     sz.FS.writeFile('/in/render.txt', new TextEncoder().encode('noise'));
     sz.callMain(['a', '/out.7z', '/in/експлікація 1п.pdf', '/in/render.txt']);
-    const archive = sz.FS.readFile('/out.7z') as Uint8Array;
+    const archive = sz.FS.readFile('/out.7z');
 
     const out = await extract7z(archive);
 

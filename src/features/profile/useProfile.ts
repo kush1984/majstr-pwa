@@ -12,7 +12,7 @@ export function useUpdateProfile() {
     mutationFn: (req: ProfileUpdateRequest) => profileApi.update(req),
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
-      qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
   });
 }
@@ -25,7 +25,7 @@ export function useUploadLogo() {
     mutationFn: (file: File) => profileApi.uploadLogo(file),
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
-      qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
   });
 }

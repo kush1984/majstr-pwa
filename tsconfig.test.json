@@ -1,0 +1,25 @@
+{
+  /*
+   * Type-checking for everything `tsconfig.app.json` deliberately excludes: unit
+   * tests, e2e specs and the tooling configs. Without this they were compiled only
+   * by esbuild (Vitest/Playwright), which strips types without checking them — so a
+   * mock with the wrong shape type-errored invisibly and could mask a real
+   * regression. It is also what lets the type-aware ESLint rules see these files.
+   *
+   * Inherits the app's strict options; adds `node` types for the config files.
+   */
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client", "vite-plugin-pwa/client", "node"]
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "e2e/**/*.ts",
+    "e2e-offline/**/*.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "playwright.offline.config.ts"
+  ],
+  "exclude": []
+}

@@ -18,7 +18,6 @@ import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import { getStoredRef } from '@/lib/referral.ts';
-import type { Trade } from '@/api/types.ts';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -47,7 +46,7 @@ export function RegisterPage() {
 
   useEffect(() => {
     if (register$.isSuccess) {
-      navigate(routes.home, { replace: true });
+      void navigate(routes.home, { replace: true });
     }
   }, [register$.isSuccess, navigate]);
 
@@ -56,7 +55,7 @@ export function RegisterPage() {
     try {
       await register$.mutateAsync({
         ...values,
-        trades: values.trades as Trade[],
+        trades: values.trades,
         // First-touch attribution: the stored ?ref= wins, the typed promo code is
         // a fallback. Absent → the backend attributes DIRECT.
         ref: getStoredRef(),
@@ -80,7 +79,7 @@ export function RegisterPage() {
   });
 
   const goToLogin = () =>
-    navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
+    void navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
 
   return (
     <AuthShell title={t('auth.registerTitle')}>

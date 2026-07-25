@@ -184,7 +184,7 @@ export function ItemForm({
             invalid={Boolean(errors.quantity)}
             {...qtyReg}
             onChange={(e) => {
-              qtyReg.onChange(e); // keep react-hook-form in sync
+              void qtyReg.onChange(e); // keep react-hook-form in sync (its handler is async)
               setQuantityManual(true); // a hand-typed quantity is no longer a live measurement sum
             }}
           />

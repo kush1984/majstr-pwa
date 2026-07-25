@@ -32,7 +32,7 @@ export function useEstimateTemplate(id: string | null) {
 
 function useInvalidateTemplates() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY });
+  return () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); };
 }
 
 /** Save the current estimate as my own reusable template. */
@@ -124,7 +124,7 @@ export function useDeleteTemplate() {
         optimistic: () => {
           qc.setQueryData<EstimateTemplateSummary[]>(ESTIMATE_TEMPLATE_KEY, (old) =>
             old?.filter((t) => t.id !== id));
-          qc.removeQueries({ queryKey: [...ESTIMATE_TEMPLATE_KEY, id] });
+          void qc.removeQueries({ queryKey: [...ESTIMATE_TEMPLATE_KEY, id] });
         },
       }),
   });
@@ -142,7 +142,7 @@ export function useAddTemplateItem(templateId: string) {
         entity: 'templateItem', entityId: id, type: 'create',
         payload: { templateId, req }, deps: [templateId],
         online: () => estimateTemplatesApi.addItem(templateId, req, id),
-        onOnlineSuccess: () => qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }),
+        onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => {
           patchSummary(qc, templateId, (t) => ({ ...t, itemCount: t.itemCount + 1 }));
           return patchDetail(qc, templateId, (d) => ({
@@ -171,7 +171,7 @@ export function useRemoveTemplateItem(templateId: string) {
         entity: 'templateItem', entityId: itemId, type: 'delete',
         payload: { templateId }, deps: [templateId],
         online: () => estimateTemplatesApi.removeItem(templateId, itemId),
-        onOnlineSuccess: () => qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }),
+        onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => {
           patchSummary(qc, templateId, (t) => ({ ...t, itemCount: Math.max(0, t.itemCount - 1) }));
           return patchDetail(qc, templateId, (d) => ({
@@ -193,8 +193,8 @@ export function useApplyTemplate() {
     mutationFn: (args: { projectId: string; templateId: string; req: EstimateCreateRequest }) =>
       estimateTemplatesApi.applyToProject(args.projectId, args.templateId, args.req),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

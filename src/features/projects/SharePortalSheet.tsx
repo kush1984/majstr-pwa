@@ -99,13 +99,13 @@ export function SharePortalSheet({
   };
 
   const invalidateAfterShare = () => {
-    qc.invalidateQueries({ queryKey: ['portal', project.id] });
+    void qc.invalidateQueries({ queryKey: ['portal', project.id] });
     // Publishing flips newly-visible DRAFTs to SENT — refresh everything that
     // shows an estimate status.
-    qc.invalidateQueries({ queryKey: ['projects'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
-    qc.invalidateQueries({ queryKey: ['project-estimates'] });
-    qc.invalidateQueries({ queryKey: ['estimate'] });
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['project-estimates'] });
+    void qc.invalidateQueries({ queryKey: ['estimate'] });
   };
 
   /** Translate a share error to UX; handles all the gates in one place. */
@@ -201,7 +201,7 @@ export function SharePortalSheet({
       });
       setAttachedClientId(newClientId);
       setShowClientPicker(false);
-      qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
       toast.success(t('estimate.clientAttached'));
     } catch (err2) {
       toast.error(toAppError(err2).message);

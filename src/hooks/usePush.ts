@@ -60,7 +60,9 @@ export function usePush(): UsePushResult {
       setReady(true);
       return;
     }
-    (async () => {
+    // Fire-and-forget probe: the effect can't be async, and `ready` is set in `finally`
+    // so a rejected serviceWorker.ready still unblocks the UI.
+    void (async () => {
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();

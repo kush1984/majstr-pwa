@@ -92,8 +92,8 @@ describe('MeasurementItemForm', () => {
     );
 
     // Pre-shapes rows have no unit — they were metres, and the sides land on a/b.
-    expect((screen.getByLabelText(/^a ширина/) as HTMLInputElement).value).toBe('5.31');
-    expect((screen.getByLabelText(/^b висота/) as HTMLInputElement).value).toBe('3.69');
+    expect((screen.getByLabelText(/^a ширина/)).value).toBe('5.31');
+    expect((screen.getByLabelText(/^b висота/)).value).toBe('3.69');
     expect(screen.getByRole('button', { name: 'м' }).className).toContain('border-brand');
   });
 
@@ -109,8 +109,8 @@ describe('MeasurementItemForm', () => {
       />,
     );
     // A blank rectangle with empty a/b fields — ready to measure, never a locked direct area.
-    expect((screen.getByLabelText(/^a ширина/) as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText(/^b висота/) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText(/^a ширина/)).value).toBe('');
+    expect((screen.getByLabelText(/^b висота/)).value).toBe('');
     expect(screen.getByRole('button', { name: 'Прямокутник' }).className).toContain('bg-primary');
   });
 
@@ -118,7 +118,7 @@ describe('MeasurementItemForm', () => {
     const onSave = vi.fn();
     render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
     // No name, no dimensions → save disabled.
-    const save = screen.getByRole('button', { name: 'Зберегти' }) as HTMLButtonElement;
+    const save = screen.getByRole('button', { name: 'Зберегти' });
     expect(save.disabled).toBe(true);
   });
 

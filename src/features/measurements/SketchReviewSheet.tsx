@@ -206,7 +206,7 @@ export function SketchReviewSheet({
       try {
         const compact = await downscaleImage(heldFile.current);
         await photosApi.upload(objectId, compact, { source: 'MANUAL', caption: t('sketch.photoCaption') });
-        qc.invalidateQueries({ queryKey: ['project-photos', objectId] });
+        void qc.invalidateQueries({ queryKey: ['project-photos', objectId] });
         toast.success(t('sketch.photoSaved'));
       } catch (err) {
         toast.error(toAppError(err).message); // fail-soft — the measurements already committed

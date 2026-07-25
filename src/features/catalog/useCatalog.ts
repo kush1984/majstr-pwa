@@ -40,7 +40,7 @@ export function useCatalogSearch(q: string) {
 
 function useInvalidateCatalog() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: CATALOG_KEY });
+  return () => { void qc.invalidateQueries({ queryKey: CATALOG_KEY }); };
 }
 
 /**

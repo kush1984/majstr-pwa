@@ -19,13 +19,15 @@ export function useOnlineGuard() {
   const { t } = useTranslation();
 
   const guard = useCallback(
-    <A extends unknown[]>(fn: (...args: A) => void) =>
+    // The guarded action may be async (most of these ARE — a PDF, an upload, a payment).
+    // The wrapper stays void: it is used as an onClick, and nothing downstream awaits it.
+    <A extends unknown[]>(fn: (...args: A) => void | Promise<void>) =>
       (...args: A): void => {
         if (!onlineManager.isOnline()) {
           toast.error(t('offline.needConnection'));
           return;
         }
-        fn(...args);
+        void fn(...args);
       },
     [t],
   );

@@ -123,7 +123,7 @@ export function CatalogImportPage() {
           type: guessType(name),
           include: true,
           issues,
-        } as Draft;
+        };
       })
       .filter((d): d is Draft => d !== null);
     setDrafts(derived);
@@ -153,9 +153,9 @@ export function CatalogImportPage() {
         trade: trade === '' ? null : trade,
         defaultPolicy: dedup,
       });
-      qc.invalidateQueries({ queryKey: CATALOG_KEY });
+      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
       toast.success(t('import.done', { created: res.created, updated: res.updated, skipped: res.skipped }));
-      navigate(routes.catalog);
+      void navigate(routes.catalog);
     } catch (err) {
       toast.error(toAppError(err).message);
     } finally {

@@ -66,11 +66,11 @@ export function ProjectsPage() {
   // FREE object quota, so both are gated the same way.
   const newCombined = () => {
     if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
-    navigate(routes.newEstimate);
+    void navigate(routes.newEstimate);
   };
   const newObject = () => {
     if (atProjectLimit) return;
-    navigate(routes.newObject);
+    void navigate(routes.newObject);
   };
   const limitTooltip = atProjectLimit ? t('limits.atLimitTooltip') : undefined;
 

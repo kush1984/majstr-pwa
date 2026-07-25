@@ -65,15 +65,20 @@ describe('ProjectImportSheet', () => {
     fireEvent.change(document.querySelector('input[type="file"]')!, {
       target: { files: [pdf('експлікація 1п.pdf'), pdf('обмірний план 1п.pdf'), pdf('план меблів.pdf')] },
     });
-    await waitFor(() => expect(projectImportApi.parse).toHaveBeenCalledTimes(2)); // noise skipped
+    // Explicit timeouts, not the 1 s default: picking these files runs the real
+    // pdfjs page-text pass, which on a loaded CI box takes several seconds. With the
+    // default this test is FLAKY — it passed in 0.8 s and failed on the same commit
+    // minutes later. The 20 s test budget below is what actually bounds it.
+    await waitFor(() => expect(projectImportApi.parse).toHaveBeenCalledTimes(2), // noise skipped
+      { timeout: 10_000 });
 
     // No «H=» anywhere in this fixture → the height is asked once for the floor.
-    const heightInput = await screen.findByPlaceholderText('2,7');
+    const heightInput = await screen.findByPlaceholderText('2,7', {}, { timeout: 10_000 });
     fireEvent.change(heightInput, { target: { value: '2,7' } });
     fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
 
     // Review: the merged room with the v2 package + a way back to other pages.
-    await waitFor(() => expect(screen.getByDisplayValue('Спальня')).toBeTruthy());
+    await waitFor(() => expect(screen.getByDisplayValue('Спальня')).toBeTruthy(), { timeout: 10_000 });
     expect(screen.getByText(/Розпізнано з/)).toBeTruthy();
     // Honesty coverage summary is shown (recognised N rooms).
     expect(screen.getByText(/Розпізнано 1 кімнат/)).toBeTruthy();

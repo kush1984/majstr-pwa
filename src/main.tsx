@@ -69,7 +69,8 @@ if ('serviceWorker' in navigator) {
     immediate: true,
     onNeedRefresh() {
       // A new version is waiting — tell the UI. Clicking «Оновити» activates it + reloads.
-      markUpdateReady(() => updateSW(true));
+      // updateSW() resolves after the reload it triggers — nothing to await here.
+      markUpdateReady(() => { void updateSW(true); });
     },
     onOfflineReady() {
       // PWA is cached and ready to work offline (app shell only — API

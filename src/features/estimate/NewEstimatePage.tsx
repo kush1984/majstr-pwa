@@ -85,14 +85,14 @@ export function NewEstimatePage() {
       });
       // Import path: the object exists now; the wizard fills the estimate from a file/photo.
       if (importMode) {
-        navigate(routes.importEstimate(proj.id), { replace: true });
+        void navigate(routes.importEstimate(proj.id), { replace: true });
         return;
       }
       const req = { name: estName.trim() || undefined };
       const estimate = template
         ? await applyTemplate.mutateAsync({ projectId: proj.id, templateId: template.id, req })
         : await createEstimate.mutateAsync({ projectId: proj.id, req });
-      navigate(routes.estimate(estimate.id), { replace: true });
+      void navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
       setBusy(false);

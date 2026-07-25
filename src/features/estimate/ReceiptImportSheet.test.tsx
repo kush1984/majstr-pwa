@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { receiptImportApi } from '@/api/receiptImport.ts';
-import { photosApi } from '@/api/photos.ts';
 import { economyApi } from '@/api/economy.ts';
 
 vi.mock('@/api/receiptImport.ts', () => ({

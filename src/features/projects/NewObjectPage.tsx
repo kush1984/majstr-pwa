@@ -61,7 +61,7 @@ export function NewObjectPage() {
         address: project.address.trim(),
         clientId,
       });
-      navigate(routes.project(proj.id), { replace: true });
+      void navigate(routes.project(proj.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
       setBusy(false);

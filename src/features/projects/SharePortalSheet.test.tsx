@@ -56,7 +56,7 @@ describe('SharePortalSheet', () => {
     renderSheet();
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    const boxes = screen.getAllByRole('checkbox');
     expect(boxes.map((b) => b.checked)).toEqual([true, false]);
   });
 
@@ -82,7 +82,7 @@ describe('SharePortalSheet', () => {
     renderSheet('e2');
 
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
-    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    const boxes = screen.getAllByRole('checkbox');
     expect(boxes.map((b) => b.checked)).toEqual([true, true]);
   });
 

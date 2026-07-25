@@ -22,7 +22,7 @@ export function NotificationBell() {
 
   const go = (id: string) => {
     setOpen(false);
-    navigate(routes.project(id));
+    void navigate(routes.project(id));
   };
 
   return (

@@ -50,7 +50,7 @@ export function ResetPasswordPage() {
     try {
       await authApi.resetPassword(token, password);
       toast.success(t('reset.doneToast'));
-      navigate(routes.login, { replace: true, state: {} });
+      void navigate(routes.login, { replace: true, state: {} });
     } catch (err) {
       const e = toAppError(err);
       // A bad/expired/used token comes back 400 INVALID_OR_EXPIRED_TOKEN — show the

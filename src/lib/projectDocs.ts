@@ -149,7 +149,7 @@ export async function extract7z(buf: Uint8Array): Promise<Record<string, Uint8Ar
   const out: Record<string, Uint8Array> = {};
   let entries = 0;
   const walk = (dir: string) => {
-    for (const n of sz.FS.readdir(dir) as string[]) {
+    for (const n of sz.FS.readdir(dir)) {
       if (n === '.' || n === '..') continue;
       const p = `${dir}/${n}`;
       const st = sz.FS.stat(p);
@@ -159,7 +159,7 @@ export async function extract7z(buf: Uint8Array): Promise<Record<string, Uint8Ar
       }
       if (++entries > MAX_ZIP_ENTRIES) throw new Error('zip-too-many-entries');
       if (isDocEntry(p) && st.size <= MAX_ENTRY_BYTES) {
-        out[p.slice('/x/'.length)] = sz.FS.readFile(p) as Uint8Array;
+        out[p.slice('/x/'.length)] = sz.FS.readFile(p);
       }
     }
   };

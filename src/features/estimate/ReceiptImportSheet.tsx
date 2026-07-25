@@ -148,7 +148,7 @@ export function ReceiptImportSheet({
           category: null,
         })),
       );
-      qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
+      void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
       toast.success(t('receipt.added', { count: included.length }));
       // The receipt is also the master's real cost — offer to log it as an object expense
       // (closes the cash-flow loop). Then offer to keep the receipt photo.
@@ -172,7 +172,7 @@ export function ReceiptImportSheet({
           spentAt: null,
           source: 'RECEIPT',
         });
-        qc.invalidateQueries({ queryKey: ['object-economy', projectId] });
+        void qc.invalidateQueries({ queryKey: ['object-economy', projectId] });
         toast.success(t('receipt.expenseSaved'));
       } catch (err) {
         toast.error(toAppError(err).message); // fail-soft — the estimate lines already committed
@@ -188,7 +188,7 @@ export function ReceiptImportSheet({
         // Shrink for storage only (parse used the full-res original).
         const compact = await downscaleImage(heldFile.current);
         await photosApi.upload(projectId, compact, { source: 'RECEIPT', estimateId });
-        qc.invalidateQueries({ queryKey: ['project-photos', projectId] });
+        void qc.invalidateQueries({ queryKey: ['project-photos', projectId] });
         toast.success(t('receipt.photoSaved'));
       } catch (err) {
         toast.error(toAppError(err).message);

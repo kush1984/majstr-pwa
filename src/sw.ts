@@ -71,7 +71,9 @@ self.addEventListener('notificationclick', (event) => {
         // Reuse an existing tab if one is open on our origin.
         const existing = clients.find((c) => c.url.includes(self.location.origin));
         if (existing) {
-          existing.focus();
+          // Focus is best-effort (some browsers reject it without a user gesture);
+          // the navigate below is what the waitUntil actually keeps alive.
+          void existing.focus();
           return existing.navigate(target);
         }
         return self.clients.openWindow(target);
@@ -81,7 +83,7 @@ self.addEventListener('notificationclick', (event) => {
 
 // Activate updated SW immediately on next page load so the user does not
 // stay on a stale build after autoUpdate finds a new version.
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', () => { void self.skipWaiting(); });
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -25,7 +25,7 @@ import {
   SaveToCatalogPrompt,
   type CatalogSaveDraft,
 } from '@/features/catalog/SaveToCatalogPrompt.tsx';
-import type { EstimateTemplateSummary, ItemType, Trade, Unit } from '@/api/types.ts';
+import type { EstimateTemplateSummary, ItemType, Unit } from '@/api/types.ts';
 import { TradeSelect } from './TradeSelect.tsx';
 import {
   useAddTemplateItem,
@@ -57,18 +57,23 @@ export function TemplatesPage() {
   // from the trades actually present (what the master sees), so it never shows an
   // empty filter. Hidden by the chip component when fewer than two would appear.
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
-  const matchTrade = (trade: string | null) =>
-    tradeFilter.size === 0 || tradeFilter.has((trade ?? 'GENERAL') as TradeKey);
+  // useCallback, not a plain arrow: the two memos below filter with it, and a fresh
+  // function each render would either be a lying dependency list or defeat the memo.
+  const matchTrade = useCallback(
+    (trade: string | null) =>
+      tradeFilter.size === 0 || tradeFilter.has((trade ?? 'GENERAL') as TradeKey),
+    [tradeFilter],
+  );
 
   const presentTrades = useMemo<TradeKey[]>(() => {
     const set = new Set<TradeKey>();
-    for (const tpl of data ?? []) set.add((tpl.trade ?? 'GENERAL') as TradeKey);
+    for (const tpl of data ?? []) set.add((tpl.trade ?? 'GENERAL'));
     return [...set];
   }, [data]);
 
   const own = useMemo(
     () => (data ?? []).filter((x) => !x.isDefault && matchTrade(x.trade)),
-    [data, tradeFilter],
+    [data, matchTrade],
   );
   const defaultsByTrade = useMemo(() => {
     const groups = new Map<string, EstimateTemplateSummary[]>();
@@ -79,7 +84,7 @@ export function TemplatesPage() {
       else groups.set(key, [tpl]);
     }
     return [...groups.entries()];
-  }, [data, tradeFilter]);
+  }, [data, matchTrade]);
   const hasOwnTemplates = (data ?? []).some((x) => !x.isDefault);
 
   const confirmDelete = async () => {
@@ -247,7 +252,7 @@ function TradeMove({
     <div className="flex items-end gap-2">
       <div className="flex-1">
         <TradeSelect
-          value={(template.trade as Trade | null) ?? null}
+          value={(template.trade) ?? null}
           label={t('templates.tradeLabel')}
           onChange={(trade) => {
             setTrade.mutate(

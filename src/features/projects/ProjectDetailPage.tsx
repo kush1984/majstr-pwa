@@ -71,9 +71,9 @@ export function ProjectDetailPage() {
   const limits = usePlanLimits();
 
   const invalidateAfterRowAction = () => {
-    qc.invalidateQueries({ queryKey: ['project-estimates', id] });
-    qc.invalidateQueries({ queryKey: ['projects'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
     setConfirm(null);
   };
   // Row-level delete / reopen reuse the SAME backend logic as the in-estimate
@@ -98,7 +98,7 @@ export function ProjectDetailPage() {
     mutationFn: (v: { estId: string; value: boolean }) => estimatesApi.setCountInEconomy(v.estId, v.value),
     onSuccess: () => {
       invalidateAfterRowAction();
-      qc.invalidateQueries({ queryKey: ['object-economy', id] });
+      void qc.invalidateQueries({ queryKey: ['object-economy', id] });
     },
     onError: (err) => toast.error(toAppError(err).message),
   });
@@ -109,7 +109,7 @@ export function ProjectDetailPage() {
     createEstimate.mutate(
       { projectId: id, req: {} },
       {
-        onSuccess: (e) => navigate(routes.estimate(e.id)),
+        onSuccess: (e) => { void navigate(routes.estimate(e.id)); },
         onError: (err) => toast.error(toAppError(err).message),
       },
     );
@@ -165,8 +165,8 @@ export function ProjectDetailPage() {
     setEstimateChoiceOpen(false);
     try {
       const e = await applyTemplate.mutateAsync({ projectId: id, templateId: tpl.id, req: {} });
-      qc.invalidateQueries({ queryKey: ['project-estimates', id] });
-      navigate(routes.estimate(e.id));
+      void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+      void navigate(routes.estimate(e.id));
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -271,7 +271,7 @@ export function ProjectDetailPage() {
             variant="secondary"
             onClick={() => {
               setEstimateChoiceOpen(false);
-              navigate(routes.importEstimate(id));
+              void navigate(routes.importEstimate(id));
             }}
           >
             {t('templates.fromFile')}
@@ -293,9 +293,9 @@ export function ProjectDetailPage() {
         estimates={list}
         onDone={(newId) => {
           setConsolidateOpen(false);
-          qc.invalidateQueries({ queryKey: ['project-estimates', id] });
-          qc.invalidateQueries({ queryKey: ['projects'] });
-          navigate(routes.estimate(newId));
+          void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
+          void qc.invalidateQueries({ queryKey: ['projects'] });
+          void navigate(routes.estimate(newId));
         }}
       />
 

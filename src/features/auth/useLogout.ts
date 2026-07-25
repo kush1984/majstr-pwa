@@ -32,6 +32,6 @@ export function useLogout() {
     qc.clear();
     void clearPersistedCache(); // the local copy is temporary — logout wipes it from the device
     void clearOutbox();         // and any unsynced writes (Phase 1 slice 3 warns before this)
-    navigate(routes.login, { replace: true });
+    void navigate(routes.login, { replace: true });
   }, [qc, navigate]);
 }

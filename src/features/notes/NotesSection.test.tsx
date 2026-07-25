@@ -39,7 +39,7 @@ describe('NotesSection', () => {
     await waitFor(() => expect(screen.getByText('Архітектор Олег')).toBeTruthy());
     // Body keeps its line breaks (pre-wrap) — the text node holds the newline.
     expect(screen.getByText(/ключі в консьєржа/)).toBeTruthy();
-    const call = screen.getByRole('link', { name: /067 123 45 67/ }) as HTMLAnchorElement;
+    const call = screen.getByRole('link', { name: /067 123 45 67/ });
     expect(call.getAttribute('href')).toBe('tel:0671234567');
   });
 
@@ -58,11 +58,11 @@ describe('NotesSection', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Нотатка' }));
 
     // Save stays disabled until the body has content.
-    const save = screen.getByRole('button', { name: 'Зберегти' }) as HTMLButtonElement;
+    const save = screen.getByRole('button', { name: 'Зберегти' });
     expect(save.disabled).toBe(true);
 
     fireEvent.change(screen.getByPlaceholderText(/Текст нотатки/), { target: { value: 'ключі в консьєржа' } });
-    expect((screen.getByRole('button', { name: 'Зберегти' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Зберегти' })).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(notesApi.add).toHaveBeenCalledTimes(1));

@@ -83,7 +83,7 @@ describe('SketchReviewSheet', () => {
     await pickPhoto();
 
     // "Фронтон" has an incomplete triangle (only b) → its result is invalid → commit disabled.
-    const commitBtn = screen.getByRole('button', { name: /Додати до замірів/ }) as HTMLButtonElement;
+    const commitBtn = screen.getByRole('button', { name: /Додати до замірів/ });
     expect(commitBtn.disabled).toBe(true);
 
     // Remove the flagged element (2nd delete-item button) → only the valid ceiling remains.
@@ -91,7 +91,7 @@ describe('SketchReviewSheet', () => {
     fireEvent.click(dels[1]);
 
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /Додати до замірів/ }) as HTMLButtonElement;
+      const btn = screen.getByRole('button', { name: /Додати до замірів/ });
       expect(btn.disabled).toBe(false);
     });
   });
@@ -103,7 +103,7 @@ describe('SketchReviewSheet', () => {
 
     fireEvent.click(screen.getAllByLabelText('Видалити елемент')[1]); // drop the invalid one
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /Додати до замірів/ }) as HTMLButtonElement;
+      const btn = screen.getByRole('button', { name: /Додати до замірів/ });
       expect(btn.disabled).toBe(false);
     });
     fireEvent.click(screen.getByRole('button', { name: /Додати до замірів/ }));

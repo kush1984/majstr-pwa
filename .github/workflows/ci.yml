@@ -1,0 +1,52 @@
+name: CI
+
+# The gate. Until this existed, `tsc -b`, the 288-test suite and the build ran only
+# when the developer remembered — so a type error or a failing outbox test could
+# reach master unnoticed (and the backend repo proved that can really happen).
+#
+# `npm ci` (not `install`) so the committed lockfile is what's actually installed.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install (from the lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check (app)
+        run: npx tsc -b
+
+      # Separate from the app check: the test/e2e sources have never been
+      # type-checked, so they carry a backlog of stale mocks. Non-blocking until
+      # that backlog is cleared — then fold it into the step above and drop this.
+      - name: Type-check (tests) — advisory
+        continue-on-error: true
+        run: npm run typecheck:tests
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Build
+        run: npx vite build

@@ -240,7 +240,7 @@ export function EstimateEditorPage() {
     try {
       await deleteEstimate.mutateAsync();
       toast.success(t('estimate.estimateDeleted'));
-      navigate(projectId ? routes.project(projectId) : routes.projects, { replace: true });
+      void navigate(projectId ? routes.project(projectId) : routes.projects, { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
     }

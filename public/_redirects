@@ -1,0 +1,10 @@
+# SPA fallback for Cloudflare Pages.
+#
+# The router owns deep paths (/projects/:id, /estimates/:id, /billing/return,
+# /reset-password, …). Without this rule the host looks for a real file at that
+# path and returns 404 on: a browser refresh, a shared deep link, the monobank
+# return redirect, and an installed PWA relaunching onto a sub-route.
+#
+# 200 (not 301) = rewrite, so the URL the user sees is preserved and the router
+# picks it up on boot. Assets are served before this rule, so /assets/* is unaffected.
+/*    /index.html   200

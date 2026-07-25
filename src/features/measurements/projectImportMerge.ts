@@ -457,7 +457,7 @@ export function roomItems(elements: PackageElement[]): MeasurementItemRequest[] 
     out.push({
       name: el.name,
       type: isLinearKind(el.kind) ? 'LINEAR' : 'SURFACE',
-      payload: payload as MeasurementItemRequest['payload'],
+      payload: payload,
       sortOrder: i,
     });
   });

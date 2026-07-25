@@ -51,16 +51,16 @@ export function useEstimate(id: string) {
 function useInvalidateEstimate(estimateId: string) {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
+    void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
     // The object screen's estimate list shows the NAME — without this a rename
     // stays stale until a manual refresh (the summaries live under their own key).
-    qc.invalidateQueries({ queryKey: ['project-estimates'] });
+    void qc.invalidateQueries({ queryKey: ['project-estimates'] });
     // project cards + dashboard show estimate-derived sums/status.
-    qc.invalidateQueries({ queryKey: ['projects'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['projects'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
     // object economy is derived from estimate totals + deposits — refresh it too
     // (deposit or item edits must recompute contracted / received / cash live).
-    qc.invalidateQueries({ queryKey: ['object-economy'] });
+    void qc.invalidateQueries({ queryKey: ['object-economy'] });
   };
 }
 
@@ -88,8 +88,8 @@ export function useCreateEstimate() {
         payload: { projectId, req }, deps: [projectId],
         online: () => estimatesApi.createForProject(projectId, req, id),
         onOnlineSuccess: () => {
-          qc.invalidateQueries({ queryKey: ['project-estimates', projectId] });
-          qc.invalidateQueries({ queryKey: ['projects'] });
+          void qc.invalidateQueries({ queryKey: ['project-estimates', projectId] });
+          void qc.invalidateQueries({ queryKey: ['projects'] });
         },
         optimistic: () => {
           qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, id], optimistic);
@@ -218,9 +218,9 @@ export function useDeleteEstimate(estimateId: string) {
   return useMutation({
     mutationFn: () => estimatesApi.remove(estimateId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      qc.invalidateQueries({ queryKey: ['project-estimates'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['project-estimates'] });
     },
   });
 }

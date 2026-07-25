@@ -17,7 +17,7 @@ export function useNotes(objectId: string) {
 
 export function useNoteActions(objectId: string) {
   const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: key(objectId) });
+  const invalidate = () => { void qc.invalidateQueries({ queryKey: key(objectId) }); };
 
   return {
     add: useMutation({ mutationFn: (req: NoteRequest) => notesApi.add(objectId, req), onSuccess: invalidate }),

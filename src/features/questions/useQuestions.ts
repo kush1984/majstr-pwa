@@ -23,8 +23,8 @@ export function useMarkQuestionsRead(projectId: string) {
     mutationFn: (questionIds: string[]) =>
       Promise.all(questionIds.map((qid) => questionsApi.markRead(projectId, qid))),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: questionsKey(projectId) });
-      qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: questionsKey(projectId) });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 }

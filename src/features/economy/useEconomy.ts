@@ -28,8 +28,8 @@ export function useExpenses(objectId: string, enabled: boolean) {
 function useInvalidateEconomy(objectId: string) {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
-    qc.invalidateQueries({ queryKey: economyKeys.expenses(objectId) });
+    void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+    void qc.invalidateQueries({ queryKey: economyKeys.expenses(objectId) });
   };
 }
 

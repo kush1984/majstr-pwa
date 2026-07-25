@@ -57,7 +57,7 @@ const AUTH_PATH = /\/api\/auth\/(login|register|refresh|logout)/i;
 
 function scrubHeaders(headers: unknown): void {
   if (!headers || typeof headers !== 'object') return;
-  for (const key of Object.keys(headers as Record<string, unknown>)) {
+  for (const key of Object.keys(headers)) {
     if (SENSITIVE_HEADER.test(key)) {
       (headers as Record<string, unknown>)[key] = '[redacted]';
     }

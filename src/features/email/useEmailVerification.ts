@@ -9,7 +9,7 @@ export function useVerifyEmail() {
     mutationFn: (token: string) => authApi.verifyEmail(token),
     onSuccess: () => {
       // Refresh /me so the banner disappears (when the user is logged in).
-      qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
   });
 }
