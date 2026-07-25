@@ -6,6 +6,10 @@ import { profileApi } from '@/api/profile.ts';
 import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { useSyncStatus } from '@/lib/useOnline.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
+import {
+  lastPrefetchAt, prefetchForOffline, type PrefetchProgress,
+} from '@/lib/offlinePrefetch.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
@@ -268,6 +272,7 @@ export function ProfilePage() {
         />
         <LogoRow me={me} />
         <PushRow />
+        <OfflinePrefetchRow isPro={(me.plan ?? 'FREE') !== 'FREE'} />
         <MenuRow
           icon="⚙️"
           title={t('profile.settings')}
@@ -452,6 +457,62 @@ function MenuRow({
       ) : (
         <span className="text-base text-faint">›</span>
       )}
+    </button>
+  );
+}
+
+/**
+ * "Prepare for offline" — download everything (objects, estimates + items, measurements, notes,
+ * clients, catalog, templates) into the local cache before driving to a no-signal site. It runs
+ * automatically in the background too; this is the deliberate button for a master who wants to be
+ * sure, with progress and when it last ran.
+ */
+function OfflinePrefetchRow({ isPro }: { isPro: boolean }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const { online } = useOnlineGuard();
+  const [progress, setProgress] = useState<PrefetchProgress | null>(null);
+  const [at, setAt] = useState(() => lastPrefetchAt());
+
+  const run = async () => {
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
+    }
+    setProgress({ done: 0, total: 0 });
+    try {
+      const r = await prefetchForOffline(qc, { isPro, onProgress: setProgress });
+      setAt(lastPrefetchAt());
+      toast.success(t('offline.prefetchDone', { objects: r.objects, estimates: r.estimates }));
+    } catch {
+      toast.error(t('offline.prefetchFailed'));
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const busy = progress !== null;
+  const sub = busy
+    ? t('offline.prefetchRunning', { done: progress.done, total: Math.max(progress.total, progress.done) })
+    : at > 0
+      ? t('offline.prefetchLast', { when: new Date(at).toLocaleString('uk-UA') })
+      : t('offline.prefetchSub');
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void run()}
+      className="flex w-full items-center gap-3 border-b border-border p-3.5 text-left last:border-b-0 disabled:opacity-60"
+    >
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
+        ⬇️
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-primary">{t('offline.prefetchTitle')}</span>
+        <span className="block text-xs text-muted">{sub}</span>
+      </span>
+      {busy ? <Spinner /> : <span className="text-base text-faint">›</span>}
     </button>
   );
 }

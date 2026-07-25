@@ -4,7 +4,11 @@ import { initSyncStatus, registerOutboxHandler, setOutboxErrorClassifier, startO
 import { clientsApi } from '@/api/clients.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
-import type { ClientRequest, EstimateCreateRequest, EstimateItemRequest, ProjectRequest } from '@/api/types.ts';
+import { measurementsApi } from '@/api/measurements.ts';
+import type {
+  ClientRequest, EstimateCreateRequest, EstimateItemRequest, MeasurementItemRequest,
+  MeasurementRoomRequest, ProjectRequest,
+} from '@/api/types.ts';
 
 /**
  * Wire the outbox at app startup: register a network handler per entity, then auto-flush on every
@@ -52,6 +56,30 @@ export function initOutbox(qc: QueryClient): () => void {
       await estimatesApi.updateItem(p.estimateId, op.entityId, p.req!);
     } else {
       await estimatesApi.removeItem(p.estimateId, op.entityId);
+    }
+  });
+
+  // Measurement rooms — entityId is the ROOM id; the object id rides the payload.
+  registerOutboxHandler('measurementRoom', async (op) => {
+    const p = op.payload as { objectId: string; req?: MeasurementRoomRequest };
+    if (op.type === 'create') {
+      await measurementsApi.addRoom(p.objectId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await measurementsApi.updateRoom(p.objectId, op.entityId, p.req!);
+    } else {
+      await measurementsApi.deleteRoom(p.objectId, op.entityId);
+    }
+  });
+
+  // Measurement elements — entityId is the ITEM id; object + room ids ride the payload.
+  registerOutboxHandler('measurementItem', async (op) => {
+    const p = op.payload as { objectId: string; roomId: string; req?: MeasurementItemRequest };
+    if (op.type === 'create') {
+      await measurementsApi.addItem(p.objectId, p.roomId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await measurementsApi.updateItem(p.objectId, p.roomId, op.entityId, p.req!);
+    } else {
+      await measurementsApi.deleteItem(p.objectId, p.roomId, op.entityId);
     }
   });
 

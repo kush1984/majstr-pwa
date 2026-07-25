@@ -190,7 +190,13 @@
   },
   "offline": {
     "banner": "Offline — showing your saved copy. Some actions need a connection.",
-    "needConnection": "This action needs an internet connection"
+    "needConnection": "This action needs an internet connection",
+    "prefetchTitle": "Prepare for offline",
+    "prefetchSub": "Download objects, estimates and the catalog to this device",
+    "prefetchRunning": "Downloading… {{done}} of {{total}}",
+    "prefetchLast": "Updated: {{when}}",
+    "prefetchDone": "Ready: {{objects}} objects, {{estimates}} estimates",
+    "prefetchFailed": "Could not download everything. Please try again."
   },
   "sync": {
     "pending": "Waiting to sync: {{n}}",

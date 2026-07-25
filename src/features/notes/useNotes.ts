@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notesApi } from '@/api/notes.ts';
 import type { NoteRequest } from '@/api/types.ts';
 
-const key = (objectId: string) => ['project-notes', objectId] as const;
+/** Exported so the offline prefetch primes the SAME key this hook reads. */
+export const NOTES_KEY = (objectId: string) => ['project-notes', objectId] as const;
+const key = NOTES_KEY;
 
 /** The object's notes (owner). No plan gate — notes are on every plan. */
 export function useNotes(objectId: string) {

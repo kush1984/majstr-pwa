@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { useAutoPrefetch } from '@/lib/useAutoPrefetch.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
@@ -19,6 +20,9 @@ import { NAV_ITEMS } from './navItems.ts';
 export function AppLayout({ children }: { children?: ReactNode }) {
   const { data: me } = useMe();
   const { t } = useTranslation();
+
+  // Fill the offline cache in the background (throttled) so every screen works in a basement.
+  useAutoPrefetch();
 
   // Tag Sentry with the user id on (re)load while already logged in — login()
   // covers the fresh-login path; this covers boot-from-home-screen.
