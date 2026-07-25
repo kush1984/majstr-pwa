@@ -38,7 +38,7 @@ export function QuestionsSection({ projectId }: { projectId: string }) {
 
       {q.isPending ? (
         <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
-      ) : q.isError ? (
+      ) : q.isError && !q.data ? (
         <p className="py-4 text-center text-sm text-muted">{t('questions.loadError')}</p>
       ) : items.length === 0 ? (
         <div className="rounded-card border border-dashed border-border bg-surface-sunken p-5 text-center">

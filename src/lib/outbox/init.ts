@@ -88,6 +88,13 @@ export function initOutbox(qc: QueryClient): () => void {
   setOutboxErrorClassifier((e) => {
     if (axios.isAxiosError(e) && e.response) {
       const s = e.response.status;
+      // 401/403 is an AUTH problem, not a rejected write: the token rotated mid-replay, or the
+      // session needs a re-login. Keep the op queued — telling the master "pay or delete your
+      // work" over an expired token would be a lie (and could cost them real data).
+      if (s === 401 || s === 403) {
+        const code = (e.response.data as { code?: string } | undefined)?.code ?? '';
+        return code.includes('LIMIT') ? 'limit' : 'retry';
+      }
       if (s >= 400 && s < 500 && s !== 408 && s !== 429) {
         const code = (e.response.data as { code?: string } | undefined)?.code ?? '';
         return code.includes('LIMIT') ? 'limit' : 'other';

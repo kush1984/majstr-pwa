@@ -102,7 +102,7 @@ export function DashboardPage() {
 
       {/* Metrics: 2 on mobile, 3 on desktop. An error shows an honest compact
           strip — silently rendering "0 активних" during an outage would lie. */}
-      {metrics.isError ? (
+      {metrics.isError && !metrics.data ? (
         <div className="mb-5 flex items-center justify-between gap-3 rounded-card border border-border bg-surface p-4">
           <p className="text-sm text-muted">⚠️ {t('dashboard.metricsError')}</p>
           <Button variant="secondary" onClick={() => void metrics.refetch()}>

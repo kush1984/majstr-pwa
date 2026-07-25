@@ -1,5 +1,6 @@
 import { get, set, del } from 'idb-keyval';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { removeOldestQuery } from '@tanstack/react-query-persist-client';
 
 /**
  * Offline read cache (Phase 0 of offline-first). The TanStack Query cache is persisted to
@@ -17,6 +18,11 @@ const CACHE_KEY = 'majstr-query-cache';
 export const offlinePersister = createAsyncStoragePersister({
   key: CACHE_KEY,
   throttleTime: 1000,
+  // The prefetch pulls a LOT (every object, estimate and item), so the serialized cache can outgrow
+  // the storage quota. Without a retry the whole write fails and the master silently ends up with NO
+  // offline data at all; `removeOldestQuery` drops the least-recently-used query and tries again, so
+  // the cache degrades gracefully instead of disappearing.
+  retry: removeOldestQuery,
   storage: {
     getItem: (key) => get<string>(key).then((v) => v ?? null),
     setItem: (key, value) => set(key, value),
