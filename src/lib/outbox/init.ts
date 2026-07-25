@@ -5,9 +5,11 @@ import { clientsApi } from '@/api/clients.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
+import { catalogApi } from '@/api/catalog.ts';
+import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import type {
-  ClientRequest, EstimateCreateRequest, EstimateItemRequest, MeasurementItemRequest,
-  MeasurementRoomRequest, ProjectRequest,
+  CatalogItemRequest, ClientRequest, EstimateCreateRequest, EstimateItemRequest,
+  MeasurementItemRequest, MeasurementRoomRequest, ProjectRequest, TemplateItemRequest, Trade,
 } from '@/api/types.ts';
 
 /**
@@ -80,6 +82,40 @@ export function initOutbox(qc: QueryClient): () => void {
       await measurementsApi.updateItem(p.objectId, p.roomId, op.entityId, p.req!);
     } else {
       await measurementsApi.deleteItem(p.objectId, p.roomId, op.entityId);
+    }
+  });
+
+  // Catalog positions — entityId is the item id.
+  registerOutboxHandler('catalogItem', async (op) => {
+    const req = op.payload as CatalogItemRequest;
+    if (op.type === 'create') {
+      await catalogApi.create(req, op.entityId);
+    } else if (op.type === 'update') {
+      await catalogApi.update(op.entityId, req);
+    } else {
+      await catalogApi.remove(op.entityId);
+    }
+  });
+
+  // Own templates — rename / re-file / delete. Templates are never CREATED offline
+  // (save-as-template reads a server-side estimate), so there is no create branch.
+  registerOutboxHandler('estimateTemplate', async (op) => {
+    if (op.type === 'update') {
+      const p = op.payload as { op: 'rename'; name: string } | { op: 'trade'; trade: Trade | null };
+      if (p.op === 'rename') await estimateTemplatesApi.rename(op.entityId, { name: p.name });
+      else await estimateTemplatesApi.setTrade(op.entityId, { trade: p.trade });
+    } else if (op.type === 'delete') {
+      await estimateTemplatesApi.remove(op.entityId);
+    }
+  });
+
+  // Template positions — entityId is the ITEM id; the template id rides the payload.
+  registerOutboxHandler('templateItem', async (op) => {
+    const p = op.payload as { templateId: string; req?: TemplateItemRequest };
+    if (op.type === 'create') {
+      await estimateTemplatesApi.addItem(p.templateId, p.req!, op.entityId);
+    } else if (op.type === 'delete') {
+      await estimateTemplatesApi.removeItem(p.templateId, op.entityId);
     }
   });
 

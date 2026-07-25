@@ -125,10 +125,11 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
     // Confirm → catalog entry with name/type/unit + the prefilled category/price.
     fireEvent.click(screen.getByRole('button', { name: 'Додати в каталог' }));
     await waitFor(() =>
+      // Second arg = the client-generated UUID that makes the create idempotent on replay.
       expect(catalogApi.create).toHaveBeenCalledWith({
         name: 'Демонтаж розетки', category: 'Демонтаж', trade: 'OTHER',
         type: 'WORK', unit: 'PIECE', defaultPrice: 90,
-      }),
+      }, expect.any(String)),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });

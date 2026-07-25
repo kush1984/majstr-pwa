@@ -36,8 +36,11 @@ export const catalogApi = {
       .then((r) => r.data);
   },
 
-  create(req: CatalogItemRequest): Promise<CatalogItemResponse> {
-    return api.post<CatalogItemResponse>('/api/catalog', req).then((r) => r.data);
+  /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
+  create(req: CatalogItemRequest, id?: string): Promise<CatalogItemResponse> {
+    return api
+      .post<CatalogItemResponse>('/api/catalog', req, id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
   },
 
   update(id: string, req: CatalogItemRequest): Promise<CatalogItemResponse> {

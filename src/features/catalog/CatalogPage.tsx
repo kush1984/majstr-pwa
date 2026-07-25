@@ -14,6 +14,7 @@ import { formatMoney } from '@/lib/format.ts';
 import i18n from '@/lib/i18n.ts';
 import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import {
   useAddNewFromTemplate,
   useCatalog,
@@ -55,6 +56,8 @@ export function CatalogPage() {
   const reset = useResetCatalog();
   const checkUpdates = useCheckTemplateUpdates();
   const addNew = useAddNewFromTemplate();
+  // The starter-set / add-new-from-library flows are server-side merges — they can't be queued.
+  const { online, guard, offlineTitle } = useOnlineGuard();
 
   // `undefined` = modal closed; `null` = create; an item = edit.
   const [editing, setEditing] = useState<CatalogItemResponse | null | undefined>(undefined);
@@ -149,7 +152,13 @@ export function CatalogPage() {
           text={t('catalog.emptyText')}
           action={
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="secondary" onClick={onReset} loading={reset.isPending}>
+              <Button
+                variant="secondary"
+                onClick={guard(() => void onReset())}
+                loading={reset.isPending}
+                disabled={!online}
+                title={offlineTitle}
+              >
                 {t('catalog.starterSet')}
               </Button>
               <Button variant="secondary" onClick={() => navigate(routes.catalogImport)}>
@@ -171,8 +180,9 @@ export function CatalogPage() {
             </button>
             <button
               type="button"
-              onClick={onCheckUpdates}
-              disabled={checkUpdates.isPending}
+              onClick={guard(() => void onCheckUpdates())}
+              disabled={checkUpdates.isPending || !online}
+              title={offlineTitle}
               className="text-xs font-semibold text-brand disabled:opacity-50"
             >
               {checkUpdates.isPending ? t('catalog.addNewChecking') : `↻ ${t('catalog.addNew')}`}
@@ -246,7 +256,13 @@ export function CatalogPage() {
           <Button variant="secondary" fullWidth onClick={() => setPendingNewCount(null)}>
             {t('common.cancel')}
           </Button>
-          <Button fullWidth loading={addNew.isPending} onClick={onAddNew}>
+          <Button
+            fullWidth
+            loading={addNew.isPending}
+            disabled={!online}
+            title={offlineTitle}
+            onClick={guard(() => void onAddNew())}
+          >
             {t('catalog.addNewConfirm')}
           </Button>
         </div>

@@ -23,6 +23,7 @@ import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
 import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import type { EstimateTemplateSummary } from '@/api/types.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 /**
  * "Object + estimate" flow: optionally pick/create a client, name the object,
@@ -53,6 +54,9 @@ export function NewEstimatePage() {
   // Import mode: create the object, then hand off to the file/photo import wizard.
   const [importMode, setImportMode] = useState(false);
   const applyTemplate = useApplyTemplate();
+  // "From a template" / "from a file" both build the estimate server-side — offline the master
+  // gets an empty estimate, which the outbox can replay.
+  const { online, guard, offlineTitle } = useOnlineGuard();
 
   const submit = async () => {
     if (busy) return;
@@ -133,9 +137,11 @@ export function NewEstimatePage() {
             </button>
             <button
               type="button"
-              onClick={() => setPickerOpen(true)}
+              onClick={guard(() => setPickerOpen(true))}
+              disabled={!online}
+              title={offlineTitle}
               className={cn(
-                'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
+                'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50',
                 template && !importMode
                   ? 'border-brand bg-brand-soft text-brand'
                   : 'border-border bg-surface text-primary',
@@ -147,12 +153,14 @@ export function NewEstimatePage() {
           {/* Third option: import a ready estimate from a file/photo (PRO — gated on the wizard). */}
           <button
             type="button"
-            onClick={() => {
+            onClick={guard(() => {
               setImportMode(true);
               setTemplate(null);
-            }}
+            })}
+            disabled={!online}
+            title={offlineTitle}
             className={cn(
-              'mt-2 w-full rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
+              'mt-2 w-full rounded-xl border px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50',
               importMode ? 'border-brand bg-brand-soft text-brand' : 'border-border bg-surface text-primary',
             )}
           >

@@ -213,7 +213,12 @@
       "client": "Client",
       "project": "Object",
       "estimate": "Estimate",
-      "estimateItem": "Line item"
+      "estimateItem": "Line item",
+      "measurementRoom": "Room",
+      "measurementItem": "Measurement",
+      "catalogItem": "Catalog",
+      "estimateTemplate": "Template",
+      "templateItem": "Template position"
     }
   },
   "auth": {

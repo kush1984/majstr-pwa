@@ -206,10 +206,11 @@ export function EstimateEditorPage() {
     }
   };
 
-  const openSaveTemplate = () => {
+  // Saving as a template reads the estimate's items on the server — online-only.
+  const openSaveTemplate = guard(() => {
     setTemplateName(est.name ?? '');
     setSaveTemplateOpen(true);
-  };
+  });
 
   const saveTemplate = async () => {
     if (!templateName.trim()) return;

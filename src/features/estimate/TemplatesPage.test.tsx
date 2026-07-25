@@ -91,9 +91,10 @@ describe('TemplatesPage — edit own template', () => {
     fireEvent.click(freshRow);
     fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
     await waitFor(() =>
+      // Third arg = the client-generated UUID that makes the add idempotent on replay.
       expect(estimateTemplatesApi.addItem).toHaveBeenCalledWith('own1', {
         name: 'Кабель ВВГ', type: 'MATERIAL', unit: 'M',
-      }),
+      }, expect.any(String)),
     );
   });
 
@@ -119,7 +120,7 @@ describe('TemplatesPage — edit own template', () => {
     await waitFor(() =>
       expect(estimateTemplatesApi.addItem).toHaveBeenCalledWith('own1', {
         name: 'Нова робота', type: 'WORK', unit: 'M2',
-      }),
+      }, expect.any(String)),
     );
     expect(await screen.findByText(/у ваш каталог/)).toBeTruthy();
 
@@ -129,7 +130,7 @@ describe('TemplatesPage — edit own template', () => {
       expect(catalogApi.create).toHaveBeenCalledWith({
         name: 'Нова робота', category: undefined, trade: 'OTHER',
         type: 'WORK', unit: 'M2', defaultPrice: 0,
-      }),
+      }, expect.any(String)),
     );
   });
 

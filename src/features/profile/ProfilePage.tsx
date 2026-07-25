@@ -272,7 +272,7 @@ export function ProfilePage() {
         />
         <LogoRow me={me} />
         <PushRow />
-        <OfflinePrefetchRow isPro={(me.plan ?? 'FREE') !== 'FREE'} />
+        <OfflinePrefetchRow isPro={(me?.plan ?? 'FREE') !== 'FREE'} />
         <MenuRow
           icon="⚙️"
           title={t('profile.settings')}

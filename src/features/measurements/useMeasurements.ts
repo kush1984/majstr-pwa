@@ -56,7 +56,8 @@ export function useMeasurementActions(objectId: string) {
         optimistic: () => edit((t) => ({
           ...t,
           rooms: [...t.rooms, {
-            id, name: req.name, sortOrder: req.sortOrder ?? t.rooms.length,
+            id, name: req.name, floor: req.floor ?? null,
+            sortOrder: req.sortOrder ?? t.rooms.length,
             items: [], areaTotal: 0, linearTotal: 0, pieceTotal: 0,
           }],
         })),

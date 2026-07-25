@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi } from '@/api/catalog.ts';
-import type { CatalogItemRequest, ItemType, Trade } from '@/api/types.ts';
+import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
+import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { newUuid } from '@/lib/uuid.ts';
 
 export const CATALOG_KEY = ['catalog'] as const;
 
@@ -41,28 +43,91 @@ function useInvalidateCatalog() {
   return () => qc.invalidateQueries({ queryKey: CATALOG_KEY });
 }
 
+/**
+ * Patch every cached catalog list (`all` plus the per-type ones) so an offline edit shows up
+ * wherever the page is looking. `keep` filters which lists a created item belongs in.
+ */
+function patchCatalog(
+  qc: ReturnType<typeof useQueryClient>,
+  edit: (items: CatalogItemResponse[]) => CatalogItemResponse[],
+  keep: (listType: string) => boolean = () => true,
+): void {
+  qc.getQueryCache()
+    .findAll({ queryKey: [...CATALOG_KEY, 'list'] })
+    .forEach((q) => {
+      if (!keep(String(q.queryKey[2]))) return;
+      qc.setQueryData<CatalogItemResponse[]>(q.queryKey, (old) => (old ? edit(old) : old));
+    });
+}
+
+/**
+ * Catalog CRUD — offline-first. A master often adds or re-prices a position right on site, so these
+ * write optimistically and queue when there is no signal. The backend create is idempotent twice
+ * over: by the client UUID, and by its own (name, type, unit) dedupe.
+ */
 export function useCreateCatalogItem() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateCatalog();
   return useMutation({
-    mutationFn: (req: CatalogItemRequest) => catalogApi.create(req),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: (req: CatalogItemRequest): Promise<CatalogItemResponse> => {
+      const id = newUuid();
+      const optimistic: CatalogItemResponse = {
+        id,
+        name: req.name,
+        category: req.category ?? null,
+        trade: req.trade ?? null,
+        type: req.type,
+        unit: req.unit,
+        defaultPrice: req.defaultPrice,
+        createdAt: new Date().toISOString(),
+      };
+      return offlineMutate<CatalogItemResponse>({
+        entity: 'catalogItem', entityId: id, type: 'create', payload: req, deps: [],
+        online: () => catalogApi.create(req, id),
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          // Only into lists this item belongs in: the "all" list and its own type's list.
+          patchCatalog(qc, (items) => [...items, optimistic], (t) => t === 'all' || t === req.type);
+          return optimistic;
+        },
+      });
+    },
   });
 }
 
 export function useUpdateCatalogItem() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateCatalog();
   return useMutation({
-    mutationFn: ({ id, req }: { id: string; req: CatalogItemRequest }) =>
-      catalogApi.update(id, req),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: ({ id, req }: { id: string; req: CatalogItemRequest }): Promise<void> =>
+      offlineMutate<void>({
+        entity: 'catalogItem', entityId: id, type: 'update', payload: req, deps: [],
+        online: async () => { await catalogApi.update(id, req); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          patchCatalog(qc, (items) => items.map((i) => (i.id === id ? {
+            ...i, name: req.name, category: req.category ?? null, trade: req.trade ?? i.trade,
+            type: req.type, unit: req.unit, defaultPrice: req.defaultPrice,
+          } : i)));
+        },
+      }),
   });
 }
 
 export function useDeleteCatalogItem() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateCatalog();
   return useMutation({
-    mutationFn: (id: string) => catalogApi.remove(id),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: (id: string): Promise<void> =>
+      offlineMutate<void>({
+        entity: 'catalogItem', entityId: id, type: 'delete', payload: {}, deps: [],
+        online: async () => { await catalogApi.remove(id); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => patchCatalog(qc, (items) => items.filter((i) => i.id !== id)),
+      }),
   });
 }
 

@@ -213,7 +213,12 @@
       "client": "Клієнт",
       "project": "Обʼєкт",
       "estimate": "Кошторис",
-      "estimateItem": "Позиція"
+      "estimateItem": "Позиція",
+      "measurementRoom": "Приміщення",
+      "measurementItem": "Замір",
+      "catalogItem": "Каталог",
+      "estimateTemplate": "Шаблон",
+      "templateItem": "Позиція шаблону"
     }
   },
   "auth": {

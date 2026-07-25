@@ -158,7 +158,9 @@ export function ProjectDetailPage() {
     setEstimateChoiceOpen(false);
     createEmptyEstimate();
   };
-  const onPickTemplate = async (tpl: EstimateTemplateSummary) => {
+  // Applying a template builds the estimate server-side (prices matched against my catalog),
+  // so it can't be queued — an empty estimate is the offline path.
+  const onPickTemplate = guard(async (tpl: EstimateTemplateSummary) => {
     setTemplatePickerOpen(false);
     setEstimateChoiceOpen(false);
     try {
@@ -168,7 +170,7 @@ export function ProjectDetailPage() {
     } catch (err) {
       toast.error(toAppError(err).message);
     }
-  };
+  });
   // Sharing mints a portal link on the server — online-only, so say so plainly when offline.
   const openShare = guard(() => {
     if (list.length === 0) {

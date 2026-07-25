@@ -44,9 +44,11 @@ export const estimateTemplatesApi = {
   },
 
   /** Add a position to my own template → updated detail. */
-  addItem(templateId: string, req: TemplateItemRequest): Promise<EstimateTemplateDetail> {
+  /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
+  addItem(templateId: string, req: TemplateItemRequest, id?: string): Promise<EstimateTemplateDetail> {
     return api
-      .post<EstimateTemplateDetail>(`/api/estimate-templates/${templateId}/items`, req)
+      .post<EstimateTemplateDetail>(`/api/estimate-templates/${templateId}/items`, req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
       .then((r) => r.data);
   },
 
