@@ -1002,6 +1002,10 @@
     "periodHalfYear": "6 months",
     "periodHalfYearPrice": "1494 ₴",
     "periodHalfYearNote": "249 ₴/mo · save 300 ₴",
+    "periodYear": "12 months",
+    "periodYearPrice": "2748 ₴",
+    "periodYearNote": "229 ₴/mo · save 840 ₴",
+    "autoRenewHintYear": "We'll charge 2748 ₴ from this card every year. Cancel anytime in your profile.",
     "periodBadge": "Best value"
   },
   "referral": {

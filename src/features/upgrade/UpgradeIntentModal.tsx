@@ -43,7 +43,8 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
     }
   };
 
-  const periods: { value: BillingPeriod; title: string; price: string; note?: string }[] = [
+  // Cheapest-per-month last: the eye lands on the annual tariff after seeing the others.
+  const periods: { value: BillingPeriod; title: string; price: string; note?: string; badge?: string }[] = [
     { value: 'MONTH', title: t('billing.periodMonth'), price: t('billing.periodMonthPrice') },
     {
       value: 'HALF_YEAR',
@@ -51,7 +52,20 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
       price: t('billing.periodHalfYearPrice'),
       note: t('billing.periodHalfYearNote'),
     },
+    {
+      value: 'YEAR',
+      title: t('billing.periodYear'),
+      price: t('billing.periodYearPrice'),
+      note: t('billing.periodYearNote'),
+      badge: t('billing.periodBadge'),
+    },
   ];
+
+  const autoRenewHint: Record<BillingPeriod, string> = {
+    MONTH: t('billing.autoRenewHint'),
+    HALF_YEAR: t('billing.autoRenewHintHalfYear'),
+    YEAR: t('billing.autoRenewHintYear'),
+  };
 
   return (
     <>
@@ -59,25 +73,31 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
       <div className="space-y-4">
         <p className="text-sm text-secondary">{t('billing.proBody')}</p>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        {/* Stacked rows, not a grid: three tariffs side by side crush the per-month
+            saving note at 375px, and that note is what sells the longer period. */}
+        <div className="space-y-2">
           {periods.map((p) => (
             <button
               key={p.value}
               type="button"
               onClick={() => setPeriod(p.value)}
               className={cn(
-                'relative rounded-xl border p-3 text-left transition-colors',
+                'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
                 period === p.value ? 'border-brand bg-brand-soft' : 'border-border bg-surface',
               )}
             >
-              {p.value === 'HALF_YEAR' && (
-                <span className="absolute -top-2 right-2 rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white">
-                  {t('billing.periodBadge')}
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm font-semibold text-primary">{p.title}</span>
+                  {p.badge && (
+                    <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {p.badge}
+                    </span>
+                  )}
                 </span>
-              )}
-              <span className="block text-sm font-semibold text-primary">{p.title}</span>
-              <span className="mt-1 block text-lg font-extrabold text-primary">{p.price}</span>
-              {p.note && <span className="mt-0.5 block text-xs text-muted">{p.note}</span>}
+                {p.note && <span className="mt-0.5 block text-xs text-muted">{p.note}</span>}
+              </span>
+              <span className="whitespace-nowrap text-lg font-extrabold text-primary">{p.price}</span>
             </button>
           ))}
         </div>
@@ -92,7 +112,7 @@ export function UpgradeIntentModal({ open, onClose }: { open: boolean; onClose: 
           <span>
             {t('billing.autoRenewLabel')}
             <span className="mt-0.5 block text-xs text-muted">
-              {period === 'HALF_YEAR' ? t('billing.autoRenewHintHalfYear') : t('billing.autoRenewHint')}
+              {autoRenewHint[period]}
             </span>
           </span>
         </label>

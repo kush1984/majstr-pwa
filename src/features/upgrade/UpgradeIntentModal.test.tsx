@@ -38,6 +38,18 @@ describe('UpgradeIntentModal — period selection', () => {
     await waitFor(() => expect(billingApi.checkout).toHaveBeenCalledWith('HALF_YEAR', true));
   });
 
+  it('sends YEAR when the 12-month card is chosen, with the annual renewal hint', async () => {
+    render(<UpgradeIntentModal open onClose={() => {}} />);
+    fireEvent.click(screen.getByText('12 місяців'));
+    // The per-month saving is what sells the longer period — it must be on screen.
+    expect(screen.getByText(/229 ₴\/міс/)).toBeTruthy();
+    // The auto-renew hint follows the chosen period (yearly, not monthly).
+    expect(screen.getByText(/Щороку списуватимемо 2748 ₴/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Оплатити' }));
+    await waitFor(() => expect(billingApi.checkout).toHaveBeenCalledWith('YEAR', true));
+  });
+
   it('passes autoRenew=false when the checkbox is unticked', async () => {
     render(<UpgradeIntentModal open onClose={() => {}} />);
     fireEvent.click(screen.getByRole('checkbox')); // default on → off

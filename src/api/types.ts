@@ -50,7 +50,7 @@ export interface UserResponse {
 }
 
 /** PRO subscription period — the client sends this; the server owns the price. */
-export type BillingPeriod = 'MONTH' | 'HALF_YEAR';
+export type BillingPeriod = 'MONTH' | 'HALF_YEAR' | 'YEAR';
 
 /** GET /api/referrals/me — the "Запроси майстра" panel stats. */
 export interface ReferralStatsResponse {

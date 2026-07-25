@@ -1002,7 +1002,11 @@
     "periodHalfYear": "6 місяців",
     "periodHalfYearPrice": "1494 ₴",
     "periodHalfYearNote": "249 ₴/міс · економія 300 ₴",
-    "periodBadge": "Вигідно"
+    "periodYear": "12 місяців",
+    "periodYearPrice": "2748 ₴",
+    "periodYearNote": "229 ₴/міс · економія 840 ₴",
+    "autoRenewHintYear": "Щороку списуватимемо 2748 ₴ з цієї картки. Вимкнути можна будь-коли в профілі.",
+    "periodBadge": "Найвигідніше"
   },
   "referral": {
     "title": "Запроси майстра",
