@@ -373,6 +373,10 @@ export interface BatchCatalogItemEntry {
   catalogItemId: string;
   quantity: number;
   sortOrder?: number;
+  /** Client-generated id for the line this entry creates — the batch equivalent of the
+   *  `X-Entity-Uuid` header, which cannot carry N ids. Makes a replayed offline batch
+   *  idempotent PER LINE instead of duplicating the whole selection. */
+  id?: string;
 }
 
 // ---------------------------------------------------------------------------

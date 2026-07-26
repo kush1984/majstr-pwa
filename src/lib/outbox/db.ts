@@ -13,6 +13,12 @@ class OutboxDB extends Dexie {
   constructor() {
     super('majstr-outbox');
     this.version(1).stores({ ops: '++seq, entityId, entity, status' });
+    // v2 adds `ownerId` so the queue can survive a logout and be handed back to the same
+    // master. Rows written by v1 carry no owner; they are deliberately left un-stamped rather
+    // than guessed at — claiming them for whoever logs in next would risk replaying one
+    // master's work into another's account. `discardForeignOps` drops them, which matches the
+    // old behaviour (everything was wiped on logout) so nobody is worse off than before.
+    this.version(2).stores({ ops: '++seq, entityId, entity, status, ownerId' });
   }
 }
 

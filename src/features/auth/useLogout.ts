@@ -5,7 +5,6 @@ import { authApi } from '@/api/auth.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
-import { clearOutbox } from '@/lib/outbox/outbox.ts';
 import { routes } from '@/lib/config.ts';
 
 /**
@@ -31,7 +30,9 @@ export function useLogout() {
     setSentryUser(null);
     qc.clear();
     void clearPersistedCache(); // the local copy is temporary — logout wipes it from the device
-    void clearOutbox();         // and any unsynced writes (Phase 1 slice 3 warns before this)
+    // The outbox is NOT wiped. It is owner-stamped, so it can only ever be replayed by the same
+    // master on their next login (`discardForeignOps` destroys it if anyone else signs in) —
+    // and a logout, planned or not, should not be the thing that throws away work they did.
     void navigate(routes.login, { replace: true });
   }, [qc, navigate]);
 }

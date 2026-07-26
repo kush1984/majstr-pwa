@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { estimatesApi } from '@/api/estimates.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import type {
   BatchCatalogItemEntry,
+  CatalogItemResponse,
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
@@ -139,22 +141,99 @@ export function useAddItem(estimateId: string) {
   });
 }
 
+/**
+ * Add a line copied from a catalog position — offline-capable.
+ *
+ * Picking from the catalog is how estimates actually get built; typing every line by hand on
+ * a phone is not a real alternative, so "make estimates offline" was only half true while this
+ * needed a signal. It replays through the from-catalog endpoint rather than the plain item add,
+ * because a catalog position may legally cost 0 while the validated add form demands ≥ 0.01 —
+ * routing through it would queue such lines happily and reject them on replay.
+ */
 export function useAddItemFromCatalog(estimateId: string) {
+  const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
-    mutationFn: (args: { catalogItemId: string; req: EstimateItemFromCatalogRequest }) =>
-      estimatesApi.addItemFromCatalog(estimateId, args.catalogItemId, args.req),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: (args: { catalogItemId: string; req: EstimateItemFromCatalogRequest }) => {
+      const id = newUuid();
+      return offlineMutate<void>({
+        entity: 'estimateItemFromCatalog', entityId: id, type: 'create',
+        payload: { estimateId, catalogItemId: args.catalogItemId, req: args.req },
+        deps: [estimateId],
+        online: async () => {
+          await estimatesApi.addItemFromCatalog(estimateId, args.catalogItemId, args.req, id);
+        },
+        onOnlineSuccess: invalidate,
+        optimistic: () => patchEstimateWithCatalogLines(qc, estimateId, [
+          { id, catalogItemId: args.catalogItemId, quantity: args.req.quantity, sortOrder: args.req.sortOrder },
+        ]),
+      });
+    },
   });
 }
 
-/** Add several catalog items at once (multi-select picker) in one request. */
+/**
+ * Add several catalog positions at once (multi-select picker).
+ *
+ * Stays ONE outbox op carrying the whole selection, not N — so online it is still a single
+ * round trip, and offline the master's "add these six" replays as one unit. Each entry carries
+ * its own client id, so a partially-applied batch resumes per line instead of duplicating
+ * everything that already landed.
+ */
 export function useAddItemsFromCatalogBatch(estimateId: string) {
+  const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
-    mutationFn: (items: BatchCatalogItemEntry[]) =>
-      estimatesApi.addItemsFromCatalogBatch(estimateId, items),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: (items: BatchCatalogItemEntry[]) => {
+      const withIds = items.map((e) => ({ ...e, id: e.id ?? newUuid() }));
+      return offlineMutate<void>({
+        entity: 'estimateItemsFromCatalogBatch', entityId: withIds[0].id, type: 'create',
+        payload: { estimateId, items: withIds },
+        deps: [estimateId],
+        online: async () => { await estimatesApi.addItemsFromCatalogBatch(estimateId, withIds); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => patchEstimateWithCatalogLines(qc, estimateId, withIds),
+      });
+    },
+  });
+}
+
+/**
+ * Optimistically append catalog lines to the cached estimate.
+ *
+ * The name/unit/type/price are resolved from the CACHED catalog — the same copy the server
+ * performs — so the master sees real lines offline rather than placeholders. The server still
+ * does the authoritative copy on replay; if the cached catalog were stale, its version wins.
+ */
+function patchEstimateWithCatalogLines(
+  qc: QueryClient,
+  estimateId: string,
+  entries: { id: string; catalogItemId: string; quantity: number; sortOrder?: number }[],
+): void {
+  const catalog = qc.getQueryData<CatalogItemResponse[]>([...CATALOG_KEY, 'list', 'all']) ?? [];
+  patchEstimate(qc, estimateId, (items) => {
+    const lines = entries.flatMap<EstimateItemResponse>((e) => {
+      const src = catalog.find((c) => c.id === e.catalogItemId);
+      // Not in the cached catalog (never prefetched, or added on another device) — skip the
+      // preview rather than invent a line; the server still adds it correctly on replay.
+      if (!src) return [];
+      return [{
+        id: e.id,
+        type: src.type,
+        name: src.name,
+        category: src.category,
+        unit: src.unit,
+        quantity: e.quantity,
+        unitPrice: src.defaultPrice,
+        lineTotal: 0, // patchEstimate re-derives every lineTotal and the subtotals
+        sortOrder: e.sortOrder ?? 0,
+        measurementRefs: [],
+        quantityManual: false,
+      }];
+    });
+    return [...items, ...lines];
   });
 }
 
@@ -201,11 +280,33 @@ export function useRemoveItem(estimateId: string) {
   });
 }
 
+/**
+ * Edit the estimate's own fields — status, name, valid-until, notes, deposit.
+ *
+ * Offline-capable: marking an estimate «Надіслано» or naming a variant on site is core work,
+ * and it used to go straight to the network and fail. `SIGNED` never reaches here from the UI
+ * (the server rejects it — a signature may only come from the portal), so a queued status
+ * change is always one the server will accept.
+ */
 export function useUpdateEstimate(estimateId: string) {
+  const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
-    mutationFn: (req: EstimateUpdateRequest) => estimatesApi.update(estimateId, req),
-    onSuccess: invalidate,
+    networkMode: 'always', // run offline (the default 'online' PAUSES) so offlineMutate can queue
+    mutationFn: (req: EstimateUpdateRequest) =>
+      offlineMutate<void>({
+        entity: 'estimate', entityId: estimateId, type: 'update', payload: { req },
+        deps: [],
+        online: async () => { await estimatesApi.update(estimateId, req); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], (old) =>
+            old ? { ...old, ...req, depositAmount: req.depositAmount ?? old.depositAmount } : old);
+          // The object's estimate list shows status + name on each card.
+          qc.setQueriesData<EstimateSummary[]>({ queryKey: ['project-estimates'] }, (old) =>
+            (old ?? []).map((e) => (e.id === estimateId ? { ...e, status: req.status, name: req.name ?? e.name } : e)));
+        },
+      }),
   });
 }
 
@@ -218,15 +319,33 @@ export function useReopenEstimate(estimateId: string) {
   });
 }
 
-/** Delete an estimate. Backend forbids deleting SIGNED (reopen first). */
+/**
+ * Delete an estimate. Backend forbids deleting SIGNED (reopen first) and is idempotent, so a
+ * replayed delete of an already-gone estimate succeeds instead of blocking the queue.
+ *
+ * Offline-capable — and not merely for convenience: the FREE cap tells a master who is over
+ * the limit to delete something, and while this went straight to the network that instruction
+ * was impossible to follow without a signal.
+ */
 export function useDeleteEstimate(estimateId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => estimatesApi.remove(estimateId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['projects'] });
-      void qc.invalidateQueries({ queryKey: ['dashboard'] });
-      void qc.invalidateQueries({ queryKey: ['project-estimates'] });
-    },
+    networkMode: 'always',
+    mutationFn: () =>
+      offlineMutate<void>({
+        entity: 'estimate', entityId: estimateId, type: 'delete', payload: {},
+        deps: [],
+        online: async () => { await estimatesApi.remove(estimateId); },
+        onOnlineSuccess: () => {
+          void qc.invalidateQueries({ queryKey: ['projects'] });
+          void qc.invalidateQueries({ queryKey: ['dashboard'] });
+          void qc.invalidateQueries({ queryKey: ['project-estimates'] });
+        },
+        optimistic: () => {
+          qc.setQueriesData<EstimateSummary[]>({ queryKey: ['project-estimates'] }, (old) =>
+            (old ?? []).filter((e) => e.id !== estimateId));
+          qc.removeQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
+        },
+      }),
   });
 }

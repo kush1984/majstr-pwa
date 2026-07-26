@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
-import { useAddItem, useRemoveItem, useCreateEstimate, useUpdateEstimate, ESTIMATE_KEY } from './useEstimate.ts';
+import {
+  useAddItem, useRemoveItem, useCreateEstimate, useUpdateEstimate, useDeleteEstimate,
+  useAddItemFromCatalog, useAddItemsFromCatalogBatch, ESTIMATE_KEY,
+} from './useEstimate.ts';
 import { clearOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import type { EstimateResponse } from '@/api/types.ts';
@@ -94,7 +97,7 @@ describe('useEstimate items — offline authoring', () => {
   });
 
   it('rename: invalidates the object screen summaries so the new name shows without a refresh', async () => {
-    onlineManager.setOnline(true); // rename is an online mutation
+    onlineManager.setOnline(true); // the ONLINE branch of the now offline-capable rename
     const { qc, wrapper } = setup();
     qc.setQueryData(['project-estimates', 'p1'], [{ id: EID, name: null }]);
     vi.mocked(estimatesApi.update).mockResolvedValue({} as EstimateResponse);
@@ -106,5 +109,123 @@ describe('useEstimate items — offline authoring', () => {
 
     // The regression: the detail cache updated but the summaries list did not.
     expect(qc.getQueryState(['project-estimates', 'p1'])?.isInvalidated).toBe(true);
+  });
+});
+
+describe('estimate fields + delete — offline', () => {
+  it('queues a status change and patches the detail AND the object-screen summary', async () => {
+    // Marking an estimate «Надіслано» on site is core work; this used to go straight to the
+    // network. SIGNED never comes from here — only the portal can sign — so a queued status
+    // change is always one the server will accept on replay.
+    const { qc, wrapper } = setup();
+    qc.setQueryData([...ESTIMATE_KEY, EID], { id: EID, status: 'DRAFT', name: null });
+    qc.setQueryData(['project-estimates', 'p1'], [{ id: EID, status: 'DRAFT', name: null }]);
+    const { result } = renderHook(() => useUpdateEstimate(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ status: 'SENT', name: 'Економ' });
+    });
+
+    expect(qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!.status).toBe('SENT');
+    expect(qc.getQueryData<{ status: string; name: string }[]>(['project-estimates', 'p1'])![0])
+      .toMatchObject({ status: 'SENT', name: 'Економ' });
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ entity: 'estimate', entityId: EID, type: 'update' });
+  });
+
+  it('queues a delete and drops the estimate from the object screen', async () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(['project-estimates', 'p1'], [{ id: EID }, { id: 'est-2' }]);
+    const { result } = renderHook(() => useDeleteEstimate(EID), { wrapper });
+
+    await act(async () => { await result.current.mutateAsync(); });
+
+    expect(qc.getQueryData<{ id: string }[]>(['project-estimates', 'p1'])!.map((e) => e.id))
+      .toEqual(['est-2']);
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ entity: 'estimate', entityId: EID, type: 'delete' });
+  });
+});
+
+describe('add from catalog — offline (how estimates are actually built)', () => {
+  const CATALOG_LIST_KEY = ['catalog', 'list', 'all'];
+
+  it('resolves the line from the CACHED catalog and queues one op per pick', async () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(CATALOG_LIST_KEY, [
+      { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL',
+        type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '' },
+    ]);
+    qc.setQueryData([...ESTIMATE_KEY, EID], {
+      id: EID, status: 'DRAFT', items: [], worksSubtotal: 0, materialsSubtotal: 0, total: 0, balance: 0,
+    });
+    const { result } = renderHook(() => useAddItemFromCatalog(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ catalogItemId: 'c1', req: { quantity: 3 } });
+    });
+
+    // The master sees a real line, not a placeholder — name/unit/price copied from the cache,
+    // and the totals re-derived by the same arithmetic the server uses.
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    expect(est.items).toHaveLength(1);
+    expect(est.items[0]).toMatchObject({ name: 'Розетка', unit: 'PIECE', unitPrice: 180, quantity: 3 });
+    expect(est.total).toBe(540);
+
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1);
+    // Replayed through the FROM-CATALOG endpoint, not the plain item add: a catalog position
+    // may legally cost 0, which the validated add form would reject on replay.
+    expect(ops[0]).toMatchObject({ entity: 'estimateItemFromCatalog', type: 'create', deps: [EID] });
+  });
+
+  it('keeps a multi-select as ONE op, with a client id per line', async () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(CATALOG_LIST_KEY, [
+      { id: 'c1', name: 'Розетка', category: null, trade: null, type: 'WORK', unit: 'PIECE', defaultPrice: 100, createdAt: '' },
+      { id: 'c2', name: 'Кабель', category: null, trade: null, type: 'MATERIAL', unit: 'M', defaultPrice: 40, createdAt: '' },
+    ]);
+    qc.setQueryData([...ESTIMATE_KEY, EID], {
+      id: EID, status: 'DRAFT', items: [], worksSubtotal: 0, materialsSubtotal: 0, total: 0, balance: 0,
+    });
+    const { result } = renderHook(() => useAddItemsFromCatalogBatch(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync([
+        { catalogItemId: 'c1', quantity: 2 },
+        { catalogItemId: 'c2', quantity: 5 },
+      ]);
+    });
+
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    expect(est.items).toHaveLength(2);
+    expect(est.worksSubtotal).toBe(200);
+    expect(est.materialsSubtotal).toBe(200);
+
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1); // ONE op, not two — online it stays a single round trip
+    const payload = ops[0].payload as { items: { id?: string }[] };
+    expect(payload.items).toHaveLength(2);
+    // Per-line ids: a partially-applied batch resumes instead of duplicating what landed.
+    expect(new Set(payload.items.map((i) => i.id)).size).toBe(2);
+  });
+
+  it('skips the optimistic line when the catalog is not cached, but still queues the add', async () => {
+    // Honesty over invention: without the catalog we cannot know the name or price, so we show
+    // nothing rather than a fake line. The server still copies it correctly on replay.
+    const { qc, wrapper } = setup();
+    qc.setQueryData([...ESTIMATE_KEY, EID], {
+      id: EID, status: 'DRAFT', items: [], worksSubtotal: 0, materialsSubtotal: 0, total: 0, balance: 0,
+    });
+    const { result } = renderHook(() => useAddItemFromCatalog(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ catalogItemId: 'unknown', req: { quantity: 1 } });
+    });
+
+    expect(qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!.items).toHaveLength(0);
+    expect(await listOutbox()).toHaveLength(1);
   });
 });

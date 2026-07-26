@@ -60,12 +60,16 @@ describe('AddItemSheet — catalog multi-select', () => {
 
     // The sticky "add N" button appears and triggers ONE batch call with both.
     fireEvent.click(screen.getByRole('button', { name: /Додати 2/ }));
+    // Each entry now also carries a client-generated id: the pick is authored offline-first,
+    // and per-line ids let a partially-applied batch resume instead of duplicating what landed.
     await waitFor(() =>
       expect(estimatesApi.addItemsFromCatalogBatch).toHaveBeenCalledWith('e1', [
-        { catalogItemId: 'i1', quantity: 1, sortOrder: 5 },
-        { catalogItemId: 'i2', quantity: 1, sortOrder: 6 },
+        { catalogItemId: 'i1', quantity: 1, sortOrder: 5, id: expect.any(String) },
+        { catalogItemId: 'i2', quantity: 1, sortOrder: 6, id: expect.any(String) },
       ]),
     );
+    const sent = vi.mocked(estimatesApi.addItemsFromCatalogBatch).mock.calls[0][1];
+    expect(new Set(sent.map((e) => e.id)).size).toBe(2); // distinct, not one id reused
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 

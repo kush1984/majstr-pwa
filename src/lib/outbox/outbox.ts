@@ -1,5 +1,6 @@
 import { onlineManager } from '@tanstack/react-query';
 import { outboxDb } from './db.ts';
+import { tokens } from '@/lib/tokens.ts';
 import type { NewOutboxOp, OutboxHandler, OutboxOp } from './types.ts';
 
 /**
@@ -91,10 +92,13 @@ export function initSyncStatus(): void {
   void refreshPending();
 }
 
-/** Queue an offline mutation. */
+/** Queue an offline mutation, stamped with the master who authored it. */
 export async function enqueue(op: NewOutboxOp): Promise<void> {
   await outboxDb.ops.add({
     ...op,
+    // Stamped HERE, not at replay: by the time the queue drains the session may have died
+    // and been re-established, and we need to know who actually did the work.
+    ownerId: op.ownerId ?? tokens.ownerId() ?? undefined,
     status: 'pending',
     attempts: 0,
     createdAt: op.createdAt ?? Date.now(),
@@ -168,7 +172,13 @@ export async function dropBlockedOps(): Promise<string[]> {
   return [...doomed];
 }
 
-/** Wipe the queue (logout / dead session). Never throws — runs in cleanup paths. */
+/**
+ * Wipe the queue outright. Never throws — runs in cleanup paths.
+ *
+ * Reserved for the cases where unsynced work genuinely must not survive: the master chose
+ * "discard" at the re-sync prompt. **A dying session is no longer one of them** — see
+ * {@link discardForeignOps}.
+ */
 export async function clearOutbox(): Promise<void> {
   try {
     await outboxDb.ops.clear();
@@ -177,6 +187,32 @@ export async function clearOutbox(): Promise<void> {
   }
   cachedPending = 0;
   emitStatus();
+}
+
+/**
+ * Drop every queued op that does NOT belong to `ownerId`, and report how many remain.
+ *
+ * Called right after a login. This is what makes keeping the queue across a logout safe: work
+ * authored by a different master (or by a pre-v2 build, which carries no owner at all) is
+ * destroyed before a single request goes out, so it can never be replayed into the wrong
+ * account. What survives is the current master's own unsynced work, which the caller then
+ * offers back to them.
+ */
+export async function discardForeignOps(ownerId: string | null): Promise<number> {
+  try {
+    const all = await outboxDb.ops.toArray();
+    const foreign = all.filter((op) => !ownerId || op.ownerId !== ownerId);
+    if (foreign.length > 0) {
+      await outboxDb.ops.bulkDelete(foreign.map((op) => op.seq!).filter((s) => s !== undefined));
+    }
+    const remaining = all.length - foreign.length;
+    cachedPending = remaining;
+    emitStatus();
+    return remaining;
+  } catch {
+    /* IndexedDB unavailable — treat as an empty queue rather than blocking the login. */
+    return 0;
+  }
 }
 
 let flushing = false;

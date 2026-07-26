@@ -104,19 +104,53 @@ export function useUpdateProject() {
   });
 }
 
+/**
+ * Delete an object and everything under it. Offline-capable — and load-bearing for it: the
+ * FREE cap tells a master who is over the limit to delete something, which was impossible to
+ * act on without a signal. The backend delete is idempotent, so a replay can't block the queue.
+ */
 export function useDeleteProject() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateProjects();
   return useMutation({
-    mutationFn: (id: string) => projectsApi.remove(id),
-    onSuccess: invalidate,
+    networkMode: 'always',
+    mutationFn: (id: string) =>
+      offlineMutate<void>({
+        entity: 'project', entityId: id, type: 'delete', payload: {},
+        deps: [],
+        online: async () => { await projectsApi.remove(id); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          qc.setQueriesData<ProjectResponse[]>({ queryKey: [...PROJECTS_KEY, 'list'] }, (old) =>
+            (old ?? []).filter((p) => p.id !== id));
+          qc.removeQueries({ queryKey: [...PROJECTS_KEY, 'detail', id] });
+        },
+      }),
   });
 }
 
+/**
+ * Change the object's status (planning → in progress → done). A separate outbox entity from
+ * the field update: a queue can outlive an app update, so reshaping the existing `project`
+ * update payload would break ops already sitting in a master's IndexedDB.
+ */
 export function useSetProjectStatus() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateProjects();
   return useMutation({
+    networkMode: 'always',
     mutationFn: ({ id, status }: { id: string; status: ProjectStatus }) =>
-      projectsApi.setStatus(id, status),
-    onSuccess: invalidate,
+      offlineMutate<void>({
+        entity: 'projectStatus', entityId: id, type: 'update', payload: { status },
+        deps: [],
+        online: async () => { await projectsApi.setStatus(id, status); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          qc.setQueriesData<ProjectResponse[]>({ queryKey: [...PROJECTS_KEY, 'list'] }, (old) =>
+            (old ?? []).map((p) => (p.id === id ? { ...p, status } : p)));
+          qc.setQueryData<ProjectResponse>([...PROJECTS_KEY, 'detail', id], (old) =>
+            (old ? { ...old, status } : old));
+        },
+      }),
   });
 }

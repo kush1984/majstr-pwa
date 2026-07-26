@@ -86,11 +86,13 @@ export const estimatesApi = {
     estimateId: string,
     catalogItemId: string,
     req: EstimateItemFromCatalogRequest,
+    id?: string,
   ): Promise<EstimateItemResponse> {
     return api
       .post<EstimateItemResponse>(
         `/api/estimates/${estimateId}/items/from-catalog/${catalogItemId}`,
         req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined,
       )
       .then((r) => r.data);
   },

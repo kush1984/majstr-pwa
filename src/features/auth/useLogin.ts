@@ -4,7 +4,9 @@ import type { AuthResponse, LoginRequest } from '@/api/types.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
-import { clearOutbox } from '@/lib/outbox/outbox.ts';
+import { discardForeignOps } from '@/lib/outbox/outbox.ts';
+import { toast } from '@/hooks/useToast.ts';
+import i18n from '@/lib/i18n.ts';
 import { ME_QUERY_KEY } from './useMe.ts';
 
 export function useLogin() {
@@ -21,10 +23,14 @@ export function useLogin() {
       // Also drop the PERSISTED cache — a hard reload would otherwise rehydrate the previous
       // account's data before this session primes. Async; the persister re-saves the new cache.
       void clearPersistedCache();
-      // And the outbox: a fresh login must never replay a prior account's unsynced writes under
-      // the new user (cross-account safety). Re-sync-on-relogin for the SAME user is slice 3.
-      void clearOutbox();
       tokens.set(data.accessToken, data.refreshToken);
+      // The outbox is no longer wiped on logout, so a queue may be waiting here. Keep only what
+      // THIS master authored and destroy the rest before any request goes out — that is what
+      // makes retention safe. What survives is their own unsynced work, which the normal
+      // reconnect flush then drains; tell them so it isn't a silent surprise.
+      void discardForeignOps(data.user.id).then((kept) => {
+        if (kept > 0) toast.info(i18n.t('sync.restoredAfterLogin', { count: kept }));
+      });
       // Prime the cache so the dashboard renders instantly without
       // an extra /me round-trip.
       qc.setQueryData(ME_QUERY_KEY, data.user);

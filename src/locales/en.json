@@ -212,8 +212,11 @@
     "entity": {
       "client": "Client",
       "project": "Object",
+      "projectStatus": "Object status",
       "estimate": "Estimate",
       "estimateItem": "Line item",
+      "estimateItemFromCatalog": "Catalog line",
+      "estimateItemsFromCatalogBatch": "Catalog lines",
       "measurementRoom": "Room",
       "measurementItem": "Measurement",
       "catalogItem": "Catalog",
@@ -222,7 +225,8 @@
     },
     "reviewStuckBody": "These changes ({{n}}) could not be sent — the app ran out of retries. Check your connection and try again, or delete them.",
     "reasonStuck": "could not be sent — out of retries",
-    "dropAllHint": "Related changes that cannot be saved without them will be deleted too."
+    "dropAllHint": "Related changes that cannot be saved without them will be deleted too.",
+    "restoredAfterLogin": "Restored {{count}} unsynced changes. Syncing."
   },
   "auth": {
     "loginTitle": "Sign in",
@@ -927,7 +931,7 @@
     "settingsSoon": "Profile settings — coming soon",
     "logout": "Sign out",
     "logoutConfirm": "Log out on this device?",
-    "logoutUnsyncedConfirm": "You have {{n}} unsynced changes. Logging out will wipe them from this device. Better to connect and let them sync first. Log out anyway?",
+    "logoutUnsyncedConfirm": "You have {{n}} unsynced changes. They stay on this device and will sync the next time you log into this account. Log out?",
     "limitReached": "Object limit reached. Upgrade your plan to create more.",
     "companyLogo": "Company logo",
     "companyLogoBranded": "For branded PDFs",

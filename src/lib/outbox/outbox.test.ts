@@ -2,8 +2,10 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   clearOutbox, dropBlockedOps, enqueue, flushOutbox, getSyncStatus, listBlockedOps, listOutbox,
+  discardForeignOps,
   MAX_ATTEMPTS, outboxCount, registerOutboxHandler, retryBlockedOps, setOutboxErrorClassifier,
 } from './outbox.ts';
+import { tokens } from '@/lib/tokens.ts';
 
 beforeEach(async () => {
   await clearOutbox();
@@ -198,6 +200,52 @@ describe('outbox engine', () => {
     await enqueue({ entityId: 'c1', entity: 'client', type: 'create', payload: {}, deps: [] });
     expect(await outboxCount()).toBe(1);
     await clearOutbox();
+    expect(await outboxCount()).toBe(0);
+  });
+});
+
+describe('owner tagging — the queue outlives a logout without leaking between accounts', () => {
+  /** A decodable access token whose `sub` is the given user id. */
+  function tokenFor(userId: string): string {
+    return `header.${btoa(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + 900 }))}.sig`;
+  }
+
+  it('stamps the authoring master onto every queued op', async () => {
+    tokens.set(tokenFor('master-a'), 'r');
+
+    await enqueue({ entityId: 'c1', entity: 'client', type: 'create', payload: {}, deps: [] });
+
+    expect((await listOutbox())[0].ownerId).toBe('master-a');
+  });
+
+  it('keeps the signed-in master\'s work and destroys everyone else\'s', async () => {
+    tokens.set(tokenFor('master-a'), 'r');
+    await enqueue({ entityId: 'a1', entity: 'client', type: 'create', payload: {}, deps: [] });
+    tokens.set(tokenFor('master-b'), 'r');
+    await enqueue({ entityId: 'b1', entity: 'client', type: 'create', payload: {}, deps: [] });
+
+    const kept = await discardForeignOps('master-a');
+
+    expect(kept).toBe(1);
+    expect((await listOutbox()).map((o) => o.entityId)).toEqual(['a1']);
+  });
+
+  it('drops ops with no owner — a pre-upgrade queue is never claimed by whoever logs in', async () => {
+    // Rows written before ownerId existed cannot be attributed. Guessing would risk replaying
+    // one master's work into another's account; dropping them matches the OLD behaviour (the
+    // queue was wiped on every logout anyway), so nobody is worse off.
+    tokens.clear();
+    await enqueue({ entityId: 'legacy', entity: 'client', type: 'create', payload: {}, deps: [] });
+
+    expect(await discardForeignOps('master-a')).toBe(0);
+    expect(await outboxCount()).toBe(0);
+  });
+
+  it('discards everything when nobody is signed in', async () => {
+    tokens.set(tokenFor('master-a'), 'r');
+    await enqueue({ entityId: 'a1', entity: 'client', type: 'create', payload: {}, deps: [] });
+
+    expect(await discardForeignOps(null)).toBe(0);
     expect(await outboxCount()).toBe(0);
   });
 });

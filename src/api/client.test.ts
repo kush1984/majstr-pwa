@@ -184,7 +184,8 @@ describe('api 401-retry interceptor', () => {
     expect(tokens.getAccess()).toBe('opaque-token'); // tokens kept
     expect(tokens.getRefresh()).toBe('refresh-1');
   });
-// Regression: a global JSON Content-Type used to ride along on FormData bodies, so every
+
+  // Regression: a global JSON Content-Type used to ride along on FormData bodies, so every
   // file upload reached Spring as application/json and died with 415. Real masters hit this
   // on sketch/parse in production (Sentry JAVA-SPRING-BOOT-D).
   it('drops the JSON Content-Type on FormData so the browser can set the multipart boundary', async () => {

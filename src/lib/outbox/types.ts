@@ -43,6 +43,20 @@ export interface OutboxOp {
   attempts: number;
   lastError?: string;
   createdAt: number;
+  /**
+   * Who authored this op (the access token's `sub`), stamped at enqueue time.
+   *
+   * The queue used to be wiped on EVERY auth transition — safe, but it meant a master whose
+   * session died on a bad connection lost work they had already done. Tagging the owner lets
+   * the queue outlive a logout: on the next login, ops belonging to that same master are
+   * offered back, and anything belonging to someone else is dropped before a single request
+   * goes out.
+   *
+   * Optional only for rows written before this field existed (see the Dexie v2 upgrade) —
+   * those are treated as un-ownable and discarded, which is exactly what would have happened
+   * to them anyway.
+   */
+  ownerId?: string;
 }
 
 /** New-op input — the engine fills seq/status/attempts/createdAt. */

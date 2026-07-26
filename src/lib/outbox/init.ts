@@ -8,8 +8,10 @@ import { measurementsApi } from '@/api/measurements.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import type {
-  CatalogItemRequest, ClientRequest, EstimateCreateRequest, EstimateItemRequest,
-  MeasurementItemRequest, MeasurementRoomRequest, ProjectRequest, TemplateItemRequest, Trade,
+  BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
+  EstimateItemFromCatalogRequest, EstimateItemRequest,
+  EstimateUpdateRequest, MeasurementItemRequest, MeasurementRoomRequest, ProjectRequest,
+  ProjectStatus, TemplateItemRequest, Trade,
 } from '@/api/types.ts';
 
 /**
@@ -41,11 +43,24 @@ export function initOutbox(qc: QueryClient): () => void {
     }
   });
 
-  // Estimate create — entityId is the estimate id; the project id rides the payload.
+  // Object status — a SEPARATE handler rather than another branch of 'project'. A queue can
+  // outlive an app update, and reshaping the existing 'project' update payload would break any
+  // op already sitting in a master's IndexedDB. A new entity name costs nothing and can't.
+  registerOutboxHandler('projectStatus', async (op) => {
+    const p = op.payload as { status: ProjectStatus };
+    await projectsApi.setStatus(op.entityId, p.status);
+  });
+
+  // Estimate — entityId is the estimate id; create carries the project id in its payload.
   registerOutboxHandler('estimate', async (op) => {
-    const p = op.payload as { projectId: string; req: EstimateCreateRequest };
     if (op.type === 'create') {
+      const p = op.payload as { projectId: string; req: EstimateCreateRequest };
       await estimatesApi.createForProject(p.projectId, p.req, op.entityId);
+    } else if (op.type === 'update') {
+      const p = op.payload as { req: EstimateUpdateRequest };
+      await estimatesApi.update(op.entityId, p.req);
+    } else {
+      await estimatesApi.remove(op.entityId);
     }
   });
 
@@ -59,6 +74,25 @@ export function initOutbox(qc: QueryClient): () => void {
     } else {
       await estimatesApi.removeItem(p.estimateId, op.entityId);
     }
+  });
+
+  // Lines copied from the catalog. Replayed through the FROM-CATALOG endpoint, not the plain
+  // item add: a catalog position may legally cost 0 (V27/V29 relaxed the CHECKs for exactly
+  // that), while the validated add form demands >= 0.01 — so routing these through `addItem`
+  // would queue such lines happily and have the server reject them on replay.
+  registerOutboxHandler('estimateItemFromCatalog', async (op) => {
+    const p = op.payload as {
+      estimateId: string; catalogItemId: string; req: EstimateItemFromCatalogRequest;
+    };
+    await estimatesApi.addItemFromCatalog(p.estimateId, p.catalogItemId, p.req, op.entityId);
+  });
+
+  // A multi-select add stays ONE op carrying the whole selection: online it is still a single
+  // round trip, and each entry has its own client id, so a partially-applied batch resumes per
+  // line instead of duplicating everything that already landed.
+  registerOutboxHandler('estimateItemsFromCatalogBatch', async (op) => {
+    const p = op.payload as { estimateId: string; items: BatchCatalogItemEntry[] };
+    await estimatesApi.addItemsFromCatalogBatch(p.estimateId, p.items);
   });
 
   // Measurement rooms — entityId is the ROOM id; the object id rides the payload.
