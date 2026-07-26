@@ -82,7 +82,7 @@ describe('outbox engine', () => {
     expect(await outboxCount()).toBe(0);
   });
 
-  it('stops retrying an op after MAX_ATTEMPTS failed flushes', async () => {
+  it('an op that exhausts MAX_ATTEMPTS becomes BLOCKED, not a phantom "pending"', async () => {
     let calls = 0;
     registerOutboxHandler('client', async () => { calls += 1; throw new Error('always fails'); });
     await enqueue({ entityId: 'c1', entity: 'client', type: 'create', payload: {}, deps: [] });
@@ -90,7 +90,29 @@ describe('outbox engine', () => {
     for (let i = 0; i < MAX_ATTEMPTS + 3; i++) await flushOutbox();
 
     expect(calls).toBe(MAX_ATTEMPTS);     // capped — no infinite retry loop
-    expect(await outboxCount()).toBe(1);  // left queued for the "needs attention" list
+    expect(await outboxCount()).toBe(1);  // kept, never silently discarded
+
+    // The regression this locks: it used to stay `failed`, which meant skipped by every
+    // later flush YET counted as pending — the badge said "syncing…" forever, the master
+    // believed the write would land, and there was no screen that listed it.
+    const blocked = await listBlockedOps();
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].blockReason).toBe('stuck');
+    expect(getSyncStatus().blocked).toBe(1);
+    expect(getSyncStatus().pending).toBe(0);
+  });
+
+  it('a stuck op can be retried once the network is back', async () => {
+    let failing = true;
+    registerOutboxHandler('client', async () => { if (failing) throw new Error('offline'); });
+    await enqueue({ entityId: 'c1', entity: 'client', type: 'create', payload: {}, deps: [] });
+    for (let i = 0; i < MAX_ATTEMPTS; i++) await flushOutbox();
+    expect(getSyncStatus().blocked).toBe(1);
+
+    failing = false;
+    await retryBlockedOps(); // resets attempts and flushes
+
+    expect(await outboxCount()).toBe(0); // the write finally lands — not lost after all
   });
 
   it('tracks the pending count in the reactive sync status', async () => {
@@ -140,6 +162,35 @@ describe('outbox engine', () => {
     expect(dropped).toEqual(['c1']);
     expect(await outboxCount()).toBe(0);
     expect(getSyncStatus().blocked).toBe(0);
+  });
+
+  it('dropping a blocked parent CASCADES to its children instead of orphaning them', async () => {
+    // The real scenario: offline over the FREE cap the master creates object P, estimate E
+    // under it, and an item I under E. Only P is blocked. Deleting P used to remove P alone,
+    // which RELEASED E and I to replay against an object the server never got — they 404'd,
+    // retried, and died stuck. One tap, three writes silently lost.
+    setOutboxErrorClassifier((e) => ((e as Error).message === 'limit' ? 'limit' : 'retry'));
+    let childRan = false;
+    registerOutboxHandler('project', async () => { throw new Error('limit'); });
+    registerOutboxHandler('estimate', async () => { childRan = true; });
+    registerOutboxHandler('item', async () => { childRan = true; });
+
+    await enqueue({ entityId: 'p1', entity: 'project', type: 'create', payload: {}, deps: [] });
+    await enqueue({ entityId: 'e1', entity: 'estimate', type: 'create', payload: {}, deps: ['p1'] });
+    await enqueue({ entityId: 'i1', entity: 'item', type: 'create', payload: {}, deps: ['e1'] });
+
+    await flushOutbox();
+    expect(getSyncStatus().blocked).toBe(1); // only the parent is blocked
+    expect(await outboxCount()).toBe(3);     // children still waiting on it
+
+    const dropped = await dropBlockedOps();
+
+    // The grandchild goes too — it only reaches p1 through e1, so the closure must be transitive.
+    expect([...dropped].sort()).toEqual(['e1', 'i1', 'p1']);
+    expect(await outboxCount()).toBe(0);
+
+    await flushOutbox();
+    expect(childRan).toBe(false); // nothing was released to fire at a non-existent parent
   });
 
   it('clearOutbox empties the queue', async () => {

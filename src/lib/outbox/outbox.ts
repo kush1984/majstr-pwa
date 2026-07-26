@@ -129,13 +129,43 @@ export async function retryBlockedOps(): Promise<{ synced: number; failed: numbe
   return flushOutbox();
 }
 
-/** Discard every blocked op (the master chose not to keep them). Returns the dropped entityIds so
- *  the caller can drop the matching optimistic cache entries. */
+/**
+ * Discard every blocked op AND everything that hangs off it. Returns all dropped entityIds so
+ * the caller can purge the matching optimistic cache entries.
+ *
+ * <p>The cascade is the point. A child only waits while a matching op is still queued, so
+ * deleting just the blocked rows RELEASED its dependents to replay against a parent that was
+ * never created: offline the master makes project P (blocked — over the FREE cap), estimate E
+ * `deps:[P]` and its items; tapping "delete" removed P, then E fired
+ * `createForProject(P, …)` → 404 → retried → died at MAX_ATTEMPTS. The master deleted one
+ * thing and silently lost three.</p>
+ */
 export async function dropBlockedOps(): Promise<string[]> {
-  const blocked = await listBlockedOps();
-  await outboxDb.ops.where('status').equals('blocked').delete();
+  const all = await outboxDb.ops.toArray();
+  const doomed = new Set<string>(
+    all.filter((o) => o.status === 'blocked').map((o) => o.entityId),
+  );
+
+  // Transitive closure: an op dies if it targets a doomed entity (a later edit of the same
+  // row) or depends on one. Repeat until nothing new is added — a grandchild reaches the
+  // dropped parent only through its parent.
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const op of all) {
+      if (doomed.has(op.entityId)) continue;
+      if (op.deps.some((d) => doomed.has(d))) {
+        doomed.add(op.entityId);
+        grew = true;
+      }
+    }
+  }
+
+  const seqs = all
+    .filter((o) => doomed.has(o.entityId) && o.seq !== undefined)
+    .map((o) => o.seq as number);
+  await outboxDb.ops.bulkDelete(seqs);
   await refreshPending();
-  return blocked.map((o) => o.entityId);
+  return [...doomed];
 }
 
 /** Wipe the queue (logout / dead session). Never throws — runs in cleanup paths. */
@@ -180,7 +210,13 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
         // Cross-entity deps: wait for a dependency (e.g. an estimate's object) still unfinished.
         if (op.deps.some((d) => d !== op.entityId && ops.some((o) => o.entityId === d && unfinished(o)))) continue;
         if (op.status === 'blocked') continue; // needs a user decision — never auto-retried
-        if (op.attempts >= MAX_ATTEMPTS) continue; // stuck — stop retrying (surfaced in the sync UI)
+        if (op.attempts >= MAX_ATTEMPTS) {
+          // Heals ops left over from a build that only `continue`d here: they sat as
+          // `failed` at the cap forever, counted as pending, with no way for the master
+          // to see or resolve them. Promote to the terminal state on first sight.
+          await outboxDb.ops.update(seq, { status: 'blocked', blockReason: 'stuck' });
+          continue;
+        }
         const handler = handlers.get(op.entity);
         if (!handler) continue; // no handler (e.g. an entity a newer build owns) — leave it
         attempted.add(seq);
@@ -193,10 +229,21 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
         } catch (e) {
           const kind = classifyError(e);
           if (kind === 'retry') {
-            await outboxDb.ops.update(seq, {
-              status: 'failed', attempts: op.attempts + 1, lastError: errMessage(e),
-            });
-            failedEntityIds.add(op.entityId);
+            const attempts = op.attempts + 1;
+            if (attempts >= MAX_ATTEMPTS) {
+              // Out of retries. This is the moment the write is really lost, so it must
+              // become TERMINAL and visible: left as `failed` it was skipped by every later
+              // flush yet still counted as pending, so the badge said "syncing…" forever and
+              // the master believed the write would land. It never would.
+              await outboxDb.ops.update(seq, {
+                status: 'blocked', blockReason: 'stuck', attempts, lastError: errMessage(e),
+              });
+            } else {
+              await outboxDb.ops.update(seq, {
+                status: 'failed', attempts, lastError: errMessage(e),
+              });
+              failedEntityIds.add(op.entityId);
+            }
           } else {
             // Permanent rejection (over the FREE limit, or another 4xx) — block it for the user to
             // resolve (PRO or delete); do not retry, and it keeps blocking its dependents.

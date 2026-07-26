@@ -219,7 +219,10 @@
       "catalogItem": "Catalog",
       "estimateTemplate": "Template",
       "templateItem": "Template position"
-    }
+    },
+    "reviewStuckBody": "These changes ({{n}}) could not be sent — the app ran out of retries. Check your connection and try again, or delete them.",
+    "reasonStuck": "could not be sent — out of retries",
+    "dropAllHint": "Related changes that cannot be saved without them will be deleted too."
   },
   "auth": {
     "loginTitle": "Sign in",

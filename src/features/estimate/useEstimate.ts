@@ -48,7 +48,13 @@ export function useEstimate(id: string) {
   });
 }
 
-function useInvalidateEstimate(estimateId: string) {
+/**
+ * The FULL set of screens an estimate change affects. Exported so every writer uses the
+ * same one: the receipt import used to invalidate only the estimate itself, so appending a
+ * ₴5 000 receipt left the object list, the dashboard and the economy showing the old total
+ * until they happened to refetch.
+ */
+export function useInvalidateEstimate(estimateId: string) {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });

@@ -25,7 +25,16 @@ export function SyncReviewSheet({ open, onClose }: { open: boolean; onClose: () 
   const qc = useQueryClient();
   const blocked = useBlockedOps();
   const overLimit = blocked.some((o) => o.blockReason === 'limit');
+  // "Stuck" is a different story from a server rejection: nobody refused these, the app ran
+  // out of retries. Saying "сервер не прийняв" about them would be a lie.
+  const allStuck = blocked.length > 0 && blocked.every((o) => o.blockReason === 'stuck');
   const [busy, setBusy] = useState(false);
+
+  const body = overLimit
+    ? t('sync.reviewLimitBody', { n: blocked.length })
+    : allStuck
+      ? t('sync.reviewStuckBody', { n: blocked.length })
+      : t('sync.reviewBody', { n: blocked.length });
 
   // Once everything is resolved (retry succeeded, or all deleted), close.
   useEffect(() => {
@@ -50,15 +59,18 @@ export function SyncReviewSheet({ open, onClose }: { open: boolean; onClose: () 
   return (
     <Modal open={open} onClose={onClose} title={t('sync.reviewTitle')}>
       <div className="space-y-3">
-        <p className="text-sm text-secondary">
-          {overLimit ? t('sync.reviewLimitBody', { n: blocked.length }) : t('sync.reviewBody', { n: blocked.length })}
-        </p>
+        <p className="text-sm text-secondary">{body}</p>
 
         <ul className="space-y-1.5">
           {blocked.map((op) => (
-            <li key={op.seq} className="flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-sm">
-              <span className="text-muted">{t(`sync.entity.${op.entity}`)}</span>
-              <span className="min-w-0 flex-1 truncate font-medium text-primary">{opName(op)}</span>
+            <li key={op.seq} className="rounded-lg border border-border bg-surface-sunken px-3 py-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-muted">{t(`sync.entity.${op.entity}`)}</span>
+                <span className="min-w-0 flex-1 truncate font-medium text-primary">{opName(op)}</span>
+              </div>
+              {op.blockReason === 'stuck' && (
+                <p className="mt-0.5 text-xs text-amber">{t('sync.reasonStuck')}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -70,6 +82,9 @@ export function SyncReviewSheet({ open, onClose }: { open: boolean; onClose: () 
           <Button fullWidth variant="secondary" loading={busy} onClick={() => void dropAll()}>
             {t('sync.dropAll')}
           </Button>
+          {/* Deleting cascades: an estimate queued under a dropped object cannot land either,
+              so it goes too. Say so BEFORE the tap, not after. */}
+          <p className="text-center text-xs text-muted">{t('sync.dropAllHint')}</p>
           <button type="button" onClick={onClose} className="w-full py-2 text-center text-sm text-muted">
             {t('sync.later')}
           </button>

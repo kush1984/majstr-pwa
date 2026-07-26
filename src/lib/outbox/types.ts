@@ -30,8 +30,16 @@ export interface OutboxOp {
    * retried automatically.
    */
   status: 'pending' | 'failed' | 'blocked';
-  /** Why a `blocked` op is blocked: `limit` → offer PRO; `other` → a different permanent rejection. */
-  blockReason?: 'limit' | 'other';
+  /**
+   * Why a `blocked` op is blocked:
+   * - `limit` → over the FREE cap; offer PRO.
+   * - `stuck` → it exhausted {@link MAX_ATTEMPTS}. NOT a server rejection: the engine gave up
+   *   retrying, so it must stop being counted as "pending / will retry" and be shown to the
+   *   master instead. Without this state such an op sat in the queue forever while the badge
+   *   promised it was still syncing.
+   * - `other` → a different permanent rejection (a real 4xx).
+   */
+  blockReason?: 'limit' | 'stuck' | 'other';
   attempts: number;
   lastError?: string;
   createdAt: number;

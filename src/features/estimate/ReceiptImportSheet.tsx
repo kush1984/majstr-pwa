@@ -17,7 +17,7 @@ import { parseDecimal } from '@/lib/decimal.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { cn } from '@/lib/cn.ts';
-import { ESTIMATE_KEY } from './useEstimate.ts';
+import { useInvalidateEstimate } from './useEstimate.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
 const UNITS: Unit[] = ['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'];
@@ -61,6 +61,7 @@ export function ReceiptImportSheet({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const invalidateEstimate = useInvalidateEstimate(estimateId);
   const { online } = useOnlineGuard(); // LLM recognition is server-side — no offline path
   const [step, setStep] = useState<Step>('source');
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -148,7 +149,9 @@ export function ReceiptImportSheet({
           category: null,
         })),
       );
-      void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
+      // The estimate total changed, so the object list, dashboard and economy are stale
+      // too — use the shared set, not just this estimate.
+      invalidateEstimate();
       toast.success(t('receipt.added', { count: included.length }));
       // The receipt is also the master's real cost — offer to log it as an object expense
       // (closes the cash-flow loop). Then offer to keep the receipt photo.
