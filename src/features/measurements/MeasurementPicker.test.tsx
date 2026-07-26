@@ -6,6 +6,7 @@ import '@/lib/i18n.ts';
 import { MeasurementPicker } from './MeasurementPicker.tsx';
 import { measurementsApi } from '@/api/measurements.ts';
 import type { MeasurementsResponse } from '@/api/types.ts';
+import { asInput } from '@/test/dom.ts';
 
 vi.mock('@/api/measurements.ts', () => ({ measurementsApi: { tree: vi.fn() } }));
 
@@ -15,7 +16,7 @@ const tree: MeasurementsResponse = {
   pieceTotal: 0,
   rooms: [
     {
-      id: 'r1', name: 'Спальня', sortOrder: 0, areaTotal: 30, linearTotal: 5, pieceTotal: 0,
+      id: 'r1', name: 'Спальня', floor: null, sortOrder: 0, areaTotal: 30, linearTotal: 5, pieceTotal: 0,
       items: [
         { id: 'i1', name: 'Стеля', type: 'SURFACE', unit: 'M2', result: 20, sortOrder: 0, payload: { segments: [], openings: [] } },
         { id: 'i2', name: 'Підлога', type: 'SURFACE', unit: 'M2', result: 10, sortOrder: 1, payload: { segments: [], openings: [] } },
@@ -55,7 +56,7 @@ describe('MeasurementPicker', () => {
 
     // i1 pre-checked (selection memory); tick i2 as well → 20 + 10 = 30.
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes[0].checked).toBe(true); // Стеля
+    expect(asInput(boxes[0]).checked).toBe(true); // Стеля
     fireEvent.click(boxes[1]); // Підлога
 
     fireEvent.click(screen.getByRole('button', { name: 'Застосувати' }));

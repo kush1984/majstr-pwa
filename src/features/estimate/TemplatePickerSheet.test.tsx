@@ -40,7 +40,7 @@ describe('TemplatePickerSheet', () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
     const detail: EstimateTemplateDetail = {
       id: 'def1', name: 'Санвузол повний', trade: 'TILING', isDefault: true,
-      items: [{ name: 'Грунтовка поверхонь', type: 'WORK', unit: 'M2', sortOrder: 0 }],
+      items: [{ id: 'ti1', name: 'Грунтовка поверхонь', type: 'WORK', unit: 'M2', sortOrder: 0 }],
     };
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(detail);
     const onPick = vi.fn();

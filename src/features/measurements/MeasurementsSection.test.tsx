@@ -28,14 +28,14 @@ const tree: MeasurementsResponse = {
   pieceTotal: 28,
   rooms: [
     {
-      id: 'r1', name: 'Спальня', sortOrder: 0, areaTotal: 30, linearTotal: 5, pieceTotal: 0,
+      id: 'r1', name: 'Спальня', floor: null, sortOrder: 0, areaTotal: 30, linearTotal: 5, pieceTotal: 0,
       items: [
         { id: 'i1', name: 'Стеля', type: 'SURFACE', unit: 'M2', result: 30, sortOrder: 0, payload: { segments: [], openings: [] } },
         { id: 'i3', name: 'Відкоси', type: 'LINEAR', unit: 'LINEAR_METER', result: 5, sortOrder: 1, payload: { height: 0, width: 0, sides: { left: true, right: true, top: true, bottom: false }, qty: 1 } },
       ],
     },
     {
-      id: 're', name: 'Електрика', sortOrder: 1, areaTotal: 0, linearTotal: 12, pieceTotal: 28,
+      id: 're', name: 'Електрика', floor: null, sortOrder: 1, areaTotal: 0, linearTotal: 12, pieceTotal: 28,
       items: [
         { id: 'e1', name: 'Точки з плану', type: 'ELECTRICAL_POINTS', unit: 'PIECE', result: 28, sortOrder: 0, payload: { points: [] } },
         { id: 'e2', name: 'Штроба · кухня', type: 'SHTROBA', unit: 'LINEAR_METER', result: 12, sortOrder: 1, payload: { busLevel: 2600, busFromTop: true, busLength: 1000, busChase: true, reservePct: 10, points: [] } },

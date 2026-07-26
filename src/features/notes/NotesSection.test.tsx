@@ -6,6 +6,7 @@ import '@/lib/i18n.ts';
 import { NotesSection } from './NotesSection.tsx';
 import { notesApi } from '@/api/notes.ts';
 import type { NoteResponse } from '@/api/types.ts';
+import { asButton } from '@/test/dom.ts';
 
 vi.mock('@/api/notes.ts', () => ({
   notesApi: { list: vi.fn(), add: vi.fn(), update: vi.fn(), remove: vi.fn() },
@@ -59,10 +60,10 @@ describe('NotesSection', () => {
 
     // Save stays disabled until the body has content.
     const save = screen.getByRole('button', { name: 'Зберегти' });
-    expect(save.disabled).toBe(true);
+    expect(asButton(save).disabled).toBe(true);
 
     fireEvent.change(screen.getByPlaceholderText(/Текст нотатки/), { target: { value: 'ключі в консьєржа' } });
-    expect((screen.getByRole('button', { name: 'Зберегти' })).disabled).toBe(false);
+    expect(asButton(screen.getByRole('button', { name: 'Зберегти' })).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(notesApi.add).toHaveBeenCalledTimes(1));

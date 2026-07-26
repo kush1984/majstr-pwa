@@ -8,15 +8,11 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { authApi } from '@/api/auth.ts';
 import type { UserResponse } from '@/api/types.ts';
+import { aUser } from '@/test/factories.ts';
 
 vi.mock('@/api/auth.ts', () => ({ authApi: { me: vi.fn() } }));
 
-const me: UserResponse = {
-  id: 'u1', email: 'm@e.com', fullName: 'Денис', trades: ['ELECTRICAL'], phone: '1',
-  companyName: null, logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
-  createdAt: '', consentedToPrivacyAt: '', acknowledgedClientDataAt: '',
-  planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'r1',
-};
+const me: UserResponse = aUser({ fullName: 'Денис' });
 
 beforeEach(() => {
   vi.clearAllMocks();

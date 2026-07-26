@@ -6,6 +6,7 @@ import '@/lib/i18n.ts';
 import { ProjectImportSheet } from './ProjectImportSheet.tsx';
 import { projectImportApi } from '@/api/projectImport.ts';
 import type { ProjectImportParseResponse } from '@/api/types.ts';
+import { anImportFloor, anImportRoom } from '@/test/factories.ts';
 
 vi.mock('@/api/projectImport.ts', () => ({
   projectImportApi: { parse: vi.fn(), commit: vi.fn() },
@@ -20,27 +21,26 @@ const empty: ProjectImportParseResponse = {
 const schedule: ProjectImportParseResponse = {
   ...empty,
   totalAreaM2: 30,
-  floors: [{
-    floor: null,
-    rooms: [{ number: '4', name: 'Спальня', areaM2: 30, perimeterMm: null, wallSegmentsMm: null, openings: [], confidence: 'high', note: null }],
-  }],
+  // The schedule table alone: an area, but no gabarits to check it against.
+  floors: [anImportFloor({
+    rooms: [anImportRoom({ number: '4', name: 'Спальня', areaM2: 30 })],
+  })],
 };
 
 const plan: ProjectImportParseResponse = {
   ...empty,
-  floors: [{
-    floor: null,
-    // Confirmed gabarits (5×6 = 30 m² matches the schedule) → real per-wall geometry.
-    rooms: [{
-      number: '4', name: null, areaM2: 30, perimeterMm: null, wallSegmentsMm: null,
-      widthMm: 5000, lengthMm: 6000, cutWidthMm: null, cutDepthMm: null, ceilingHmm: null,
+  // Confirmed gabarits (5×6 = 30 m² matches the schedule) → real per-wall geometry.
+  floors: [anImportFloor({
+    rooms: [anImportRoom({
+      number: '4', name: null, areaM2: 30,
+      widthMm: 5000, lengthMm: 6000,
       openings: [
         { kind: 'вікно', wMm: 1400, hMm: 1500, sillMm: 900, note: null },
         { kind: 'двері', wMm: 900, hMm: 2100, sillMm: null, note: null },
       ],
-      confidence: 'medium', note: null,
-    }],
-  }],
+      confidence: 'medium',
+    })],
+  })],
 };
 
 function renderSheet() {
@@ -134,14 +134,12 @@ describe('ProjectImportSheet', () => {
     // in silence and the master saw a room of zeros with no explanation.
     const mismatched: ProjectImportParseResponse = {
       ...empty,
-      floors: [{
-        floor: null,
-        rooms: [{
-          number: '4', name: 'Спальня', areaM2: 30, perimeterMm: null, wallSegmentsMm: null,
-          widthMm: 5000, lengthMm: 4000, cutWidthMm: null, cutDepthMm: null, ceilingHmm: 2700,
-          openings: [], confidence: 'high', note: null,
-        }],
-      }],
+      floors: [anImportFloor({
+        rooms: [anImportRoom({
+          number: '4', name: 'Спальня', areaM2: 30,
+          widthMm: 5000, lengthMm: 4000, ceilingHmm: 2700,
+        })],
+      })],
     };
     vi.mocked(projectImportApi.parse).mockResolvedValue(mismatched);
     vi.mocked(projectImportApi.commit).mockResolvedValue({ rooms: [], areaTotal: 0, linearTotal: 0, pieceTotal: 0 });

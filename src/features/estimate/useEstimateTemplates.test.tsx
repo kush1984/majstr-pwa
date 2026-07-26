@@ -32,7 +32,7 @@ function seed(qc: QueryClient) {
   ]);
   qc.setQueryData<EstimateTemplateDetail>(detailKey('t1'), {
     id: 't1', name: 'Санвузол', trade: 'PLUMBING', isDefault: false,
-    items: [{ id: 'i1', name: 'Монтаж унітаза', type: 'WORK', unit: 'PCS', sortOrder: 0 }],
+    items: [{ id: 'i1', name: 'Монтаж унітаза', type: 'WORK', unit: 'PIECE', sortOrder: 0 }],
   });
 }
 
@@ -57,7 +57,7 @@ describe('useEstimateTemplates — offline authoring (queued)', () => {
     const { result } = renderHook(() => useAddTemplateItem('t1'), { wrapper });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Монтаж змішувача', type: 'WORK', unit: 'PCS' });
+      await result.current.mutateAsync({ name: 'Монтаж змішувача', type: 'WORK', unit: 'PIECE' });
     });
 
     const detail = qc.getQueryData<EstimateTemplateDetail>(detailKey('t1'));

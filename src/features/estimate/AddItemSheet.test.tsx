@@ -8,6 +8,7 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import type { CatalogItemResponse, UserResponse } from '@/api/types.ts';
+import { aUser, anEstimate } from '@/test/factories.ts';
 
 vi.mock('@/api/catalog.ts', () => ({
   catalogApi: { list: vi.fn(), create: vi.fn(), categories: vi.fn(), search: vi.fn() },
@@ -19,11 +20,7 @@ vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-const me: UserResponse = {
-  id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
-  companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
-  createdAt: '2026-01-01',
-};
+const me: UserResponse = aUser();
 const catalog: CatalogItemResponse[] = [
   { id: 'i1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '' },
   { id: 'i2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, createdAt: '' },
@@ -50,10 +47,7 @@ beforeEach(() => {
 describe('AddItemSheet — catalog multi-select', () => {
   it('selects several catalog items and adds them in one batch request', async () => {
     vi.mocked(catalogApi.list).mockResolvedValue(catalog);
-    vi.mocked(estimatesApi.addItemsFromCatalogBatch).mockResolvedValue({
-      id: 'e1', projectId: 'p1', name: null, status: 'DRAFT', validUntil: null, notes: null,
-      createdAt: '', updatedAt: '', items: [], worksSubtotal: 0, materialsSubtotal: 0, total: 0,
-    });
+    vi.mocked(estimatesApi.addItemsFromCatalogBatch).mockResolvedValue(anEstimate());
     const onClose = vi.fn();
 
     renderSheet(onClose);

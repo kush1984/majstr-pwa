@@ -6,6 +6,7 @@ import { isAtLimit, usePlanLimits } from './usePlanLimits.ts';
 import { planApi } from '@/api/plan.ts';
 import { tokens } from '@/lib/tokens.ts';
 import type { PlanLimits } from '@/api/types.ts';
+import { aPlanLimits } from '@/test/factories.ts';
 
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
 
@@ -39,7 +40,7 @@ describe('isAtLimit', () => {
 });
 
 describe('usePlanLimits', () => {
-  const free: PlanLimits = { plan: 'FREE', maxProjects: 2, maxEstimatesPerProject: 3 };
+  const free: PlanLimits = aPlanLimits({ maxProjects: 2, maxEstimatesPerProject: 3 });
 
   it('fetches the plan limits when logged in', async () => {
     tokens.set('access', 'refresh');

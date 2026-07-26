@@ -6,6 +6,7 @@ import '@/lib/i18n.ts';
 import { SketchReviewSheet } from './SketchReviewSheet.tsx';
 import { sketchImportApi } from '@/api/sketchImport.ts';
 import type { SketchParseResponse } from '@/api/types.ts';
+import { asButton } from '@/test/dom.ts';
 
 vi.mock('@/api/sketchImport.ts', () => ({
   sketchImportApi: { parse: vi.fn(), commit: vi.fn() },
@@ -84,7 +85,7 @@ describe('SketchReviewSheet', () => {
 
     // "Фронтон" has an incomplete triangle (only b) → its result is invalid → commit disabled.
     const commitBtn = screen.getByRole('button', { name: /Додати до замірів/ });
-    expect(commitBtn.disabled).toBe(true);
+    expect(asButton(commitBtn).disabled).toBe(true);
 
     // Remove the flagged element (2nd delete-item button) → only the valid ceiling remains.
     const dels = screen.getAllByLabelText('Видалити елемент');
@@ -92,7 +93,7 @@ describe('SketchReviewSheet', () => {
 
     await waitFor(() => {
       const btn = screen.getByRole('button', { name: /Додати до замірів/ });
-      expect(btn.disabled).toBe(false);
+      expect(asButton(btn).disabled).toBe(false);
     });
   });
 
@@ -104,7 +105,7 @@ describe('SketchReviewSheet', () => {
     fireEvent.click(screen.getAllByLabelText('Видалити елемент')[1]); // drop the invalid one
     await waitFor(() => {
       const btn = screen.getByRole('button', { name: /Додати до замірів/ });
-      expect(btn.disabled).toBe(false);
+      expect(asButton(btn).disabled).toBe(false);
     });
     fireEvent.click(screen.getByRole('button', { name: /Додати до замірів/ }));
 

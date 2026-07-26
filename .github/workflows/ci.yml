@@ -38,11 +38,11 @@ jobs:
       - name: Type-check (app)
         run: npx tsc -b
 
-      # Separate from the app check: the test/e2e sources have never been
-      # type-checked, so they carry a backlog of stale mocks. Non-blocking until
-      # that backlog is cleared — then fold it into the step above and drop this.
-      - name: Type-check (tests) — advisory
-        continue-on-error: true
+      # Separate program from the app check (different tsconfig), but just as blocking:
+      # the stale-mock backlog these sources carried is cleared, and shared fixtures in
+      # src/test/ keep it from coming back. A mock that drifts from its API type now
+      # fails CI instead of silently rendering the wrong branch under test.
+      - name: Type-check (tests)
         run: npm run typecheck:tests
 
       - name: Unit tests

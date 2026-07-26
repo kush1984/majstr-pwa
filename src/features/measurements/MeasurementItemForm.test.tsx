@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { MeasurementItemForm } from './MeasurementItemForm.tsx';
+import { asButton, asInput } from '@/test/dom.ts';
 
 describe('MeasurementItemForm', () => {
   it('builds a LINEAR payload (perimeter sides × count) and computes the result', () => {
@@ -92,8 +93,8 @@ describe('MeasurementItemForm', () => {
     );
 
     // Pre-shapes rows have no unit — they were metres, and the sides land on a/b.
-    expect((screen.getByLabelText(/^a ширина/)).value).toBe('5.31');
-    expect((screen.getByLabelText(/^b висота/)).value).toBe('3.69');
+    expect(asInput(screen.getByLabelText(/^a ширина/)).value).toBe('5.31');
+    expect(asInput(screen.getByLabelText(/^b висота/)).value).toBe('3.69');
     expect(screen.getByRole('button', { name: 'м' }).className).toContain('border-brand');
   });
 
@@ -109,8 +110,8 @@ describe('MeasurementItemForm', () => {
       />,
     );
     // A blank rectangle with empty a/b fields — ready to measure, never a locked direct area.
-    expect((screen.getByLabelText(/^a ширина/)).value).toBe('');
-    expect((screen.getByLabelText(/^b висота/)).value).toBe('');
+    expect(asInput(screen.getByLabelText(/^a ширина/)).value).toBe('');
+    expect(asInput(screen.getByLabelText(/^b висота/)).value).toBe('');
     expect(screen.getByRole('button', { name: 'Прямокутник' }).className).toContain('bg-primary');
   });
 
@@ -119,7 +120,7 @@ describe('MeasurementItemForm', () => {
     render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
     // No name, no dimensions → save disabled.
     const save = screen.getByRole('button', { name: 'Зберегти' });
-    expect(save.disabled).toBe(true);
+    expect(asButton(save).disabled).toBe(true);
   });
 
   it('builds a SHTROBA payload (explicit bus + per-drop chase) as the chase/cable calculator', () => {

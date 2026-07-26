@@ -6,6 +6,7 @@ import '@/lib/i18n.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
 import { portalApi } from '@/api/portal.ts';
 import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
+import { asInput } from '@/test/dom.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
@@ -57,7 +58,7 @@ describe('SharePortalSheet', () => {
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
   });
 
   it('publishes exactly the ticked set before copying the link', async () => {
@@ -83,7 +84,7 @@ describe('SharePortalSheet', () => {
 
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => b.checked)).toEqual([true, true]);
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true]);
   });
 
   it('unticking everything offers "hide all" instead of copy', async () => {

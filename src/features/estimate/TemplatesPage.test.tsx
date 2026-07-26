@@ -13,6 +13,8 @@ import type {
   EstimateTemplateSummary,
   UserResponse,
 } from '@/api/types.ts';
+import { aUser } from '@/test/factories.ts';
+import { asButton } from '@/test/dom.ts';
 
 vi.mock('@/api/estimateTemplates.ts', () => ({
   estimateTemplatesApi: {
@@ -32,11 +34,7 @@ vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-const me: UserResponse = {
-  id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
-  companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
-  createdAt: '2026-01-01',
-};
+const me: UserResponse = aUser();
 const own: EstimateTemplateSummary = {
   id: 'own1', name: 'Моя ванна', trade: null, isDefault: false, itemCount: 1,
 };
@@ -84,8 +82,8 @@ describe('TemplatesPage — edit own template', () => {
     expect(rows).toHaveLength(2);
     const presentRow = rows.find((r) => r.textContent?.includes('Розетка'))!;
     const freshRow = rows.find((r) => r.textContent?.includes('Кабель ВВГ'))!;
-    expect(presentRow.disabled).toBe(true);
-    expect(freshRow.disabled).toBe(false);
+    expect(asButton(presentRow).disabled).toBe(true);
+    expect(asButton(freshRow).disabled).toBe(false);
 
     // Select the fresh one → add → addItem called with its name/type/unit.
     fireEvent.click(freshRow);

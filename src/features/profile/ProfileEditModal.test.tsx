@@ -8,6 +8,7 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import type { UserResponse } from '@/api/types.ts';
+import { aUser } from '@/test/factories.ts';
 
 vi.mock('@/api/profile.ts', () => ({
   profileApi: { update: vi.fn(), uploadLogo: vi.fn(), deleteLogo: vi.fn() },
@@ -20,19 +21,12 @@ vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-const me: UserResponse = {
-  id: 'u1',
-  email: 'master@example.com',
-  fullName: 'Іван Майстер',
-  trades: ['ELECTRICAL'],
+// verified → email field read-only, no email validation in the way
+const me: UserResponse = aUser({
   phone: '+380501112233',
   companyName: 'ФОП Майстер',
-  logoUrl: null,
-  plan: 'FREE',
-  role: 'USER',
-  emailVerified: true, // verified → email field read-only, no email validation in the way
-  createdAt: '2026-01-01T00:00:00Z',
-};
+  emailVerified: true,
+});
 
 function renderModal(qc: QueryClient) {
   const wrapper = ({ children }: { children: ReactNode }) => (

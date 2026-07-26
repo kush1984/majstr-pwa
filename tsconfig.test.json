@@ -15,6 +15,11 @@
   "include": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
+    "src/test/**/*.ts",
+    // Vite's `define` globals (__APP_VERSION__) are declared here. App sources pulled in
+    // transitively by a test reference them, so without this the test program alone cannot
+    // resolve them — an error that exists in no other build.
+    "src/vite-env.d.ts",
     "e2e/**/*.ts",
     "e2e-offline/**/*.ts",
     "vitest.config.ts",

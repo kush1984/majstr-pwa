@@ -7,6 +7,7 @@ import { ME_QUERY_KEY } from './useMe.ts';
 import { authApi } from '@/api/auth.ts';
 import { tokens } from '@/lib/tokens.ts';
 import type { AuthResponse, UserResponse } from '@/api/types.ts';
+import { aUser } from '@/test/factories.ts';
 
 vi.mock('@/api/auth.ts', () => ({ authApi: { login: vi.fn() } }));
 vi.mock('@/lib/sentry.ts', () => ({ setSentryUser: vi.fn() }));
@@ -14,19 +15,14 @@ vi.mock('@/lib/sentry.ts', () => ({ setSentryUser: vi.fn() }));
 const CATALOG_KEY = ['catalog', 'list', 'all'] as const;
 
 function userB(): UserResponse {
-  return {
+  // Only the identity matters here — this test is about whose cache gets cleared on login.
+  return aUser({
     id: 'user-b',
     email: 'b@example.com',
     fullName: 'Майстер Б',
     trades: ['PLUMBING'],
-    phone: '+380000000002',
     companyName: 'Б',
-    logoUrl: null,
-    plan: 'FREE',
-    role: 'USER',
-    emailVerified: true,
-    createdAt: '2026-06-12T00:00:00Z',
-  };
+  });
 }
 
 function authResponse(user: UserResponse): AuthResponse {

@@ -102,7 +102,7 @@ describe('recomputeTree', () => {
     const tree: MeasurementsResponse = {
       areaTotal: 0, linearTotal: 0, pieceTotal: 0,
       rooms: [{
-        id: 'r1', name: 'Кухня', sortOrder: 0, areaTotal: 0, linearTotal: 0, pieceTotal: 0,
+        id: 'r1', name: 'Кухня', floor: null, sortOrder: 0, areaTotal: 0, linearTotal: 0, pieceTotal: 0,
         items: [
           { id: 'a', name: 'Стеля', type: 'SURFACE', unit: 'M2', result: 12, payload: {} as never, sortOrder: 0 },
           { id: 'b', name: 'Відкоси', type: 'LINEAR', unit: 'LINEAR_METER', result: 5, payload: {} as never, sortOrder: 1 },
