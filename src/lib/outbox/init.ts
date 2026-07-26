@@ -7,10 +7,13 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
+import { notesApi } from '@/api/notes.ts';
+import { economyApi } from '@/api/economy.ts';
 import type {
   BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest,
-  EstimateUpdateRequest, MeasurementItemRequest, MeasurementRoomRequest, ProjectRequest,
+  EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
+  NoteRequest, ProjectRequest,
   ProjectStatus, TemplateItemRequest, Trade,
 } from '@/api/types.ts';
 
@@ -116,6 +119,30 @@ export function initOutbox(qc: QueryClient): () => void {
       await measurementsApi.updateItem(p.objectId, p.roomId, op.entityId, p.req!);
     } else {
       await measurementsApi.deleteItem(p.objectId, p.roomId, op.entityId);
+    }
+  });
+
+  // Object notes — entityId is the NOTE id; the object id rides the payload.
+  registerOutboxHandler('note', async (op) => {
+    const p = op.payload as { objectId: string; req?: NoteRequest };
+    if (op.type === 'create') {
+      await notesApi.add(p.objectId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await notesApi.update(p.objectId, op.entityId, p.req!);
+    } else {
+      await notesApi.remove(p.objectId, op.entityId);
+    }
+  });
+
+  // Object expenses (PRO) — entityId is the EXPENSE id; the object id rides the payload.
+  registerOutboxHandler('expense', async (op) => {
+    const p = op.payload as { objectId: string; req?: ExpenseRequest };
+    if (op.type === 'create') {
+      await economyApi.addExpense(p.objectId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await economyApi.updateExpense(p.objectId, op.entityId, p.req!);
+    } else {
+      await economyApi.deleteExpense(p.objectId, op.entityId);
     }
   });
 

@@ -50,3 +50,18 @@ jobs:
 
       - name: Build
         run: npx vite build
+
+      # The offline SHELL check, on the real production bundle.
+      #
+      # Nothing above it can see this class of bug: the unit suite has no service worker, and
+      # the regular e2e runs on the Vite dev server where the SW is deliberately disabled. That
+      # is exactly how "Ви не в мережі" on a refreshed deep route reached a real master.
+      #
+      # Only shell.spec — it needs no backend. The sibling journey.spec registers a real account
+      # and drains the outbox, so it needs Postgres + the API and stays a local/manual run until
+      # this workflow grows services.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Offline shell e2e (production build + service worker)
+        run: npm run test:e2e:offline:shell

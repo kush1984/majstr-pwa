@@ -203,13 +203,17 @@ export function CatalogPage() {
                     onClick={() => setEditing(item)}
                     className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-primary">
+                    <span className="min-w-0 flex-1">
+                      {/* Wraps instead of truncating: catalog names are long and specific
+                          («Профіль/куточок для плитки алюмінієвий 10 мм»), and the tail is
+                          exactly what tells two positions apart — a master could not read
+                          which one they were tapping. Same treatment as the template rows. */}
+                      <span className="block break-words text-sm font-medium text-primary">
                         {item.name}
                       </span>
                       <span className="block text-xs text-muted">
-                      {t('unitPer', { unit: t('units.' + item.unit) })}
-                    </span>
+                        {t('unitPer', { unit: t('units.' + item.unit) })}
+                      </span>
                     </span>
                     <span className="whitespace-nowrap text-sm font-bold text-primary">
                       {formatMoney(item.defaultPrice)}

@@ -67,6 +67,9 @@ describe('NotesSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(notesApi.add).toHaveBeenCalledTimes(1));
-    expect(notesApi.add).toHaveBeenCalledWith('p1', { title: null, phone: null, body: 'ключі в консьєржа' });
+    // The third argument is the client-generated id: notes are authored offline-first, so the
+    // add carries an idempotency key and a replay returns the existing note instead of a copy.
+    expect(notesApi.add).toHaveBeenCalledWith(
+      'p1', { title: null, phone: null, body: 'ключі в консьєржа' }, expect.any(String));
   });
 });

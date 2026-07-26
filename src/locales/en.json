@@ -221,7 +221,9 @@
       "measurementItem": "Measurement",
       "catalogItem": "Catalog",
       "estimateTemplate": "Template",
-      "templateItem": "Template position"
+      "templateItem": "Template position",
+      "note": "Note",
+      "expense": "Expense"
     },
     "reviewStuckBody": "These changes ({{n}}) could not be sent — the app ran out of retries. Check your connection and try again, or delete them.",
     "reasonStuck": "could not be sent — out of retries",

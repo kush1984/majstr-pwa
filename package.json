@@ -1,7 +1,7 @@
 {
   "name": "majstr-pwa",
   "private": true,
-  "version": "0.37.0",
+  "version": "0.38.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:offline": "playwright test --config=playwright.offline.config.ts",
+    "test:e2e:offline:shell": "playwright test --config=playwright.offline.config.ts e2e-offline/shell.spec.ts",
     "typecheck:tests": "tsc -b tsconfig.test.json"
   },
   "dependencies": {

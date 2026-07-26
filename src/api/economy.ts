@@ -19,8 +19,11 @@ export const economyApi = {
     return api.get<ExpenseResponse[]>(`/api/projects/${objectId}/expenses`).then((r) => r.data);
   },
 
-  addExpense(objectId: string, req: ExpenseRequest): Promise<ExpenseResponse> {
-    return api.post<ExpenseResponse>(`/api/projects/${objectId}/expenses`, req).then((r) => r.data);
+  addExpense(objectId: string, req: ExpenseRequest, id?: string): Promise<ExpenseResponse> {
+    return api
+      .post<ExpenseResponse>(`/api/projects/${objectId}/expenses`, req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
   },
 
   updateExpense(objectId: string, expenseId: string, req: ExpenseRequest): Promise<ExpenseResponse> {

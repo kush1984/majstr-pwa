@@ -11,8 +11,10 @@ export const notesApi = {
   list(objectId: string): Promise<NoteResponse[]> {
     return api.get<NoteResponse[]>(base(objectId)).then((r) => r.data);
   },
-  add(objectId: string, req: NoteRequest): Promise<NoteResponse> {
-    return api.post<NoteResponse>(base(objectId), req).then((r) => r.data);
+  add(objectId: string, req: NoteRequest, id?: string): Promise<NoteResponse> {
+    return api
+      .post<NoteResponse>(base(objectId), req, id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
   },
   update(objectId: string, noteId: string, req: NoteRequest): Promise<NoteResponse> {
     return api.patch<NoteResponse>(`${base(objectId)}/${noteId}`, req).then((r) => r.data);
