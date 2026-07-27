@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +19,7 @@ import {
   type CatalogItemFormValues,
 } from './catalogItemSchema.ts';
 import {
-  useCatalogCategories,
+  useCatalog,
   useCreateCatalogItem,
   useDeleteCatalogItem,
   useUpdateCatalogItem,
@@ -44,7 +44,10 @@ export function CatalogItemForm({
   const create = useCreateCatalogItem();
   const update = useUpdateCatalogItem();
   const del = useDeleteCatalogItem();
-  const categories = useCatalogCategories();
+  // Categories come from the catalog list rather than the /categories endpoint: this query
+  // carries each item's TRADE (so the dropdown can be narrowed to the one being edited) and it is
+  // the query the offline prefetch stores, so the dropdown is populated with no connection too.
+  const catalog = useCatalog();
   const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Only worth choosing a trade when the master has more than one.
@@ -63,6 +66,7 @@ export function CatalogItemForm({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<CatalogItemFormValues>({
     resolver: zodResolver(catalogItemSchema),
@@ -72,11 +76,38 @@ export function CatalogItemForm({
           type: initial.type,
           unit: initial.unit,
           category: initial.category ?? '',
+          newCategory: '',
           trade: initial.trade ?? 'OTHER',
           defaultPrice: String(initial.defaultPrice),
         }
-      : { name: '', type: 'WORK', unit: 'PIECE', category: '', trade: defaultTrade ?? 'OTHER', defaultPrice: '' },
+      : {
+          name: '',
+          type: 'WORK',
+          unit: 'PIECE',
+          category: '',
+          newCategory: '',
+          trade: defaultTrade ?? 'OTHER',
+          defaultPrice: '',
+        },
   });
+
+  // The trade is live: picking a different one re-narrows the category list under it.
+  const selectedTrade = watch('trade');
+  const selectedCategory = watch('category');
+  const categoryOptions = useMemo(() => {
+    const found = new Set<string>();
+    for (const item of catalog.data ?? []) {
+      const c = item.category?.trim();
+      if (c && (item.trade ?? 'OTHER') === selectedTrade) found.add(c);
+    }
+    // Whatever is currently selected stays on the list even when it belongs to another trade.
+    // Without this, switching trade would leave the <select> pointing at a value it no longer
+    // offers — the browser falls back to the first option, and the category is gone on save.
+    for (const own of [initial?.category?.trim(), selectedCategory?.trim()]) {
+      if (own) found.add(own);
+    }
+    return [...found].sort((a, b) => a.localeCompare(b, 'uk'));
+  }, [catalog.data, selectedTrade, selectedCategory, initial?.category]);
 
   const submitting = create.isPending || update.isPending;
 
@@ -85,7 +116,8 @@ export function CatalogItemForm({
       name: v.name.trim(),
       type: v.type,
       unit: v.unit,
-      category: v.category.trim() || undefined,
+      // Picked from the list, or typed in when nothing was picked; blank in both means no category.
+      category: (v.category.trim() || v.newCategory.trim()) || undefined,
       // Always a trade (OTHER = "Інше" when unspecified); when the picker is hidden
       // (single-trade master) the form value is the item's existing/default trade.
       trade: v.trade,
@@ -148,20 +180,28 @@ export function CatalogItemForm({
         <FormField
           label={t('estimate.category')}
           htmlFor="ci-category"
-          error={errors.category?.message}
-          hint={t('catalog.categoryHint')}
+          error={errors.category?.message ?? errors.newCategory?.message}
         >
-          <Input
-            id="ci-category"
-            list="ci-category-list"
-            invalid={Boolean(errors.category)}
-            {...register('category')}
-          />
-          <datalist id="ci-category-list">
-            {(categories.data ?? []).map((c) => (
-              <option key={c} value={c} />
+          <Select id="ci-category" invalid={Boolean(errors.category)} {...register('category')}>
+            <option value="">{t('catalog.noCategory')}</option>
+            {categoryOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
-          </datalist>
+          </Select>
+          {/* Nothing picked → offer to name one. Kept visible rather than hidden behind another
+              control: on a phone an extra tap to reveal a field is a tap most masters never make,
+              and «Без категорії» is a perfectly good final answer if they leave it empty. */}
+          {!selectedCategory && (
+            <Input
+              id="ci-category-new"
+              className="mt-2"
+              placeholder={t('catalog.categoryNewPlaceholder')}
+              invalid={Boolean(errors.newCategory)}
+              {...register('newCategory')}
+            />
+          )}
         </FormField>
 
         {showTrade && (

@@ -43,7 +43,11 @@ export const catalogItemSchema = z.object({
   unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'], {
     message: i18n.t('validation.chooseUnit'),
   }),
+  // The form offers a dropdown of the trade's existing categories; `newCategory` is the free
+  // text shown when nothing is picked, so a master can name one that does not exist yet. Exactly
+  // one of the two ends up on the request (see CatalogItemForm.onSubmit).
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),
+  newCategory: z.string().max(100, i18n.t('validation.categoryTooLong')),
   // Always a trade — "no specific trade" is OTHER ("Інше"), the single catch-all.
   trade: z.enum(TRADE_VALUES),
   defaultPrice: priceString,

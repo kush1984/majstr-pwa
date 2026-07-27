@@ -643,7 +643,6 @@
     "itemsAdded": "Added {{count}} items",
     "starterAlreadyPresent": "The starter set is already in the catalog",
     "savedToCatalog": "Added to the catalog",
-    "categoryHint": "E.g. Electrical, Tiling, Demolition",
     "priceLabel": "Unit price, ₴",
     "deleteTitle": "Delete item?",
     "deleteMessage": "«{{name}}» will be removed from the catalog. Items already added to estimates will remain.",
@@ -654,7 +653,8 @@
     "addNewConfirm": "Add",
     "addNewNothingTitle": "All up to date",
     "addNewNothing": "There are no new items in the library — your catalog already has every standard item for your lines of work.",
-    "addNewAdded": "Added {{count}} new items. Don't forget to fill in your prices."
+    "addNewAdded": "Added {{count}} new items. Don't forget to fill in your prices.",
+    "categoryNewPlaceholder": "Or type a new category"
   },
   "measure": {
     "proTitle": "Object measurements — in PRO",
