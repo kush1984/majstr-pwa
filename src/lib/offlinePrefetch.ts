@@ -172,8 +172,8 @@ export async function prefetchForOffline(
     [...CATALOG_KEY, 'categories'],
     ESTIMATE_TEMPLATE_KEY,
   ] as const) {
-    const cached = qc.getQueryData(key as unknown as readonly unknown[]);
-    if (cached !== undefined) qc.setQueryData(key as unknown as readonly unknown[], cached);
+    const cached = qc.getQueryData(key);
+    if (cached !== undefined) qc.setQueryData(key, cached);
   }
 
   localStorage.setItem(LAST_RUN_KEY, String(Date.now()));
