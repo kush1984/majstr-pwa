@@ -38,6 +38,13 @@ interface RetryableRequest extends InternalAxiosRequestConfig {
 export const api = axios.create({
   baseURL: config.apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
+  // Without a timeout axios waits indefinitely, and `navigator.onLine` (what onlineManager reads)
+  // reports "online" for a phone on one bar or a Wi-Fi with no internet — the everyday state on a
+  // site. A write then took the ONLINE path, hung on a dead socket, never reached the outbox, and
+  // was lost outright if the master closed the app. Failing fast turns that into a network error,
+  // which `offlineMutate` queues instead. Safe against double-writes: a replayed create carries a
+  // client UUID the backend de-duplicates.
+  timeout: 12_000,
 });
 
 // ---------- token expiry (client-side, best-effort) ----------

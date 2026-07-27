@@ -4,7 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { registerSW } from 'virtual:pwa-register';
 import { markUpdateReady } from '@/lib/swUpdate.ts';
-import { offlinePersister } from '@/lib/offlinePersist.ts';
+import { offlinePersister, shouldDehydrateQuery } from '@/lib/offlinePersist.ts';
 import { initOutbox } from '@/lib/outbox/init.ts';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -89,7 +89,14 @@ createRoot(document.getElementById('root')!).render(
           incompatibly; `maxAge` still caps the cache's lifetime. */}
       <PersistQueryClientProvider
         client={queryClient}
-        persistOptions={{ persister: offlinePersister, maxAge: WEEK_MS, buster: CACHE_SCHEMA }}
+        persistOptions={{
+          persister: offlinePersister,
+          maxAge: WEEK_MS,
+          buster: CACHE_SCHEMA,
+          // Persist every query that HAS data, not just the ones whose last fetch succeeded —
+          // see `shouldDehydrateQuery` for why the default made the offline cache self-destruct.
+          dehydrateOptions: { shouldDehydrateQuery },
+        }}
       >
         <App />
       </PersistQueryClientProvider>

@@ -128,7 +128,8 @@ export function ProjectDetailPage() {
       </div>
     );
   }
-  if (project.isError || !project.data) {
+  // Data first: a failed offline refetch must not hide an object we still have cached.
+  if (!project.data) {
     // Transient failure (offline / backend down / 5xx) is NOT "не знайдено" —
     // offer a retry instead of suggesting the project doesn't exist.
     const status = project.error ? toAppError(project.error).status : 404;

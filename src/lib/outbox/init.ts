@@ -167,6 +167,11 @@ export function initOutbox(qc: QueryClient): () => void {
       else await estimateTemplatesApi.setTrade(op.entityId, { trade: p.trade });
     } else if (op.type === 'delete') {
       await estimateTemplatesApi.remove(op.entityId);
+    } else {
+      // A handler that just falls through RESOLVES, and the engine then deletes the op as
+      // synced — the write disappears with no error anywhere. Fail loudly instead: the op gets
+      // classified, surfaces in the sync sheet, and the master can see something went wrong.
+      throw new Error(`estimateTemplate: unsupported op type "${op.type}"`);
     }
   });
 
@@ -177,6 +182,8 @@ export function initOutbox(qc: QueryClient): () => void {
       await estimateTemplatesApi.addItem(p.templateId, p.req!, op.entityId);
     } else if (op.type === 'delete') {
       await estimateTemplatesApi.removeItem(p.templateId, op.entityId);
+    } else {
+      throw new Error(`templateItem: unsupported op type "${op.type}"`); // see note above
     }
   });
 
@@ -196,8 +203,14 @@ export function initOutbox(qc: QueryClient): () => void {
         const code = (e.response.data as { code?: string } | undefined)?.code ?? '';
         return code.includes('LIMIT') ? 'limit' : 'other';
       }
+      return 'retry'; // 5xx and the rest — worth another go
     }
-    return 'retry';
+    // A network blip has no response but IS an axios error; anything else here is our own bug
+    // (a malformed payload from an older build hitting `p.req!`, a missing handler branch).
+    // Retrying can't fix code, and pretending it might burned all 8 attempts before the op
+    // finally showed up as "stuck" — surface it immediately instead.
+    if (axios.isAxiosError(e)) return 'retry';
+    return 'other';
   });
 
   initSyncStatus(); // publish the queued-op count (leftovers from a prior offline session)

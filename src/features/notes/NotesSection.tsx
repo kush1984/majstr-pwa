@@ -27,7 +27,8 @@ export function NotesSection({ objectId }: { objectId: string }) {
   if (notes.isPending) {
     return <div className="py-8 text-center text-brand"><Spinner /></div>;
   }
-  if (notes.isError || !notes.data) {
+  // Data first: offline the refetch fails but the cached notes are still perfectly usable.
+  if (!notes.data) {
     return (
       <div className="py-6 text-center">
         <p className="mb-2 text-sm text-muted">{t('notes.loadError')}</p>

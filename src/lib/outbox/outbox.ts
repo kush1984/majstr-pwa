@@ -302,13 +302,49 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
  * Start auto-flushing: flush now, and again whenever the network comes back (TanStack
  * `onlineManager`). Returns an unsubscribe. `onFlush` reports each flush's result to the UI.
  */
+/** Backoff for the self-retry below: 15s, 30s, 60s, then every 2 min. */
+const RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
+
 export function startOutboxSync(onFlush?: (result: { synced: number; failed: number }) => void): () => void {
-  const run = () => {
-    if (onlineManager.isOnline()) void flushOutbox().then((r) => onFlush?.(r));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let misses = 0;
+
+  const run = async (): Promise<void> => {
+    if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+    if (!onlineManager.isOnline()) return;
+    const result = await flushOutbox();
+    onFlush?.(result);
+    // Re-arm ONLY while something is still waiting. Previously the sole trigger was an
+    // online/offline transition, so a flush that hit a 5xx (or a half-open connection) left the
+    // ops sitting there: the phone had signal, the badge said "syncing…", and nothing moved
+    // again until the master toggled the network or restarted the app.
+    const remaining = await outboxDb.ops
+      .filter((o) => o.status !== 'blocked')
+      .count()
+      .catch(() => 0);
+    if (remaining > 0) {
+      const delay = RETRY_DELAYS_MS[Math.min(misses, RETRY_DELAYS_MS.length - 1)];
+      misses += 1;
+      timer = setTimeout(() => void run(), delay);
+    } else {
+      misses = 0;
+    }
   };
-  const unsubscribe = onlineManager.subscribe(() => run());
-  run();
-  return unsubscribe;
+
+  const unsubscribe = onlineManager.subscribe(() => { misses = 0; void run(); });
+  // Coming back from the background is the single most valuable trigger on a phone: the master
+  // walks out of the basement with the app suspended, so no online/offline event ever fires.
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') { misses = 0; void run(); }
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  void run();
+
+  return () => {
+    unsubscribe();
+    document.removeEventListener('visibilitychange', onVisible);
+    if (timer !== undefined) clearTimeout(timer);
+  };
 }
 
 function errMessage(e: unknown): string {

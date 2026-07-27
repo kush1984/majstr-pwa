@@ -98,7 +98,11 @@ export function EstimateEditorPage() {
     );
   }
 
-  if (estimate.isError || !estimate.data) {
+  // Only DATA decides whether we can render. Offline the background refetch fails and leaves an
+  // error ON the query while the cached estimate is still right there — branching on `isError`
+  // first threw that data away, so the second visit to a screen with no signal showed
+  // "не знайдено" instead of the estimate the master had just been reading.
+  if (!estimate.data) {
     // Transient failure (offline / backend down / 5xx) is NOT "не знайдено" —
     // offer a retry instead of suggesting the estimate doesn't exist.
     const status = estimate.error ? toAppError(estimate.error).status : 404;

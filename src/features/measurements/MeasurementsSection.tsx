@@ -128,7 +128,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   if (tree.isPending) {
     return <div className="py-8 text-center text-brand"><Spinner /></div>;
   }
-  if (tree.isError || !tree.data) {
+  // Data first: offline the refetch fails but the cached tree is still perfectly usable.
+  if (!tree.data) {
     return (
       <div className="py-6 text-center">
         <p className="mb-2 text-sm text-muted">{t('measure.loadError')}</p>

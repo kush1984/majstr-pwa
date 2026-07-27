@@ -5,7 +5,7 @@ import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
 import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
-import { useSyncStatus } from '@/lib/useOnline.ts';
+import { useOnline, useSyncStatus } from '@/lib/useOnline.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import {
   lastPrefetchAt, prefetchForOffline, type PrefetchProgress,
@@ -47,6 +47,7 @@ export function ProfilePage() {
   const { data: me } = useMe();
   const logout = useLogout();
   const { pending: pendingSync } = useSyncStatus();
+  const online = useOnline();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -279,15 +280,25 @@ export function ProfilePage() {
           sub={t('profile.settingsSub')}
           onClick={() => toast.info(t('profile.settingsSoon'))}
         />
+        {/* Logging out with no signal is a trap: it clears the tokens and the local copy, but
+            signing back in needs the server — so the master is locked out of their own app until
+            the connection returns, with any queued work stranded behind the login screen. Offline
+            the row is disabled and says why, instead of quietly bricking the app on a stray tap. */}
         <button
           type="button"
+          disabled={!online}
           onClick={() => setLogoutConfirmOpen(true)}
-          className="flex w-full items-center gap-3 p-3.5 text-left"
+          className="flex w-full items-center gap-3 p-3.5 text-left disabled:opacity-50"
         >
           <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-danger-soft text-base text-danger">
             ↪
           </span>
-          <span className="text-sm font-medium text-danger">{t('profile.logout')}</span>
+          <span className="flex flex-col">
+            <span className="text-sm font-medium text-danger">{t('profile.logout')}</span>
+            {!online && (
+              <span className="text-xs text-muted">{t('profile.logoutOfflineBlocked')}</span>
+            )}
+          </span>
         </button>
         <ConfirmDialog
           open={logoutConfirmOpen}

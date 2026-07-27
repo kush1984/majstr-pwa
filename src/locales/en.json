@@ -934,6 +934,7 @@
     "logout": "Sign out",
     "logoutConfirm": "Log out on this device?",
     "logoutUnsyncedConfirm": "You have {{n}} unsynced changes. They stay on this device and will sync the next time you log into this account. Log out?",
+    "logoutOfflineBlocked": "Available only with a connection — you could not sign back in",
     "limitReached": "Object limit reached. Upgrade your plan to create more.",
     "companyLogo": "Company logo",
     "companyLogoBranded": "For branded PDFs",

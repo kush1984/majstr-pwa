@@ -160,6 +160,22 @@ export async function prefetchForOffline(
   report();
   await pool(perEstimate);
 
+  // Re-stamp the core lists so they are the FRESHEST entries in the cache. The persister retries
+  // a quota failure with `removeOldestQuery`, which evicts by `dataUpdatedAt` — and the core is
+  // fetched first here, so it was precisely what got thrown away on a big account. That is how a
+  // master ended up with every object available offline but an empty catalog, no templates and no
+  // clients to attach. Touching the data (same value, new timestamp) puts them last in line.
+  for (const key of [
+    PLAN_LIMITS_KEY,
+    [...CLIENTS_KEY, 'list'],
+    [...CATALOG_KEY, 'list', 'all'],
+    [...CATALOG_KEY, 'categories'],
+    ESTIMATE_TEMPLATE_KEY,
+  ] as const) {
+    const cached = qc.getQueryData(key as unknown as readonly unknown[]);
+    if (cached !== undefined) qc.setQueryData(key as unknown as readonly unknown[], cached);
+  }
+
   localStorage.setItem(LAST_RUN_KEY, String(Date.now()));
   return { objects: projects.length, estimates: estimateIds.length };
 }

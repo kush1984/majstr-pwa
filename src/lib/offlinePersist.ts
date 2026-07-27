@@ -31,6 +31,22 @@ export const offlinePersister = createAsyncStoragePersister({
 });
 
 /**
+ * Which queries make it into the IndexedDB snapshot.
+ *
+ * React Query's default keeps only `status === 'success'`. That is actively wrong here: with
+ * `networkMode: 'offlineFirst'` every screen opened without a signal fires a request, the request
+ * fails, and the query flips to `error` — WITH its data still attached. The default then dropped
+ * it from the next snapshot, so the offline cache erased itself as the master used it: reopen the
+ * app in a basement and the catalog, the templates, whatever had been touched were simply gone.
+ *
+ * Keep everything that HAS data. Stale data beats a blank screen, and it is replaced the moment a
+ * real fetch succeeds.
+ */
+export function shouldDehydrateQuery(query: { state: { data: unknown } }): boolean {
+  return query.state.data !== undefined;
+}
+
+/**
  * Drop the persisted cache from IndexedDB. Fire-and-forget safe: NEVER throws — it runs inside
  * logout / login / the dead-session redirect, which must not break if IndexedDB is unavailable
  * (private mode, a quota error, or a test env with no `indexedDB` where `del` throws synchronously).
