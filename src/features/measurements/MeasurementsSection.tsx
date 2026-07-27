@@ -6,6 +6,8 @@ import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { toast } from '@/hooks/useToast.ts';
@@ -92,6 +94,7 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
   const hasElectrical = ELECTRICAL_MEASUREMENTS_ENABLED && (me?.trades ?? []).includes('ELECTRICAL');
 
+  const online = useOnline();
   const tree = useMeasurements(objectId, isPro);
   const actions = useMeasurementActions(objectId);
 
@@ -129,6 +132,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
     return <div className="py-8 text-center text-brand"><Spinner /></div>;
   }
   // Data first: offline the refetch fails but the cached tree is still perfectly usable.
+  // With nothing cached, offline is its own state — a retry there can only fail again.
+  if (!tree.data && !online) return <OfflineNotCached compact what={t('offline.dataMeasurements')} />;
   if (!tree.data) {
     return (
       <div className="py-6 text-center">

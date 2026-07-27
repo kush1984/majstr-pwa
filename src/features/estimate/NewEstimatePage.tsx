@@ -21,7 +21,7 @@ import {
 import { useCreateProject, useProjects } from '@/features/projects/useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
-import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
+import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
@@ -94,7 +94,11 @@ export function NewEstimatePage() {
         : await createEstimate.mutateAsync({ projectId: proj.id, req });
       void navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
-      toast.error(toAppError(err).message);
+      // A template whose composition was never cached can't be applied offline — say so
+      // usefully ("open it once online") instead of surfacing the raw bundle key.
+      toast.error(err instanceof TemplateNotCachedError
+        ? t('offline.templateNotCached')
+        : toAppError(err).message);
       setBusy(false);
     }
   };
@@ -135,13 +139,14 @@ export function NewEstimatePage() {
             >
               {t('templates.emptyEstimate')}
             </button>
+            {/* Works offline: the picker reads the cached template list, and applying one is
+                composed on the device (see useApplyTemplate). Only the file/photo import below
+                still needs the server. */}
             <button
               type="button"
-              onClick={guard(() => setPickerOpen(true))}
-              disabled={!online}
-              title={offlineTitle}
+              onClick={() => setPickerOpen(true)}
               className={cn(
-                'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50',
+                'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
                 template && !importMode
                   ? 'border-brand bg-brand-soft text-brand'
                   : 'border-border bg-surface text-primary',

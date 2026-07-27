@@ -7,6 +7,8 @@ import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -110,7 +112,12 @@ export function TemplatesPage() {
           <Spinner />
         </div>
       ) : isError && !data ? (
-        <ErrorState error={error} title={t('templates.loadError')} onRetry={() => void refetch()} />
+        <ErrorState
+          error={error}
+          title={t('templates.loadError')}
+          what={t('offline.dataTemplates')}
+          onRetry={() => void refetch()}
+        />
       ) : (
         <div className="space-y-6">
           <TradeFilterChips
@@ -276,6 +283,7 @@ function TradeMove({
 /** Read-only composition — what a row tap shows (own and default alike). */
 function Preview({ templateId }: { templateId: string }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending } = useEstimateTemplate(templateId);
 
   if (isPending) {
@@ -286,9 +294,11 @@ function Preview({ templateId }: { templateId: string }) {
     );
   }
   // NO data (never cached, and we're offline / the request failed) is NOT "this template is empty" —
-  // saying so would be a lie about the master's own template. Be honest about what happened.
+  // saying so would be a lie about the master's own template. Be honest about what happened, and
+  // offline that means saying how to fix it.
+  if (!data && !online) return <OfflineNotCached compact what={t('offline.dataTemplateItems')} />;
   if (!data) {
-    return <p className="py-3 text-center text-xs text-muted">{t('templates.compositionOffline')}</p>;
+    return <p className="py-3 text-center text-xs text-muted">{t('errors.unavailableText')}</p>;
   }
 
   const items = data.items ?? [];
@@ -321,6 +331,7 @@ function EditModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending } = useEstimateTemplate(template.id);
   const rename = useRenameTemplate();
   const removeItem = useRemoveTemplateItem(template.id);
@@ -371,8 +382,12 @@ function EditModal({
             <Spinner />
           </div>
         ) : !data ? (
-          // No cached detail (offline) — don't claim the template is empty.
-          <p className="py-3 text-center text-xs text-muted">{t('templates.compositionOffline')}</p>
+          // No cached detail — don't claim the template is empty.
+          online ? (
+            <p className="py-3 text-center text-xs text-muted">{t('errors.unavailableText')}</p>
+          ) : (
+            <OfflineNotCached compact what={t('offline.dataTemplateItems')} />
+          )
         ) : items.length === 0 ? (
           <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>
         ) : (
@@ -457,6 +472,7 @@ function CatalogPicker({
   existingNames: string[];
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending } = useCatalog();
   const { data: me } = useMe();
   const addItem = useAddTemplateItem(templateId);
@@ -521,6 +537,9 @@ function CatalogPicker({
       <div className="max-h-[30dvh] space-y-1.5 overflow-y-auto">
         {isPending ? (
           <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
+        ) : !online && (data?.length ?? 0) === 0 ? (
+          // Not "нічого не знайдено" — the catalog simply never reached the device.
+          <OfflineNotCached compact what={t('offline.dataCatalog')} />
         ) : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
         ) : (

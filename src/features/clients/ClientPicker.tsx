@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
 import { useClients } from '@/features/clients/useClients.ts';
@@ -69,6 +71,7 @@ export function ClientPicker({
   allowNone?: boolean;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const clients = useClients();
   const { data: me } = useMe();
   const [search, setSearch] = useState('');
@@ -164,6 +167,9 @@ export function ClientPicker({
             <div className="flex justify-center py-4 text-brand">
               <Spinner />
             </div>
+          ) : !online && (clients.data?.length ?? 0) === 0 ? (
+            // "Немає клієнтів" would deny clients the master really has — they are just not here.
+            <OfflineNotCached compact what={t('offline.dataClients')} />
           ) : filtered.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border py-4 text-center text-sm text-muted">
               {t('estimate.noClients')}

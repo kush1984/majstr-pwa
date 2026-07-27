@@ -28,7 +28,7 @@ import { SharePortalSheet } from './SharePortalSheet.tsx';
 import { ConsolidateSheet } from '@/features/estimate/ConsolidateSheet.tsx';
 import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
 import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
-import { useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
+import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
@@ -134,7 +134,13 @@ export function ProjectDetailPage() {
     // offer a retry instead of suggesting the project doesn't exist.
     const status = project.error ? toAppError(project.error).status : 404;
     if (project.isError && status !== 404 && status !== 403) {
-      return <ErrorState error={project.error} onRetry={() => void project.refetch()} />;
+      return (
+        <ErrorState
+          error={project.error}
+          what={t('offline.dataProject')}
+          onRetry={() => void project.refetch()}
+        />
+      );
     }
     return (
       <EmptyState
@@ -159,9 +165,11 @@ export function ProjectDetailPage() {
     setEstimateChoiceOpen(false);
     createEmptyEstimate();
   };
-  // Applying a template builds the estimate server-side (prices matched against my catalog),
-  // so it can't be queued — an empty estimate is the offline path.
-  const onPickTemplate = guard(async (tpl: EstimateTemplateSummary) => {
+  // Works offline: `useApplyTemplate` composes the estimate on the device from the cached
+  // template and catalog (same name-matching rule as the server) and queues it. This is the
+  // second entry point for that action — the wizard has the other one, and both must behave
+  // the same, or the master just meets the wall from a different screen.
+  const onPickTemplate = async (tpl: EstimateTemplateSummary) => {
     setTemplatePickerOpen(false);
     setEstimateChoiceOpen(false);
     try {
@@ -169,9 +177,11 @@ export function ProjectDetailPage() {
       void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
       void navigate(routes.estimate(e.id));
     } catch (err) {
-      toast.error(toAppError(err).message);
+      toast.error(err instanceof TemplateNotCachedError
+        ? t('offline.templateNotCached')
+        : toAppError(err).message);
     }
-  });
+  };
   // Sharing mints a portal link on the server — online-only, so say so plainly when offline.
   const openShare = guard(() => {
     if (list.length === 0) {

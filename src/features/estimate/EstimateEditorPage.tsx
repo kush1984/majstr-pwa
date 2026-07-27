@@ -109,7 +109,11 @@ export function EstimateEditorPage() {
     if (estimate.isError && status !== 404 && status !== 403) {
       return (
         <div className="flex min-h-dvh items-center justify-center bg-canvas">
-          <ErrorState error={estimate.error} onRetry={() => void estimate.refetch()} />
+          <ErrorState
+            error={estimate.error}
+            what={t('offline.dataEstimate')}
+            onRetry={() => void estimate.refetch()}
+          />
         </div>
       );
     }

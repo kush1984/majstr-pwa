@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { useEstimateTemplate, useEstimateTemplates } from './useEstimateTemplates.ts';
@@ -27,6 +29,7 @@ export function TemplatePickerSheet({
   applying?: boolean;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending, isError } = useEstimateTemplates();
   const [preview, setPreview] = useState<EstimateTemplateSummary | null>(null);
 
@@ -60,6 +63,8 @@ export function TemplatePickerSheet({
         <div className="flex justify-center py-8 text-brand">
           <Spinner />
         </div>
+      ) : !online && (data?.length ?? 0) === 0 ? (
+        <OfflineNotCached compact what={t('offline.dataTemplates')} />
       ) : isError && !data ? (
         <p className="py-6 text-center text-sm text-muted">{t('templates.loadError')}</p>
       ) : (
@@ -150,6 +155,7 @@ function TemplatePreview({
   onApply: () => void;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending } = useEstimateTemplate(template.id);
 
   return (
@@ -163,9 +169,16 @@ function TemplatePreview({
           <Spinner />
         </div>
       ) : !data ? (
-        // No cached composition (offline) — showing an empty list here reads as "this template has
-        // no positions", which is a lie about the master's own data.
-        <p className="mb-5 py-4 text-center text-sm text-muted">{t('templates.compositionOffline')}</p>
+        // No cached composition — showing an empty list here reads as "this template has no
+        // positions", which is a lie about the master's own data. Offline that is fixable and we
+        // say how; online it is a plain fetch failure.
+        online ? (
+          <p className="mb-5 py-4 text-center text-sm text-muted">{t('errors.unavailableText')}</p>
+        ) : (
+          <div className="mb-5">
+            <OfflineNotCached compact what={t('offline.dataTemplateItems')} />
+          </div>
+        )
       ) : (
         <div className="mb-5 max-h-[40dvh] space-y-1 overflow-y-auto">
           {(data.items ?? []).map((item, i) => (

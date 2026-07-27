@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { Chip } from '@/components/Chip.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -139,6 +141,7 @@ function CatalogPicker({
   onDone: () => void;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const { data, isPending } = useCatalog();
   const { data: me } = useMe();
   const batch = useAddItemsFromCatalogBatch(estimateId);
@@ -208,6 +211,10 @@ function CatalogPicker({
       <div className="max-h-[40dvh] space-y-1.5 overflow-y-auto">
         {isPending ? (
           <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
+        ) : !online && (data?.length ?? 0) === 0 ? (
+          // Nothing cached at all — the master's catalog exists, it just is not here. Distinct
+          // from a search that matched nothing, which is what the message below actually means.
+          <OfflineNotCached compact what={t('offline.dataCatalog')} />
         ) : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
         ) : (

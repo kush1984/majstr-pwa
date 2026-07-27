@@ -5,6 +5,8 @@ import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -18,6 +20,7 @@ import type { NoteResponse } from '@/api/types.ts';
  */
 export function NotesSection({ objectId }: { objectId: string }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const notes = useNotes(objectId);
   const actions = useNoteActions(objectId);
 
@@ -28,6 +31,8 @@ export function NotesSection({ objectId }: { objectId: string }) {
     return <div className="py-8 text-center text-brand"><Spinner /></div>;
   }
   // Data first: offline the refetch fails but the cached notes are still perfectly usable.
+  // With nothing cached, offline is its own state — a retry there can only fail again.
+  if (!notes.data && !online) return <OfflineNotCached compact what={t('offline.dataNotes')} />;
   if (!notes.data) {
     return (
       <div className="py-6 text-center">

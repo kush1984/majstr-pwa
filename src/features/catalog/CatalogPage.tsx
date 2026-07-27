@@ -143,6 +143,7 @@ export function CatalogPage() {
         <ErrorState
           error={error}
           title={t('catalog.loadErrorTitle')}
+          what={t('offline.dataCatalog')}
           onRetry={() => void refetch()}
         />
       ) : (data?.length ?? 0) === 0 ? (
@@ -260,12 +261,13 @@ export function CatalogPage() {
           <Button variant="secondary" fullWidth onClick={() => setPendingNewCount(null)}>
             {t('common.cancel')}
           </Button>
+          {/* Adding a position works offline — `useCreateCatalogItem` queues it through the
+              outbox — so this must not be gated. Resetting the catalog and checking for new
+              default positions above genuinely do need the server and stay gated. */}
           <Button
             fullWidth
             loading={addNew.isPending}
-            disabled={!online}
-            title={offlineTitle}
-            onClick={guard(() => void onAddNew())}
+            onClick={() => void onAddNew()}
           >
             {t('catalog.addNewConfirm')}
           </Button>

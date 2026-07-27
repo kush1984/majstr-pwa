@@ -1,14 +1,24 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  onlineManager, useMutation, useQuery, useQueryClient, type QueryClient,
+} from '@tanstack/react-query';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import type {
+  CatalogItemResponse,
   EstimateCreateRequest,
+  EstimateItemRequest,
+  EstimateItemResponse,
+  EstimateResponse,
+  EstimateSummary,
   EstimateTemplateDetail,
   EstimateTemplateSummary,
   TemplateItemRequest,
   Trade,
 } from '@/api/types.ts';
-import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { isNetworkError, offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { enqueue } from '@/lib/outbox/outbox.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
+import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 
 export const ESTIMATE_TEMPLATE_KEY = ['estimate-templates'] as const;
 
@@ -187,14 +197,125 @@ export function useRemoveTemplateItem(templateId: string) {
 
 /** Apply a template → a new estimate in the project. Invalidates the project's
  *  estimate list / cards (a new estimate appeared). */
+/** Raised when a template can't be applied offline because its composition was never cached. */
+export class TemplateNotCachedError extends Error {
+  constructor() {
+    super('offline.templateNotCached');
+    this.name = 'TemplateNotCachedError';
+  }
+}
+
+/**
+ * Apply a template to an object, offline-first.
+ *
+ * Online this stays ONE request — the server owns the price substitution. Offline it is composed
+ * on the device instead, because applying a template needs nothing the server alone can do: it is
+ * a create plus N item creates, and both inputs are already in the offline cache (the template's
+ * composition and the master's catalog). So rather than telling a master standing in a basement
+ * "потрібен інтернет", we replay the server's own rule locally:
+ *
+ *   for each template position, match the master's catalog by LOWERCASED NAME (first wins) and
+ *   take type/category/unit/price from the catalog entry; with no match keep the template's own
+ *   type/unit at price 0. Quantity is always 0 — the master fills it in on site.
+ *
+ * The estimate and its lines ride the existing `estimate` / `estimateItem` handlers, so replay is
+ * dependency-ordered and idempotent via the client UUIDs — no new endpoint, no backend change.
+ *
+ * Two honest consequences: prices come from the CACHED catalog, so they can differ from what the
+ * server would have picked if the catalog changed since the last sync (the master reviews every
+ * line anyway — quantities start empty); and the FREE estimate cap can only be enforced on replay,
+ * where a rejection lands in the sync sheet as a "PRO or delete" decision.
+ */
 export function useApplyTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (args: { projectId: string; templateId: string; req: EstimateCreateRequest }) =>
-      estimateTemplatesApi.applyToProject(args.projectId, args.templateId, args.req),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['projects'] });
-      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    networkMode: 'always', // never let it sit paused offline — we have a real offline path
+    mutationFn: async (
+      args: { projectId: string; templateId: string; req: EstimateCreateRequest },
+    ): Promise<EstimateResponse> => {
+      if (onlineManager.isOnline()) {
+        try {
+          const created = await estimateTemplatesApi.applyToProject(
+            args.projectId, args.templateId, args.req);
+          void qc.invalidateQueries({ queryKey: ['projects'] });
+          void qc.invalidateQueries({ queryKey: ['dashboard'] });
+          return created;
+        } catch (e) {
+          if (!isNetworkError(e)) throw e; // real error → surface; blip → compose below
+        }
+      }
+      return applyTemplateOffline(qc, args);
     },
   });
+}
+
+/** The offline half of {@link useApplyTemplate}: compose locally, then queue create + N lines. */
+async function applyTemplateOffline(
+  qc: QueryClient,
+  { projectId, templateId, req }: { projectId: string; templateId: string; req: EstimateCreateRequest },
+): Promise<EstimateResponse> {
+  const template = qc.getQueryData<EstimateTemplateDetail>([...ESTIMATE_TEMPLATE_KEY, templateId]);
+  if (!template) {
+    // Refuse loudly rather than create an EMPTY estimate the master would think is the template.
+    throw new TemplateNotCachedError();
+  }
+  const catalog = qc.getQueryData<CatalogItemResponse[]>([...CATALOG_KEY, 'list', 'all']) ?? [];
+  const byName = new Map<string, CatalogItemResponse>();
+  for (const c of catalog) {
+    const key = c.name.toLowerCase();
+    if (!byName.has(key)) byName.set(key, c); // first wins — same as the server's merge
+  }
+
+  const estimateId = newUuid();
+  const now = new Date().toISOString();
+
+  // The lines, mirroring the server's substitution rule.
+  const lines = (template.items ?? []).map((ti) => {
+    const match = byName.get(ti.name.toLowerCase());
+    const request: EstimateItemRequest = {
+      type: match?.type ?? ti.type,
+      name: ti.name,
+      category: match?.category ?? undefined,
+      unit: match?.unit ?? ti.unit,
+      quantity: 0, // empty — filled per object
+      unitPrice: match?.defaultPrice ?? 0,
+      sortOrder: ti.sortOrder, // carried over from the template, as the server does
+    };
+    return { id: newUuid(), request };
+  });
+
+  // Queue the estimate first, then its lines depending on it: the engine replays in `seq` order
+  // and holds a child until its parent has landed, so the server never sees an orphan line.
+  await enqueue({
+    entityId: estimateId, entity: 'estimate', type: 'create',
+    payload: { projectId, req }, deps: [projectId],
+  });
+  for (const line of lines) {
+    await enqueue({
+      entityId: line.id, entity: 'estimateItem', type: 'create',
+      payload: { estimateId, req: line.request }, deps: [estimateId],
+    });
+  }
+
+  // Optimistic cache, so the estimate opens filled in immediately.
+  const items: EstimateItemResponse[] = lines.map(({ id, request }) => ({
+    id, type: request.type, name: request.name, category: request.category ?? null,
+    unit: request.unit, quantity: 0, unitPrice: request.unitPrice,
+    lineTotal: 0, sortOrder: request.sortOrder ?? 0, measurementRefs: [], quantityManual: false,
+  }));
+  const optimistic: EstimateResponse = {
+    id: estimateId, projectId, name: req.name ?? null, status: 'DRAFT',
+    validUntil: req.validUntil ?? null, notes: req.notes ?? null,
+    createdAt: now, updatedAt: now, items,
+    // Every quantity is 0, so every total is 0 — no rounding to worry about.
+    worksSubtotal: 0, materialsSubtotal: 0, total: 0, depositAmount: null, balance: 0,
+  };
+  qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], optimistic);
+  const summary: EstimateSummary = {
+    id: estimateId, projectId, name: optimistic.name, status: 'DRAFT',
+    validUntil: optimistic.validUntil, createdAt: now, updatedAt: now, countInEconomy: false,
+  };
+  qc.setQueryData<EstimateSummary[]>(['project-estimates', projectId],
+    (old) => [summary, ...(old ?? [])]);
+  return optimistic;
 }
