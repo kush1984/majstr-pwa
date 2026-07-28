@@ -323,6 +323,15 @@ export interface EstimateUpdateRequest {
   depositAmount?: number | null;
 }
 
+/**
+ * The whole arrangement of an estimate's lines, as dragged. Position is the index in the array and
+ * the category travels with each line, so moving a line into another section is one request — see
+ * the backend's EstimateItemsOrderRequest for why it is stated in full rather than as a move.
+ */
+export interface EstimateItemsOrderRequest {
+  items: { id: string; category?: string | null }[];
+}
+
 export interface EstimateItemRequest {
   type: ItemType;
   name: string;

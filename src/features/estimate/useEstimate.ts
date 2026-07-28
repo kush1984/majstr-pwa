@@ -10,6 +10,7 @@ import type {
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
+  EstimateItemsOrderRequest,
   EstimateResponse,
   EstimateSummary,
   EstimateUpdateRequest,
@@ -255,6 +256,39 @@ export function useUpdateItem(estimateId: string) {
             measurementRefs: req.measurementRefs ?? i.measurementRefs,
             quantityManual: req.quantityManual ?? i.quantityManual,
           } : i)));
+        },
+      });
+    },
+  });
+}
+
+/**
+ * Persist the arrangement a drag produced: the caller passes the lines in their new order, each
+ * already carrying the category (section) it now belongs to, and this states that whole arrangement
+ * to the server.
+ *
+ * `coalesce` because dragging four times offline means the master wants the fourth arrangement —
+ * every request overwrites the whole order anyway, so replaying the abandoned three would only cost
+ * round trips to reach where the last one already points.
+ */
+export function useReorderItems(estimateId: string) {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateEstimate(estimateId);
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (arranged: EstimateItemResponse[]): Promise<void> => {
+      const req: EstimateItemsOrderRequest = {
+        items: arranged.map((i) => ({ id: i.id, category: i.category })),
+      };
+      return offlineMutate<void>({
+        entity: 'estimateItemOrder', entityId: estimateId, type: 'update',
+        payload: { req }, deps: [estimateId], coalesce: true,
+        online: async () => { await estimatesApi.reorderItems(estimateId, req); },
+        onOnlineSuccess: invalidate,
+        // sortOrder is renumbered from the position so the cached estimate re-groups into the same
+        // sections the master just dragged — grouping reads sortOrder, not the array order.
+        optimistic: () => {
+          patchEstimate(qc, estimateId, () => arranged.map((i, idx) => ({ ...i, sortOrder: idx })));
         },
       });
     },

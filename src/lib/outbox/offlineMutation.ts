@@ -1,6 +1,6 @@
 import { onlineManager } from '@tanstack/react-query';
 import axios from 'axios';
-import { enqueue } from './outbox.ts';
+import { enqueue, enqueueLatest } from './outbox.ts';
 import type { OutboxOpType } from './types.ts';
 
 /** A dropped connection (no HTTP response) — as opposed to a real 4xx/5xx the server sent back. */
@@ -28,6 +28,11 @@ export async function offlineMutate<T>(opts: {
   online: () => Promise<T>;
   optimistic: () => T;
   onOnlineSuccess?: () => void;
+  /**
+   * For an op that states the entity's WHOLE state, so a queued one is worthless once a newer one
+   * exists — a reorder, not a create. Replaces the pending op instead of stacking behind it.
+   */
+  coalesce?: boolean;
 }): Promise<T> {
   if (onlineManager.isOnline()) {
     try {
@@ -39,7 +44,8 @@ export async function offlineMutate<T>(opts: {
     }
   }
   const optimistic = opts.optimistic();
-  await enqueue({
+  const queue = opts.coalesce ? enqueueLatest : enqueue;
+  await queue({
     entityId: opts.entityId, entity: opts.entity, type: opts.type,
     payload: opts.payload, deps: opts.deps ?? [],
   });

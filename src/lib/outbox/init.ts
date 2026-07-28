@@ -10,6 +10,7 @@ import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { economyApi } from '@/api/economy.ts';
 import type {
+  EstimateItemsOrderRequest,
   BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
@@ -77,6 +78,19 @@ export function initOutbox(qc: QueryClient): () => void {
     } else {
       await estimatesApi.removeItem(p.estimateId, op.entityId);
     }
+  });
+
+  // The arrangement of an estimate's lines after a drag. entityId is the ESTIMATE — the op is
+  // about the whole list, not one line — and it is queued with `enqueueLatest`, so several drags
+  // made offline collapse into the one arrangement the master ended on.
+  //
+  // deps on the estimate id, so an estimate authored offline is created before anything tries to
+  // reorder inside it. Lines created in the same offline session are NOT listed as deps: the
+  // server keeps any line an arrangement does not mention (appending it after the rest), so a
+  // reorder that lands before its lines do is harmless — they simply arrive already positioned.
+  registerOutboxHandler('estimateItemOrder', async (op) => {
+    const p = op.payload as { req: EstimateItemsOrderRequest };
+    await estimatesApi.reorderItems(op.entityId, p.req);
   });
 
   // Lines copied from the catalog. Replayed through the FROM-CATALOG endpoint, not the plain

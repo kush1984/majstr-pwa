@@ -7,6 +7,7 @@ import type {
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
+  EstimateItemsOrderRequest,
   EstimateResponse,
   EstimateSummary,
   EstimateUpdateRequest,
@@ -114,6 +115,12 @@ export const estimatesApi = {
   ): Promise<EstimateItemResponse> {
     return api
       .put<EstimateItemResponse>(`/api/estimates/${estimateId}/items/${itemId}`, req)
+      .then((r) => r.data);
+  },
+
+  reorderItems(estimateId: string, req: EstimateItemsOrderRequest): Promise<EstimateResponse> {
+    return api
+      .put<EstimateResponse>(`/api/estimates/${estimateId}/items/order`, req)
       .then((r) => r.data);
   },
 

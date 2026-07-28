@@ -107,6 +107,44 @@ export async function enqueue(op: NewOutboxOp): Promise<void> {
   emitStatus();
 }
 
+/**
+ * Queue an op that states the entity's WHOLE desired state, replacing any queued op just like it.
+ *
+ * For a reorder this is the only sensible behaviour: dragging four times offline means the master
+ * wants the fourth arrangement, and the first three are not history worth replaying — each request
+ * overwrites the whole order anyway, so sending them all would cost four round trips to reach the
+ * state the last one describes, and would briefly park the server on arrangements the master already
+ * abandoned.
+ *
+ * Only safe for ops carrying full state. A create or a delete must NEVER coalesce — those are
+ * distinct facts, not successive drafts of one — which is why this is a separate function rather
+ * than a flag on {@link enqueue}.
+ *
+ * A `blocked` op is left alone: it is waiting on a decision from the master (PRO or delete), and
+ * silently dropping it would erase the thing the sync banner is asking them about.
+ */
+export async function enqueueLatest(op: NewOutboxOp): Promise<void> {
+  await outboxDb.transaction('rw', outboxDb.ops, async () => {
+    const superseded = await outboxDb.ops
+      .where('entityId')
+      .equals(op.entityId)
+      .filter((o) => o.entity === op.entity && o.type === op.type && o.status !== 'blocked')
+      .primaryKeys();
+    if (superseded.length > 0) {
+      await outboxDb.ops.bulkDelete(superseded);
+    }
+    await outboxDb.ops.add({
+      ...op,
+      ownerId: op.ownerId ?? tokens.ownerId() ?? undefined,
+      status: 'pending',
+      attempts: 0,
+      createdAt: op.createdAt ?? Date.now(),
+    });
+  });
+  // Re-counted rather than incremented: this both adds and removes rows.
+  await refreshPending();
+}
+
 /** How many ops are still queued (pending or failed). */
 export function outboxCount(): Promise<number> {
   return outboxDb.ops.count();

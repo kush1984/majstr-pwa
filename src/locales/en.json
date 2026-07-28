@@ -467,7 +467,12 @@
     "sendToEmail": "📧 Send to {{email}}",
     "copyLink": "🔗 Copy link",
     "addClientEmailHint": "Add the client's email to send the estimate by mail.",
-    "addClientEmail": "+ Add client's email"
+    "addClientEmail": "+ Add client's email",
+    "dragItem": "Drag the line",
+    "dragSection": "Drag the section",
+    "moveSectionTitle": "Change the line’s section?",
+    "moveSectionMessage": "The line moves from “{{from}}” to “{{to}}”. That changes its category.",
+    "moveSectionConfirm": "Move it"
   },
   "economy": {
     "title": "Object economy",

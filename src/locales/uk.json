@@ -467,7 +467,12 @@
     "sendToEmail": "📧 Надіслати на {{email}}",
     "copyLink": "🔗 Копіювати посилання",
     "addClientEmailHint": "Додайте email клієнта, щоб надсилати кошторис поштою.",
-    "addClientEmail": "+ Додати email клієнта"
+    "addClientEmail": "+ Додати email клієнта",
+    "dragItem": "Перетягнути позицію",
+    "dragSection": "Перетягнути розділ",
+    "moveSectionTitle": "Змінити розділ позиції?",
+    "moveSectionMessage": "Позиція переїде з «{{from}}» у «{{to}}». Це змінить її категорію.",
+    "moveSectionConfirm": "Перенести"
   },
   "economy": {
     "title": "Економіка об'єкту",

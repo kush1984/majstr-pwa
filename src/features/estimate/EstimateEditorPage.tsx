@@ -12,17 +12,17 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
+import { formatMoney, initials } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
-import i18n from '@/lib/i18n.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse, Trade } from '@/api/types.ts';
 import { TradeSelect } from './TradeSelect.tsx';
 import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
+import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
@@ -39,21 +39,11 @@ import {
   useUpdateEstimate,
   useReopenEstimate,
   useDeleteEstimate,
+  useInvalidateEstimate,
+  useReorderItems,
 } from './useEstimate.ts';
 import { useSaveAsTemplate } from './useEstimateTemplates.ts';
 
-function groupByCategory(items: EstimateItemResponse[]): [string, EstimateItemResponse[]][] {
-  const noCategory = i18n.t('catalog.noCategory');
-  const sorted = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
-  const groups = new Map<string, EstimateItemResponse[]>();
-  for (const item of sorted) {
-    const key = item.category?.trim() || noCategory;
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(item);
-    else groups.set(key, [item]);
-  }
-  return [...groups.entries()];
-}
 
 export function EstimateEditorPage() {
   const { id = '' } = useParams();
@@ -67,6 +57,8 @@ export function EstimateEditorPage() {
   const updateEstimate = useUpdateEstimate(id);
   const reopenEstimate = useReopenEstimate(id);
   const deleteEstimate = useDeleteEstimate(id);
+  const reorder = useReorderItems(id);
+  const invalidate = useInvalidateEstimate(id);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
@@ -132,7 +124,6 @@ export function EstimateEditorPage() {
   }
 
   const est = estimate.data;
-  const groups = groupByCategory(est.items);
   const nextSortOrder = est.items.length;
   // A signed estimate is read-only in the UI (the backend also enforces 409):
   // hide edit/delete, show a "view only" banner with a master-only reopen.
@@ -338,42 +329,21 @@ export function EstimateEditorPage() {
               />
             ) : (
               <>
-                {groups.map(([category, items]) => (
-                <section key={category} className="mb-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                    {category}
-                  </div>
-                  <div className="space-y-1.5">
-                    {items.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => !signed && setEditing(item)}
-                        disabled={signed}
-                        title={signed ? t('estimate.signedNoEdit') : undefined}
-                        className="w-full rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-sm font-medium text-primary">{item.name}</span>
-                          <span className="whitespace-nowrap text-sm font-bold text-primary">
-                            {formatMoney(item.lineTotal)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                          <span>
-                            {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
-                          </span>
-                          <span className="h-[3px] w-[3px] rounded-full bg-faint" />
-                          <span>
-                            {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-                ))}
+                <EstimateItemsBoard
+                  items={est.items}
+                  signed={signed}
+                  onEdit={setEditing}
+                  onArrange={(arranged) => {
+                    reorder.mutate(arranged, {
+                      // The optimistic cache already shows the new arrangement, so a failure has to
+                      // put the old one back — otherwise the screen keeps an order the server rejected.
+                      onError: (err) => {
+                        void invalidate();
+                        toast.error(toAppError(err).message);
+                      },
+                    });
+                  }}
+                />
                 {!signed && (
                   <button
                     type="button"
