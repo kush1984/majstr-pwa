@@ -7,6 +7,7 @@ import { billingApi } from '@/api/billing.ts';
 import { useLogout } from '@/features/auth/useLogout.ts';
 import { useOnline, useSyncStatus } from '@/lib/useOnline.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
+import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import {
   lastPrefetchAt, prefetchForOffline, type PrefetchProgress,
 } from '@/lib/offlinePrefetch.ts';
@@ -53,6 +54,7 @@ export function ProfilePage() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [proVerifyOpen, setProVerifyOpen] = useState(false);
+  const ensureEmailVerified = useEmailGate();
 
   // Used object count for the limit bar — the real list, not a guess.
   const projects = useQuery({
@@ -72,14 +74,16 @@ export function ProfilePage() {
 
   // Any PRO path (trial OR paid) requires a verified email. Unverified → the
   // verify reminder; verified → the real action.
-  const onTrialClick = () => {
-    if (me?.emailVerified) void startTrial();
+  // Both confirm with the server rather than trusting a cached `false` — the same stale flag that
+  // kept telling masters to verify an email they had already verified. See useEmailGate.
+  const onTrialClick = async () => {
+    if (await ensureEmailVerified()) void startTrial();
     else setProVerifyOpen(true);
   };
 
-  const onUpgradeClick = () => {
+  const onUpgradeClick = async () => {
     void upgradeApi.click('PROFILE');
-    if (me?.emailVerified) setUpgradeOpen(true);
+    if (await ensureEmailVerified()) setUpgradeOpen(true);
     else setProVerifyOpen(true);
   };
 
@@ -220,7 +224,7 @@ export function ProfilePage() {
         {!isPro && (
           <button
             type="button"
-            onClick={onUpgradeClick}
+            onClick={() => void onUpgradeClick()}
             className="w-full rounded-xl bg-brand py-3 text-sm font-bold text-white"
           >
             {t('profile.upgradeToPro')}
@@ -230,7 +234,7 @@ export function ProfilePage() {
         {canStartTrial && (
           <button
             type="button"
-            onClick={onTrialClick}
+            onClick={() => void onTrialClick()}
             className="mt-2 w-full rounded-xl border border-brand py-2.5 text-sm font-bold text-brand"
           >
             {t('billing.tryTrial')}

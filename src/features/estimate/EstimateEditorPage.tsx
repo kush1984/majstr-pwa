@@ -29,6 +29,7 @@ import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
+import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { estimateName } from './estimateName.ts';
 import {
@@ -72,6 +73,7 @@ export function EstimateEditorPage() {
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const ensureEmailVerified = useEmailGate();
   const [fabOpen, setFabOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -141,8 +143,9 @@ export function EstimateEditorPage() {
   const onPdf = async () => {
     // The PDF is a client-facing deliverable and now requires a verified email
     // (anti-abuse). Bounce an unverified master straight to the verify modal
-    // instead of firing a doomed request.
-    if (me && !me.emailVerified) {
+    // instead of firing a doomed request — but ask the server first, because a
+    // cached `false` outlives a verification done in the mail app's browser.
+    if (!(await ensureEmailVerified())) {
       setEmailGateOpen(true);
       return;
     }
@@ -159,11 +162,11 @@ export function EstimateEditorPage() {
     }
   };
 
-  const onShare = () => {
+  const onShare = async () => {
     // Sharing reaches a client and requires a verified email — check upfront so an
     // unverified master gets the verify prompt immediately, not a share dialog that
-    // dead-ends on every option.
-    if (me && !me.emailVerified) {
+    // dead-ends on every option. Confirmed against the server, see useEmailGate.
+    if (!(await ensureEmailVerified())) {
       setEmailGateOpen(true);
       return;
     }
@@ -445,7 +448,7 @@ export function EstimateEditorPage() {
               />
             )}
             {/* Online-only: both reach the server (a rendered PDF / a link sent to a client). */}
-            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(guard(onShare))} />
+            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(guard(() => void onShare()))} />
             <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(guard(() => void onPdf()))} />
             {est.items.length > 0 && (
               <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => runFab(openSaveTemplate)} />
