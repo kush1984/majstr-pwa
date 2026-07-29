@@ -5,6 +5,7 @@ import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
+import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
@@ -14,7 +15,6 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
-import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse, Trade } from '@/api/types.ts';
@@ -66,7 +66,6 @@ export function EstimateEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const ensureEmailVerified = useEmailGate();
-  const [fabOpen, setFabOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [depositOpen, setDepositOpen] = useState(false);
@@ -258,10 +257,6 @@ export function EstimateEditorPage() {
     }
   };
 
-  const runFab = (fn: () => void) => {
-    setFabOpen(false);
-    fn();
-  };
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -387,26 +382,18 @@ export function EstimateEditorPage() {
       </div>
 
       {/* Floating actions (speed-dial) — always in reach on every screen size */}
-      {fabOpen && (
-        <button
-          type="button"
-          aria-label={t('common.close')}
-          className="fixed inset-0 z-40 cursor-default"
-          onClick={() => setFabOpen(false)}
-        />
-      )}
-      <div className="fixed bottom-32 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
-        {fabOpen && (
+      <Fab ariaLabel={t('estimate.actionsMenu')}>
+        {(close) => (
           <>
             {!signed && (
-              <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => runFab(() => setAddOpen(true))} />
+              <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => close(() => setAddOpen(true))} />
             )}
             {!signed && (
               <FabAction
                 icon="🧾"
                 label={t('receipt.fabLabel')}
                 onClick={() =>
-                  runFab(guard(() => { // LLM recognition — server-side, no offline path
+                  close(guard(() => { // LLM recognition — server-side, no offline path
                     if (isPro) {
                       setReceiptOpen(true);
                     } else {
@@ -418,23 +405,14 @@ export function EstimateEditorPage() {
               />
             )}
             {/* Online-only: both reach the server (a rendered PDF / a link sent to a client). */}
-            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => runFab(guard(() => void onShare()))} />
-            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => runFab(guard(() => void onPdf()))} />
+            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => close(guard(() => void onShare()))} />
+            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => close(guard(() => void onPdf()))} />
             {est.items.length > 0 && (
-              <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => runFab(openSaveTemplate)} />
+              <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => close(openSaveTemplate)} />
             )}
           </>
         )}
-        <button
-          type="button"
-          onClick={() => setFabOpen((o) => !o)}
-          aria-label={t('estimate.actionsMenu')}
-          aria-expanded={fabOpen}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-card-lg transition-transform active:scale-95"
-        >
-          <span className={cn('text-3xl leading-none transition-transform', fabOpen && 'rotate-45')}>＋</span>
-        </button>
-      </div>
+      </Fab>
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       {project.data && (
@@ -608,18 +586,6 @@ export function EstimateEditorPage() {
   );
 }
 
-function FabAction({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-2 rounded-full bg-surface py-2.5 pl-4 pr-5 text-sm font-semibold text-primary shadow-card-lg active:scale-95"
-    >
-      <span className="text-base leading-none">{icon}</span>
-      {label}
-    </button>
-  );
-}
 
 /** Deposit line for the mobile total bar: shows завдаток/залишок or an "add
  *  deposit" affordance; tapping opens the deposit editor. Read-only when signed. */

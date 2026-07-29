@@ -31,6 +31,8 @@ import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
 import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { MessagesSection } from '@/features/messages/MessagesSection.tsx';
+import { ChatLinkSheet } from '@/features/messages/ChatLinkSheet.tsx';
+import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 import { NotesSection } from '@/features/notes/NotesSection.tsx';
@@ -57,6 +59,7 @@ export function ProjectDetailPage() {
   const project = useProject(id);
   const [tab, setTab] = useState<Tab>('estimate');
   const [shareOpen, setShareOpen] = useState(false);
+  const [chatLinkOpen, setChatLinkOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [editClientOpen, setEditClientOpen] = useState(false);
   // Quick actions menu on an estimate row, and the resulting confirm dialog.
@@ -390,21 +393,8 @@ export function ProjectDetailPage() {
         <ObjectEconomySection objectId={id} />
       ) : (
         <>
-          <button
-            type="button"
-            onClick={openShare}
-            className="mb-4 flex w-full items-center gap-3 rounded-card bg-brand p-3.5 text-left text-white shadow-cta"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/20 text-lg">
-              📤
-            </span>
-            <span className="flex-1">
-              <span className="block text-sm font-bold">{t('projects.shareWithClient')}</span>
-              <span className="block text-[11px] opacity-85">{t('projects.clientPortalLink')}</span>
-            </span>
-            <span className="text-lg">→</span>
-          </button>
-
+          {/* The two share links used to be full-width cards here. On a phone they pushed the
+              estimates below the fold for actions taken once a job, so they moved into the FAB. */}
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">
               {t('projects.estimatesCount', { count: list.length })}
@@ -474,6 +464,32 @@ export function ProjectDetailPage() {
       )}
 
       <MessagesSection projectId={id} />
+
+      <ChatLinkSheet
+        open={chatLinkOpen}
+        onClose={() => setChatLinkOpen(false)}
+        projectId={id}
+        allowRevoke
+      />
+
+      {/* The object's two share links. Both reach the server to mint or publish, so both go through
+          `guard` — offline they say so rather than failing silently. */}
+      <Fab ariaLabel={t('projects.actionsMenu')}>
+        {(close) => (
+          <>
+            <FabAction
+              icon="📤"
+              label={t('projects.shareWithClient')}
+              onClick={() => close(openShare)}
+            />
+            <FabAction
+              icon="💬"
+              label={t('messageLink.title')}
+              onClick={() => close(guard(() => setChatLinkOpen(true)))}
+            />
+          </>
+        )}
+      </Fab>
     </>
   );
 }

@@ -1,11 +1,19 @@
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 
 /**
  * Responsive modal: a bottom sheet on mobile (slides up, rounded top),
  * a centred dialog on desktop. Closes on backdrop click or Escape.
+ *
+ * <p>Rendered into `document.body` through a portal, which is not a detail. `position: fixed` is
+ * resolved against the nearest ancestor carrying a transform, filter or containment — so a modal
+ * rendered inside, say, a `-translate-y-1/2` wrapper measures `inset-0` against that wrapper and
+ * collapses into a sliver of a column. Nothing about the modal's own markup hints at that, and the
+ * failure looks like broken CSS rather than misplaced markup, so the escape is built in here instead of
+ * being every caller's problem.</p>
  */
 export function Modal({
   open,
@@ -41,7 +49,7 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
       role="dialog"
@@ -76,6 +84,7 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

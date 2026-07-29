@@ -18,6 +18,10 @@ export function useProjects(status?: ProjectStatus) {
   return useQuery({
     queryKey: [...PROJECTS_KEY, 'list', status ?? 'all'],
     queryFn: () => projectsApi.list(status),
+    // Overrides the global `false`. This list carries `unreadQuestions`, which feeds the header bell
+    // and the row badges — the one thing that changes while the master is NOT looking at the app.
+    // Without this, a message that arrived as a push stayed invisible until a manual refresh.
+    refetchOnWindowFocus: true,
   });
 }
 

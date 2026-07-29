@@ -57,7 +57,20 @@ self.addEventListener('push', (event) => {
     data: { url: data.url ?? '/dashboard' },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Tell any open tab as well as showing the notification. A push is the only moment the server has
+  // news the app did not ask for, and without this an app already on screen kept its stale counts —
+  // the bell only caught up on a manual refresh.
+  const notify = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: 'push', url: data.url ?? null });
+      }
+    })
+    // Best effort: failing to reach a tab must never cost the notification itself.
+    .catch(() => undefined);
+
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), notify]));
 });
 
 self.addEventListener('notificationclick', (event) => {

@@ -221,6 +221,26 @@ export interface MessageView {
   estimateName: string | null;
   isRead: boolean;
   createdAt: string;
+  /** Photos and PDFs left with the message, oldest first. Empty, never null. */
+  files: MessageFileView[];
+}
+
+/**
+ * One attachment. There is no URL: the bytes come from the owner-authenticated endpoint, addressed by
+ * id, so the client builds the path itself. `name` is the sender's own string — render it as text.
+ */
+export interface MessageFileView {
+  id: string;
+  name: string | null;
+  /** Sniffed server-side from the bytes, never what the uploader claimed. */
+  contentType: string;
+  sizeBytes: number;
+  isImage: boolean;
+  /**
+   * When retention will delete this file, or null when it is not due. Opening the file clears it on the
+   * server, so a marker that has gone means the file is safe for another six months.
+   */
+  deleteAfter: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +260,15 @@ export interface PortalStateResponse {
   /** Shareable portal URL; null until the first publish mints the link. */
   url: string | null;
   estimates: PortalEstimateFlag[];
+}
+
+/**
+ * The object's message-form URL — a second, separate link. Never null, unlike the portal's: asking
+ * for it mints it, because there is nothing to publish first. The form shows the object's name and
+ * the contractor's, and no money at all, which is why it cannot be the portal link.
+ */
+export interface MessageLinkState {
+  url: string;
 }
 
 // ---------------------------------------------------------------------------

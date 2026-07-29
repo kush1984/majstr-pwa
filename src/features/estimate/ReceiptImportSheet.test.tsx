@@ -47,10 +47,10 @@ describe('ReceiptImportSheet', () => {
       depositAmount: null, balance: 360,
     });
 
-    const { container } = renderSheet();
+    renderSheet();
 
     // Fire the hidden upload input (second file input) with a JPEG file.
-    const inputs = container.querySelectorAll('input[type="file"]');
+    const inputs = document.querySelectorAll('input[type="file"]');
     const upload = inputs[inputs.length - 1] as HTMLInputElement;
     const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
     fireEvent.change(upload, { target: { files: [file] } });

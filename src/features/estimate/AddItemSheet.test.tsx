@@ -106,13 +106,13 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
     } as never);
     const onClose = vi.fn();
 
-    const { container } = renderSheet(onClose);
+    renderSheet(onClose);
 
     fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
-    fireEvent.change(container.querySelector('#it-name')!, { target: { value: 'Демонтаж розетки' } });
-    fireEvent.change(container.querySelector('#it-category')!, { target: { value: 'Демонтаж' } });
-    fireEvent.change(container.querySelector('#it-qty')!, { target: { value: '2' } });
-    fireEvent.change(container.querySelector('#it-price')!, { target: { value: '90' } });
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Демонтаж розетки' } });
+    fireEvent.change(document.querySelector('#it-category')!, { target: { value: 'Демонтаж' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '2' } });
+    fireEvent.change(document.querySelector('#it-price')!, { target: { value: '90' } });
     fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
 
     // Line added; the modal stays open showing the save-to-catalog prompt.

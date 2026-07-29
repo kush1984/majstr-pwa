@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { MessagesSection } from './MessagesSection.tsx';
 import { messagesApi } from '@/api/messages.ts';
+import { toast } from '@/hooks/useToast.ts';
 import type { MessageView } from '@/api/types.ts';
 
 /**
@@ -14,7 +15,7 @@ import type { MessageView } from '@/api/types.ts';
  * else's words and there is no undo.
  */
 vi.mock('@/api/messages.ts', () => ({
-  messagesApi: { listForProject: vi.fn(), markRead: vi.fn(), remove: vi.fn() },
+  messagesApi: { listForProject: vi.fn(), markRead: vi.fn(), remove: vi.fn(), fetchFileUrl: vi.fn() },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -23,13 +24,18 @@ vi.mock('@/hooks/useToast.ts', () => ({
 const fromClient: MessageView = {
   id: 'm1', authorName: 'Василь', authorPhone: '+380 67 111 22 33',
   message: 'Коли починаєте?', estimateName: 'Варіант А', isRead: true,
-  createdAt: '2026-07-20T10:00:00Z',
+  createdAt: '2026-07-20T10:00:00Z', files: [],
 };
 const fromLink: MessageView = {
   id: 'm2', authorName: 'Постачальник', authorPhone: null,
   message: 'Рахунок у вкладенні', estimateName: null, isRead: true,
   createdAt: '2026-07-21T10:00:00Z',
+  files: [{ id: 'f1', name: 'Рахунок №7.pdf', contentType: 'application/pdf',
+            sizeBytes: 204800, isImage: false, deleteAfter: null }],
 };
+
+/** The message's own card — the element that carries the unread highlight. */
+const row = (text: string) => screen.getByText(text).closest('div')!;
 
 function renderSection(messages: MessageView[]) {
   vi.mocked(messagesApi.listForProject).mockResolvedValue(messages);
@@ -96,11 +102,67 @@ describe('MessagesSection', () => {
     expect(messagesApi.remove).not.toHaveBeenCalled();
   });
 
-  it('marks the unread ones read on open, and keeps them highlighted for this viewing', async () => {
+  it('does NOT mark anything read merely because the screen was opened', async () => {
+    // Opening an object to check something else used to clear the bell for messages the master never
+    // read, which made the counter untrustworthy — the only thing a counter has to be.
     renderSection([{ ...fromClient, isRead: false }]);
+    await screen.findByText('Коли починаєте?');
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(messagesApi.markRead).not.toHaveBeenCalled();
+    expect(row('Коли починаєте?').className).toContain('bg-brand-soft');
+  });
+
+  it('marks read on tap, says so, and stops looking unread', async () => {
+    renderSection([{ ...fromClient, isRead: false }]);
+    await screen.findByText('Коли починаєте?');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Позначити прочитаним' }));
 
     await waitFor(() => expect(messagesApi.markRead).toHaveBeenCalledWith('p1', 'm1'));
-    // Still flagged on screen: the master needs to see which ones were new even after the badge clears.
-    expect(screen.getByText('Коли починаєте?').closest('div')?.className).toContain('bg-brand-soft');
+    // A tap that only changes a colour reads as nothing having happened, hence the toast.
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    await waitFor(() => expect(row('Коли починаєте?').className).not.toContain('bg-brand-soft'));
+  });
+
+  it('offers no mark-read control on a message that is already read', async () => {
+    // A control that does nothing is worse than no control: the master taps it and learns nothing.
+    renderSection([fromClient]);
+    await screen.findByText('Коли починаєте?');
+
+    expect(screen.queryByRole('button', { name: 'Позначити прочитаним' })).toBeNull();
+  });
+
+  it('keeps a message looking unread when marking it read failed', async () => {
+    // Claiming "read" here would clear the row badge and the bell while the server still counts it.
+    vi.mocked(messagesApi.markRead).mockRejectedValue(new Error('offline'));
+    renderSection([{ ...fromClient, isRead: false }]);
+    await screen.findByText('Коли починаєте?');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Позначити прочитаним' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(row('Коли починаєте?').className).toContain('bg-brand-soft');
+  });
+
+  it('calling the sender does not mark the message read on the way', async () => {
+    // The tel: link is a SIBLING of the mark-read target, not inside it — which is what keeps this
+    // true, rather than a stopPropagation call that would be invisible if it were ever dropped.
+    renderSection([{ ...fromClient, isRead: false }]);
+
+    fireEvent.click(await screen.findByText(/380 67 111 22 33/));
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(messagesApi.markRead).not.toHaveBeenCalled();
+  });
+
+  it('deleting does not mark the message read on the way to the confirmation', async () => {
+    renderSection([{ ...fromClient, isRead: false }]);
+    await screen.findByText('Коли починаєте?');
+
+    fireEvent.click(screen.getByRole('button', { name: /Видалити/ }));
+
+    expect(await screen.findByText(/Василь.*вкладення/s)).toBeTruthy();
+    expect(messagesApi.markRead).not.toHaveBeenCalled();
   });
 });

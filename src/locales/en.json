@@ -340,7 +340,8 @@
     "createEstimateFirst": "Create an estimate first",
     "estimateRowName": "Estimate",
     "itemsCount": "{{count}} items",
-    "tabActShort": "Economy"
+    "tabActShort": "Economy",
+    "actionsMenu": "Object actions"
   },
   "estimate": {
     "newTitle": "Object & estimate",
@@ -1279,6 +1280,24 @@
     "aboutEstimate": "about “{{name}}”",
     "delete": "Delete the message",
     "deleteTitle": "Delete this message?",
-    "deleteMessage": "The message from {{author}} will be deleted along with its attachments. This cannot be undone."
+    "deleteMessage": "The message from {{author}} will be deleted along with its attachments. This cannot be undone.",
+    "attachment": "Attachment",
+    "fileOpenFailed": "Could not open the file.",
+    "markedRead": "Message marked read",
+    "markRead": "Mark as read",
+    "deleteAfter": "will be deleted on {{date}} — open it to keep it"
+  },
+  "messageLink": {
+    "hint": "Whoever opens this link sees only the object's name — no prices.",
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "copyFailed": "Could not copy. Here it is: {{url}}",
+    "revoke": "Revoke link",
+    "revokeTitle": "Revoke the link?",
+    "revokeMessage": "Anyone already holding it will no longer be able to write. A new one is created next time.",
+    "revoked": "Link revoked",
+    "needConnection": "A connection is needed to get the link.",
+    "title": "Chat link",
+    "rowAria": "Chat link: {{name}}"
   }
 }

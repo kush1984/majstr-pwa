@@ -7,6 +7,7 @@ import { useMe } from '@/features/auth/useMe.ts';
 import { useAutoPrefetch } from '@/lib/useAutoPrefetch.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
+import { usePushRefresh } from '@/hooks/usePushRefresh.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
 import { NotificationBell } from '@/components/NotificationBell.tsx';
 import { PrivacyConsentModal } from '@/features/legal/ConsentModals.tsx';
@@ -23,6 +24,9 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
   // Fill the offline cache in the background (throttled) so every screen works in a basement.
   useAutoPrefetch();
+
+  // A push arriving while the app is open has to move the bell, not just ring it.
+  usePushRefresh();
 
   // Tag Sentry with the user id on (re)load while already logged in — login()
   // covers the fresh-login path; this covers boot-from-home-screen.
