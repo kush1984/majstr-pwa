@@ -10,7 +10,7 @@ import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { planApi } from '@/api/plan.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
-import { questionsApi } from '@/api/questions.ts';
+import { messagesApi } from '@/api/messages.ts';
 import { photosApi } from '@/api/photos.ts';
 import { economyApi } from '@/api/economy.ts';
 import { ESTIMATE_TEMPLATE_KEY } from '@/features/estimate/useEstimateTemplates.ts';
@@ -31,7 +31,7 @@ vi.mock('@/api/estimateTemplates.ts', () => ({
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn() } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
 vi.mock('@/api/dashboard.ts', () => ({ dashboardApi: { metrics: vi.fn() } }));
-vi.mock('@/api/questions.ts', () => ({ questionsApi: { listForProject: vi.fn() } }));
+vi.mock('@/api/messages.ts', () => ({ messagesApi: { listForProject: vi.fn() } }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { list: vi.fn() } }));
 vi.mock('@/api/economy.ts', () => ({ economyApi: { economy: vi.fn(), listExpenses: vi.fn() } }));
 
@@ -46,7 +46,7 @@ beforeEach(() => {
   vi.mocked(catalogApi.categories).mockResolvedValue(['Стіни'] as never);
   vi.mocked(estimateTemplatesApi.list).mockResolvedValue([{ id: 't1' }] as never);
   vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ id: 't1', items: [{ name: 'Поз.' }] } as never);
-  vi.mocked(questionsApi.listForProject).mockResolvedValue([] as never);
+  vi.mocked(messagesApi.listForProject).mockResolvedValue([] as never);
   vi.mocked(photosApi.list).mockResolvedValue([] as never);
   vi.mocked(economyApi.economy).mockResolvedValue({} as never);
   vi.mocked(economyApi.listExpenses).mockResolvedValue([] as never);

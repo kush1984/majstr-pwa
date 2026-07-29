@@ -209,10 +209,10 @@ export interface ProjectRequest {
 // ---------------------------------------------------------------------------
 // Client questions (Fix F). Left by the client on the public portal; the
 // contractor reads them on the project screen. Mirrors the contractor-facing
-// QuestionResponse (the portal's own ack DTO only returns id + createdAt).
+// MessageView (the portal's own ack DTO only returns id + createdAt).
 // ---------------------------------------------------------------------------
 
-export interface QuestionResponse {
+export interface MessageView {
   id: string;
   message: string;
   authorName: string | null;

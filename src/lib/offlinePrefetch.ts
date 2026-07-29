@@ -9,7 +9,7 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
 import { notesApi } from '@/api/notes.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
-import { questionsApi } from '@/api/questions.ts';
+import { messagesApi } from '@/api/messages.ts';
 import { photosApi } from '@/api/photos.ts';
 import { economyApi } from '@/api/economy.ts';
 import { PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
@@ -20,7 +20,7 @@ import { PROJECTS_KEY } from '@/features/projects/useProjects.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
 import { NOTES_KEY } from '@/features/notes/useNotes.ts';
-import { questionsKey } from '@/features/questions/useQuestions.ts';
+import { messagesKey } from '@/features/messages/useMessages.ts';
 import { PHOTOS_KEY } from '@/features/photos/usePhotos.ts';
 import { economyKeys } from '@/features/economy/useEconomy.ts';
 import type { ProjectResponse } from '@/api/types.ts';
@@ -121,7 +121,7 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: NOTES_KEY(p.id), queryFn: () => notesApi.list(p.id) }));
     // The object's other tabs, so none of them is blank on site.
     perProject.push(() =>
-      qc.prefetchQuery({ queryKey: questionsKey(p.id), queryFn: () => questionsApi.listForProject(p.id) }));
+      qc.prefetchQuery({ queryKey: messagesKey(p.id), queryFn: () => messagesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: PHOTOS_KEY(p.id), queryFn: () => photosApi.list(p.id) }));
     if (opts.isPro) {

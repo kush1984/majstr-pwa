@@ -982,14 +982,6 @@
     "pushNotConfigured": "Push notifications aren't configured on the server",
     "pushPermissionDenied": "Notification permission not granted"
   },
-  "questions": {
-    "title": "💬 Client questions",
-    "titleWithCount": "💬 Client questions · {{count}}",
-    "loadError": "Couldn't load the questions.",
-    "empty": "No questions yet",
-    "client": "Client",
-    "aboutEstimate": "about “{{name}}”"
-  },
   "clientPicker": {
     "none": "No client",
     "existing": "Existing",
@@ -1277,5 +1269,16 @@
     "pickOther": "pick other pages",
     "heightsFound": "For {{n}} rooms the height came from the drawing (H=…) — only the rest are asked about.",
     "coveringsSkipped": "The coverings spec is skipped — it gives no per-room measurements (only material totals)."
+  },
+  "messages": {
+    "title": "💬 Messages",
+    "titleWithCount": "💬 Messages · {{count}}",
+    "loadError": "Could not load the messages.",
+    "empty": "No messages yet",
+    "client": "Client",
+    "aboutEstimate": "about “{{name}}”",
+    "delete": "Delete the message",
+    "deleteTitle": "Delete this message?",
+    "deleteMessage": "The message from {{author}} will be deleted along with its attachments. This cannot be undone."
   }
 }

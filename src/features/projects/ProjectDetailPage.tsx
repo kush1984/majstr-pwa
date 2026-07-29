@@ -30,7 +30,7 @@ import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx
 import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
 import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
-import { QuestionsSection } from '@/features/questions/QuestionsSection.tsx';
+import { MessagesSection } from '@/features/messages/MessagesSection.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 import { NotesSection } from '@/features/notes/NotesSection.tsx';
@@ -473,7 +473,7 @@ export function ProjectDetailPage() {
         </>
       )}
 
-      <QuestionsSection projectId={id} />
+      <MessagesSection projectId={id} />
     </>
   );
 }
