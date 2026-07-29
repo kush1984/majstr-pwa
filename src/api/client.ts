@@ -35,6 +35,13 @@ interface RetryableRequest extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
+/**
+ * How long a recognition call may take. Sized against the server's own ceiling for an LLM pass
+ * (`HttpClients.forLlm` = 120s), not guessed: below it the client would abandon a call the server
+ * is still legitimately working on — and the tokens are billed either way.
+ */
+export const LLM_TIMEOUT_MS = 180_000;
+
 export const api = axios.create({
   baseURL: config.apiBaseUrl,
   headers: { 'Content-Type': 'application/json' },
@@ -203,6 +210,17 @@ api.interceptors.request.use(async (req) => {
     // `setContentType(false)` is the AxiosHeaders way to clear it — a plain
     // `delete headers['Content-Type']` misses the class's normalised entry.
     req.headers.setContentType(false);
+  }
+
+  // Recognition endpoints wait on an LLM reading a drawing, which legitimately takes tens of
+  // seconds — the server allows 120s for exactly that, while the instance default above is 12s.
+  // That mismatch cost real money: the server finished the call and the tokens were billed, the
+  // client had already given up at 12s, and the master saw «Сервер недоступний» with nothing in
+  // the server log to explain it, because from the server's side nothing had gone wrong. Keyed on
+  // the path rather than set per call for the same reason as the FormData rule above — there are
+  // seven of these endpoints, and the next one must not have to remember.
+  if (req.url?.endsWith('/parse')) {
+    req.timeout = LLM_TIMEOUT_MS;
   }
 
   // Backend error messages localise by Accept-Language, and without this header the

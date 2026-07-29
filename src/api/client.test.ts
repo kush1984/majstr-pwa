@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { api, ensureAccessToken } from './client.ts';
+import { api, ensureAccessToken, LLM_TIMEOUT_MS } from './client.ts';
 import { tokens } from '@/lib/tokens.ts';
 
 /**
@@ -204,6 +204,41 @@ describe('api 401-retry interceptor', () => {
     const sent = adapter.mock.calls[0][0];
     expect(sent.headers['Content-Type']).not.toBe('application/json');
     expect(sent.headers['Content-Type']).toBeFalsy();
+  });
+
+  // A recognition call waits on an LLM reading a drawing. The instance default is 12s (there to make
+  // an offline WRITE fail fast into the outbox), the server allows 120s for the same call — so the
+  // default silently aborted every import while the tokens were still billed, and the server log was
+  // clean because nothing had failed server-side. Pinned per path, not per call site.
+  it('gives a recognition call the LLM timeout, not the 12s write default', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    const form = new FormData();
+    form.append('file', new File(['x'], 'plan.pdf', { type: 'application/pdf' }));
+    await api.post('/api/projects/p1/measurements/project/parse', form);
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(LLM_TIMEOUT_MS);
+    // The value has to clear the server's own ceiling for one LLM pass, or the client abandons a
+    // call the server is still legitimately working on.
+    expect(LLM_TIMEOUT_MS).toBeGreaterThan(120_000);
+  });
+
+  it('keeps the short fail-fast timeout on an ordinary write', async () => {
+    // The 12s default earns its keep on writes: a phone on one bar reports "online", and a write
+    // that hangs on a dead socket never reaches the outbox. Raising it globally would lose that.
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    await api.post('/api/projects', { name: 'Обʼєкт' });
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(12_000);
   });
 
   it('still sends application/json for ordinary JSON bodies', async () => {
