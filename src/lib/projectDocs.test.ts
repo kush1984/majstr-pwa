@@ -6,8 +6,12 @@ import {
   classifyPageText,
   extract7z,
   extractZipEntries,
+  defaultPicks,
   floorFromName,
   floorFromRoomName,
+  looksLikeData,
+  MAX_AUTO_PICKS,
+  pageEvidence,
   isDocEntry,
   listZipEntries,
 } from './projectDocs.ts';
@@ -125,4 +129,92 @@ describe('zip handling', () => {
     expect(Object.keys(out)).toEqual(['проєкт/експлікація 1п.pdf']);
     expect(new TextDecoder().decode(out['проєкт/експлікація 1п.pdf'])).toBe('%PDF-fake');
   });
+});
+
+describe('the classifier is a hint, and the page contents decide when it fails', () => {
+  // Lifted verbatim from four real projects, because every one of them broke a rule that looked
+  // safe in the abstract.
+  const BELGRADSKA_P3 = 'H=2850мм 3545 4730 4615 4990 2990 5000 2750 3700 Нпр=2230мм Нпд=900мм '
+    + 'Специфікація приміщень (обміри) 7,16 m² 17,69 m² ОБМІРНИЙ ПЛАН';
+  const EXAMPLE_HOUSE_P2 = 'Умовні позначення - відмітка стелі - відмітка підлоги - відмітка верха '
+    + 'прорізу розміри вказані в міліметрах, відмітки в метрах 2.93 0.00 2.28 0.82 12.63m 4.09m';
+  const TITLE_PAGE = "ДИЗАЙН-ПРОЄКТ приватний будинок 2024 Автор проєкту";
+  const WINDOWS_SPEC = 'СПЕЦИФІКАЦІЯ ВІКОН В 07 В 08 1500 650 650 1300 1415 1000 2415 2140 2230';
+
+  it('reads the evidence a page carries, whatever we called the page', () => {
+    const plan = pageEvidence(BELGRADSKA_P3);
+    expect(plan.chains).toBeGreaterThan(5);
+    expect(plan.areas).toBeGreaterThan(0);
+    expect(plan.heights).toBe(true);
+    expect(looksLikeData(plan)).toBe(true);
+
+    // Level marks are heights too — «H=» is one studio's convention, not the only one.
+    const marks = pageEvidence(EXAMPLE_HOUSE_P2);
+    expect(marks.heights).toBe(true);
+    expect(marks.areas).toBeGreaterThan(0);   // dot decimals, not commas
+
+    expect(pageEvidence(WINDOWS_SPEC).openingSpec).toBe(true);
+    expect(looksLikeData(pageEvidence(TITLE_PAGE))).toBe(false);
+  });
+
+  it('treats a page with NO text layer as a candidate, not as noise', () => {
+    // A raster export hides its content; it does not prove there is none. Dropping those silently
+    // is how a scanned measure plan became invisible.
+    const raster = pageEvidence('   ');
+    expect(raster.raster).toBe(true);
+    expect(looksLikeData(raster)).toBe(true);
+  });
+
+  it('keeps the classifier verdict when ANY sheet classified', () => {
+    const picks = defaultPicks([
+      { kind: 'OTHER' as const, useful: false, evidence: pageEvidence(BELGRADSKA_P3) },
+      { kind: 'PLAN_MEASURE' as const, useful: true, evidence: pageEvidence(TITLE_PAGE) },
+    ]);
+    expect(picks).toEqual([false, true]);
+  });
+
+  it('falls back to the evidence when NOTHING classified — the Solone case', () => {
+    // 19 sheets, not one recognised: the import had nothing to send and did nothing at all.
+    const picks = defaultPicks([
+      { kind: 'OTHER' as const, useful: false, evidence: pageEvidence(TITLE_PAGE) },
+      { kind: 'OTHER' as const, useful: false, evidence: pageEvidence(BELGRADSKA_P3) },
+      { kind: 'OTHER' as const, useful: false, evidence: pageEvidence(WINDOWS_SPEC) },
+    ]);
+    expect(picks[0]).toBe(false);
+    expect(picks[1]).toBe(true);
+    expect(picks[2]).toBe(true);
+  });
+
+  it('never ticks a sheet the classifier DID recognise as unable to give rooms', () => {
+    // A coverings spec produces material totals, not measurements — that decision predates this
+    // fallback and must not be undone by it. Same for electrical sheets (a separate, parked step).
+    const picks = defaultPicks([
+      { kind: 'COVERINGS' as const, useful: false, evidence: pageEvidence('Плитка 94,5 м² 12,5 м²') },
+      { kind: 'ELECTRICAL' as const, useful: false, evidence: pageEvidence(BELGRADSKA_P3) },
+    ]);
+    expect(picks).toEqual([false, false]);
+  });
+
+  it('caps the fallback so a 44-file archive cannot become 44 model calls', () => {
+    const many = Array.from({ length: 20 }, () => ({
+      kind: 'OTHER' as const,
+      useful: false,
+      evidence: pageEvidence(BELGRADSKA_P3),
+    }));
+    expect(defaultPicks(many).filter(Boolean)).toHaveLength(MAX_AUTO_PICKS);
+  });
+
+  it('«цоколь» is a floor only when it reads like one', () => {
+    // Found on a real lighting sheet: «в зоні цоколя» is the kitchen plinth, and it was putting
+    // every room on that page onto a basement floor that does not exist.
+    expect(floorFromName('h - в зоні цоколя для побут.техніки')).toBeNull();
+    expect(floorFromName('лампа з цоколем Е27')).toBeNull();
+    expect(floorFromName('цокольний поверх')).toBe('цоколь');
+    expect(floorFromName('обмірний план, цоколь')).toBe('цоколь');
+    expect(floorFromName('план цоколь')).toBe('цоколь');
+    // The other labels are unambiguous and must keep working.
+    expect(floorFromName('мансарда 2п')).toBe('мансарда');
+    expect(floorFromName('підвал')).toBe('підвал');
+  });
+
 });

@@ -696,6 +696,12 @@ export interface ProjectImportRoom {
   openings: ProjectImportOpening[];
   confidence: Confidence;
   note: string | null;
+  /**
+   * Field names on THIS room whose figures were read but not confirmed — `["widthMm"]`. The value
+   * is present and usable; the review screen marks it «перепровірити». Optional so a response from
+   * a server that predates the field deserializes as undefined rather than breaking the review.
+   */
+  uncertain?: string[];
 }
 
 export interface ProjectImportFloor {
@@ -721,6 +727,8 @@ export interface ProjectImportParseResponse {
   /** Absolute ceiling height per floor label, mm. */
   ceilingHeightsMm: Record<string, number>;
   warnings: string[];
+  /** What the SHEET says it is, off its own stamp — our own label was a filename guess. */
+  sheetTitle?: string | null;
 }
 
 export interface ProjectImportCommitRoom {

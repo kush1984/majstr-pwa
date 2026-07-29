@@ -11,15 +11,18 @@ import { cn } from '@/lib/cn.ts';
 import {
   classifyDoc,
   classifyPageText,
+  defaultPicks,
   docLabel,
   extract7z,
   extractZipEntries,
   isDocEntry,
   listZipEntries,
   MAX_ENTRY_BYTES,
+  pageEvidence,
   pdfPageTexts,
   type ClassifiedDoc,
   type DocKind,
+  type PageEvidence,
 } from '@/lib/projectDocs.ts';
 import { extractPdfPages, pdfPageCount } from '@/lib/pdfPages.ts';
 import { projectImportApi } from '@/api/projectImport.ts';
@@ -50,6 +53,8 @@ interface DocRow extends ClassifiedDoc {
   sevenZip?: boolean;
   /** 1-based page of a multi-page PDF — split out client-side before upload. */
   page?: number;
+  /** What the page actually holds, independent of what we classified it as. */
+  evidence?: PageEvidence;
 }
 
 interface RoomRow {
@@ -65,6 +70,8 @@ interface RoomRow {
   src: MergedRoom;
   /** Gabarits the model DID read but the checksum refused — shown, never silently dropped. */
   rejected: { widthMm: number; lengthMm: number } | null;
+  /** Field names read but unconfirmed — named on the card so he knows WHAT to re-measure. */
+  uncertain: string[];
 }
 
 const IMPORT_KINDS: DocKind[] = ['ROOM_SCHEDULE', 'PLAN_MEASURE', 'COVERINGS'];
@@ -98,6 +105,8 @@ export function ProjectImportSheet({
   const [heights, setHeights] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   /** What the auto-pick actually parsed — shown on the review so it's never a black box. */
+  /** True when the default ticks came from page CONTENTS, because no name or stamp matched. */
+  const [guessed, setGuessed] = useState(false);
   const [usedRows, setUsedRows] = useState<DocRow[]>([]);
   const pickRef = useRef<HTMLInputElement>(null);
   const zips = useRef<Map<string, Uint8Array>>(new Map());
@@ -118,6 +127,7 @@ export function ProjectImportSheet({
     setMovingRooms(new Set());
     setMoveTarget('');
     setUsedRows([]);
+    setGuessed(false);
     zips.current.clear();
     sevenFiles.current.clear();
   };
@@ -132,18 +142,27 @@ export function ProjectImportSheet({
    *  the page's own text (title block / stamp) — no LLM, and no «up to 5 pages» wall. */
   const pdfRows = async (file: File): Promise<DocRow[]> => {
     const pages = await pdfPageCount(file);
-    if (pages <= 1) {
-      return [{ id: seq.current++, ...classifyDoc(file.name), file }];
-    }
-    const nameFloor = classifyDoc(file.name).floor;
     let texts: string[] = [];
     try {
       texts = await pdfPageTexts(await file.arrayBuffer());
     } catch {
-      texts = new Array<string>(pages).fill('');
+      texts = new Array<string>(Math.max(pages, 1)).fill('');
     }
+    if (pages <= 1) {
+      // A one-page file is classified by its NAME, but it still gets its evidence read: designers
+      // send single-sheet PDFs by the dozen («13_підлоги 1п.pdf»), and when a name says nothing the
+      // page contents are the only thing left to tick by.
+      return [{
+        id: seq.current++,
+        ...classifyDoc(file.name),
+        file,
+        evidence: pageEvidence(texts[0] ?? ''),
+      }];
+    }
+    const nameFloor = classifyDoc(file.name).floor;
     return texts.map((text, i) => {
       const cls = text.trim() ? classifyPageText(text) : { kind: 'OTHER' as DocKind, floor: null };
+      const evidence = pageEvidence(text);
       return {
         id: seq.current++,
         name: file.name,
@@ -153,6 +172,7 @@ export function ProjectImportSheet({
         useful: cls.kind === 'ROOM_SCHEDULE' || cls.kind === 'PLAN_MEASURE',
         file,
         page: i + 1,
+        evidence,
       };
     });
   };
@@ -197,6 +217,15 @@ export function ProjectImportSheet({
       toast.error(t('projectImport.nothingUseful'));
       return;
     }
+    // The classifier is a HINT. When no name or stamp matched anything — a whole real 19-sheet
+    // project — the ticks come from what the pages actually carry instead, so the master gets a
+    // list with something on it rather than an empty screen and no reason why.
+    const picks = defaultPicks(rows);
+    rows.forEach((row, i) => {
+      row.useful = picks[i];
+    });
+    const byEvidenceOnly = !rows.some((r) => IMPORT_KINDS.includes(r.kind) && r.useful);
+    setGuessed(byEvidenceOnly);
     setDocs(rows);
     // The master shouldn't have to hunt for the measure sheet in a 25-page set: when the
     // classifier found the useful page(s) unambiguously, parse them straight away. The
@@ -216,11 +245,13 @@ export function ProjectImportSheet({
       seen.add(slot);
       return true;
     });
-    if (auto.length > 0 && auto.length <= MAX_SELECTED) {
+    if (!byEvidenceOnly && auto.length > 0 && auto.length <= MAX_SELECTED) {
       setStep('parsing');
       void runParse(auto);
       return;
     }
+    // Picked on evidence alone: show the list, with the evidence, and let him confirm. Spending
+    // recognition calls on a guess the master never saw is how «нічого не розпізнало» happens.
     setStep('files');
   };
 
@@ -323,6 +354,7 @@ export function ProjectImportSheet({
       floor: room.floor,
       areaM2: room.areaM2,
       confidence: room.confidence,
+      uncertain: room.uncertain,
       notes: room.notes,
       elements: buildRoomPackage(room, heightMmOf(h, room.floor)),
       src: room,
@@ -465,6 +497,13 @@ export function ProjectImportSheet({
           <p className="text-sm text-muted">
             {t('projectImport.filesHint', { n: selected.length, m: docs.length })}
           </p>
+          {/* Nothing matched by name or stamp, so the ticks are a guess from the page contents —
+              say so, rather than letting him assume the classifier knew what it was doing. */}
+          {guessed && (
+            <p className="rounded-xl bg-amber-soft p-3 text-xs text-amber">
+              {t('projectImport.guessedByEvidence')}
+            </p>
+          )}
 
           <div className="max-h-[45vh] space-y-1.5 overflow-y-auto">
             {docs.map((d) => (
@@ -480,6 +519,7 @@ export function ProjectImportSheet({
                     <span className="block text-[11px] text-muted">
                       {kindLabel(d.kind)}
                       {d.floor && ` · ${t('projectImport.floorLabel', { floor: d.floor })}`}
+                      {evidenceNote(d.evidence, t) && ` · ${evidenceNote(d.evidence, t)}`}
                     </span>
                   </span>
                 </label>
@@ -507,17 +547,16 @@ export function ProjectImportSheet({
             </div>
           )}
 
+          {/* A ticked sheet is ALWAYS sendable, whatever we called it. Blocking here (and 400-ing
+              on the server) punished the master for our classifier being wrong about his own
+              drawing — and on sets where nothing classifies, that was every sheet. */}
           <Button fullWidth
-            disabled={selected.length === 0 || selected.length > MAX_SELECTED
-              || selected.some((d) => !IMPORT_KINDS.includes(d.kind))}
+            disabled={selected.length === 0 || selected.length > MAX_SELECTED}
             onClick={() => void runParse()}>
             {t('projectImport.recognise', { n: selected.length })}
           </Button>
           {selected.length > MAX_SELECTED && (
             <p className="text-center text-xs text-amber">{t('projectImport.tooManySelected', { max: MAX_SELECTED })}</p>
-          )}
-          {selected.some((d) => !IMPORT_KINDS.includes(d.kind)) && (
-            <p className="text-center text-xs text-muted">{t('projectImport.untickNoise')}</p>
           )}
         </div>
       )}
@@ -712,6 +751,16 @@ export function ProjectImportSheet({
                               onChange={(patch) => patchElement(room.key, e.key, patch)} />
                           ))}
                         </div>
+                        {/* Named, not merely coloured: «перепровірити: ширина, висота стелі» tells
+                            him which tape measurement settles it. The figures themselves stay in
+                            the fields above — that is the whole point of keeping them. */}
+                        {room.uncertain.length > 0 && (
+                          <p className="mt-1.5 rounded-lg bg-amber-soft px-2 py-1.5 text-xs text-amber">
+                            <span className="font-semibold">{t('projectImport.recheck')}</span>
+                            {': '}
+                            {room.uncertain.map((f) => fieldLabel(f, t)).join(', ')}
+                          </p>
+                        )}
                         {(room.notes.length > 0) && (
                           <p className="mt-1.5 text-xs text-amber">{room.notes.join(' · ')}</p>
                         )}
@@ -874,6 +923,35 @@ function reviewFloorLabels(rooms: { floor: string | null }[]): string[] {
     if (!labels.includes(l)) labels.push(l);
   }
   return labels;
+}
+
+/** Schema field names → what the master calls them, for the «перепровірити» line. */
+function fieldLabel(field: string, t: (k: string) => string): string {
+  const key = `projectImport.field.${field}`;
+  const label = t(key);
+  // i18next echoes the key back when it is missing: a field we have no word for is shown as-is
+  // rather than as «projectImport.field.somethingNew».
+  return label === key ? field : label;
+}
+
+/**
+ * Why this page is worth a look, in the master's own terms — «89 розмірів · 11 площ · висоти».
+ *
+ * Shown on every row, ticked or not, because the alternative is a grey list of file names where the
+ * only way to find the sheet with the dimensions on it is to open all 25 in another app.
+ */
+function evidenceNote(
+  e: PageEvidence | undefined,
+  t: (k: string, o?: Record<string, unknown>) => string,
+): string {
+  if (!e) return '';
+  if (e.raster) return t('projectImport.evidenceRaster');
+  const parts: string[] = [];
+  if (e.chains > 0) parts.push(t('projectImport.evidenceChains', { n: e.chains }));
+  if (e.areas > 0) parts.push(t('projectImport.evidenceAreas', { n: e.areas }));
+  if (e.heights) parts.push(t('projectImport.evidenceHeights'));
+  if (e.openingSpec) parts.push(t('projectImport.evidenceOpenings'));
+  return parts.join(' · ');
 }
 
 /** What the selected document kinds can produce — shown before parsing. */

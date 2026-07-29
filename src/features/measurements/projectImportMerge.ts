@@ -39,6 +39,12 @@ export interface MergedRoom {
   openings: ProjectImportOpening[];
   confidence: Confidence;
   notes: string[];
+  /**
+   * Field names the model read but could not confirm, unioned across every sheet that mentioned
+   * this room. The review highlights exactly these — a figure the master can check in ten seconds
+   * beats an empty field he has to re-derive from scratch.
+   */
+  uncertain: string[];
 }
 
 /** Gabarits × vs the table area: the proof that makes recognised sizes trustworthy. */
@@ -139,6 +145,7 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
             openings: [],
             confidence: 'high',
             notes: [],
+            uncertain: [],
           };
           rooms.set(key, room);
         }
@@ -151,8 +158,14 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
           const note = `на аркуші «${sheetClaim}» поверху — перевірте`;
           if (!room.notes.includes(note)) room.notes.push(note);
         }
-        if (r.areaM2 != null && room.areaM2 == null) room.areaM2 = r.areaM2;
-        if (r.ceilingHmm != null && room.ceilingHmm == null) room.ceilingHmm = r.ceilingHmm;
+        if (r.areaM2 != null && room.areaM2 == null) {
+          room.areaM2 = r.areaM2;
+          room.uncertain = room.uncertain.filter((f) => f !== 'areaM2');
+        }
+        if (r.ceilingHmm != null && room.ceilingHmm == null) {
+          room.ceilingHmm = r.ceilingHmm;
+          room.uncertain = room.uncertain.filter((f) => f !== 'ceilingHmm');
+        }
         if (r.perimeterMm != null && room.perimeterMm == null) {
           room.perimeterMm = r.perimeterMm;
           room.perimeterDerived = false;
@@ -194,6 +207,12 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
         if (r.openings.length > 0 && room.openings.length === 0) room.openings = r.openings;
         if (rank(r.confidence) > rank(room.confidence)) room.confidence = r.confidence;
         if (r.note && !room.notes.includes(r.note)) room.notes.push(r.note);
+        // Union, never replace: one sheet may confirm what another could not, but until some sheet
+        // actually SUPPLIES the figure the doubt stands. Fields we then fill from elsewhere are
+        // cleared below, where they are filled.
+        for (const field of r.uncertain ?? []) {
+          if (!room.uncertain.includes(field)) room.uncertain.push(field);
+        }
       }
     }
     coverings.push(...resp.coverings);

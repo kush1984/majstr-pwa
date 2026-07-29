@@ -22,7 +22,11 @@ export interface ClassifiedDoc {
 /** «1п» / «1 поверх» / «2-го поверху» / «цоколь» / «мансарда» out of a filename. */
 export function floorFromName(name: string): string | null {
   const n = name.toLowerCase();
-  if (n.includes('цокол')) return 'цоколь';
+  // «цоколь» is two different words. On a lighting or kitchen sheet it is a lamp base («цоколь
+  // Е27») or the plinth under the cabinets («в зоні цоколя») — found exactly that on a real
+  // electrical page, which put every room on it onto a basement floor that does not exist. A floor
+  // is only meant when it reads like one: «цокольний поверх», «цоколь 1п», a bare «цоколь».
+  if (/цокольн|цоколь\s*(поверх|$|[,.)\-–])/u.test(n)) return 'цоколь';
   if (n.includes('мансард')) return 'мансарда';
   if (n.includes('підвал')) return 'підвал';
   const full = n.match(/(\d+)(?:\s*-?\s*|-го\s+)поверх/u);
@@ -192,6 +196,75 @@ export function classifyPageText(text: string): { kind: DocKind; floor: string |
   if (/специфікація покритт|специфікація покриття/.test(n)) return { kind: 'COVERINGS', floor };
   return { kind: 'OTHER', floor };
 }
+
+// ---- evidence: what a page holds, regardless of what we called it -----------
+
+/** Countable signs that a page carries measurement data, used to decide the default ticks. */
+export interface PageEvidence {
+  /** Dimension chains: four-digit figures, optionally with a thousands space («5 000»). */
+  chains: number;
+  /** Areas: a decimal followed by м/m — «12,63 м²», «12.63 m2». Both separators occur. */
+  areas: number;
+  /** A ceiling height in either notation: «H=2850» or a level mark («відмітка стелі 2.93»). */
+  heights: boolean;
+  /** An opening spec's markings — «Д 01», «ДЗ 02», «В 07» — the authoritative door/window sizes. */
+  openingSpec: boolean;
+  /** No text layer at all: a raster export. Says nothing about the content — it hides it. */
+  raster: boolean;
+}
+
+export function pageEvidence(text: string): PageEvidence {
+  const t = text ?? '';
+  return {
+    chains: (t.match(/\d\s?\d{3}(?!\d)/g) ?? []).length,
+    areas: (t.match(/\d+[.,]\d{1,2}\s*(м|m)/giu) ?? []).length,
+    // `\w` is ASCII-only in JS even under /u, so «відмітк\w*» never matched a Cyrillic ending —
+    // it silently made the whole level-mark notation invisible. \S* is the fix, not a shortcut.
+    heights: /[HН]\s*[=\-–]?\s*\d{3,4}/u.test(t) || /відмітк\S*\s+(стел|підлог|верх|низ)/iu.test(t),
+    openingSpec: /(^|\s)(ДЗ|Д|В)\s?0?\d{1,2}(\s|$)/u.test(t),
+    raster: t.trim().length === 0,
+  };
+}
+
+/** Whether a page holds enough to be worth a recognition call when nothing classified. */
+export function looksLikeData(e: PageEvidence): boolean {
+  // A raster page counts: its text layer is missing, not its content, and dropping those silently
+  // is how a scanned measure plan became invisible.
+  return e.raster || e.chains >= 5 || e.areas >= 3 || e.openingSpec;
+}
+
+/**
+ * Which rows to tick by default — the classifier as a HINT rather than a verdict.
+ *
+ * Measured on four real sets: of Belgradska's 25 sheets one classified useful, and of another
+ * 19-sheet project NOT ONE did, so the import had nothing to send and did nothing at all. When the
+ * names and stamps produce no useful sheet, the evidence on the pages decides instead, capped so a
+ * 44-file archive cannot turn into forty recognition calls.
+ */
+export const MAX_AUTO_PICKS = 6;
+
+export function defaultPicks<T extends { kind: DocKind; useful: boolean; evidence?: PageEvidence }>(
+  rows: T[],
+): boolean[] {
+  const classified = rows.map((r) => r.useful);
+  if (classified.some(Boolean)) return classified;
+  const scored = rows
+    .map((row, index) => ({ index, e: row.evidence, kind: row.kind }))
+    // Only sheets we FAILED to classify. A COVERINGS or ELECTRICAL sheet is excluded on purpose,
+    // not by accident: the classifier knew what it was, and it cannot produce rooms — spending a
+    // recognition call on it would be the deliberate decision reversed by a side effect.
+    .filter((r) => r.kind === 'OTHER' && r.e && looksLikeData(r.e))
+    // Most evidence first: a sheet with 89 chains beats a title page with one stray figure.
+    .sort((a, b) => score(b.e!) - score(a.e!))
+    .slice(0, MAX_AUTO_PICKS)
+    .map((r) => r.index);
+  return rows.map((_, i) => scored.includes(i));
+}
+
+function score(e: PageEvidence): number {
+  return e.chains + e.areas * 3 + (e.heights ? 10 : 0) + (e.openingSpec ? 8 : 0);
+}
+
 
 /**
  * The text of every page of a PDF (pdfjs-dist, lazy). Pages without a text

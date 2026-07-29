@@ -1209,7 +1209,6 @@
     "zipFailed": "Could not read the archive",
     "nothingUseful": "No PDFs or photos found in the selection",
     "filesHint": "Will recognise {{n}} of {{m}} files. Ticks are editable — add a missed one or untick noise.",
-    "untickNoise": "Pick a type for every ticked file (schedule / measure plan / coverings)",
     "recognise": "Recognise {{n}} file(s)",
     "parsing": "Reading the drawings…",
     "heightsHint": "No ceiling height found in the drawings. Enter one per floor — walls can’t be computed without it (leave blank to skip).",
@@ -1269,7 +1268,26 @@
     "autoPicked": "Recognised from: {{what}}",
     "pickOther": "pick other pages",
     "heightsFound": "For {{n}} rooms the height came from the drawing (H=…) — only the rest are asked about.",
-    "coveringsSkipped": "The coverings spec is skipped — it gives no per-room measurements (only material totals)."
+    "coveringsSkipped": "The coverings spec is skipped — it gives no per-room measurements (only material totals).",
+    "evidenceChains": "{{n}} dimensions",
+    "evidenceAreas": "{{n}} areas",
+    "evidenceHeights": "heights",
+    "evidenceOpenings": "openings spec",
+    "evidenceRaster": "no text layer — recognisable only as an image",
+    "guessedByEvidence": "No sheet matched by name or stamp — ticked the ones that show data. Check the ticks.",
+    "recheck": "check",
+    "recheckHint": "Highlighted figures were read from the drawing but not confirmed — measure on site and correct.",
+    "sheetRead": "Sheet: {{title}}",
+    "field": {
+      "widthMm": "width",
+      "lengthMm": "length",
+      "areaM2": "area",
+      "perimeterMm": "perimeter",
+      "ceilingHmm": "ceiling height",
+      "openings": "openings",
+      "cutWidthMm": "cut-out",
+      "cutDepthMm": "cut-out"
+    }
   },
   "messages": {
     "title": "💬 Messages",
