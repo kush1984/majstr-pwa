@@ -6,13 +6,16 @@ import {
   classifyPageText,
   extract7z,
   extractZipEntries,
+  dedupeBySlot,
   defaultPicks,
   floorFromName,
+  floorFromStamp,
   isAfterRemodel,
   floorFromRoomName,
   looksLikeData,
   MAX_AUTO_PICKS,
   pageEvidence,
+  type DocKind,
   isDocEntry,
   listZipEntries,
 } from './projectDocs.ts';
@@ -238,5 +241,59 @@ describe('two plans of the same floor: before and after remodelling', () => {
 
   it('does not mistake a plan «до перепланування» for the after one', () => {
     expect(isAfterRemodel('Обмірний план до перепланування')).toBe(false);
+  });
+});
+
+describe('which floor a SHEET is, told apart from a floor inside a room name', () => {
+  it('takes the floor from the title block, not from a room called «Коридор 2 поверху»', () => {
+    // Дубляни's floor-1 schedule, verbatim in shape: reading the page as one string put this sheet
+    // on floor 2, where it collided with the real floor-2 schedule and one of the two was dropped.
+    const schedule = 'Експлікація приміщень Номер приміщення Найменування Площа м.кв '
+      + '1 Коридор 26,5 2 Коридор 2 поверху 64,4 3 Кабінет 13,7 Загальна площа 204,0 '
+      + 'Експлікація приміщень 1 поверх 1 2 3 4';
+
+    expect(floorFromStamp(schedule)).toBe('1');
+    // The naive whole-text read is what used to happen, and it is wrong.
+    expect(floorFromName(schedule)).toBe('2');
+  });
+
+  it('reads a floor printed next to the title, and ignores the SHEET number', () => {
+    // Clearline's two-storey set: «3 лист» is the sheet's number, not a floor.
+    expect(floorFromStamp('clearline.com.ua ex_5947 Обмірний план 3 лист 2 поверх 2.96 0.00')).toBe('2');
+    expect(floorFromStamp('Обмірний план 2 лист 495 1110 310 250')).toBeNull();
+  });
+
+  it('accepts a floor label standing alone among figures', () => {
+    // Same set, other sheet: the stamp says only «Обмірний план 2 лист», and the floor sits away
+    // from it among the level marks. A label among numbers is a label; one glued to a word is a name.
+    expect(floorFromStamp('Обмірний план 2 лист 2.57 0.95 1 поверх 3655 2288 1140')).toBe('1');
+    expect(floorFromStamp('план меблів Спальня 2 поверху 12,5')).toBeNull();
+  });
+});
+
+describe('one sheet per slot — but only where a slot means something', () => {
+  const row = (kind: DocKind, floor: string | null, extra: Partial<{ afterRemodel: boolean }> = {}) =>
+    ({ kind, floor, useful: true, ...extra });
+
+  it('the after-remodel plan claims the floor, the before-plan is set aside', () => {
+    const before = row('PLAN_MEASURE', '1');
+    const after = row('PLAN_MEASURE', '1', { afterRemodel: true });
+
+    const kept = dedupeBySlot([before, after]);
+
+    expect(kept).toEqual([after]);
+    expect(before.useful).toBe(false); // stays in the list, unticked, for the master
+  });
+
+  it('sheets picked on EVIDENCE are all «OTHER», so they are not duplicates of one another', () => {
+    // The Solone set: six unclassified candidates carrying the areas and the window/door specs.
+    // Treating «OTHER | no floor» as one slot threw five of them away.
+    const rows = Array.from({ length: 6 }, () => row('OTHER', null));
+
+    expect(dedupeBySlot(rows)).toHaveLength(6);
+  });
+
+  it('two schedules of different floors both survive', () => {
+    expect(dedupeBySlot([row('ROOM_SCHEDULE', '1'), row('ROOM_SCHEDULE', '2')])).toHaveLength(2);
   });
 });

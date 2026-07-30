@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn.ts';
 import {
   classifyDoc,
   classifyPageText,
+  dedupeBySlot,
   defaultPicks,
   docLabel,
   isAfterRemodel,
@@ -205,7 +206,9 @@ export function ProjectImportSheet({
         // the same has to hold here, where the decision about WHICH sheet to send is made.
         const stamp = classifyPageText(text);
         if (stamp.kind !== 'OTHER') row.kind = stamp.kind;
-        if (stamp.floor) row.floor = stamp.floor;
+        // FILL a missing floor, never overwrite one the file name already gave: «експлікація 1п» is
+        // a stronger statement than anything the page's own prose can be trusted for.
+        if (stamp.floor && !row.floor) row.floor = stamp.floor;
       } catch {
         // A stamp we cannot read changes nothing: the name-based classification stands.
       }
@@ -275,18 +278,7 @@ export function ProjectImportSheet({
     // remodelling. The after-sheet is the flat that will exist and the one the schedule's areas
     // belong to; taking the before-sheet by list order imported demolished walls, whose gabarits
     // then failed the checksum and came out as zeros. So the after-sheet claims the slot first.
-    const seen = new Set<string>();
-    const ranked = [...rows].sort((a, b) => Number(b.afterRemodel ?? false) - Number(a.afterRemodel ?? false));
-    const auto = ranked.filter((r) => {
-      if (!r.useful) return false;
-      const slot = `${r.kind}|${r.floor ?? ''}`;
-      if (seen.has(slot)) {
-        r.useful = false;
-        return false;
-      }
-      seen.add(slot);
-      return true;
-    });
+    const auto = dedupeBySlot(rows);
     if (!byEvidenceOnly && auto.length > 0 && auto.length <= MAX_SELECTED) {
       setStep('parsing');
       void runParse(auto);

@@ -183,9 +183,34 @@ export async function extract7z(buf: Uint8Array): Promise<Record<string, Uint8Ar
  *   floors, electrics…), so the page's own STAMP (обмірний план / план меблів /
  *   план розеток) must win over the table's presence.
  */
+/**
+ * Which floor the SHEET is, as opposed to a floor mentioned inside a room's name.
+ *
+ * A whole page is a poisoned haystack: the Дубляни schedule lists a room called «Коридор 2 поверху»,
+ * and reading the page as one string put that floor-1 sheet on floor 2 — where it collided with the
+ * real floor-2 schedule and one of the two was dropped.
+ *
+ * The tell is grammatical, and it holds across every real set we have. A title block states the floor
+ * in the NOMINATIVE — «Експлікація приміщень 1 поверх», «Обмірний план 3 лист 2 поверх», or standing
+ * among the level marks as «… 0.95 1 поверх 3655». A room's name uses the GENITIVE — «Коридор 2
+ * поверху». The only genitive a title itself uses is the ordinal «2-го поверху», so that one is
+ * accepted too and nothing else is.
+ */
+export function floorFromStamp(text: string): string | null {
+  const n = (text ?? '').toLowerCase();
+  // The named floors carry their own guard already (see floorFromName on «цоколь»).
+  if (/цокольн|цоколь\s*(поверх|$|[,.)\-–])/u.test(n)) return 'цоколь';
+  if (n.includes('мансард')) return 'мансарда';
+  if (n.includes('підвал')) return 'підвал';
+  const nominative = /(\d+)\s*поверх(?!у)/u.exec(n);
+  if (nominative) return nominative[1];
+  const ordinal = /(\d+)\s*-?\s*го\s+поверху/u.exec(n);
+  return ordinal ? ordinal[1] : null;
+}
+
 export function classifyPageText(text: string): { kind: DocKind; floor: string | null } {
   const n = text.toLowerCase();
-  const floor = floorFromName(n);
+  const floor = floorFromStamp(n);
   if (/відомість креслень/.test(n)) return { kind: 'OTHER', floor };
   if (/обмірний план|обмірювальний план|план обмірів/.test(n)) return { kind: 'PLAN_MEASURE', floor };
   if (/розет|вимикач|освітлен|електр/.test(n)) return { kind: 'ELECTRICAL', floor };
@@ -224,6 +249,46 @@ export function pageEvidence(text: string): PageEvidence {
     openingSpec: /(^|\s)(ДЗ|Д|В)\s?0?\d{1,2}(\s|$)/u.test(t),
     raster: t.trim().length === 0,
   };
+}
+
+/**
+ * One sheet per kind+floor, and WHICH one is not a detail.
+ *
+ * A real set carries the same plan twice — before and after remodelling — so this is where the
+ * import decides whether it reads the flat that will exist or the walls about to be demolished. The
+ * after-sheet claims the slot first; the loser stays in the list, unticked, for the master.
+ *
+ * Extracted from the picker so the rule that decides what we PAY for can be tested directly against
+ * real archives rather than reasoned about inside a component.
+ */
+export function dedupeBySlot<T extends { kind: DocKind; floor: string | null; useful: boolean; afterRemodel?: boolean }>(
+  rows: T[],
+): T[] {
+  // Only a kind we RECOGNISED can have a twin. Sheets picked on evidence alone are all
+  // «OTHER, floor unknown», so treating that as a slot collapsed six distinct candidates into one —
+  // on the Solone set that threw away every sheet carrying the areas and the window/door specs, and
+  // left a single plan behind.
+  const deduped: DocKind[] = ['ROOM_SCHEDULE', 'PLAN_MEASURE'];
+  const seen = new Set<string>();
+  const ranked = [...rows].sort(
+    (a, b) => Number(b.afterRemodel ?? false) - Number(a.afterRemodel ?? false),
+  );
+  const kept: T[] = [];
+  for (const row of ranked) {
+    if (!row.useful) continue;
+    if (!deduped.includes(row.kind)) {
+      kept.push(row);
+      continue;
+    }
+    const slot = `${row.kind}|${row.floor ?? ''}`;
+    if (seen.has(slot)) {
+      row.useful = false;
+      continue;
+    }
+    seen.add(slot);
+    kept.push(row);
+  }
+  return kept;
 }
 
 /**
