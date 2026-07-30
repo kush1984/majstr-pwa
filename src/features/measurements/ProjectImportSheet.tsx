@@ -13,6 +13,7 @@ import {
   classifyPageText,
   defaultPicks,
   docLabel,
+  isAfterRemodel,
   extract7z,
   extractZipEntries,
   isDocEntry,
@@ -55,6 +56,8 @@ interface DocRow extends ClassifiedDoc {
   page?: number;
   /** What the page actually holds, independent of what we classified it as. */
   evidence?: PageEvidence;
+  /** Sheet stamped «після перепланування» — the layout that will actually exist. */
+  afterRemodel?: boolean;
 }
 
 interface RoomRow {
@@ -177,6 +180,38 @@ export function ProjectImportSheet({
     });
   };
 
+  /**
+   * Read the STAMP of the archive entries that matter.
+   *
+   * An entry arrives as a file name and nothing else, and a name cannot tell «Обмірний план 1
+   * поверх» from «Обмірний план ПІСЛЯ ПЕРЕПЛАНУВАННЯ 1 поверх» — a real set carries both, with
+   * identical names bar a leading number. Sending the wrong one imports walls that are about to be
+   * demolished, whose gabarits then fail the area checksum and land as zeros.
+   *
+   * Only the candidate sheets are opened (six of forty-four on a real archive), so this is a few
+   * small single-page PDFs, not the whole set.
+   */
+  const readArchiveStamps = async (rows: DocRow[]) => {
+    for (const row of rows) {
+      if (!row.useful || row.file) continue;
+      try {
+        const blob = await bytesOf(row);
+        const texts = await pdfPageTexts(await blob.arrayBuffer());
+        const text = texts.join(' ');
+        if (!text.trim()) continue;
+        row.evidence = pageEvidence(text);
+        row.afterRemodel = isAfterRemodel(text);
+        // The sheet's own stamp outranks its file name — our own prompt says so to the model, and
+        // the same has to hold here, where the decision about WHICH sheet to send is made.
+        const stamp = classifyPageText(text);
+        if (stamp.kind !== 'OTHER') row.kind = stamp.kind;
+        if (stamp.floor) row.floor = stamp.floor;
+      } catch {
+        // A stamp we cannot read changes nothing: the name-based classification stands.
+      }
+    }
+  };
+
   const onPick = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const rows: DocRow[] = [];
@@ -224,6 +259,7 @@ export function ProjectImportSheet({
     rows.forEach((row, i) => {
       row.useful = picks[i];
     });
+    await readArchiveStamps(rows);
     const byEvidenceOnly = !rows.some((r) => IMPORT_KINDS.includes(r.kind) && r.useful);
     setGuessed(byEvidenceOnly);
     setDocs(rows);
@@ -234,8 +270,14 @@ export function ProjectImportSheet({
     // One sheet per KIND+FLOOR: a real set often carries near-identical variants
     // («1_обмірний план 1п» and «7_обмірний план 1п») — parsing both costs two LLM
     // calls for the same rooms. The rest stay in the list, unticked, for the master.
+    //
+    // WHICH one survives is not a detail: those two sheets are the layout before and after
+    // remodelling. The after-sheet is the flat that will exist and the one the schedule's areas
+    // belong to; taking the before-sheet by list order imported demolished walls, whose gabarits
+    // then failed the checksum and came out as zeros. So the after-sheet claims the slot first.
     const seen = new Set<string>();
-    const auto = rows.filter((r) => {
+    const ranked = [...rows].sort((a, b) => Number(b.afterRemodel ?? false) - Number(a.afterRemodel ?? false));
+    const auto = ranked.filter((r) => {
       if (!r.useful) return false;
       const slot = `${r.kind}|${r.floor ?? ''}`;
       if (seen.has(slot)) {

@@ -8,6 +8,7 @@ import {
   extractZipEntries,
   defaultPicks,
   floorFromName,
+  isAfterRemodel,
   floorFromRoomName,
   looksLikeData,
   MAX_AUTO_PICKS,
@@ -217,4 +218,25 @@ describe('the classifier is a hint, and the page contents decide when it fails',
     expect(floorFromName('підвал')).toBe('підвал');
   });
 
+});
+
+describe('two plans of the same floor: before and after remodelling', () => {
+  // Verbatim from «Креслення друк.7z», where the file names are identical bar a leading number:
+  //   1_обмірний план 1п.pdf → «Обмірний план приміщень 1 поверх»            (before)
+  //   7_обмірний план 1п.pdf → «Обмірний план приміщень після перепланування 1 поверх»
+  // Sending the before-sheet imports walls that are about to be demolished, and its gabarits then
+  // fail the schedule's area checksum — which is what «everything came back zero» was.
+  it('recognises the after-sheet from its stamp, typo and all', () => {
+    expect(isAfterRemodel('Обмірний план приміщень після перепланування 1 поверх')).toBe(true);
+    // The real 2nd-floor sheet is stamped «після перПланування» — a designer's typo must not decide
+    // which plan we read.
+    expect(isAfterRemodel('Обмірний план приміщень після перпланування 2 поверх')).toBe(true);
+    expect(isAfterRemodel('Обмірний план приміщень 1 поверх')).toBe(false);
+    expect(isAfterRemodel('План демонтажу')).toBe(false);
+    expect(isAfterRemodel('')).toBe(false);
+  });
+
+  it('does not mistake a plan «до перепланування» for the after one', () => {
+    expect(isAfterRemodel('Обмірний план до перепланування')).toBe(false);
+  });
 });

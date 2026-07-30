@@ -226,6 +226,22 @@ export function pageEvidence(text: string): PageEvidence {
   };
 }
 
+/**
+ * Does this sheet show the layout AFTER remodelling?
+ *
+ * A real set carries the same plan twice — «Обмірний план приміщень 1 поверх» and «Обмірний план
+ * приміщень ПІСЛЯ ПЕРЕПЛАНУВАННЯ 1 поверх» — with identical file names bar a leading number. The
+ * after-sheet is the one that matters: it is the flat that will exist, and it is the one whose areas
+ * the schedule lists. Sending the before-sheet gives geometry for walls about to be demolished, and
+ * those gabarits then fail the area checksum and come out as zeros — which is what happened.
+ *
+ * Matches «після пер…» rather than the full word on purpose: one of the real sheets is stamped
+ * «після перПланування», and a typo in a designer's title block must not decide which plan we read.
+ */
+export function isAfterRemodel(text: string): boolean {
+  return /після\s+пер/iu.test(text ?? '');
+}
+
 /** Whether a page holds enough to be worth a recognition call when nothing classified. */
 export function looksLikeData(e: PageEvidence): boolean {
   // A raster page counts: its text layer is missing, not its content, and dropping those silently
