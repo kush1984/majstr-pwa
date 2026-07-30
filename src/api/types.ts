@@ -1,3 +1,4 @@
+import type { DocKind } from '@/lib/projectDocs.ts';
 /**
  * Backend response shapes. Mirror Spring DTOs verbatim so a typo in a
  * field name fails at compile time, not in production.
@@ -734,6 +735,35 @@ export interface ProjectImportParseResponse {
   warnings: string[];
   /** What the SHEET says it is, off its own stamp — our own label was a filename guess. */
   sheetTitle?: string | null;
+}
+
+/** One sheet offered for triage — its extracted TEXT, which is where a title block lives. */
+export interface ProjectTriageSheet {
+  id: string;
+  name: string;
+  text: string;
+}
+
+/**
+ * What the model made of one sheet, reading its own title block.
+ *
+ * This is what decides which sheets are read in detail. It replaced keyword lists, which were
+ * derived from the projects we happened to have and never matched a Russian or English title.
+ */
+export interface ProjectTriageResult {
+  id: string;
+  title: string | null;
+  /** Same names the client-side classifier uses, so it drops straight in. */
+  kind: DocKind;
+  floor: string | null;
+  /** AFTER = the layout that will exist; EXISTING = the one being demolished. */
+  version: 'AFTER' | 'EXISTING' | 'UNKNOWN';
+  hasRoomTable: boolean;
+  hasDimensions: boolean;
+  hasOpeningSizes: boolean;
+  /** The model's recommendation, not a command — the master still sees and edits the ticks. */
+  worthReading: boolean;
+  note: string | null;
 }
 
 export interface ProjectImportCommitRoom {

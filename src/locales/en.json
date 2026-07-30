@@ -1304,7 +1304,9 @@
       "openings": "openings",
       "cutWidthMm": "cut-out",
       "cutDepthMm": "cut-out"
-    }
+    },
+    "triaging": "Working out what these sheets are…",
+    "triagingHint": "One cheap call for the whole set, so nothing useless is read"
   },
   "messages": {
     "title": "💬 Messages",

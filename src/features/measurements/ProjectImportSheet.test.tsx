@@ -9,10 +9,16 @@ import type { ProjectImportParseResponse } from '@/api/types.ts';
 import { anImportFloor, anImportRoom } from '@/test/factories.ts';
 
 vi.mock('@/api/projectImport.ts', () => ({
-  projectImportApi: { parse: vi.fn(), commit: vi.fn() },
+  projectImportApi: { triage: vi.fn(), parse: vi.fn(), commit: vi.fn() },
 }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // These tests use PDFs with no text layer, so there is nothing to triage and the keyword
+  // classification decides — the fallback path, exercised on purpose. The model-led path lives in
+  // ProjectImportSheet.triage.test.tsx, which mocks text extraction to have something to classify.
+  vi.mocked(projectImportApi.triage).mockRejectedValue(new Error('no text to triage'));
+});
 
 const empty: ProjectImportParseResponse = {
   floors: [], coverings: [], totalAreaM2: null, ceilingHeightsMm: {}, warnings: [],
@@ -52,6 +58,7 @@ function renderSheet() {
 }
 
 const pdf = (name: string) => new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], name, { type: 'application/pdf' });
+
 
 describe('ProjectImportSheet', () => {
   it('AUTO-parses the useful sheets (no file screen), asks only the missing height, commits the package', async () => {
@@ -199,3 +206,4 @@ describe('ProjectImportSheet', () => {
     await waitFor(() => expect(screen.getByText(/не сходиться/)).toBeTruthy());
   });
 });
+

@@ -45,7 +45,7 @@ import type {
   ProjectImportParseResponse,
 } from '@/api/types.ts';
 
-type Step = 'source' | 'files' | 'parsing' | 'heights' | 'review';
+type Step = 'source' | 'triage' | 'files' | 'parsing' | 'heights' | 'review';
 
 interface DocRow extends ClassifiedDoc {
   id: number;
@@ -59,6 +59,10 @@ interface DocRow extends ClassifiedDoc {
   evidence?: PageEvidence;
   /** Sheet stamped «після перепланування» — the layout that will actually exist. */
   afterRemodel?: boolean;
+  /** Extracted text, kept so the whole set can be triaged in ONE call before anything is read. */
+  text?: string;
+  /** The sheet's own title, as the model read it — shown instead of a file name when we have it. */
+  title?: string;
 }
 
 interface RoomRow {
@@ -161,6 +165,7 @@ export function ProjectImportSheet({
         ...classifyDoc(file.name),
         file,
         evidence: pageEvidence(texts[0] ?? ''),
+        text: texts[0] ?? '',
       }];
     }
     const nameFloor = classifyDoc(file.name).floor;
@@ -177,6 +182,7 @@ export function ProjectImportSheet({
         file,
         page: i + 1,
         evidence,
+        text,
       };
     });
   };
@@ -202,6 +208,7 @@ export function ProjectImportSheet({
         if (!text.trim()) continue;
         row.evidence = pageEvidence(text);
         row.afterRemodel = isAfterRemodel(text);
+        row.text = text;
         // The sheet's own stamp outranks its file name — our own prompt says so to the model, and
         // the same has to hold here, where the decision about WHICH sheet to send is made.
         const stamp = classifyPageText(text);
@@ -212,6 +219,42 @@ export function ProjectImportSheet({
       } catch {
         // A stamp we cannot read changes nothing: the name-based classification stands.
       }
+    }
+  };
+
+  /**
+   * Let the MODEL say what these sheets are — one cheap text call for the whole set.
+   *
+   * This is what decides the ticks now. The keyword lists that used to decide were written from the
+   * projects we happened to have: eight Ukrainian patterns, nothing Russian or English, and a sheet
+   * matching none of them was never sent at all. They remain as the fallback below, for a set with no
+   * text layer, an offline pick, or a call that fails — never as the primary answer.
+   */
+  const triage = async (rows: DocRow[]): Promise<boolean> => {
+    const withText = rows.filter((r) => (r.text ?? '').trim().length > 0);
+    if (withText.length === 0) return false;
+    try {
+      const results = await projectImportApi.triage(objectId, withText.slice(0, 60).map((r) => ({
+        id: String(r.id), name: r.name, text: (r.text ?? '').slice(0, 6000),
+      })));
+      if (results.length === 0) return false;
+      const byId = new Map(results.map((x) => [x.id, x]));
+      for (const row of rows) {
+        const verdict = byId.get(String(row.id));
+        if (!verdict) continue;
+        row.kind = verdict.kind;
+        // The sheet's own floor, from its title block. Ours came from a file name, which is a
+        // weaker statement — but an empty answer must not erase it.
+        if (verdict.floor) row.floor = verdict.floor;
+        row.afterRemodel = verdict.version === 'AFTER';
+        row.title = verdict.title ?? undefined;
+        row.useful = verdict.worthReading;
+      }
+      return true;
+    } catch {
+      // Offline, unconfigured, or refused: the keyword classification we already have stands. The
+      // import must not become unusable because a triage call could not be made.
+      return false;
     }
   };
 
@@ -255,15 +298,20 @@ export function ProjectImportSheet({
       toast.error(t('projectImport.nothingUseful'));
       return;
     }
-    // The classifier is a HINT. When no name or stamp matched anything — a whole real 19-sheet
-    // project — the ticks come from what the pages actually carry instead, so the master gets a
-    // list with something on it rather than an empty screen and no reason why.
-    const picks = defaultPicks(rows);
-    rows.forEach((row, i) => {
-      row.useful = picks[i];
-    });
-    await readArchiveStamps(rows);
-    const byEvidenceOnly = !rows.some((r) => IMPORT_KINDS.includes(r.kind) && r.useful);
+    setStep('triage');
+    const triaged = await triage(rows);
+    if (!triaged) {
+      // The classifier is a HINT. When no name or stamp matched anything — a whole real 19-sheet
+      // project — the ticks come from what the pages actually carry instead, so the master gets a
+      // list with something on it rather than an empty screen and no reason why.
+      const picks = defaultPicks(rows);
+      rows.forEach((row, i) => {
+        row.useful = picks[i];
+      });
+      await readArchiveStamps(rows);
+    }
+    // Only a guess needs confirming. When the model classified the sheets, its answer stands.
+    const byEvidenceOnly = !triaged && !rows.some((r) => IMPORT_KINDS.includes(r.kind) && r.useful);
     setGuessed(byEvidenceOnly);
     setDocs(rows);
     // The master shouldn't have to hunt for the measure sheet in a 25-page set: when the
@@ -549,7 +597,9 @@ export function ProjectImportSheet({
                     onChange={() => setDoc(d.id, { useful: !d.useful })}
                     className="h-5 w-5 flex-shrink-0 rounded border-border text-brand focus:ring-brand-200" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-primary">{rowLabel(d)}</span>
+                    <span className="block truncate text-sm text-primary">
+                      {d.title ? `${d.title} · ${rowLabel(d)}` : rowLabel(d)}
+                    </span>
                     <span className="block text-[11px] text-muted">
                       {kindLabel(d.kind)}
                       {d.floor && ` · ${t('projectImport.floorLabel', { floor: d.floor })}`}
@@ -592,6 +642,14 @@ export function ProjectImportSheet({
           {selected.length > MAX_SELECTED && (
             <p className="text-center text-xs text-amber">{t('projectImport.tooManySelected', { max: MAX_SELECTED })}</p>
           )}
+        </div>
+      )}
+
+      {step === 'triage' && (
+        <div className="py-10 text-center">
+          <Spinner size="lg" />
+          <p className="mt-3 text-sm text-muted">{t('projectImport.triaging')}</p>
+          <p className="mt-1 text-xs text-faint">{t('projectImport.triagingHint')}</p>
         </div>
       )}
 
