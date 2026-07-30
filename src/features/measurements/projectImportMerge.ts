@@ -34,6 +34,11 @@ export interface MergedRoom {
   cutDepthMm: number | null;
   /** Read but REJECTED by the checksum — shown greyed as a hint, never computed with. */
   rejected: { widthMm: number; lengthMm: number } | null;
+  /**
+   * The gabarits describe the room's BOUNDING BOX, not a rectangle it fills: walls and plinth use
+   * them, the floor must not. Set when the printed area is smaller than w×l by a plausible cut.
+   */
+  boundingBoxOnly: boolean;
   /** Per-room ceiling height from the plan's «H=…мм», mm. */
   ceilingHmm: number | null;
   openings: ProjectImportOpening[];
@@ -53,7 +58,25 @@ export const CHECKSUM_TOLERANCE = 0.02;
 export type ChecksumVerdict =
   | { kind: 'rect' }
   | { kind: 'lshape'; cutWidthMm: number; cutDepthMm: number }
+  /**
+   * The gabarits are bigger than the printed area by a plausible cut-out, but the cut itself was
+   * not read: an L-shaped room (or one with a niche) whose corner nobody transcribed.
+   *
+   * Rejecting this — which is what used to happen — threw away the whole geometry because ONE of
+   * its uses was wrong. The perimeter of an L-shaped room equals the perimeter of its bounding
+   * rectangle (the cut removes two segments and adds two identical ones), so the walls, the plinth
+   * and the reveals are all correct from w×l. Only the FLOOR is not, and the floor is the one
+   * figure the schedule already gives us.
+   */
+  | { kind: 'bounding-box'; missingAreaM2: number }
   | { kind: 'reject' };
+
+/**
+ * Above this, the "cut" is too big to be a cut. A real L-shaped room loses a corner; gabarits that
+ * exceed the area by more than this are a misread chain — most often one belonging to the room next
+ * door — and accepting them would quietly produce walls for a room that does not exist.
+ */
+export const MAX_PLAUSIBLE_CUT = 0.4;
 
 /**
  * width × length must equal the table area (±2%). If it doesn't, but
@@ -76,6 +99,12 @@ export function checksum(
     if (net > 0 && Math.abs(net - areaM2) / areaM2 <= CHECKSUM_TOLERANCE) {
       return { kind: 'lshape', cutWidthMm, cutDepthMm };
     }
+  }
+  // Bigger than the area, but not absurdly: the shape is not a plain rectangle and the cut was not
+  // transcribed. Keep what is usable instead of discarding all of it.
+  const excess = gross - areaM2;
+  if (excess > 0 && excess / gross <= MAX_PLAUSIBLE_CUT) {
+    return { kind: 'bounding-box', missingAreaM2: round3(excess) };
   }
   return { kind: 'reject' };
 }
@@ -141,6 +170,7 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
             cutWidthMm: null,
             cutDepthMm: null,
             rejected: null,
+            boundingBoxOnly: false,
             ceilingHmm: null,
             openings: [],
             confidence: 'high',
@@ -186,6 +216,20 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
           }
           if (verdict.kind === 'reject') {
             room.rejected = { widthMm: r.widthMm, lengthMm: r.lengthMm };
+          } else if (verdict.kind === 'bounding-box') {
+            // Walls/plinth/reveals are right from the bounding box; the floor comes from the
+            // schedule area instead, and the master is told which corner to check.
+            room.widthMm = r.widthMm;
+            room.lengthMm = r.lengthMm;
+            room.perimeterMm = 2 * (r.widthMm + r.lengthMm);
+            room.perimeterDerived = false;
+            room.boundingBoxOnly = true;
+            if (!room.uncertain.includes('cutWidthMm')) room.uncertain.push('cutWidthMm');
+            const note = `габарити ${(r.widthMm / 1000).toLocaleString('uk-UA')}×`
+              + `${(r.lengthMm / 1000).toLocaleString('uk-UA')} м більші за площу на `
+              + `${verdict.missingAreaM2.toLocaleString('uk-UA')} м² — схоже на виріз (Г-подібна), уточніть`;
+            if (!room.notes.includes(note)) room.notes.push(note);
+            if (rank('medium') > rank(room.confidence)) room.confidence = 'medium';
           } else {
             room.widthMm = r.widthMm;
             room.lengthMm = r.lengthMm;
@@ -204,7 +248,14 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
           room.perimeterMm = r.wallSegmentsMm.reduce((s, v) => s + v, 0);
           room.perimeterDerived = true;
         }
-        if (r.openings.length > 0 && room.openings.length === 0) room.openings = r.openings;
+        // UNION, not first-wins: on a real set the windows are specified on one sheet and the
+        // doors on another, and taking only the first sheet that had any silently loses the rest.
+        for (const opening of r.openings) {
+          const key = `${opening.kind}|${opening.wMm}|${opening.hMm}`;
+          if (!room.openings.some((o) => `${o.kind}|${o.wMm}|${o.hMm}` === key)) {
+            room.openings.push(opening);
+          }
+        }
         if (rank(r.confidence) > rank(room.confidence)) room.confidence = r.confidence;
         if (r.note && !room.notes.includes(r.note)) room.notes.push(r.note);
         // Union, never replace: one sheet may confirm what another could not, but until some sheet
@@ -288,6 +339,8 @@ export interface RoomInputs {
   perimeterMm: number | null;
   heightMm: number | null;
   openings: ProjectImportOpening[];
+  /** Gabarits are the room's BOUNDING BOX (an unread cut-out): walls yes, floor no. */
+  boundingBoxOnly?: boolean;
 }
 
 /**
@@ -364,15 +417,21 @@ export function buildPackage(inputs: RoomInputs): PackageElement[] {
   const hasGabarits = w != null && l != null;
   const els: PackageElement[] = [];
 
+  // An L-shaped room's gabarits describe the box it sits in, so a rect floor of w×l would
+  // overstate it by the cut. The schedule's own area is the honest figure — take it, rather than
+  // offer a rectangle we already know is wrong.
+  const boxOnly = inputs.boundingBoxOnly === true;
   const floorCeil = (kind: 'floor' | 'ceiling', enabled: boolean): PackageElement => ({
     key: kind, kind, name: ELEMENT_NAMES[kind], unit: 'M2', enabled,
-    aMm: hasGabarits ? w : null,
-    bMm: hasGabarits ? l : null,
+    aMm: hasGabarits && !boxOnly ? w : null,
+    bMm: hasGabarits && !boxOnly ? l : null,
     areaHintM2: inputs.areaM2,
     // NEVER auto-take the area — a floor with no gabarits imports with EMPTY width×length
     // fields (the master measures), and the doc area is offered as a one-tap «взяти площу»
     // hint. Defaulting to "take" produced a locked «площа напряму», which is not what we want.
-    takeArea: false,
+    // The exception is the bounding-box case above: there the rectangle is known to be wrong and
+    // the area is known to be right, so leaving it untaken would only invite a worse answer.
+    takeArea: boxOnly && inputs.areaM2 != null && inputs.areaM2 > 0,
     lengthM: null, openings: [],
   });
   els.push(floorCeil('floor', true));
@@ -436,6 +495,7 @@ export function buildRoomPackage(room: MergedRoom, floorHeightMm: number | null)
     // The plan's own «H=…мм» for this room wins over the per-floor answer.
     heightMm: room.ceilingHmm ?? floorHeightMm,
     openings: room.openings,
+    boundingBoxOnly: room.boundingBoxOnly,
   });
 }
 

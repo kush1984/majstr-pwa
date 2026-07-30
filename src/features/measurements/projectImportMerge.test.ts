@@ -231,11 +231,69 @@ describe('checksum — the proof that makes recognised sizes trustworthy', () =>
   });
 });
 
+describe('an L-shaped room whose cut nobody transcribed', () => {
+  // «1 Коридор 26,5 м²» from the Дубляни schedule: the corridor wraps a corner, so its bounding
+  // box is far bigger than its area, and the plan prints no cut-out pair. This used to be thrown
+  // away whole — and with it the walls, which were never wrong.
+  const boxed: ProjectImportParseResponse = {
+    ...empty,
+    floors: [{
+      floor: '1 поверх', roomsOnThisSheet: ['1'],
+      rooms: [{
+        number: '1', name: 'Коридор', areaM2: 26.5, perimeterMm: null, wallSegmentsMm: null,
+        widthMm: 7547, lengthMm: 4460, cutWidthMm: null, cutDepthMm: null, ceilingHmm: null,
+        openings: [], confidence: 'high', note: null,
+      }],
+    }],
+  };
+
+  it('keeps the gabarits for the WALLS and says which corner to check', () => {
+    const room = mergeParses([{ fileFloor: '1', resp: boxed }]).rooms[0];
+
+    // 7,547 × 4,460 = 33,66 m² against a printed 26,5 — not a rectangle, and not a misread either.
+    expect(room.widthMm).toBe(7547);
+    expect(room.lengthMm).toBe(4460);
+    expect(room.rejected).toBeNull();
+    // An L-shape's perimeter IS its bounding rectangle's — walls and plinth are exact.
+    expect(room.perimeterMm).toBe(2 * (7547 + 4460));
+    expect(room.boundingBoxOnly).toBe(true);
+    expect(room.uncertain).toContain('cutWidthMm');
+    expect(room.notes.some((n) => n.includes('Г-подібна'))).toBe(true);
+    expect(room.confidence).toBe('medium');
+  });
+
+  it('the floor takes the SCHEDULE area, never the bounding rectangle', () => {
+    const room = mergeParses([{ fileFloor: '1', resp: boxed }]).rooms[0];
+    const pkg = buildPackage({
+      areaM2: room.areaM2, widthMm: room.widthMm, lengthMm: room.lengthMm,
+      perimeterMm: room.perimeterMm, heightMm: 2700, openings: room.openings,
+      boundingBoxOnly: room.boundingBoxOnly,
+    });
+
+    const floor = pkg.find((e) => e.kind === 'floor')!;
+    // No 7,5×4,5 rectangle: that would bill 33,66 m² of flooring for a 26,5 m² corridor.
+    expect(floor.aMm).toBeNull();
+    expect(floor.takeArea).toBe(true);
+    expect(elementPayloadV2(floor)).toMatchObject({
+      segments: [{ shape: 'direct', values: { s: 26.5 } }],
+    });
+    // …while a wall still gets the real run of the bounding box.
+    expect(pkg.find((e) => e.key === 'wall-1')!.aMm).toBe(7547);
+  });
+
+  it('gabarits absurdly bigger than the area are still a misread, not a cut', () => {
+    // A chain taken from the room next door: no niche removes 70% of a room.
+    expect(checksum(26.5, 15000, 6000, null, null)).toEqual({ kind: 'reject' });
+    // And smaller than the area is impossible for a bounding box — also a misread.
+    expect(checksum(26.5, 3000, 3000, null, null)).toEqual({ kind: 'reject' });
+  });
+});
+
 describe('crossCheck', () => {
   const rooms = (areas: number[]): MergedRoom[] =>
     areas.map((a, i) => ({
       key: String(i), number: null, name: 'К', floor: null, areaM2: a,
-      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, ceilingHmm: null, openings: [], confidence: 'high', notes: [], uncertain: [],
+      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, boundingBoxOnly: false, ceilingHmm: null, openings: [], confidence: 'high', notes: [], uncertain: [],
     }));
 
   it('flags a >5% gap (rooms were lost) and passes a close match', () => {
