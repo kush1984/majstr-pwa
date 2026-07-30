@@ -235,7 +235,7 @@ describe('crossCheck', () => {
   const rooms = (areas: number[]): MergedRoom[] =>
     areas.map((a, i) => ({
       key: String(i), number: null, name: 'К', floor: null, areaM2: a,
-      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, ceilingHmm: null, openings: [], confidence: 'high', notes: [],
+      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, ceilingHmm: null, openings: [], confidence: 'high', notes: [], uncertain: [],
     }));
 
   it('flags a >5% gap (rooms were lost) and passes a close match', () => {
