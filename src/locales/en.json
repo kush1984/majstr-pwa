@@ -121,7 +121,9 @@
     "T": "t",
     "POINT": "point",
     "PERCENT": "%",
-    "KM": "km"
+    "KM": "km",
+    "DAY": "day",
+    "FLOOR": "floor"
   },
   "unitOptions": {
     "M2": "m² (square metre)",
@@ -135,7 +137,9 @@
     "T": "t (tonne)",
     "POINT": "point",
     "PERCENT": "% (percent)",
-    "KM": "km (kilometre)"
+    "KM": "km (kilometre)",
+    "DAY": "day (working day)",
+    "FLOOR": "floor (per floor)"
   },
   "unitPer": "per {{unit}}",
   "trades": {

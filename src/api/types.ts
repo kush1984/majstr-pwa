@@ -154,7 +154,9 @@ export type Unit =
   | 'T'
   | 'POINT'
   | 'PERCENT'
-  | 'KM';
+  | 'KM'
+  | 'DAY'
+  | 'FLOOR';
 
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)
