@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { UNITS } from '@/api/types.ts';
 import i18n from '@/lib/i18n.ts';
 import { decimalString } from '@/lib/decimal.ts';
 
@@ -13,7 +14,7 @@ export const itemFormSchema = z.object({
     .min(1, i18n.t('validation.enterName'))
     .max(255, i18n.t('validation.nameTooLong')),
   category: z.string().max(100, i18n.t('validation.categoryTooLongShort')),
-  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM']),
+  unit: z.enum(UNITS),
   quantity: decimalString(i18n.t('validation.enterQuantity')),
   unitPrice: decimalString(i18n.t('validation.enterPrice')),
   saveToCatalog: z.boolean(),

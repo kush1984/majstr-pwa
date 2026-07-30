@@ -142,21 +142,24 @@ export type EstimateStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 
 export type ItemType = 'WORK' | 'MATERIAL';
 
-export type Unit =
-  | 'M2'
-  | 'M'
-  | 'LINEAR_METER'
-  | 'PIECE'
-  | 'KG'
-  | 'HOUR'
-  | 'SET'
-  | 'M3'
-  | 'T'
-  | 'POINT'
-  | 'PERCENT'
-  | 'KM'
-  | 'DAY'
-  | 'FLOOR';
+/**
+ * Every unit, once. `Unit` is derived from this, zod schemas do `z.enum(UNITS)`, and the
+ * pickers iterate it — so adding a unit is a one-line change here.
+ *
+ * It used to be a hand-written union with the same list copied into two zod enums and three
+ * `const UNITS: Unit[]` arrays. Adding DAY and FLOOR compiled fine, passed the unit-label
+ * check, and then failed CI in three files at once: a widened `Unit` no longer fit the
+ * narrower hard-coded enums. Six copies of one list is not a typing problem, it is a
+ * single-source-of-truth problem.
+ *
+ * Order matters — it is the order shown in every unit dropdown.
+ */
+export const UNITS = [
+  'M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET',
+  'M3', 'T', 'POINT', 'PERCENT', 'KM', 'DAY', 'FLOOR',
+] as const;
+
+export type Unit = (typeof UNITS)[number];
 
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)

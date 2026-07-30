@@ -16,6 +16,7 @@ import { parseDecimal } from '@/lib/decimal.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { estimateImportApi } from '@/api/estimateImport.ts';
+import { UNITS } from '@/api/types.ts';
 import type {
   DedupPolicy,
   EstimateImportParseResponse,
@@ -23,7 +24,6 @@ import type {
   Unit,
 } from '@/api/types.ts';
 
-const UNITS: Unit[] = ['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'];
 
 interface Draft {
   key: number;

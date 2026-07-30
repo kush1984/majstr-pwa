@@ -20,4 +20,12 @@ import { configure } from '@testing-library/react';
  * holds. The timeout only bounds the FAILING case, so the extra seconds are spent only when
  * something is genuinely broken.
  */
-configure({ asyncUtilTimeout: 5_000 });
+configure({ asyncUtilTimeout: 10_000 });
+
+/*
+ * 10s, not 5s: at 5s it still failed on a run that took 100s wall-clock while passing on every
+ * ~38s run. Four failures observed, all on slow runs, none reproducible on demand — which is why
+ * the number is set from the evidence rather than from a diagnosis. It is NOT confirmed fixed;
+ * if a red run appears again, capture the reporter output before rerunning, because the failing
+ * test's name is the one thing still missing.
+ */

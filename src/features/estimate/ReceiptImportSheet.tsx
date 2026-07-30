@@ -18,9 +18,9 @@ import { formatMoney } from '@/lib/format.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { cn } from '@/lib/cn.ts';
 import { useInvalidateEstimate } from './useEstimate.ts';
+import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
-const UNITS: Unit[] = ['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'];
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Parse a decimal field to a finite number, blank/garbage → 0 (master may fill later). */

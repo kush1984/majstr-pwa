@@ -15,6 +15,7 @@ import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { catalogImportApi } from '@/api/catalogImport.ts';
 import { guessType, guessUnit, parsePrice } from './importParse.ts';
+import { UNITS } from '@/api/types.ts';
 import type {
   CatalogImportParseResponse,
   DedupPolicy,
@@ -24,7 +25,6 @@ import type {
   Unit,
 } from '@/api/types.ts';
 
-const UNITS: Unit[] = ['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'];
 
 interface Draft {
   key: number;

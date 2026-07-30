@@ -1,25 +1,13 @@
 import { z } from 'zod';
 import i18n from '@/lib/i18n.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
+import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
 /** Option value lists; labels are rendered via i18n (`itemType.*` / `unitOptions.*`). */
 export const ITEM_TYPE_OPTIONS: readonly ItemType[] = ['WORK', 'MATERIAL'];
 
-export const UNIT_OPTIONS: readonly Unit[] = [
-  'M2',
-  'M',
-  'LINEAR_METER',
-  'PIECE',
-  'KG',
-  'HOUR',
-  'SET',
-  'M3',
-  'T',
-  'POINT',
-  'PERCENT',
-  'KM',
-];
+export const UNIT_OPTIONS: readonly Unit[] = UNITS;
 
 /**
  * Price is kept as a string in the form (accepts comma or dot) and parsed to a
@@ -40,7 +28,7 @@ export const catalogItemSchema = z.object({
     .min(1, i18n.t('validation.enterName'))
     .max(255, i18n.t('validation.nameTooLong')),
   type: z.enum(['WORK', 'MATERIAL'], { message: i18n.t('validation.chooseType') }),
-  unit: z.enum(['M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET', 'M3', 'T', 'POINT', 'PERCENT', 'KM'], {
+  unit: z.enum(UNITS, {
     message: i18n.t('validation.chooseUnit'),
   }),
   // The form offers a dropdown of the trade's existing categories; `newCategory` is the free
