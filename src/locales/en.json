@@ -193,7 +193,7 @@
     "sessionExpired": "Session ended — please sign in again"
   },
   "offline": {
-    "banner": "Offline — showing your saved copy. Some actions need a connection.",
+    "banner": "Offline — showing a saved copy",
     "needConnection": "This action needs an internet connection",
     "templateNotCached": "This template's contents are not downloaded yet. Open it once with a connection and it will work offline.",
     "prefetchTitle": "Prepare for offline",
@@ -216,7 +216,7 @@
     "dataNotes": "Notes"
   },
   "sync": {
-    "pending": "Waiting to sync: {{n}}",
+    "pending": "Not synced: {{n}}",
     "syncing": "Syncing…",
     "blocked": "Not saved to cloud: {{n}} — resolve",
     "reviewTitle": "Action needed",

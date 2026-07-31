@@ -32,7 +32,7 @@ export function OfflineBanner() {
       <button
         type="button"
         onClick={() => setReviewOpen(true)}
-        className="fixed inset-x-0 top-0 z-50 bg-danger px-4 py-2 text-center text-sm font-semibold text-white shadow-sm"
+        className="sticky top-0 z-50 w-full bg-danger px-4 py-2 text-center text-sm font-semibold text-white shadow-sm"
       >
         {t('sync.blocked', { n: blocked })}
       </button>
@@ -57,11 +57,20 @@ const TONE = {
   pending: 'bg-amber-500 text-white',
 } as const;
 
+/**
+ * `sticky`, never `fixed`.
+ *
+ * Fixed took the banner out of the flow, so it lay ON TOP of whatever was at the top of the page —
+ * and on a phone this text wraps to three lines, which is exactly tall enough to bury a screen's
+ * header. A master reported it from an estimate: offline, the back arrow was underneath the banner
+ * and there was no way out of the screen. Sticky keeps it pinned while scrolling AND makes it
+ * occupy its own space, so it cannot cover anything by construction.
+ */
 function Bar({ tone, children }: { tone: keyof typeof TONE; children: ReactNode }) {
   return (
     <div
       role="status"
-      className={`fixed inset-x-0 top-0 z-50 px-4 py-2 text-center text-sm font-medium shadow-sm ${TONE[tone]}`}
+      className={`sticky top-0 z-50 px-4 py-1.5 text-center text-sm font-medium shadow-sm ${TONE[tone]}`}
     >
       {children}
     </div>

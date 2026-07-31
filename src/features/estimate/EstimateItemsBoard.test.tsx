@@ -36,9 +36,9 @@ describe('position numbering', () => {
 
     // The point of the feature: the LAST number equals how many positions there are, so the
     // master can check his count in one glance. Per-category numbering would end at «1».
-    expect(screen.getByText('5.')).toBeTruthy();
-    expect(screen.queryAllByText('1.')).toHaveLength(1);
-    for (const n of ['1.', '2.', '3.', '4.', '5.']) {
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.queryAllByText('1')).toHaveLength(1);
+    for (const n of ['1', '2', '3', '4', '5']) {
       expect(screen.getByText(n)).toBeTruthy();
     }
   });
@@ -51,9 +51,21 @@ describe('position numbering', () => {
     ]);
 
     const rows = screen.getAllByRole('button').map((b) => b.textContent ?? '');
-    const first = rows.find((r) => r.includes('Перша')) ?? '';
-    const second = rows.find((r) => r.includes('Друга')) ?? '';
-    expect(first).toContain('1.');
-    expect(second).toContain('2.');
+    expect(rows.find((r) => r.includes('Перша'))).toMatch(/^1/);
+    expect(rows.find((r) => r.includes('Друга'))).toMatch(/^2/);
+  });
+
+  it('keeps the number in its own column when a long name wraps', () => {
+    // The first attempt put the number inside the name's text flow, so a wrapping name — most of
+    // them on a phone — sent its second line back under the number and the column stopped being a
+    // column. The number must be a SIBLING of the name, never part of its text.
+    renderBoard([
+      item('x', 'Укладання декоративної плитки під «цеглу» або «камінь» (гіпсова, бетонна)', '', 0),
+    ]);
+
+    const number = screen.getByText('1');
+    const name = screen.getByText(/Укладання декоративної/);
+    expect(number.contains(name)).toBe(false);
+    expect(name.contains(number)).toBe(false);
   });
 });

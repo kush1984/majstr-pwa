@@ -189,35 +189,43 @@ function ItemRow({
         onClick={() => !signed && onEdit(item)}
         disabled={signed}
         title={signed ? t('estimate.signedNoEdit') : undefined}
-        className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
+        className="flex min-w-0 flex-1 gap-1.5 rounded-xl border border-border bg-surface px-3 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
       >
-        <div className="flex items-start justify-between gap-2">
-          {/* Tabular figures and a fixed width so the numbers form a straight column: the master
-              counts down this column to check he has all his positions, and a 9 that is narrower
-              than a 10 makes that harder than it needs to be. */}
-          {/* w-8 in REM, not em: the meta line below indents to match, and it is one size smaller,
-              so an em-based width silently drifts out of alignment. 2rem also holds three digits —
-              «УСІ ПЛИТОЧНІ РОБОТИ» applies 167 positions, so that is a real estimate, not a
-              hypothetical one. Tabular figures keep the column straight while he counts down it. */}
-          <span className="min-w-0 flex-1 text-sm font-medium text-primary">
-            <span className="mr-1.5 inline-block w-8 text-right tabular-nums text-faint">
-              {number}.
+        {/* The number is a GUTTER for the whole card, not a word inside the name.
+            Putting it in the name's text flow was the first attempt and it read as a mess: a name
+            long enough to wrap — most of them, on a phone — sent its second line back to the left
+            margin, underneath the number, so neither the text nor the column lined up with
+            anything. As its own column it stays a column, and every line of the name shares one
+            left edge.
+
+            MIN-width, not a fixed one, and sized for two digits. Reserving three digits' worth on
+            every row bought alignment for the rare 100+ estimate by taking a strip of a 375 px
+            screen away from every ordinary one — the wrong trade, since the name is what the master
+            reads and the number is only a reference mark. A three-digit row simply grows by a
+            couple of pixels. Tabular figures keep the right edge straight, which is what lets him
+            run a finger down the column and count. */}
+        <span className="min-w-[1.05rem] flex-shrink-0 pt-[3px] text-right text-xs tabular-nums text-faint">
+          {number}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-start justify-between gap-2">
+            <span className="min-w-0 flex-1 text-sm font-medium text-primary">{item.name}</span>
+            <span className="whitespace-nowrap text-sm font-bold text-primary">
+              {formatMoney(item.lineTotal)}
             </span>
-            {item.name}
           </span>
-          <span className="whitespace-nowrap text-sm font-bold text-primary">
-            {formatMoney(item.lineTotal)}
+          {/* No manual indent any more: the gutter above already holds the column open, so this
+              line simply starts where the name starts. */}
+          <span className="mt-1 flex items-center gap-2 text-xs text-muted">
+            <span>
+              {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
+            </span>
+            <span className="h-[3px] w-[3px] rounded-full bg-faint" />
+            <span>
+              {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
+            </span>
           </span>
-        </div>
-        <div className="mt-1 flex items-center gap-2 pl-[2.375rem] text-xs text-muted">
-          <span>
-            {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
-          </span>
-          <span className="h-[3px] w-[3px] rounded-full bg-faint" />
-          <span>
-            {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
-          </span>
-        </div>
+        </span>
       </button>
     </div>
   );
