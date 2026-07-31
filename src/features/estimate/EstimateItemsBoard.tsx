@@ -77,10 +77,14 @@ export function EstimateItemsBoard({
         onDragEnd={onDragEnd}
       >
         <SortableContext items={sections.map(sectionId)} strategy={verticalListSortingStrategy}>
-          {sections.map((section) => (
+          {/* The running number is computed HERE, across sections, not inside one: a master asked
+              for it to check how many positions he has, and a count that restarts at every
+              category cannot answer that. The last number on screen is the total. */}
+          {sections.map((section, s) => (
             <SectionBlock
               key={sectionId(section)}
               section={section}
+              firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, 1)}
               signed={signed}
               onEdit={onEdit}
             />
@@ -108,9 +112,11 @@ function label(category: string, t: (k: string) => string): string {
 }
 
 function SectionBlock({
-  section, signed, onEdit,
+  section, firstNumber, signed, onEdit,
 }: {
   section: Section;
+  /** Position number of this section's first line, counted from the top of the whole estimate. */
+  firstNumber: number;
   signed: boolean;
   onEdit: (item: EstimateItemResponse) => void;
 }) {
@@ -140,8 +146,14 @@ function SectionBlock({
           items={section.items.map((i) => ITEM_ID + i.id)}
           strategy={verticalListSortingStrategy}
         >
-          {section.items.map((item) => (
-            <ItemRow key={item.id} item={item} signed={signed} onEdit={onEdit} />
+          {section.items.map((item, i) => (
+            <ItemRow
+              key={item.id}
+              item={item}
+              number={firstNumber + i}
+              signed={signed}
+              onEdit={onEdit}
+            />
           ))}
         </SortableContext>
       </div>
@@ -150,9 +162,10 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, signed, onEdit,
+  item, number, signed, onEdit,
 }: {
   item: EstimateItemResponse;
+  number: number;
   signed: boolean;
   onEdit: (item: EstimateItemResponse) => void;
 }) {
@@ -179,12 +192,24 @@ function ItemRow({
         className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-medium text-primary">{item.name}</span>
+          {/* Tabular figures and a fixed width so the numbers form a straight column: the master
+              counts down this column to check he has all his positions, and a 9 that is narrower
+              than a 10 makes that harder than it needs to be. */}
+          {/* w-8 in REM, not em: the meta line below indents to match, and it is one size smaller,
+              so an em-based width silently drifts out of alignment. 2rem also holds three digits —
+              «УСІ ПЛИТОЧНІ РОБОТИ» applies 167 positions, so that is a real estimate, not a
+              hypothetical one. Tabular figures keep the column straight while he counts down it. */}
+          <span className="min-w-0 flex-1 text-sm font-medium text-primary">
+            <span className="mr-1.5 inline-block w-8 text-right tabular-nums text-faint">
+              {number}.
+            </span>
+            {item.name}
+          </span>
           <span className="whitespace-nowrap text-sm font-bold text-primary">
             {formatMoney(item.lineTotal)}
           </span>
         </div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+        <div className="mt-1 flex items-center gap-2 pl-[2.375rem] text-xs text-muted">
           <span>
             {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
           </span>

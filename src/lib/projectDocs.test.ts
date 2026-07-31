@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { zipSync } from 'fflate';
 import {
   classifyDoc,
@@ -15,6 +15,7 @@ import {
   looksLikeData,
   MAX_AUTO_PICKS,
   pageEvidence,
+  withTimeout,
   type DocKind,
   isDocEntry,
   listZipEntries,
@@ -312,5 +313,37 @@ describe('one sheet per slot — but only where a slot means something', () => {
 
   it('two schedules of different floors both survive', () => {
     expect(dedupeBySlot([row('ROOM_SCHEDULE', '1'), row('ROOM_SCHEDULE', '2')])).toHaveLength(2);
+  });
+});
+
+describe('a PDF that never parses must not stall the whole import', () => {
+  it('gives up on a hung text extraction instead of awaiting it forever', async () => {
+    // pdfjs does not promise to REJECT on a file it cannot make sense of — on a truncated or
+    // corrupt PDF it can simply never settle. Every caller awaits it, so an unbounded await meant
+    // the import sheet sat on «Обрати файли» with no error and no way forward.
+    vi.useFakeTimers();
+    try {
+      const hang = new Promise<string[]>(() => {}); // never settles, like the real failure mode
+      const bounded = withTimeout(hang, 20_000, 'pdfPageTexts');
+      const settled = vi.fn();
+      void bounded.catch(settled);
+
+      await vi.advanceTimersByTimeAsync(20_001);
+
+      expect(settled).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not leave a timer running when the work finishes first', async () => {
+    // A stray timer per PDF would keep the page awake and, in a test, leak between files.
+    vi.useFakeTimers();
+    try {
+      await expect(withTimeout(Promise.resolve(['ok']), 20_000, 'x')).resolves.toEqual(['ok']);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

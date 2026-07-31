@@ -38,10 +38,33 @@ configure({ asyncUtilTimeout: 10_000 });
  * CONCURRENTLY with the other 72 is the actual variable — leaked global state, a shared fake-IDB,
  * an ordering assumption — and that has not been found yet.
  *
- * Honest status: still open, still ~1 run in 3, and both times it reappeared the error text was
- * lost by re-running before capturing it. NEXT TIME: capture the reporter output FIRST
- * (`npx vitest run 2>&1 | tee flake.log`), because "it passed on retry" has now cost three
- * diagnosis attempts and produced one wrong conclusion.
+ * SOLVED 2026-07-31, and the answer was in none of the three theories that preceded it. Kept in
+ * full because the WAY it was found is the reusable part: three diagnoses were wrong while the
+ * error text kept being thrown away by re-running, and the fix arrived within minutes of finally
+ * capturing it.
+ *
+ * The cause: `pdfPageTexts` can HANG — pdfjs does not promise to reject on a file it cannot parse,
+ * and the import awaited it unbounded, so the sheet never left its first screen. Bounded now in
+ * `lib/projectDocs.ts`, proven by dropping that bound below the test's own wait and watching three
+ * consecutive full runs go green. It was a product bug too: a master with a corrupt PDF got an
+ * import sheet frozen on «Обрати файли», no error, no way forward.
+ *
+ * The evidence that cracked it — note that NONE of it is about time:
+ *
+ *     AssertionError: expected "spy" to be called 2 times, but got 0 times
+ *
+ * and the rendered DOM shows the sheet still on its FIRST step — the «Обрати файли» screen. So
+ * `onPick` never reached `setStep`/`setDocs` at all: `projectImportApi.parse` was never called,
+ * which is why no per-test budget could ever have fixed it.
+ *
+ * That left two candidates inside `onPick` — an await that never settles, or its
+ * `catch { toast.error(); return; }` firing — and the DOM looks identical either way. What
+ * separated them was a one-line experiment rather than more reading: drop the new bound on
+ * `pdfPageTexts` BELOW the test's own wait and re-run. If the await was hanging, the guard would
+ * fire, the flow would recover, and the suite would go green. It did, three runs out of three.
+ *
+ * (Watch out for the false detector that nearly derailed this: grepping the run for the timeout's
+ * message finds nothing, because `pdfRows` catches and discards it. Absence there proves nothing.)
  *
  * This setting stays regardless: it is right for the general case and costs nothing on a passing
  * run, since `waitFor` polls and returns the moment the condition holds.

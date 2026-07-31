@@ -77,22 +77,23 @@ describe('ProjectImportSheet', () => {
     // default this test is FLAKY — it passed in 0.8 s and failed on the same commit
     // minutes later. The test budget below is what actually bounds it.
     //
-    // 2026-07-31: this test is the long-hunted flake that src/test-setup.ts describes. It runs in
-    // 385 ms on its own and fails inside a full 73-file run roughly one time in three. The budget
-    // below was raised 20 s → 60 s on that evidence — and it failed again on the next full run, so
-    // slowness is NOT the explanation and the budget is not the fix. Something about running
-    // concurrently with the other 72 files is the real variable and is still unidentified.
-    // If you see it red: capture the output BEFORE re-running (see the note in src/test-setup.ts).
+    // 2026-07-31, SOLVED: this was the long-hunted flake. Not slowness at all — pdfjs can HANG
+    // outright on the deliberately-corrupt 4-byte «%PDF» these fixtures use, and `onPick` awaited
+    // it with no bound, so the sheet never left its first screen and `parse` was never called.
+    // `pdfPageTexts` is bounded now (projectDocs.ts), which is a product fix as much as a test one:
+    // a master with a corrupt PDF used to get an import sheet frozen on «Обрати файли».
+    // These waits are 20 s so they OUTLAST that 10 s bound — the point is to prove the flow
+    // RECOVERS from a hang, and a wait shorter than the guard could never see it happen.
     await waitFor(() => expect(projectImportApi.parse).toHaveBeenCalledTimes(2), // noise skipped
-      { timeout: 10_000 });
+      { timeout: 20_000 });
 
     // No «H=» anywhere in this fixture → the height is asked once for the floor.
-    const heightInput = await screen.findByPlaceholderText('2,7', {}, { timeout: 10_000 });
+    const heightInput = await screen.findByPlaceholderText('2,7', {}, { timeout: 20_000 });
     fireEvent.change(heightInput, { target: { value: '2,7' } });
     fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
 
     // Review: the merged room with the v2 package + a way back to other pages.
-    await waitFor(() => expect(screen.getByDisplayValue('Спальня')).toBeTruthy(), { timeout: 10_000 });
+    await waitFor(() => expect(screen.getByDisplayValue('Спальня')).toBeTruthy(), { timeout: 20_000 });
     expect(screen.getByText(/Розпізнано з/)).toBeTruthy();
     // Honesty coverage summary is shown (recognised N rooms).
     expect(screen.getByText(/Розпізнано 1 кімнат/)).toBeTruthy();
@@ -165,7 +166,7 @@ describe('ProjectImportSheet', () => {
 
     // The plan printed «H=2700», so the heights step is skipped — straight to the review.
     // The read-but-refused sizes are visible there, with the reason and the escape hatch.
-    await waitFor(() => expect(screen.getByText(/не сходиться з площею/)).toBeTruthy(), { timeout: 10_000 });
+    await waitFor(() => expect(screen.getByText(/не сходиться з площею/)).toBeTruthy(), { timeout: 20_000 });
     expect(screen.getByText(/розміри прочитані, але не збіглися/)).toBeTruthy();
 
     // Taking them anyway re-seeds the package: the walls get real runs (5 and 4 m × 2.7).

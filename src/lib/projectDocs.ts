@@ -362,7 +362,43 @@ function score(e: PageEvidence): number {
  * The text of every page of a PDF (pdfjs-dist, lazy). Pages without a text
  * layer come back as '' — the master assigns those by hand.
  */
+/**
+ * How long a single PDF's text extraction may take before we give up on it.
+ *
+ * pdfjs does not promise to REJECT on a file it cannot make sense of — on a truncated or corrupt
+ * PDF it can simply never settle, and every caller here `await`s it. That is not a theoretical
+ * risk: it is why the import sheet could sit on «Обрати файли» doing nothing at all, with no error
+ * and no way forward, and it is what made one suite test fail about one run in three.
+ *
+ * A bound turns "hangs forever" into "this sheet has no text layer", which every caller already
+ * handles — the file is still listed, still tickable, still classified by its name.
+ */
+const PDF_TEXT_TIMEOUT_MS = 10_000;
+// 10 s, and the number was measured rather than picked. Reading a text layer does no rasterising,
+// so even a 40-page set is normally under a second — but the ceiling has to survive a slow phone,
+// which is why it is not the 3 s that proved the diagnosis. It also has to stay BELOW the point
+// where a master concludes the app is broken, which is why it is not 30 s.
+
+/** Rejects if `work` has not settled in time, so a hung PDF cannot stall the whole import. */
+export async function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function pdfPageTexts(buf: ArrayBuffer): Promise<string[]> {
+  return withTimeout(readPdfPageTexts(buf), PDF_TEXT_TIMEOUT_MS, 'pdfPageTexts');
+}
+
+async function readPdfPageTexts(buf: ArrayBuffer): Promise<string[]> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc =
     new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
