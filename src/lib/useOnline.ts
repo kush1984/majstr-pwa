@@ -6,9 +6,14 @@ import {
 import type { OutboxOp } from '@/lib/outbox/types.ts';
 
 /**
- * Reactive online/offline state, sourced from TanStack Query's `onlineManager` (which tracks
- * `navigator.onLine` + the window online/offline events) — the same signal that pauses query
- * fetches offline, so the UI and the cache agree on "are we online". SSR-safe default: online.
+ * Reactive online/offline state, sourced from TanStack Query's `onlineManager` — the same signal
+ * that governs query fetching, so the UI and the cache always agree on "are we online".
+ * SSR-safe default: online.
+ *
+ * It tracks `navigator.onLine` only because {@link installOnlineTracking} (lib/onlineStatus.ts)
+ * makes it: TanStack's own default seeds `true` and listens for nothing but transition events. This
+ * comment used to claim the library read the device itself, and that wrong belief is exactly how an
+ * app opened in flight mode came up thinking it was online.
  */
 export function useOnline(): boolean {
   return useSyncExternalStore(

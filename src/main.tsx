@@ -11,12 +11,19 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
 import { captureRefFromUrl } from './lib/referral.ts';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
+import { installOnlineTracking } from './lib/onlineStatus.ts';
 import './lib/i18n.ts';
 import './styles/index.css';
 
 // Start error reporting before anything else so even early crashes are caught.
 // No-op unless VITE_SENTRY_DSN is set.
 initSentry();
+
+// Seed the online/offline state from navigator.onLine BEFORE anything subscribes to it. TanStack's
+// default only listens for TRANSITIONS, so an app opened in flight mode would otherwise believe it
+// is online: no offline banner, and online-only actions firing doomed requests instead of saying a
+// connection is needed. See onlineStatus.ts for why this is not the default.
+installOnlineTracking();
 
 // First-touch referral capture from ?ref= on the entry URL (stored once).
 captureRefFromUrl(window.location.search);
