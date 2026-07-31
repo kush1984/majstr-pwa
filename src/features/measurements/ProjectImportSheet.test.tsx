@@ -70,11 +70,12 @@ describe('ProjectImportSheet', () => {
     // default this test is FLAKY — it passed in 0.8 s and failed on the same commit
     // minutes later. The test budget below is what actually bounds it.
     //
-    // 2026-07-31: this test is the long-hunted flake that src/test-setup.ts describes. Measured:
-    // 385 ms run on its own, >20 s inside a full 73-file run — a 50× spread with no hang anywhere,
-    // i.e. pure CPU contention (real pdfjs parsing competing with every other worker), not a bug
-    // and not something a bigger waitFor could fix. Only the per-test budget could, so that is
-    // what was raised.
+    // 2026-07-31: this test is the long-hunted flake that src/test-setup.ts describes. It runs in
+    // 385 ms on its own and fails inside a full 73-file run roughly one time in three. The budget
+    // below was raised 20 s → 60 s on that evidence — and it failed again on the next full run, so
+    // slowness is NOT the explanation and the budget is not the fix. Something about running
+    // concurrently with the other 72 files is the real variable and is still unidentified.
+    // If you see it red: capture the output BEFORE re-running (see the note in src/test-setup.ts).
     await waitFor(() => expect(projectImportApi.parse).toHaveBeenCalledTimes(2), // noise skipped
       { timeout: 10_000 });
 

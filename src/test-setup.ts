@@ -27,14 +27,22 @@ configure({ asyncUtilTimeout: 10_000 });
  * ~38s run. Four failures observed, all on slow runs, none reproducible on demand — which is why
  * the number is set from the evidence rather than from a diagnosis.
  *
- * RESOLVED 2026-07-31. The name this note was waiting for is
- * `ProjectImportSheet > AUTO-parses the useful sheets …, commits the package`. It was never a
- * `waitFor` timing out: that test parses real PDFs through pdfjs and carries its own PER-TEST
- * budget, which no global `asyncUtilTimeout` can extend. Measured 385 ms alone vs >20 s inside a
- * full 73-file run — a 50× spread with no hang, i.e. CPU contention between workers. Fixed where
- * it actually lived, by raising that file's per-test budget to 60 s.
+ * IDENTIFIED, NOT FIXED (2026-07-31). The name this note was waiting for is
+ * `ProjectImportSheet > AUTO-parses the useful sheets …, commits the package`, and it is NOT a
+ * `waitFor` timing out — that test parses real PDFs through pdfjs and carries its own PER-TEST
+ * budget, which no global `asyncUtilTimeout` can extend. That budget was raised 20 s → 60 s, the
+ * suite went green, **and the same test failed again on the very next full run anyway.**
  *
- * This setting stays: raising it was still right for the general case, and it costs nothing on a
- * passing run because `waitFor` polls and returns as soon as the condition holds. But if a red
- * run appears again, check the failing test's OWN budget first — that is the lesson here.
+ * So the "CPU contention" reading is probably wrong too: 385 ms in isolation against a >60 s
+ * budget is a 150× spread, which no loaded machine explains. Something about running this file
+ * CONCURRENTLY with the other 72 is the actual variable — leaked global state, a shared fake-IDB,
+ * an ordering assumption — and that has not been found yet.
+ *
+ * Honest status: still open, still ~1 run in 3, and both times it reappeared the error text was
+ * lost by re-running before capturing it. NEXT TIME: capture the reporter output FIRST
+ * (`npx vitest run 2>&1 | tee flake.log`), because "it passed on retry" has now cost three
+ * diagnosis attempts and produced one wrong conclusion.
+ *
+ * This setting stays regardless: it is right for the general case and costs nothing on a passing
+ * run, since `waitFor` polls and returns the moment the condition holds.
  */
