@@ -242,6 +242,23 @@ describe('two plans of the same floor: before and after remodelling', () => {
   it('does not mistake a plan «до перепланування» for the after one', () => {
     expect(isAfterRemodel('Обмірний план до перепланування')).toBe(false);
   });
+
+  it('recognises the after-sheet on sets that never write «до/після»', () => {
+    // Дубляни happens to spell it out; most sets do not. A studio names the RESULT instead, or
+    // draws in Russian — and every one of these used to fall through to the before-sheet, which is
+    // the exact failure this function was written to stop.
+    expect(isAfterRemodel('Планувальне рішення')).toBe(true);
+    expect(isAfterRemodel('ПРОЕКТНЕ РІШЕННЯ 2 поверх')).toBe(true);
+    expect(isAfterRemodel('Проектований план')).toBe(true);
+    expect(isAfterRemodel('План после перепланировки')).toBe(true);
+
+    // …but a sheet that names the WORK is still not a layout: «монтаж» carries only the partitions
+    // being built, «демонтаж» only those coming down. Treating either as the finished flat imports
+    // a plan with most of its rooms missing.
+    expect(isAfterRemodel('План монтажу перегородок')).toBe(false);
+    expect(isAfterRemodel('Схема демонтажу')).toBe(false);
+    expect(isAfterRemodel('Обмірний план приміщень 1 поверх')).toBe(false);
+  });
 });
 
 describe('which floor a SHEET is, told apart from a floor inside a room name', () => {

@@ -302,9 +302,20 @@ export function dedupeBySlot<T extends { kind: DocKind; floor: string | null; us
  *
  * Matches «після пер…» rather than the full word on purpose: one of the real sheets is stamped
  * «після перПланування», and a typo in a designer's title block must not decide which plan we read.
+ *
+ * The other three forms are there because «до/після» is not how most sets put it. A studio more
+ * often names the RESULT («планувальне рішення», «проектне рішення», «проектований план») or writes
+ * the sheet in Russian («после перепланировки») — and a set that does either used to fall through
+ * to the before-sheet, which is the same failure this function exists to prevent. Deliberately NOT
+ * matched: «план монтажу»/«план демонтажу», which name the work rather than the resulting layout
+ * and carry only the partitions that change.
  */
 export function isAfterRemodel(text: string): boolean {
-  return /після\s+пер/iu.test(text ?? '');
+  const t = text ?? '';
+  return /після\s+пер/iu.test(t)
+    || /после\s+переплан/iu.test(t)
+    || /(планувальне|проектне|проєктне)\s+рішення/iu.test(t)
+    || /про[єе]ктований\s+план/iu.test(t);
 }
 
 /** Whether a page holds enough to be worth a recognition call when nothing classified. */
