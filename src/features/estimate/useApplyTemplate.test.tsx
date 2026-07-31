@@ -68,7 +68,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: { name: 'Ванна' },
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: { name: 'Ванна' },
     });
 
     // --- the composed estimate ------------------------------------------------
@@ -115,7 +115,7 @@ describe('useApplyTemplate offline', () => {
     const { result } = harness((c) => c.setQueryData(TEMPLATE_KEY, template));
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: {},
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
     });
 
     expect(estimate.items).toHaveLength(3);
@@ -129,7 +129,7 @@ describe('useApplyTemplate offline', () => {
     const { result } = harness((c) => c.setQueryData(CATALOG_KEY, catalog));
 
     await expect(result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: {},
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
     })).rejects.toBeInstanceOf(TemplateNotCachedError);
 
     expect(await listOutbox()).toHaveLength(0); // nothing half-queued
@@ -145,14 +145,58 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: {},
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
     });
 
     // The server's substitution stays authoritative while there is a connection.
-    expect(spy).toHaveBeenCalledWith(PROJECT_ID, 'tpl-1', {});
+    expect(spy).toHaveBeenCalledWith(PROJECT_ID, ['tpl-1'], {});
     expect(estimate).toBe(served);
     expect(await listOutbox()).toHaveLength(0);
     spy.mockRestore();
+  });
+
+  it('merges several bundles offline and bills an overlapping position once', async () => {
+    // Every tiling bundle carries the primer. Applying two of them must not bill it twice — the
+    // client would see the repeat on the estimate, so the offline path replays the server's rule.
+    const second: EstimateTemplateDetail = {
+      id: 'tpl-2', name: 'Підлога плиткою', trade: 'TILING', isDefault: true,
+      items: [
+        // Same position as tpl-1's first line, different case — matched all the same.
+        { id: 'ti-4', name: 'ШТУКАТУРКА СТІН', type: 'WORK', unit: 'M2', sortOrder: 0 },
+        { id: 'ti-5', name: 'Стяжка', type: 'WORK', unit: 'M2', sortOrder: 1 },
+      ],
+    };
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, template);
+      c.setQueryData(['estimate-templates', 'tpl-2'], second);
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, templateIds: ['tpl-1', 'tpl-2'], req: {},
+    });
+
+    expect(estimate.items.map((i) => i.name)).toEqual([
+      'Штукатурка стін', 'Плитка', 'Немає в каталозі', 'Стяжка',
+    ]);
+    // Renumbered across the whole result — each template counts its own sortOrder from 0, so
+    // carrying them over would interleave the two bundles.
+    expect(estimate.items.map((i) => i.sortOrder)).toEqual([0, 1, 2, 3]);
+    expect(await listOutbox()).toHaveLength(5); // one estimate + four lines
+  });
+
+  it('refuses when ONE of several bundles was never cached', async () => {
+    // Applying the rest would produce an estimate that is short a section and looks complete.
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, template);
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    await expect(result.current.mutateAsync({
+      projectId: PROJECT_ID, templateIds: ['tpl-1', 'never-opened'], req: {},
+    })).rejects.toBeInstanceOf(TemplateNotCachedError);
+
+    expect(await listOutbox()).toHaveLength(0);
   });
 
   it('online but the request drops: falls back to composing locally', async () => {
@@ -166,7 +210,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: {},
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
     });
 
     expect(estimate.items).toHaveLength(3);
@@ -186,7 +230,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     await expect(result.current.mutateAsync({
-      projectId: PROJECT_ID, templateId: 'tpl-1', req: {},
+      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
     })).rejects.toBe(rejected);
 
     expect(await listOutbox()).toHaveLength(0); // a 400 is not something replay can fix

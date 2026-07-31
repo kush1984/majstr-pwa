@@ -11,6 +11,7 @@ import { usePushRefresh } from '@/hooks/usePushRefresh.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
 import { NotificationBell } from '@/components/NotificationBell.tsx';
 import { PrivacyConsentModal } from '@/features/legal/ConsentModals.tsx';
+import { CatalogUpdateNotice } from '@/features/catalog/CatalogUpdateNotice.tsx';
 import { NAV_ITEMS } from './navItems.ts';
 
 /**
@@ -135,6 +136,10 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
       {/* One-time privacy consent for users who predate the registration checkbox. */}
       {me && me.consentedToPrivacyAt == null && <PrivacyConsentModal />}
+
+      {/* One-time "we changed your catalog" notice. Renders nothing unless one is pending, and
+          sits behind consent so a first-run user is not handed two modals at once. */}
+      {me && me.consentedToPrivacyAt != null && <CatalogUpdateNotice />}
     </div>
   );
 }

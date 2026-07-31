@@ -68,7 +68,13 @@ describe('ProjectImportSheet', () => {
     // Explicit timeouts, not the 1 s default: picking these files runs the real
     // pdfjs page-text pass, which on a loaded CI box takes several seconds. With the
     // default this test is FLAKY — it passed in 0.8 s and failed on the same commit
-    // minutes later. The 20 s test budget below is what actually bounds it.
+    // minutes later. The test budget below is what actually bounds it.
+    //
+    // 2026-07-31: this test is the long-hunted flake that src/test-setup.ts describes. Measured:
+    // 385 ms run on its own, >20 s inside a full 73-file run — a 50× spread with no hang anywhere,
+    // i.e. pure CPU contention (real pdfjs parsing competing with every other worker), not a bug
+    // and not something a bigger waitFor could fix. Only the per-test budget could, so that is
+    // what was raised.
     await waitFor(() => expect(projectImportApi.parse).toHaveBeenCalledTimes(2), // noise skipped
       { timeout: 10_000 });
 
@@ -106,7 +112,7 @@ describe('ProjectImportSheet', () => {
     });
     // The whole flow in one test (2 parses → heights → review → commit) needs more than
     // the 5 s default when the full suite runs in parallel.
-  }, 20_000);
+  }, 60_000);
 
   it('the ceilings checkbox opts every room back into a ceiling element', async () => {
     vi.mocked(projectImportApi.parse).mockResolvedValue(schedule);
@@ -165,7 +171,7 @@ describe('ProjectImportSheet', () => {
     expect(items.find((i) => i.name === 'Підлога')).toMatchObject({
       payload: { segments: [{ shape: 'rect', values: { a: 5, b: 4 } }] },
     });
-  }, 20_000);
+  }, 60_000);
 
   it('a coverings-only pick parses NOTHING and explains why (the file list is the fallback)', async () => {
     renderSheet();

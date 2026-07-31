@@ -842,6 +842,19 @@ export interface TemplateUpdatesResponse {
   available: number;
 }
 
+/**
+ * GET /api/catalog/update-notice — the pending "we changed your catalog" notice.
+ *
+ * Written by a catalog migration that rewrote the master's OWN catalog without them asking (the
+ * V82–V84 tiling rebuild was the first). `pending: false` is the normal answer, so this is a 200
+ * with a flag rather than a 404.
+ */
+export interface CatalogUpdateNoticeResponse {
+  pending: boolean;
+  added: number;
+  removed: number;
+}
+
 // ---------------------------------------------------------------------------
 // Consolidated estimate — fold several of an object's estimates into one.
 // ---------------------------------------------------------------------------

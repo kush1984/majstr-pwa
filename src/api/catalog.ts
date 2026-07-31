@@ -3,6 +3,7 @@ import type {
   CatalogItemRequest,
   CatalogItemResponse,
   CatalogResetResponse,
+  CatalogUpdateNoticeResponse,
   ItemType,
   TemplateUpdatesResponse,
   Trade,
@@ -80,5 +81,17 @@ export const catalogApi = {
     return api
       .post<CatalogResetResponse>('/api/catalog/add-new-from-template')
       .then((r) => r.data);
+  },
+
+  /** A pending "we changed your catalog" notice, written by a catalog migration that rewrote the
+   *  master's own catalog without them asking. `pending: false` when there is nothing to show. */
+  updateNotice(): Promise<CatalogUpdateNoticeResponse> {
+    return api
+      .get<CatalogUpdateNoticeResponse>('/api/catalog/update-notice')
+      .then((r) => r.data);
+  },
+
+  dismissUpdateNotice(): Promise<void> {
+    return api.post('/api/catalog/update-notice/dismiss').then(() => undefined);
   },
 };

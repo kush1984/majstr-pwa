@@ -47,9 +47,9 @@ export function NewEstimatePage() {
   const [project, setProject] = useState({ name: '', address: '' });
   const [estName, setEstName] = useState('');
   const [busy, setBusy] = useState(false);
-  // Empty estimate vs. start from a template (positions pre-filled, prices from
-  // the master's catalog). The picker hands back the chosen template summary.
-  const [template, setTemplate] = useState<EstimateTemplateSummary | null>(null);
+  // Empty estimate vs. start from templates (positions pre-filled, prices from the master's
+  // catalog). The picker hands back every chosen bundle; several merge into ONE estimate.
+  const [templates, setTemplates] = useState<EstimateTemplateSummary[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Import mode: create the object, then hand off to the file/photo import wizard.
   const [importMode, setImportMode] = useState(false);
@@ -89,8 +89,9 @@ export function NewEstimatePage() {
         return;
       }
       const req = { name: estName.trim() || undefined };
-      const estimate = template
-        ? await applyTemplate.mutateAsync({ projectId: proj.id, templateId: template.id, req })
+      const estimate = templates.length > 0
+        ? await applyTemplate.mutateAsync({
+            projectId: proj.id, templateIds: templates.map((tpl) => tpl.id), req })
         : await createEstimate.mutateAsync({ projectId: proj.id, req });
       void navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
@@ -127,12 +128,12 @@ export function NewEstimatePage() {
             <button
               type="button"
               onClick={() => {
-                setTemplate(null);
+                setTemplates([]);
                 setImportMode(false);
               }}
               className={cn(
                 'rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
-                !template && !importMode
+                templates.length === 0 && !importMode
                   ? 'border-brand bg-brand-soft text-brand'
                   : 'border-border bg-surface text-primary',
               )}
@@ -147,12 +148,16 @@ export function NewEstimatePage() {
               onClick={() => setPickerOpen(true)}
               className={cn(
                 'truncate rounded-xl border px-3 py-3 text-sm font-semibold transition-colors',
-                template && !importMode
+                templates.length > 0 && !importMode
                   ? 'border-brand bg-brand-soft text-brand'
                   : 'border-border bg-surface text-primary',
               )}
             >
-              {template ? t('templates.chosen', { name: template.name }) : t('templates.fromTemplate')}
+              {templates.length === 1
+                ? t('templates.chosen', { name: templates[0].name })
+                : templates.length > 1
+                  ? t('templates.applyCount', { count: templates.length })
+                  : t('templates.fromTemplate')}
             </button>
           </div>
           {/* Third option: import a ready estimate from a file/photo (PRO — gated on the wizard). */}
@@ -160,7 +165,7 @@ export function NewEstimatePage() {
             type="button"
             onClick={guard(() => {
               setImportMode(true);
-              setTemplate(null);
+              setTemplates([]);
             })}
             disabled={!online}
             title={offlineTitle}
@@ -229,8 +234,8 @@ export function NewEstimatePage() {
       <TemplatePickerSheet
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onPick={(tpl) => {
-          setTemplate(tpl);
+        onPick={(tpls) => {
+          setTemplates(tpls);
           setImportMode(false);
           setPickerOpen(false);
         }}

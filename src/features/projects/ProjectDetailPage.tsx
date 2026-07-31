@@ -172,11 +172,13 @@ export function ProjectDetailPage() {
   // template and catalog (same name-matching rule as the server) and queues it. This is the
   // second entry point for that action — the wizard has the other one, and both must behave
   // the same, or the master just meets the wall from a different screen.
-  const onPickTemplate = async (tpl: EstimateTemplateSummary) => {
+  const onPickTemplate = async (tpls: EstimateTemplateSummary[]) => {
     setTemplatePickerOpen(false);
     setEstimateChoiceOpen(false);
     try {
-      const e = await applyTemplate.mutateAsync({ projectId: id, templateId: tpl.id, req: {} });
+      const e = await applyTemplate.mutateAsync({
+        projectId: id, templateIds: tpls.map((tpl) => tpl.id), req: {},
+      });
       void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
       void navigate(routes.estimate(e.id));
     } catch (err) {

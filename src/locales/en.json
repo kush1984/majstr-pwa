@@ -664,7 +664,12 @@
     "addNewNothingTitle": "All up to date",
     "addNewNothing": "There are no new items in the library — your catalog already has every standard item for your lines of work.",
     "addNewAdded": "Added {{count}} new items. Don't forget to fill in your prices.",
-    "categoryNewPlaceholder": "Or type a new category"
+    "categoryNewPlaceholder": "Or type a new category",
+    "updateNoticeTitle": "Your catalog was updated",
+    "updateNoticeAdded": "Added {{count}} positions",
+    "updateNoticeRemoved": "Removed {{count}} outdated",
+    "updateNoticeBody": "We refreshed the ready-made catalog for your trades. Your own positions, and any price you changed yourself, were left untouched.",
+    "updateNoticeOk": "Got it"
   },
   "measure": {
     "proTitle": "Object measurements — in PRO",
@@ -919,7 +924,15 @@
     "loadError": "Couldn't load templates",
     "tradeLabel": "Trade",
     "tradeGeneral": "General (all trades)",
-    "tradeMoved": "Moved"
+    "tradeMoved": "Moved",
+    "applyCount": "Create estimate ({{count}})",
+    "select": "Select this template",
+    "deselect": "Remove from selection",
+    "previewOf": "Preview contents: {{name}}",
+    "multiHint": "Pick several — positions merge into one estimate with no repeats",
+    "searchPlaceholder": "Search templates",
+    "filterAll": "All",
+    "nothingFound": "Nothing found — try another name"
   },
   "profile": {
     "title": "Profile",

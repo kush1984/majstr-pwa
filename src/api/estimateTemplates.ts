@@ -66,14 +66,20 @@ export const estimateTemplatesApi = {
       .then((r) => r.data);
   },
 
-  /** Create a new estimate in a project from a template. */
+  /**
+   * Create ONE new estimate in a project from one or more templates. The server concatenates the
+   * picked bundles in order and drops a position the moment a name repeats, so overlapping
+   * bundles (every tiling bundle carries «Ґрунтівка поверхні») cannot bill the same work twice.
+   */
   applyToProject(
     projectId: string,
-    templateId: string,
+    templateIds: string[],
     req: EstimateCreateRequest,
   ): Promise<EstimateResponse> {
     return api
-      .post<EstimateResponse>(`/api/projects/${projectId}/estimates/from-template/${templateId}`, req)
+      .post<EstimateResponse>(`/api/projects/${projectId}/estimates/from-templates`, req, {
+        params: { ids: templateIds.join(',') },
+      })
       .then((r) => r.data);
   },
 };

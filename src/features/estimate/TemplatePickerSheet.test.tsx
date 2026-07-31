@@ -23,7 +23,7 @@ const def: EstimateTemplateSummary = {
   id: 'def1', name: 'Санвузол повний', trade: 'TILING', isDefault: true, itemCount: 8,
 };
 
-function renderPicker(onPick: (t: EstimateTemplateSummary) => void) {
+function renderPicker(onPick: (t: EstimateTemplateSummary[]) => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -34,6 +34,17 @@ function renderPicker(onPick: (t: EstimateTemplateSummary) => void) {
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+/**
+ * The toggle half of a row. Not `getByRole('button', { name })` — the row holds TWO buttons whose
+ * accessible names both contain the template name (the toggle and the preview chevron), so a name
+ * query is ambiguous; and `aria-pressed` flips between taps, so it cannot pin the element either.
+ */
+function toggleFor(name: string): HTMLElement {
+  const button = screen.getByText(name).closest('button');
+  if (!button) throw new Error(`no toggle button for ${name}`);
+  return button;
+}
 
 describe('TemplatePickerSheet', () => {
   it('lists my templates and the defaults, and previews → picks one', async () => {
@@ -51,13 +62,94 @@ describe('TemplatePickerSheet', () => {
     expect(await screen.findByText('Моя ванна')).toBeTruthy();
     expect(screen.getByText('Санвузол повний')).toBeTruthy();
 
-    // Open the default's preview → its position is fetched and listed.
-    fireEvent.click(screen.getByText('Санвузол повний'));
+    // The chevron opens the preview → the template's positions are fetched and listed.
+    fireEvent.click(screen.getByRole('button', { name: /Переглянути склад: Санвузол повний/ }));
     expect(await screen.findByText('Грунтовка поверхонь')).toBeTruthy();
 
-    // Confirm → onPick gets the chosen template.
-    fireEvent.click(screen.getByRole('button', { name: 'Створити з цього шаблону' }));
-    await waitFor(() => expect(onPick).toHaveBeenCalledWith(def));
+    // Selecting from the preview returns to the list; applying is the footer's job.
+    fireEvent.click(screen.getByRole('button', { name: 'Обрати цей шаблон' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Створити кошторис (1)' }));
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith([def]));
+  });
+
+  it('applies several bundles at once, in the order they were tapped', async () => {
+    // A real job is rarely one bundle — this is the whole point of the multi-select.
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
+    const onPick = vi.fn();
+    renderPicker(onPick);
+
+    await screen.findByText('Санвузол повний');
+    fireEvent.click(toggleFor('Санвузол повний'));
+    fireEvent.click(toggleFor('Моя ванна'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Створити кошторис (2)' }));
+
+    // Tap order decides which bundle's wording survives a duplicate, so it must be preserved.
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith([def, own]));
+  });
+
+  it('untaps a template, and the footer disappears with nothing selected', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
+    renderPicker(vi.fn());
+
+    await screen.findByText('Моя ванна');
+    fireEvent.click(toggleFor('Моя ванна'));
+    expect(await screen.findByRole('button', { name: 'Створити кошторис (1)' })).toBeTruthy();
+
+    fireEvent.click(toggleFor('Моя ванна'));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Створити кошторис/ })).toBeNull());
+  });
+
+  it('filters a long default list by name, and keeps what is already ticked', async () => {
+    // A master with one busy trade has 20+ bundles — the search box exists because that is a long
+    // scroll. The filter must be a VIEW: a bundle ticked before searching still counts.
+    const many: EstimateTemplateSummary[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', isDefault: true, itemCount: 5,
+    }));
+    many.push({ id: 'fence', name: 'Паркан профнастил', trade: 'BUILDER', isDefault: true, itemCount: 4 });
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...many]);
+    const onPick = vi.fn();
+    renderPicker(onPick);
+
+    await screen.findByText('Паркан профнастил');
+    fireEvent.click(toggleFor('Кладка 0'));
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'паркан' } });
+
+    await waitFor(() => expect(screen.queryByText('Кладка 0')).toBeNull());
+    expect(screen.getByText('Паркан профнастил')).toBeTruthy();
+    // Ticked while hidden by the filter — still selected, still counted.
+    expect(screen.getByRole('button', { name: 'Створити кошторис (1)' })).toBeTruthy();
+
+    fireEvent.click(toggleFor('Паркан профнастил'));
+    fireEvent.click(screen.getByRole('button', { name: 'Створити кошторис (2)' }));
+    await waitFor(() =>
+      expect(onPick).toHaveBeenCalledWith([many[0], many[many.length - 1]]));
+  });
+
+  it('says "nothing found" rather than "you have no templates" while searching', async () => {
+    // The empty-state texts claim the master saved nothing / has no bundles. Under a filter that
+    // is a lie, and a scary one — it reads as data loss.
+    const many: EstimateTemplateSummary[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', isDefault: true, itemCount: 5,
+    }));
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...many]);
+    renderPicker(vi.fn());
+
+    await screen.findByText('Кладка 0');
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'абракадабра' } });
+
+    await waitFor(() => expect(screen.queryAllByText(/Нічого не знайдено/).length).toBe(2));
+    expect(screen.queryByText(/не зберегли жодного шаблону/)).toBeNull();
+    expect(screen.queryByText(/Немає доступних шаблонів/)).toBeNull();
+  });
+
+  it('hides the search box for a list short enough to just read', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
+    renderPicker(vi.fn());
+
+    await screen.findByText('Санвузол повний');
+    expect(screen.queryByRole('searchbox')).toBeNull();
   });
 
   it('shows the empty-state hint when there are no own templates', async () => {

@@ -231,12 +231,12 @@ export function useApplyTemplate() {
   return useMutation({
     networkMode: 'always', // never let it sit paused offline — we have a real offline path
     mutationFn: async (
-      args: { projectId: string; templateId: string; req: EstimateCreateRequest },
+      args: { projectId: string; templateIds: string[]; req: EstimateCreateRequest },
     ): Promise<EstimateResponse> => {
       if (onlineManager.isOnline()) {
         try {
           const created = await estimateTemplatesApi.applyToProject(
-            args.projectId, args.templateId, args.req);
+            args.projectId, args.templateIds, args.req);
           void qc.invalidateQueries({ queryKey: ['projects'] });
           void qc.invalidateQueries({ queryKey: ['dashboard'] });
           return created;
@@ -252,11 +252,14 @@ export function useApplyTemplate() {
 /** The offline half of {@link useApplyTemplate}: compose locally, then queue create + N lines. */
 async function applyTemplateOffline(
   qc: QueryClient,
-  { projectId, templateId, req }: { projectId: string; templateId: string; req: EstimateCreateRequest },
+  { projectId, templateIds, req }: { projectId: string; templateIds: string[]; req: EstimateCreateRequest },
 ): Promise<EstimateResponse> {
-  const template = qc.getQueryData<EstimateTemplateDetail>([...ESTIMATE_TEMPLATE_KEY, templateId]);
-  if (!template) {
+  const templates = templateIds.map((id) =>
+    qc.getQueryData<EstimateTemplateDetail>([...ESTIMATE_TEMPLATE_KEY, id]));
+  if (templates.some((tpl) => !tpl)) {
     // Refuse loudly rather than create an EMPTY estimate the master would think is the template.
+    // One missing bundle out of several is still a refusal: silently applying the rest would
+    // produce an estimate that is short a section and looks complete.
     throw new TemplateNotCachedError();
   }
   const catalog = qc.getQueryData<CatalogItemResponse[]>([...CATALOG_KEY, 'list', 'all']) ?? [];
@@ -269,20 +272,29 @@ async function applyTemplateOffline(
   const estimateId = newUuid();
   const now = new Date().toISOString();
 
-  // The lines, mirroring the server's substitution rule.
-  const lines = (template.items ?? []).map((ti) => {
-    const match = byName.get(ti.name.toLowerCase());
-    const request: EstimateItemRequest = {
-      type: match?.type ?? ti.type,
-      name: ti.name,
-      category: match?.category ?? undefined,
-      unit: match?.unit ?? ti.unit,
-      quantity: 0, // empty — filled per object
-      unitPrice: match?.defaultPrice ?? 0,
-      sortOrder: ti.sortOrder, // carried over from the template, as the server does
-    };
-    return { id: newUuid(), request };
-  });
+  // The lines, mirroring the server's substitution AND its de-duplication: bundles overlap, and
+  // a position contributed by an earlier one must not come back from a later one. Same key as the
+  // catalog lookup right above, so a line that resolves to one catalog row appears once.
+  // sortOrder is renumbered across the whole result — each template counts its own from 0.
+  const seen = new Set<string>();
+  const lines = templates.flatMap((tpl) => tpl!.items ?? [])
+    .filter((ti) => {
+      const key = ti.name.trim().toLowerCase();
+      return seen.has(key) ? false : (seen.add(key), true);
+    })
+    .map((ti, index) => {
+      const match = byName.get(ti.name.toLowerCase());
+      const request: EstimateItemRequest = {
+        type: match?.type ?? ti.type,
+        name: ti.name,
+        category: match?.category ?? undefined,
+        unit: match?.unit ?? ti.unit,
+        quantity: 0, // empty — filled per object
+        unitPrice: match?.defaultPrice ?? 0,
+        sortOrder: index,
+      };
+      return { id: newUuid(), request };
+    });
 
   // Queue the estimate first, then its lines depending on it: the engine replays in `seq` order
   // and holds a child until its parent has landed, so the server never sees an orphan line.
