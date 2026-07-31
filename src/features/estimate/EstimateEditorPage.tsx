@@ -154,8 +154,13 @@ export function EstimateEditorPage() {
       window.open(url, '_blank');
       setTimeout(revoke, 60_000);
     } catch (err) {
-      if (toAppError(err).code === 'EMAIL_NOT_VERIFIED') {
+      const failure = toAppError(err);
+      if (failure.code === 'EMAIL_NOT_VERIFIED') {
         setEmailGateOpen(true);
+      } else if (failure.code === 'NETWORK') {
+        // The request never left the phone — signal dropped after the guard let it through. Say
+        // that, because «Не вдалося сформувати PDF» reads as a fault in the estimate or the server.
+        toast.error(failure.message);
       } else {
         toast.error(t('estimate.pdfFailed'));
       }
