@@ -72,11 +72,48 @@ export type ChecksumVerdict =
   | { kind: 'reject' };
 
 /**
- * Above this, the "cut" is too big to be a cut. A real L-shaped room loses a corner; gabarits that
- * exceed the area by more than this are a misread chain — most often one belonging to the room next
- * door — and accepting them would quietly produce walls for a room that does not exist.
+ * Above this, the "cut" is too big to be a cut: gabarits that exceed the area by more than this are
+ * a misread chain, most often one belonging to the room next door.
+ *
+ * Raised from 0.4, which rejected the very shape it was written for. A corridor with 1,2 m arms in a
+ * 4,0 × 3,5 m box holds 7,56 m², so its cut is 46 % of the box; at the 900 mm minimum corridor width
+ * of ДБН В.2.2-15:2019 the same box gives 58 %. 0,6 covers a norm-minimum corridor and still refuses
+ * the 70 % case that only a chain from the next room can produce.
  */
-export const MAX_PLAUSIBLE_CUT = 0.4;
+export const MAX_PLAUSIBLE_CUT = 0.6;
+
+/**
+ * Narrowest arm we will believe an L-shaped room has, in mm. Below this it is not a room that lost a
+ * corner, it is a misread. Deliberately under the 900 mm the norm requires, because this tests
+ * whether a shape is arithmetically possible, not whether it is compliant.
+ */
+export const MIN_ARM_MM = 600;
+
+/**
+ * The arm width an L-shape must have for this bounding box to enclose this area, in metres, or null
+ * when no such shape exists.
+ *
+ * For a bounding box a×b with both arms w wide: `area = ab − (a−w)(b−w)`, which rearranges to
+ * `w² − (a+b)w + area = 0`. The smaller root is the arm.
+ *
+ * This replaced a flat "gabarits may exceed the area by at most 40%" rule, which rejected the very
+ * shape it was written for: a 4,0 × 3,5 m corridor with 1,2 m arms holds 7,56 m², so its cut is 46 %
+ * of the box — over the old ceiling, and corridors are routinely narrower still. Solving for the arm
+ * tests the same thing without a magic number: a plausible arm means the L is geometrically real,
+ * and an absurd one (0,42 m for the same box holding 3 m²) means a chain was misread.
+ */
+export function impliedArmM(
+  widthMm: number,
+  lengthMm: number,
+  areaM2: number,
+): number | null {
+  const a = widthMm / 1000;
+  const b = lengthMm / 1000;
+  const disc = (a + b) * (a + b) - 4 * areaM2;
+  if (disc < 0) return null; // no real shape: the box cannot hold that area with a corner removed
+  const w = (a + b - Math.sqrt(disc)) / 2;
+  return w > 0 && w < Math.min(a, b) ? w : null;
+}
 
 /**
  * width × length must equal the table area (±2%). If it doesn't, but
@@ -100,11 +137,19 @@ export function checksum(
       return { kind: 'lshape', cutWidthMm, cutDepthMm };
     }
   }
-  // Bigger than the area, but not absurdly: the shape is not a plain rectangle and the cut was not
-  // transcribed. Keep what is usable instead of discarding all of it.
+  // Bigger than the area, and a corner cut of a believable width explains the difference: the shape
+  // is not a plain rectangle and the cut was not transcribed. Keep what is usable — the perimeter of
+  // an L-shape IS its bounding box's — instead of discarding all of it.
+  // Two conditions, because either alone lets a misread through. The fraction bounds how much of a
+  // box a cut may take; the implied arm checks that a cut of that size is a SHAPE rather than
+  // arithmetic — a 15,0 × 6,0 box over 26,5 m² solves to a tidy 1,35 m arm and is still a chain
+  // borrowed from the room next door.
   const excess = gross - areaM2;
   if (excess > 0 && excess / gross <= MAX_PLAUSIBLE_CUT) {
-    return { kind: 'bounding-box', missingAreaM2: round3(excess) };
+    const arm = impliedArmM(widthMm, lengthMm, areaM2);
+    if (arm != null && arm * 1000 >= MIN_ARM_MM) {
+      return { kind: 'bounding-box', missingAreaM2: round3(excess) };
+    }
   }
   return { kind: 'reject' };
 }

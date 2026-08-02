@@ -282,10 +282,34 @@ describe('an L-shaped room whose cut nobody transcribed', () => {
   });
 
   it('gabarits absurdly bigger than the area are still a misread, not a cut', () => {
-    // A chain taken from the room next door: no niche removes 70% of a room.
+    // A chain taken from the room next door: no niche removes 70% of a room. Note this one solves to
+    // a perfectly tidy 1,35 m arm — arithmetic alone would wave it through, which is why the cut
+    // fraction is checked as well as the shape.
     expect(checksum(26.5, 15000, 6000, null, null)).toEqual({ kind: 'reject' });
     // And smaller than the area is impossible for a bounding box — also a misread.
     expect(checksum(26.5, 3000, 3000, null, null)).toEqual({ kind: 'reject' });
+    // An arm thinner than 600 mm is not a room that lost a corner either.
+    expect(checksum(3, 4000, 3500, null, null)).toEqual({ kind: 'reject' });
+  });
+
+  it('keeps a Г-shaped corridor whose cut nobody transcribed', () => {
+    // Дубляни, reported: the Г-shaped corridor came back with nothing. A 4,0 × 3,5 m box holding
+    // 7,56 m² is an L with 1,2 m arms — a 46% cut, which the old 40% ceiling rejected outright,
+    // throwing away walls that were correct. The perimeter of an L equals its bounding box's, so the
+    // plinth, the reveals and the wall area are all right; only the floor is not, and the schedule
+    // gives us that.
+    expect(checksum(7.56, 4000, 3500, null, null)).toEqual({
+      kind: 'bounding-box',
+      missingAreaM2: 6.44,
+    });
+    // At the 900 mm minimum corridor width of ДБН В.2.2-15:2019 the cut reaches 58% — still kept.
+    expect(checksum(5.94, 4000, 3500, null, null).kind).toBe('bounding-box');
+    // And when the cut WAS transcribed it is a proof, not a fallback.
+    expect(checksum(7.56, 4000, 3500, 2800, 2300)).toEqual({
+      kind: 'lshape',
+      cutWidthMm: 2800,
+      cutDepthMm: 2300,
+    });
   });
 });
 
