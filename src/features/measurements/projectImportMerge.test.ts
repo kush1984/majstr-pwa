@@ -180,9 +180,14 @@ describe('checksum — the proof that makes recognised sizes trustworthy', () =>
   });
 
   it('rejects anything unproven — an unverified gabarit never reaches a calculation', () => {
-    expect(checksum(17.69, 4990, 3200, null, null)).toEqual({ kind: 'reject' }); // 10% off
     expect(checksum(null, 4990, 3545, null, null)).toEqual({ kind: 'reject' });  // no table area
     expect(checksum(17.69, null, null, null, null)).toEqual({ kind: 'reject' }); // nothing read
+
+    // Belgradska: 17,69 m² printed against 4,99 × 3,20 = 15,97 — the chains fall 10% SHORT. The
+    // verdict changed from 'reject' to 'partial-gabarits', and the rule this test exists for is
+    // untouched: the unverified gabarits still reach no calculation. What changed is that the AREA
+    // no longer goes down with them — it was never the unproven half.
+    expect(checksum(17.69, 4990, 3200, null, null).kind).toBe('partial-gabarits');
   });
 
   it('merge: confirmed gabarits set an EXACT perimeter; rejected ones are kept as a hint only', () => {
@@ -286,8 +291,11 @@ describe('an L-shaped room whose cut nobody transcribed', () => {
     // a perfectly tidy 1,35 m arm — arithmetic alone would wave it through, which is why the cut
     // fraction is checked as well as the shape.
     expect(checksum(26.5, 15000, 6000, null, null)).toEqual({ kind: 'reject' });
-    // And smaller than the area is impossible for a bounding box — also a misread.
-    expect(checksum(26.5, 3000, 3000, null, null)).toEqual({ kind: 'reject' });
+    // Smaller than the area is impossible for a BOUNDING BOX — but it is not a misread to discard,
+    // it is the partial-chain case below. Whether those 3×3 chains are one arm of this room or a
+    // stray from the next one cannot be told from the numbers, and it does not matter: both answers
+    // are "keep the printed area, drop the chains".
+    expect(checksum(26.5, 3000, 3000, null, null).kind).toBe('partial-gabarits');
     // An arm thinner than 600 mm is not a room that lost a corner either.
     expect(checksum(3, 4000, 3500, null, null)).toEqual({ kind: 'reject' });
   });
@@ -311,13 +319,31 @@ describe('an L-shaped room whose cut nobody transcribed', () => {
       cutDepthMm: 2300,
     });
   });
+
+  it('keeps a corridor whose chains cover ONE ARM — the inequality the L-fix pointed the wrong way', () => {
+    // The real numbers off the БТІ sheet: room 1 prints 12,4 m² beside chains of 7,74 × 1,35.
+    // An L has no single width and length, so the chains describe one leg and the product comes out
+    // SMALLER than the area — the mirror of the bounding-box case. Every rule written so far tested
+    // `gross > areaM2`, so none of them ever fired here and the room fell through to 'reject'.
+    expect(checksum(12.4, 7740, 1350, null, null)).toEqual({
+      kind: 'partial-gabarits',
+      missingAreaM2: 1.951,
+    });
+
+    // Room 4 on the same sheet: 10,4 printed against 2,96 × 3,24 = 9,59. Small gap, same shape of
+    // error — and it is the gap that used to be silently resolved in favour of the WRONG number.
+    expect(checksum(10.4, 2960, 3240, null, null).kind).toBe('partial-gabarits');
+
+    // A room that genuinely is its rectangle still passes as one — 2 % tolerance, unchanged.
+    expect(checksum(17.6, 3260, 5420, null, null).kind).toBe('rect');
+  });
 });
 
 describe('crossCheck', () => {
   const rooms = (areas: number[]): MergedRoom[] =>
     areas.map((a, i) => ({
       key: String(i), number: null, name: 'К', floor: null, areaM2: a,
-      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, boundingBoxOnly: false, ceilingHmm: null, openings: [], confidence: 'high', notes: [], uncertain: [],
+      perimeterMm: null, perimeterDerived: false, widthMm: null, lengthMm: null, cutWidthMm: null, cutDepthMm: null, rejected: null, boundingBoxOnly: false, areaOnly: false, ceilingHmm: null, openings: [], confidence: 'high', notes: [], uncertain: [],
     }));
 
   it('flags a >5% gap (rooms were lost) and passes a close match', () => {

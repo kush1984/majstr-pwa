@@ -39,6 +39,12 @@ export interface MergedRoom {
    * them, the floor must not. Set when the printed area is smaller than w×l by a plausible cut.
    */
   boundingBoxOnly: boolean;
+  /**
+   * Only the printed AREA survived the checksum: the chains covered part of the room (one arm of an
+   * L), so the floor takes the area and the walls are measured on site. Unlike boundingBoxOnly the
+   * gabarits are not kept at all — a partial chain cannot give a perimeter.
+   */
+  areaOnly: boolean;
   /** Per-room ceiling height from the plan's «H=…мм», mm. */
   ceilingHmm: number | null;
   openings: ProjectImportOpening[];
@@ -69,6 +75,23 @@ export type ChecksumVerdict =
    * figure the schedule already gives us.
    */
   | { kind: 'bounding-box'; missingAreaM2: number }
+  /**
+   * The printed area is BIGGER than width × length — the mirror of 'bounding-box', and the case
+   * that actually turns up on an L-shaped corridor.
+   *
+   * A room that wraps a corner has no single width and length, so its chains describe ONE ARM: the
+   * Дубляни corridor prints 12,4 m² beside chains of 7,74 × 1,35 = 10,45 m². Nothing contradicts
+   * anything here — the box simply is not the room. This used to fall through to 'reject', which
+   * discarded the AREA as well, and the corridor imported with no geometry at all. Both the
+   * bounding-box rule and the fragment-merge rule were written for the opposite inequality, so
+   * neither ever fired on it.
+   *
+   * The area is the trustworthy half — it is the room's own printed label, normative to one decimal
+   * — and the gabarits are the partial one. So the floor and ceiling take the area, and the walls
+   * stay empty for the master to measure. Unlike 'bounding-box' the perimeter is NOT recoverable:
+   * one arm of an L says nothing about the length of the other.
+   */
+  | { kind: 'partial-gabarits'; missingAreaM2: number }
   | { kind: 'reject' };
 
 /**
@@ -151,6 +174,14 @@ export function checksum(
       return { kind: 'bounding-box', missingAreaM2: round3(excess) };
     }
   }
+  // The area is the BIGGER of the two: the chains cover part of the room, not a box around it.
+  // Deliberately uncapped, unlike the branch above. That one keeps w×l and must therefore prove the
+  // gabarits are believable; this one keeps only the printed area and throws the chains away, so a
+  // wrong chain costs nothing — the worst case is walls left empty, which is where they would have
+  // been anyway. Capping it would only re-create the old behaviour of losing the area too.
+  if (areaM2 > gross) {
+    return { kind: 'partial-gabarits', missingAreaM2: round3(areaM2 - gross) };
+  }
   return { kind: 'reject' };
 }
 
@@ -216,6 +247,7 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
             cutDepthMm: null,
             rejected: null,
             boundingBoxOnly: false,
+            areaOnly: false,
             ceilingHmm: null,
             openings: [],
             confidence: 'high',
@@ -261,6 +293,21 @@ export function mergeParses(parses: ParsedFile[]): MergedImport {
           }
           if (verdict.kind === 'reject') {
             room.rejected = { widthMm: r.widthMm, lengthMm: r.lengthMm };
+          } else if (verdict.kind === 'partial-gabarits') {
+            // Keep the AREA, drop the chains. Leaving width/length unset is the point: buildPackage
+            // then emits four EMPTY walls at the known height instead of four walls sized off one
+            // arm, which would understate the room while looking like a finished answer.
+            room.areaOnly = true;
+            room.rejected = { widthMm: r.widthMm, lengthMm: r.lengthMm };
+            if (!room.uncertain.includes('widthMm')) room.uncertain.push('widthMm');
+            if (!room.uncertain.includes('lengthMm')) room.uncertain.push('lengthMm');
+            const note = `площа ${area?.toLocaleString('uk-UA')} м² більша за `
+              + `${(r.widthMm / 1000).toLocaleString('uk-UA')}×`
+              + `${(r.lengthMm / 1000).toLocaleString('uk-UA')} м на `
+              + `${verdict.missingAreaM2.toLocaleString('uk-UA')} м² — розміри описують частину `
+              + `кімнати (схоже на Г-подібну); площу взято, стіни обміряйте`;
+            if (!room.notes.includes(note)) room.notes.push(note);
+            if (rank('medium') > rank(room.confidence)) room.confidence = 'medium';
           } else if (verdict.kind === 'bounding-box') {
             // Walls/plinth/reveals are right from the bounding box; the floor comes from the
             // schedule area instead, and the master is told which corner to check.
@@ -386,6 +433,8 @@ export interface RoomInputs {
   openings: ProjectImportOpening[];
   /** Gabarits are the room's BOUNDING BOX (an unread cut-out): walls yes, floor no. */
   boundingBoxOnly?: boolean;
+  /** Only the printed area survived: floor yes, walls to be measured (no usable gabarits). */
+  areaOnly?: boolean;
 }
 
 /**
@@ -476,7 +525,10 @@ export function buildPackage(inputs: RoomInputs): PackageElement[] {
     // hint. Defaulting to "take" produced a locked «площа напряму», which is not what we want.
     // The exception is the bounding-box case above: there the rectangle is known to be wrong and
     // the area is known to be right, so leaving it untaken would only invite a worse answer.
-    takeArea: boxOnly && inputs.areaM2 != null && inputs.areaM2 > 0,
+    // areaOnly joins boxOnly here for the same reason: in both the rectangle is known to be wrong
+    // and the printed area known to be right, so leaving it untaken invites a worse answer.
+    takeArea: (boxOnly || inputs.areaOnly === true)
+      && inputs.areaM2 != null && inputs.areaM2 > 0,
     lengthM: null, openings: [],
   });
   els.push(floorCeil('floor', true));
@@ -541,6 +593,7 @@ export function buildRoomPackage(room: MergedRoom, floorHeightMm: number | null)
     heightMm: room.ceilingHmm ?? floorHeightMm,
     openings: room.openings,
     boundingBoxOnly: room.boundingBoxOnly,
+    areaOnly: room.areaOnly,
   });
 }
 
