@@ -749,7 +749,7 @@
   "sketch": {
     "button": "📷 Recognise a plan or sketch",
     "title": "Room plan or sketch",
-    "sourceHint": "Photograph a hand-drawn sketch with sizes, or a printed floor plan (technical passport, BTI) — we read the shape and numbers, you verify. Several sheets of the same object can be picked at once.",
+    "sourceHint": "Photograph a hand-drawn sketch, a design-project sheet or a technical passport — we read the shape and numbers, you verify. Several sheets of the same object can be picked at once.",
     "takePhoto": "Take a photo",
     "upload": "Choose photos (several allowed)",
     "parsing": "Reading…",
