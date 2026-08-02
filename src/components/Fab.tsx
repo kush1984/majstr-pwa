@@ -32,10 +32,15 @@ export function Fab({
       {open && (
         // A full-screen catcher rather than an onBlur: a tap anywhere else has to close the menu, and
         // on a touch screen there is no blur to hang that on.
+        //
+        // It is also the scrim, and that is not decoration. The menu is white pills over a list of
+        // white cards, so the two read at the same weight and the actions disappear into the
+        // estimate. Dimming removes the competition instead of fighting it with a louder pill, and
+        // it finally SHOWS what this catcher already does — the page behind is not tappable.
         <button
           type="button"
           aria-label={t('common.close')}
-          className="fixed inset-0 z-40 cursor-default"
+          className="fixed inset-0 z-40 cursor-default bg-ink/45 backdrop-blur-[2px]"
           onClick={() => setOpen(false)}
         />
       )}
@@ -76,7 +81,7 @@ export function FabAction({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 rounded-full bg-surface py-2.5 pl-4 pr-5 text-sm font-semibold text-primary shadow-card-lg active:scale-95"
+      className="flex min-h-[44px] items-center gap-2 rounded-full bg-surface py-2.5 pl-4 pr-5 text-sm font-semibold text-primary shadow-card-lg ring-1 ring-black/5 active:scale-95"
     >
       <span className="text-base leading-none">{icon}</span>
       {label}

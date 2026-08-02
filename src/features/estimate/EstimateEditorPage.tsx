@@ -282,7 +282,10 @@ export function EstimateEditorPage() {
             ←
           </button>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[17px] font-bold text-primary">
+            {/* Wraps rather than truncates: a master names variants to tell them apart («Зведений
+                кошторис +15%»), and the part that distinguishes them is at the END, which is
+                exactly what an ellipsis eats on a phone. */}
+            <div className="break-words text-[17px] font-bold leading-tight text-primary">
               {estimateName(est.name, est.createdAt)}
             </div>
             <div className="truncate text-xs text-muted">

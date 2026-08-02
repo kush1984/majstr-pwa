@@ -137,7 +137,15 @@ export function resolveDrag(
 
   if (activeId.startsWith(SECTION_ID)) {
     const from = sections.findIndex((s) => sectionId(s) === activeId);
-    const to = sections.findIndex((s) => sectionId(s) === overId);
+    // The drop usually lands on a LINE, not on a heading. A section's droppable area is its whole
+    // block — heading plus every line in it — so while dragging one, whatever is under the pointer
+    // is somebody's line the overwhelming majority of the time. Discarding that as "not a section"
+    // is what made moving a category look like it randomly did nothing: the drag ran, the release
+    // resolved to no target, and the estimate snapped back. A line identifies its section perfectly
+    // well, so resolve through it.
+    const to = overId.startsWith(SECTION_ID)
+      ? sections.findIndex((s) => sectionId(s) === overId)
+      : sections.findIndex((s) => s.items.some((i) => ITEM_ID + i.id === overId));
     if (from < 0 || to < 0) return { kind: 'none' };
     const next = reorderSections(sections, from, to);
     return next === sections ? { kind: 'none' } : { kind: 'apply', sections: next };

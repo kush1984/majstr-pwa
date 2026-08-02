@@ -133,6 +133,22 @@ describe('resolveDrag', () => {
     expect(ids(out.sections)).toEqual(['Плитка:c,d', 'Підготовка:a,b', '-:e']);
   });
 
+  it('moves a section when the drop landed on a LINE of another section', () => {
+    // The bug a master reported as "categories drag, then randomly do nothing". A section's
+    // droppable area is its whole block, so on release the thing under the pointer is nearly
+    // always someone's line — and treating that as "no section here" threw the whole drag away.
+    const out = resolveDrag(sections, sec('Плитка'), item('a'));
+    expect(out.kind).toBe('apply');
+    if (out.kind !== 'apply') throw new Error('unreachable');
+    expect(ids(out.sections)).toEqual(['Плитка:c,d', 'Підготовка:a,b', '-:e']);
+  });
+
+  it('does nothing when a section is dropped on one of its OWN lines', () => {
+    // Same resolution path, but it must not read as a move: the section did not go anywhere, and a
+    // spurious reorder request on every mis-tap of the grip is exactly what this guards.
+    expect(resolveDrag(sections, sec('Плитка'), item('c')).kind).toBe('none');
+  });
+
   it('ASKS before moving a line into another section', () => {
     // The one branch that must never apply silently: it changes the line's category, and a drag is
     // easy to start by accident on a document a client gets quoted from.

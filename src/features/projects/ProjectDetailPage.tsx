@@ -533,8 +533,11 @@ function EstimateRow({
           onClick={onClick}
           className="min-w-0 flex-1 px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-sm font-medium text-primary">
+          {/* The name wraps instead of truncating — what tells «Зведений кошторис» from «Зведений
+              кошторис +15%» is at the end, and on a phone that is precisely what the ellipsis ate.
+              items-start keeps the total on the first line while the name grows downward. */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="min-w-0 break-words text-sm font-medium leading-snug text-primary">
               {estimateName(summary.name, summary.createdAt)}
             </span>
             <span className="whitespace-nowrap text-sm font-bold text-primary">

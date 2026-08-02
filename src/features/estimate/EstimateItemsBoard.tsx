@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
-  type DragEndEvent,
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, closestCorners, useSensor, useSensors,
+  type CollisionDetection, type DragEndEvent,
 } from '@dnd-kit/core';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import {
@@ -13,8 +13,28 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import type { EstimateItemResponse } from '@/api/types.ts';
 import {
-  flatten, ITEM_ID, resolveDrag, sectionId, toSections, type Section,
+  flatten, ITEM_ID, resolveDrag, SECTION_ID, sectionId, toSections, type Section,
 } from './estimateArrange.ts';
+
+/**
+ * Which droppable a drag is over.
+ *
+ * Dragging a SECTION only ever considers other sections, and by corners rather than centres. Both
+ * halves matter. With every line also a candidate, the nearest thing to a moving category was
+ * almost always a line — lines are small and there are dozens of them, while a section's centre
+ * sits buried in the middle of its own block. And with `closestCenter` between blocks of wildly
+ * different heights, a short category had to be dragged past the MIDDLE of a thirty-line one before
+ * it would give way, which is the "то тягнеться, то не тягнеться". Corners react at the edge.
+ *
+ * Dragging a line is left alone: a line is dropped on another line, and that already worked.
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  if (!String(args.active.id).startsWith(SECTION_ID)) return closestCenter(args);
+  return closestCorners({
+    ...args,
+    droppableContainers: args.droppableContainers.filter((c) => String(c.id).startsWith(SECTION_ID)),
+  });
+};
 
 /**
  * The estimate's lines, grouped into sections and rearrangeable by dragging.
@@ -86,7 +106,7 @@ export function EstimateItemsBoard({
     <>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collisionDetection}
         modifiers={[restrictToVerticalAxis]}
         onDragEnd={onDragEnd}
       >
@@ -330,8 +350,13 @@ function Grip({
       style={{ touchAction: 'none' }}
       {...attributes}
       {...listeners}
+      // A line's grip is the full height of its card; a section's was 20 px tall, so the two were
+      // nothing like the same target on a phone — which is most of why categories "practically
+      // could not be dragged" there. 44 px is the floor for a thumb, and it matches the height the
+      // category checkbox already uses in selection mode, so the header no longer changes height
+      // between modes either.
       className={`flex w-7 flex-shrink-0 cursor-grab items-center justify-center rounded-lg text-faint
-        active:cursor-grabbing ${stretch ? 'self-stretch' : 'h-5'}`}
+        active:cursor-grabbing ${stretch ? 'self-stretch' : 'h-11'}`}
     >
       <svg viewBox="0 0 10 16" className="h-4 w-2.5 fill-current" aria-hidden="true">
         <circle cx="2" cy="3" r="1.4" /><circle cx="8" cy="3" r="1.4" />
