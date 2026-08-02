@@ -12,9 +12,13 @@ import type {
  * elements and returns the fresh measurement tree.
  */
 export const sketchImportApi = {
-  parse(objectId: string, file: File): Promise<SketchParseResponse> {
+  /**
+   * Several sheets go up under the SAME field name — that is how a multipart form carries a list,
+   * and the backend binds the repeated field into an array. One photo is simply a one-item list.
+   */
+  parse(objectId: string, files: File[]): Promise<SketchParseResponse> {
     const form = new FormData();
-    form.append('file', file);
+    for (const file of files) form.append('file', file);
     return api
       .post<SketchParseResponse>(`/api/projects/${objectId}/measurements/sketch/parse`, form)
       .then((r) => r.data);

@@ -162,6 +162,17 @@ describe('the classifier is a hint, and the page contents decide when it fails',
     expect(looksLikeData(pageEvidence(TITLE_PAGE))).toBe(false);
   });
 
+  it('sees a ceiling height however the БТІ office wrote it — three vendors, three notations', () => {
+    // Not hypothetical: these are the forms three real Ukrainian passports use for the SAME field.
+    // Only the millimetre one used to match, so on a technical passport — the one sheet that
+    // ALWAYS prints a height — the height was invisible.
+    const kyiv = pageEvidence('ПЛАН КВАРТИРИ Масштаб 1:100 h=2.71 22.5 18.2 3.9');   // Latin, dot
+    const lviv = pageEvidence('ПЛАН 5 поверх Н=2,49 16,1 1,8 кв.м');                 // Cyrillic, comma
+    const mm = pageEvidence('ОБМІРНИЙ ПЛАН H=2850мм 3545 4730');                      // millimetres
+
+    expect([kyiv.heights, lviv.heights, mm.heights]).toEqual([true, true, true]);
+  });
+
   it('treats a page with NO text layer as a candidate, not as noise', () => {
     // A raster export hides its content; it does not prove there is none. Dropping those silently
     // is how a scanned measure plan became invisible.

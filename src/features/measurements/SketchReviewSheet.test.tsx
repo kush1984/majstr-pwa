@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { SketchReviewSheet } from './SketchReviewSheet.tsx';
 import { sketchImportApi } from '@/api/sketchImport.ts';
+import { toast } from '@/hooks/useToast.ts';
 import type { SketchParseResponse } from '@/api/types.ts';
 import { asButton } from '@/test/dom.ts';
 
@@ -12,6 +13,9 @@ vi.mock('@/api/sketchImport.ts', () => ({
   sketchImportApi: { parse: vi.fn(), commit: vi.fn() },
 }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { upload: vi.fn() } }));
+vi.mock('@/hooks/useToast.ts', () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 
 // jsdom has no createObjectURL.
 beforeEach(() => {
@@ -59,16 +63,44 @@ function renderSheet() {
   render(<SketchReviewSheet open onClose={() => {}} objectId="p1" />, { wrapper });
 }
 
+function sheet(name: string) {
+  return new File([new Uint8Array([1, 2, 3])], name, { type: 'image/jpeg' });
+}
+
+/** Drops files on the upload <input> (accept without capture — the second file input). */
+function dropOnUpload(files: File[]) {
+  fireEvent.change(document.querySelectorAll('input[type="file"]')[1], { target: { files } });
+}
+
 async function pickPhoto() {
   vi.mocked(sketchImportApi.parse).mockResolvedValue(parsed);
-  const file = new File([new Uint8Array([1, 2, 3])], 'sketch.jpg', { type: 'image/jpeg' });
-  // The upload <input> (accept without capture) is the second file input.
-  const inputs = document.querySelectorAll('input[type="file"]');
-  fireEvent.change(inputs[1], { target: { files: [file] } });
+  dropOnUpload([sheet('sketch.jpg')]);
   await waitFor(() => expect(screen.getByDisplayValue('Спальня')).toBeTruthy());
 }
 
 describe('SketchReviewSheet', () => {
+  it('sends every picked sheet in ONE parse call — a flat is a page per floor, read together', async () => {
+    vi.mocked(sketchImportApi.parse).mockResolvedValue(parsed);
+    renderSheet();
+
+    dropOnUpload([sheet('floor-1.jpg'), sheet('floor-2.jpg'), sheet('schedule.jpg')]);
+
+    await waitFor(() => expect(sketchImportApi.parse).toHaveBeenCalledTimes(1));
+    const [, files] = vi.mocked(sketchImportApi.parse).mock.calls[0];
+    expect(files.map((f) => f.name)).toEqual(['floor-1.jpg', 'floor-2.jpg', 'schedule.jpg']);
+  });
+
+  it('refuses a batch over the sheet cap instead of letting the server reject it', async () => {
+    renderSheet();
+
+    dropOnUpload(Array.from({ length: 11 }, (_, i) => sheet(`p${i}.jpg`)));
+
+    await waitFor(() =>
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith(expect.stringMatching(/Забагато аркушів/)),
+    );
+    expect(sketchImportApi.parse).not.toHaveBeenCalled();
+  });
+
   it('shows the recognised rooms, warnings, and flags low-confidence items', async () => {
     renderSheet();
     await pickPhoto();

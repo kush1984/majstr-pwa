@@ -58,6 +58,7 @@ function renderSheet() {
 }
 
 const pdf = (name: string) => new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], name, { type: 'application/pdf' });
+const photo = (name: string) => new File([new Uint8Array([0xff, 0xd8, 0xff])], name, { type: 'image/jpeg' });
 
 
 describe('ProjectImportSheet', () => {
@@ -190,6 +191,18 @@ describe('ProjectImportSheet', () => {
     // Not useful → no auto-parse; the master lands on the list with the honest note.
     await waitFor(() => expect(screen.getByText(/дає ЛИШЕ площі|Розпізнаю 0 із 1/)).toBeTruthy());
     expect(projectImportApi.parse).not.toHaveBeenCalled();
+  });
+
+  it('a PHOTOGRAPHED plan is ticked, not dropped — every signal the picker reads is absent from it', async () => {
+    renderSheet();
+
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: { files: [photo('IMG20260510130144.jpg'), photo('IMG20260510130201.jpg')] },
+    });
+
+    // Camera names classify as nothing and a photo has no text layer, so the sheet used to land on
+    // «Розпізнаю 0 із 2» with the button dead over the plan he had just photographed.
+    await waitFor(() => expect(screen.getByText(/Розпізнаю 2 із 2/)).toBeTruthy());
   });
 
   it('cross-check: a lost room makes the schedule total mismatch loudly', async () => {

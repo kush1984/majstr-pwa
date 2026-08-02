@@ -24,6 +24,8 @@ import type {
 } from '@/api/types.ts';
 
 const MAX_BYTES = 10 * 1024 * 1024;
+/** Matches the server's cap. A flat rarely needs more, and a bigger batch reads worse, not better. */
+const MAX_SHEETS = 10;
 
 interface ItemDraft {
   key: number;
@@ -64,10 +66,10 @@ export function SketchReviewSheet({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [unit, setUnit] = useState<LengthUnit>('M');
   const [committing, setCommitting] = useState(false);
-  const [zoom, setZoom] = useState(false);
+  const [zoom, setZoom] = useState<string | null>(null);
   const [savePhotoOpen, setSavePhotoOpen] = useState(false);
-  const heldFile = useRef<File | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const heldFiles = useRef<File[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const keySeq = useRef(0);
@@ -78,18 +80,18 @@ export function SketchReviewSheet({
     setWarnings([]);
     setUnit('M');
     setCommitting(false);
-    setZoom(false);
+    setZoom(null);
     setSavePhotoOpen(false);
-    heldFile.current = null;
-    setPhotoUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
+    heldFiles.current = [];
+    setPhotoUrls((prev) => {
+      prev.forEach((u) => URL.revokeObjectURL(u));
+      return [];
     });
   }, []);
 
   useEffect(() => () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-  }, [photoUrl]);
+    photoUrls.forEach((u) => URL.revokeObjectURL(u));
+  }, [photoUrls]);
 
   const close = () => {
     reset();
@@ -118,26 +120,37 @@ export function SketchReviewSheet({
       })),
     }));
 
-  const onPick = async (file: File | undefined) => {
-    if (!file) return;
+  /**
+   * A flat is rarely one sheet — a БТІ plan comes as a page per floor, кроки as a page per room —
+   * so the picker takes several and they go up in ONE call. Read together the model can carry a
+   * room's name from the sheet that names it to the sheet that sizes it; one call at a time it
+   * cannot, and the master merges the reviews by hand.
+   */
+  const onPick = async (picked: FileList | null) => {
+    const files = Array.from(picked ?? []);
+    if (files.length === 0) return;
     // Recognition runs on the server (Claude vision) — impossible offline; say so up front.
     if (!online) {
       toast.error(t('offline.needConnection'));
       return;
     }
-    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
+    if (files.length > MAX_SHEETS) {
+      toast.error(t('sketch.tooManySheets', { count: MAX_SHEETS }));
+      return;
+    }
+    if (files.some((f) => !/^image\/(png|jpeg|jpg|webp)$/.test(f.type))) {
       toast.error(t('photos.badType'));
       return;
     }
-    if (file.size > MAX_BYTES) {
+    if (files.some((f) => f.size > MAX_BYTES)) {
       toast.error(t('photos.tooLarge'));
       return;
     }
-    heldFile.current = file;
-    setPhotoUrl(URL.createObjectURL(file));
+    heldFiles.current = files;
+    setPhotoUrls(files.map((f) => URL.createObjectURL(f)));
     setStep('parsing');
     try {
-      const res = await sketchImportApi.parse(objectId, file);
+      const res = await sketchImportApi.parse(objectId, files);
       setRooms(buildDrafts(res));
       setWarnings(res.warnings);
       setUnit(res.unitGuess === 'MM' ? 'MM' : res.unitGuess === 'CM' ? 'CM' : 'M');
@@ -202,10 +215,14 @@ export function SketchReviewSheet({
 
   const saveSketchPhoto = async (save: boolean) => {
     setSavePhotoOpen(false);
-    if (save && heldFile.current) {
+    if (save && heldFiles.current.length > 0) {
       try {
-        const compact = await downscaleImage(heldFile.current);
-        await photosApi.upload(objectId, compact, { source: 'MANUAL', caption: t('sketch.photoCaption') });
+        // Sequentially, not Promise.all: this runs on a phone off site data, and one upload at a
+        // time is what the rest of the app does with photos.
+        for (const file of heldFiles.current) {
+          const compact = await downscaleImage(file);
+          await photosApi.upload(objectId, compact, { source: 'MANUAL', caption: t('sketch.photoCaption') });
+        }
         void qc.invalidateQueries({ queryKey: ['project-photos', objectId] });
         toast.success(t('sketch.photoSaved'));
       } catch (err) {
@@ -225,10 +242,12 @@ export function SketchReviewSheet({
             <Button fullWidth variant="secondary" onClick={() => uploadRef.current?.click()}>
               🖼 {t('sketch.upload')}
             </Button>
+            {/* `capture` pins this one to the camera, which hands back a single shot — `multiple`
+                there is meaningless. The upload input takes the whole set. */}
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
-              onChange={(e) => { void onPick(e.target.files?.[0]); e.target.value = ''; }} />
-            <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
-              onChange={(e) => { void onPick(e.target.files?.[0]); e.target.value = ''; }} />
+              onChange={(e) => { void onPick(e.target.files); e.target.value = ''; }} />
+            <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
+              onChange={(e) => { void onPick(e.target.files); e.target.value = ''; }} />
           </div>
         )}
 
@@ -247,13 +266,22 @@ export function SketchReviewSheet({
             </div>
           ) : (
             <div className="space-y-4">
-              {/* The sketch photo — compare it against our schemas below. */}
-              {photoUrl && (
-                <button type="button" onClick={() => setZoom(true)} className="block w-full">
-                  <img src={photoUrl} alt={t('sketch.title')}
-                    className="max-h-52 w-full rounded-xl border border-border object-contain bg-surface-sunken" />
+              {/* The sheets — compare them against our schemas below. Several scroll sideways so
+                  the review itself stays where the master's thumb is. */}
+              {photoUrls.length > 0 && (
+                <div>
+                  <div className={cn('gap-2', photoUrls.length > 1 ? 'flex overflow-x-auto pb-1' : 'block')}>
+                    {/* Index keys: the strip is built once per pick and never reordered. */}
+                    {photoUrls.map((url, i) => (
+                      <button key={i} type="button" onClick={() => setZoom(url)}
+                        className={cn('block', photoUrls.length > 1 ? 'w-40 shrink-0' : 'w-full')}>
+                        <img src={url} alt={t('sketch.title')}
+                          className="max-h-52 w-full rounded-xl border border-border object-contain bg-surface-sunken" />
+                      </button>
+                    ))}
+                  </div>
                   <span className="mt-1 block text-center text-xs text-muted">{t('sketch.photoTap')}</span>
-                </button>
+                </div>
               )}
 
               {warnings.length > 0 && (
@@ -318,11 +346,11 @@ export function SketchReviewSheet({
         )}
       </Modal>
 
-      {/* Fullscreen sketch for a close look. */}
-      {zoom && photoUrl && (
+      {/* Fullscreen sheet for a close look. */}
+      {zoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setZoom(false)}>
-          <img src={photoUrl} alt={t('sketch.title')} className="max-h-full max-w-full object-contain" />
+          onClick={() => setZoom(null)}>
+          <img src={zoom} alt={t('sketch.title')} className="max-h-full max-w-full object-contain" />
         </div>
       )}
 

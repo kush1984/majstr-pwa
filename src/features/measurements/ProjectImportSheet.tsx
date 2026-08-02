@@ -287,7 +287,21 @@ export function ProjectImportSheet({
         } else if (/\.pdf$/i.test(file.name)) {
           rows.push(...await pdfRows(file));
         } else {
-          rows.push({ id: seq.current++, ...classifyDoc(file.name), file });
+          // A PHOTO. It carries no text layer and its name is a camera's («IMG20260510130144»), so
+          // every signal the picker normally reads is absent: triage skips it for having no text,
+          // and defaultPicks skipped it for having no evidence at all — which left the master with
+          // «Розпізнаю 0 із 1 файлів» and a disabled button over the plan he had just photographed.
+          //
+          // Nothing here can judge the picture, and a file the master chose one at a time, looking
+          // at it, is not a file he wants excluded. So it is ticked, and its evidence says what is
+          // actually true: no text layer.
+          rows.push({
+            id: seq.current++,
+            ...classifyDoc(file.name),
+            useful: true,
+            evidence: pageEvidence(''),
+            file,
+          });
         }
       }
     } catch {

@@ -245,7 +245,14 @@ export function pageEvidence(text: string): PageEvidence {
     areas: (t.match(/\d+[.,]\d{1,2}\s*(м|m)/giu) ?? []).length,
     // `\w` is ASCII-only in JS even under /u, so «відмітк\w*» never matched a Cyrillic ending —
     // it silently made the whole level-mark notation invisible. \S* is the fix, not a shortcut.
-    heights: /[HН]\s*[=\-–]?\s*\d{3,4}/u.test(t) || /відмітк\S*\s+(стел|підлог|верх|низ)/iu.test(t),
+    //
+    // The letter and the number both had to widen for БТІ sheets. Three real vendors' passports
+    // write the SAME field three ways — «h=2.71» (Latin lowercase, dot), «Н=2,49» (Cyrillic
+    // capital, comma), «H=2850» (millimetres) — and this pattern used to accept only the last:
+    // lowercase h was outside the class, and \d{3,4} cannot match a metre value. So on a technical
+    // passport, the one sheet that always prints a height, the height went unseen.
+    heights: /[HhНн]\s*[=\-–]?\s*(\d{3,4}|\d[.,]\d{1,2})/u.test(t)
+      || /відмітк\S*\s+(стел|підлог|верх|низ)/iu.test(t),
     openingSpec: /(^|\s)(ДЗ|Д|В)\s?0?\d{1,2}(\s|$)/u.test(t),
     raster: t.trim().length === 0,
   };
