@@ -821,6 +821,13 @@ export interface SketchParseRoom {
   items: SketchParseItem[];
 }
 export interface SketchParseResponse {
+  /**
+   * What the sheet turned out to BE. A PRINTED_PLAN is not reviewed here: the same files go to the
+   * project-import flow, which reconciles each printed area against its gabarits, merges several
+   * sheets into one set of rooms and guarantees every room a floor, a ceiling and four walls. This
+   * path knows кроки only, so a plan read here loses the printed areas and the walls with them.
+   */
+  sheetKind: 'HAND_DRAWN' | 'PRINTED_PLAN';
   rooms: SketchParseRoom[];
   /** The unit the sketch's numbers are in — the review's default (a wrong guess is fixable). */
   unitGuess: 'MM' | 'CM' | 'M';

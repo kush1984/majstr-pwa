@@ -25,6 +25,7 @@ beforeEach(() => {
 });
 
 const parsed: SketchParseResponse = {
+  sheetKind: 'HAND_DRAWN',
   unitGuess: 'CM',
   warnings: ['масштаб не вказано'],
   rooms: [
@@ -55,12 +56,14 @@ const parsed: SketchParseResponse = {
   ],
 };
 
+const onPrintedPlan = vi.fn();
+
 function renderSheet() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  render(<SketchReviewSheet open onClose={() => {}} objectId="p1" />, { wrapper });
+  render(<SketchReviewSheet open onClose={() => {}} objectId="p1" onPrintedPlan={onPrintedPlan} />, { wrapper });
 }
 
 function sheet(name: string) {
@@ -99,6 +102,24 @@ describe('SketchReviewSheet', () => {
       expect(vi.mocked(toast.error)).toHaveBeenCalledWith(expect.stringMatching(/Забагато аркушів/)),
     );
     expect(sketchImportApi.parse).not.toHaveBeenCalled();
+  });
+
+  it('hands a PRINTED PLAN to the import conveyor instead of reviewing it here', async () => {
+    // The recogniser names the sheet and stops, so `rooms` is empty BY DESIGN. Reviewing that would
+    // show «не вдалося нічого прочитати» over a plan that reads perfectly well on the other path —
+    // which is exactly what a photographed БТІ sheet used to produce: chain products for areas, and
+    // rooms with no walls at all.
+    vi.mocked(sketchImportApi.parse).mockResolvedValue({
+      sheetKind: 'PRINTED_PLAN', rooms: [], unitGuess: 'M', warnings: ['друкований план'],
+    });
+    renderSheet();
+
+    dropOnUpload([sheet('IMG20260510130144.jpg'), sheet('IMG20260510130201.jpg')]);
+
+    await waitFor(() => expect(onPrintedPlan).toHaveBeenCalledTimes(1));
+    expect(onPrintedPlan.mock.calls[0][0].map((f: File) => f.name))
+      .toEqual(['IMG20260510130144.jpg', 'IMG20260510130201.jpg']);
+    expect(screen.queryByText(/Не вдалося нічого прочитати/)).toBeNull();
   });
 
   it('shows the recognised rooms, warnings, and flags low-confidence items', async () => {

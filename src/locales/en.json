@@ -753,6 +753,7 @@
     "takePhoto": "Take a photo",
     "upload": "Choose photos (several allowed)",
     "parsing": "Reading…",
+    "handedToImport": "This is a printed plan — opening Project import, which reads it properly",
     "tooManySheets": "Too many sheets at once — pick up to {{count}}",
     "reviewHint": "Compare our schema with your sheet and fix anything off. Nothing is saved until you confirm.",
     "photoTap": "Tap to enlarge",

@@ -107,6 +107,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const [removingItem, setRemovingItem] = useState<{ roomId: string; item: MeasurementItem } | null>(null);
   const [sketchOpen, setSketchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  /** Sheets the sketch screen recognised as a printed plan and passed to the import conveyor. */
+  const [handedFiles, setHandedFiles] = useState<File[] | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
 
   // Drag a room card onto another floor group. One Pointer Events path covers BOTH touch
@@ -583,9 +585,26 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
         onClose={() => setRemovingItem(null)}
       />
 
-      <SketchReviewSheet open={sketchOpen} onClose={() => setSketchOpen(false)} objectId={objectId} />
+      <SketchReviewSheet
+        open={sketchOpen}
+        onClose={() => setSketchOpen(false)}
+        objectId={objectId}
+        // A printed plan photographed under «Розпізнати план чи ескіз» is not reviewed there — it
+        // moves to the import conveyor, the only place that reconciles printed areas against
+        // gabarits, merges several sheets and guarantees every room its four walls.
+        onPrintedPlan={(files) => {
+          setSketchOpen(false);
+          setHandedFiles(files);
+          setImportOpen(true);
+        }}
+      />
 
-      <ProjectImportSheet open={importOpen} onClose={() => setImportOpen(false)} objectId={objectId} />
+      <ProjectImportSheet
+        open={importOpen}
+        onClose={() => { setImportOpen(false); setHandedFiles(null); }}
+        objectId={objectId}
+        initialFiles={handedFiles}
+      />
 
       <ElectricalPlanSheet
         open={planOpen}

@@ -53,10 +53,17 @@ export function SketchReviewSheet({
   open,
   onClose,
   objectId,
+  onPrintedPlan,
 }: {
   open: boolean;
   onClose: () => void;
   objectId: string;
+  /**
+   * The sheets turned out to be a printed plan, not кроки. This screen hands them over rather than
+   * reviewing them: the import flow reconciles printed areas against gabarits, merges sheets and
+   * guarantees each room its walls, and none of that exists here.
+   */
+  onPrintedPlan: (files: File[]) => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -151,6 +158,15 @@ export function SketchReviewSheet({
     setStep('parsing');
     try {
       const res = await sketchImportApi.parse(objectId, files);
+      if (res.sheetKind === 'PRINTED_PLAN') {
+        // Hand over, don't review. The recogniser stopped after naming the sheet, so `rooms` is
+        // empty by design — showing it would be the «нічого не прочитало» screen over a plan that
+        // reads perfectly well on the other conveyor.
+        toast.info(t('sketch.handedToImport'));
+        reset();
+        onPrintedPlan(files);
+        return;
+      }
       setRooms(buildDrafts(res));
       setWarnings(res.warnings);
       setUnit(res.unitGuess === 'MM' ? 'MM' : res.unitGuess === 'CM' ? 'CM' : 'M');

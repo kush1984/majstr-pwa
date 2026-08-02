@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal.tsx';
@@ -98,10 +98,17 @@ export function ProjectImportSheet({
   open,
   onClose,
   objectId,
+  initialFiles,
 }: {
   open: boolean;
   onClose: () => void;
   objectId: string;
+  /**
+   * Files handed over by «Розпізнати план чи ескіз» once the recogniser found them to be a printed
+   * plan rather than кроки. They are picked up exactly as if the master had chosen them here, so
+   * there is ONE conveyor rather than a second copy of it living on the sketch screen.
+   */
+  initialFiles?: File[] | null;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -258,7 +265,8 @@ export function ProjectImportSheet({
     }
   };
 
-  const onPick = async (files: FileList | null) => {
+  // FileList from the input, File[] when handed over from the sketch screen — both spread the same.
+  const onPick = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const rows: DocRow[] = [];
     try {
@@ -350,6 +358,17 @@ export function ProjectImportSheet({
     // recognition calls on a guess the master never saw is how «нічого не розпізнало» happens.
     setStep('files');
   };
+
+  // Files handed over from the sketch screen start the same way a manual pick does. Keyed on the
+  // array identity, which the parent creates once per handover, so re-renders cannot re-run it; the
+  // `step` guard keeps a handover from restarting a pick that is already under way.
+  const handedOver = initialFiles ?? null;
+  useEffect(() => {
+    if (open && handedOver && handedOver.length > 0 && step === 'source') {
+      void onPick(handedOver);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, handedOver]);
 
   const selected = docs.filter((d) => d.useful);
 
