@@ -56,3 +56,35 @@ describe('scrubBreadcrumb (Sentry beforeBreadcrumb)', () => {
     expect(scrubBreadcrumb(crumb)).toBe(crumb);
   });
 });
+
+describe('third-party beacon noise', () => {
+  const withFrames = (files: string[]) =>
+    ({
+      exception: { values: [{ stacktrace: { frames: files.map((filename) => ({ filename })) } }] },
+    }) as unknown as SentryType.ErrorEvent;
+
+  it('drops an error thrown entirely inside an analytics beacon', () => {
+    // Verbatim from the reported issue: Cloudflare's Web Vitals beacon calling Array.prototype.at
+    // on Chrome 83, where it does not exist. We do not ship it and cannot fix it — and the app
+    // itself was running fine on that device.
+    expect(scrubEvent(withFrames([
+      '/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e',
+      '/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e',
+    ]))).toBeNull();
+  });
+
+  it('KEEPS an error that touches our code, even if a beacon is in the stack', () => {
+    // The trade this filter must never make: silencing our own bug because a third-party frame
+    // happens to sit above it.
+    expect(scrubEvent(withFrames([
+      '/beacon.min.js/v451322',
+      '/assets/index-C6TpYKqm.js',
+    ]))).not.toBeNull();
+  });
+
+  it('keeps an error with no stack at all', () => {
+    // No frames is not evidence of a beacon; it is usually a cross-origin script error, and those
+    // have been real bugs before.
+    expect(scrubEvent({} as SentryType.ErrorEvent)).not.toBeNull();
+  });
+});

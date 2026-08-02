@@ -4,6 +4,7 @@ import type {
   BatchCatalogItemEntry,
   EstimateConsolidateRequest,
   EstimateCreateRequest,
+  EstimateDuplicateRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
@@ -128,6 +129,27 @@ export const estimatesApi = {
     return api
       .delete(`/api/estimates/${estimateId}/items/${itemId}`)
       .then(() => undefined);
+  },
+
+  /**
+   * Remove several lines in ONE request.
+   *
+   * Not a loop over {@link removeItem}: trimming «УСІ ПЛИТОЧНІ РОБОТИ» down to a real job is ~130
+   * deletions, and as many calls means 130 chances to fail on a phone — leaving an estimate
+   * half-trimmed with no way to see which half. POST, not DELETE-with-a-body, because proxies drop
+   * bodies on DELETE and losing the list would report success having deleted nothing.
+   */
+  deleteItems(estimateId: string, itemIds: string[]): Promise<void> {
+    return api
+      .post(`/api/estimates/${estimateId}/items/delete`, { itemIds })
+      .then(() => undefined);
+  },
+
+  /** Copy an estimate, marking the chosen lines up — the foreman's crew price vs client price. */
+  duplicate(estimateId: string, req: EstimateDuplicateRequest): Promise<EstimateResponse> {
+    return api
+      .post<EstimateResponse>(`/api/estimates/${estimateId}/duplicate`, req)
+      .then((r) => r.data);
   },
 
   /**

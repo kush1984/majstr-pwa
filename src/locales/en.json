@@ -477,7 +477,21 @@
     "dragSection": "Drag the section",
     "moveSectionTitle": "Change the line’s section?",
     "moveSectionMessage": "The line moves from “{{from}}” to “{{to}}”. That changes its category.",
-    "moveSectionConfirm": "Move it"
+    "moveSectionConfirm": "Move it",
+    "selectItems": "Delete positions",
+    "selectSection": "Select the whole «{{name}}» category",
+    "selectedCount": "Selected: {{count}}",
+    "deleteSelected": "Delete",
+    "deleteSelectedTitle": "Delete positions?",
+    "deleteSelectedConfirm": "{{count}} positions will be deleted. If this estimate has a marked-up copy, the same positions go from it too (unless it is signed).",
+    "deletedCount": "Deleted: {{count}}",
+    "duplicateWithMarkup": "Copy +%",
+    "duplicateCreate": "Create the copy",
+    "duplicated": "Copy created",
+    "markupPercent": "Markup, %",
+    "markupHint": "A copy of this estimate. The markup applies to the {{count}} selected positions, and only the difference counts as your earnings.",
+    "duplicateMarkupHint": "Copy: only the +{{percent}}% markup reaches the economy",
+    "crewPricesHint": "Crew prices — normally not counted"
   },
   "economy": {
     "title": "Object economy",

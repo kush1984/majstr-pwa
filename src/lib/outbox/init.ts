@@ -80,6 +80,18 @@ export function initOutbox(qc: QueryClient): () => void {
     }
   });
 
+  // Trimming many lines at once. entityId is the ESTIMATE, because the op is about a set of its
+  // lines rather than any one of them — and it stays ONE op deliberately: queueing 130 separate
+  // deletions would give the replay 130 chances to stop half-way through a trim the master already
+  // saw finish on screen.
+  //
+  // Ids already gone are skipped server-side, so a replay after a partial success is a no-op for
+  // what landed and completes the rest.
+  registerOutboxHandler('estimateItemsBulkDelete', async (op) => {
+    const p = op.payload as { itemIds: string[] };
+    await estimatesApi.deleteItems(op.entityId, p.itemIds);
+  });
+
   // The arrangement of an estimate's lines after a drag. entityId is the ESTIMATE — the op is
   // about the whole list, not one line — and it is queued with `enqueueLatest`, so several drags
   // made offline collapse into the one arrangement the master ended on.

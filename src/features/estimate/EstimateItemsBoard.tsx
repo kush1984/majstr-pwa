@@ -35,6 +35,7 @@ export function EstimateItemsBoard({
   signed,
   onEdit,
   onArrange,
+  selection,
 }: {
   items: EstimateItemResponse[];
   /** A signed estimate is read-only: no grips, no drags. */
@@ -42,6 +43,19 @@ export function EstimateItemsBoard({
   onEdit: (item: EstimateItemResponse) => void;
   /** The new arrangement, flat and in order, each line carrying the section it now belongs to. */
   onArrange: (arranged: EstimateItemResponse[]) => void;
+  /**
+   * Selection mode, when the master is picking lines to delete or to mark up.
+   *
+   * Absent = the ordinary board. Present, it takes over the row's tap: dragging and editing are
+   * both out of the way, because a tap that might mean three different things is worse than three
+   * modes that each mean one.
+   */
+  selection?: {
+    selected: Set<string>;
+    onToggle: (id: string) => void;
+    /** Tick or clear a whole category at once — see the note where it is rendered. */
+    onToggleSection: (ids: string[], select: boolean) => void;
+  };
 }) {
   const { t } = useTranslation();
   const sections = useMemo(() => toSections(items), [items]);
@@ -87,6 +101,7 @@ export function EstimateItemsBoard({
               firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, 1)}
               signed={signed}
               onEdit={onEdit}
+              selection={selection}
             />
           ))}
         </SortableContext>
@@ -111,20 +126,43 @@ function label(category: string, t: (k: string) => string): string {
   return category === '' ? t('catalog.noCategory') : category;
 }
 
+interface Selection {
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleSection: (ids: string[], select: boolean) => void;
+}
+
+/** The tick itself. `aria-hidden` — the pressed state is announced by the button that owns it. */
+function Tick({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold ${
+        on ? 'border-brand bg-brand text-white' : 'border-border text-transparent'
+      }`}
+    >
+      ✓
+    </span>
+  );
+}
+
 function SectionBlock({
-  section, firstNumber, signed, onEdit,
+  section, firstNumber, signed, onEdit, selection,
 }: {
   section: Section;
   /** Position number of this section's first line, counted from the top of the whole estimate. */
   firstNumber: number;
   signed: boolean;
   onEdit: (item: EstimateItemResponse) => void;
+  selection?: Selection;
 }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: sectionId(section),
-    disabled: signed,
+    disabled: signed || !!selection,
   });
+  const ids = section.items.map((i) => i.id);
+  const allPicked = selection ? ids.every((id) => selection.selected.has(id)) : false;
   // What this stage costs. The master is asked it on site far more often than the grand total.
   const subtotal = section.items.reduce((sum, i) => sum + i.lineTotal, 0);
 
@@ -135,7 +173,23 @@ function SectionBlock({
       className={`mb-4 rounded-xl ${isDragging ? 'bg-brand-soft/40 opacity-90 shadow-lg' : ''}`}
     >
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
-        {!signed && <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />}
+        {/* The category checkbox is what makes this feature worth building. A master who applies a
+            167-position catalog keeps one trade's worth and drops the rest — he is not picking
+            scattered lines, he is dropping whole categories. Ticking «Басейни» turns thirty taps
+            into one, and it is the difference between a usable big template and an unusable one. */}
+        {selection ? (
+          <button
+            type="button"
+            onClick={() => selection.onToggleSection(ids, !allPicked)}
+            aria-pressed={allPicked}
+            aria-label={t('estimate.selectSection', { name: label(section.category, t) })}
+            className="flex h-11 w-7 flex-shrink-0 items-center justify-center"
+          >
+            <Tick on={allPicked} />
+          </button>
+        ) : (
+          !signed && <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />
+        )}
         <span className="h-1.5 w-1.5 rounded-full bg-brand" />
         <span className="min-w-0 flex-1 truncate">{label(section.category, t)}</span>
         <span className="font-bold normal-case text-muted">{formatMoney(subtotal)}</span>
@@ -153,6 +207,7 @@ function SectionBlock({
               number={firstNumber + i}
               signed={signed}
               onEdit={onEdit}
+              selection={selection}
             />
           ))}
         </SortableContext>
@@ -162,18 +217,20 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, number, signed, onEdit,
+  item, number, signed, onEdit, selection,
 }: {
   item: EstimateItemResponse;
   number: number;
   signed: boolean;
   onEdit: (item: EstimateItemResponse) => void;
+  selection?: Selection;
 }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ITEM_ID + item.id,
-    disabled: signed,
+    disabled: signed || !!selection,
   });
+  const picked = selection ? selection.selected.has(item.id) : false;
 
   return (
     <div
@@ -181,15 +238,35 @@ function ItemRow({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`flex items-stretch gap-1 ${isDragging ? 'z-10 opacity-90' : ''}`}
     >
-      {!signed && (
-        <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
+      {selection ? (
+        // A BUTTON, not a span. It was inert, and a checkbox that does nothing when you tap it is
+        // worse than no checkbox: the card beside it was the only target, so the feature read as
+        // "only whole categories can be picked". Both halves of the row toggle now.
+        <button
+          type="button"
+          onClick={() => selection.onToggle(item.id)}
+          aria-pressed={picked}
+          aria-label={item.name}
+          className="flex w-7 flex-shrink-0 items-center justify-center"
+        >
+          <Tick on={picked} />
+        </button>
+      ) : (
+        !signed && (
+          <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
+        )
       )}
       <button
         type="button"
-        onClick={() => !signed && onEdit(item)}
-        disabled={signed}
-        title={signed ? t('estimate.signedNoEdit') : undefined}
-        className="flex min-w-0 flex-1 gap-1.5 rounded-xl border border-border bg-surface px-3 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100"
+        // In selection mode the row IS the checkbox — the whole card, not a 20 px square, because
+        // this is a thumb picking dozens of lines in a row.
+        onClick={() => (selection ? selection.onToggle(item.id) : !signed && onEdit(item))}
+        disabled={signed && !selection}
+        aria-pressed={selection ? picked : undefined}
+        title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
+        className={`flex min-w-0 flex-1 gap-1.5 rounded-xl border bg-surface px-3 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100 ${
+          picked ? 'border-brand bg-brand-soft/40' : 'border-border'
+        }`}
       >
         {/* The number is a GUTTER for the whole card, not a word inside the name.
             Putting it in the name's text flow was the first attempt and it read as a mess: a name
@@ -204,8 +281,11 @@ function ItemRow({
             reads and the number is only a reference mark. A three-digit row simply grows by a
             couple of pixels. Tabular figures keep the right edge straight, which is what lets him
             run a finger down the column and count. */}
-        <span className="min-w-[1.05rem] flex-shrink-0 pt-[3px] text-right text-xs tabular-nums text-faint">
-          {number}
+        {/* self-center, not top-aligned: a name wraps to two or three lines on a phone, and a
+            number pinned to the first line reads as if it belongs to that line rather than to the
+            row. Centred on the row's height it belongs to the whole card. */}
+        <span className="min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
+          {number}.
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-start justify-between gap-2">

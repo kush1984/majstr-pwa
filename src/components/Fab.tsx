@@ -39,7 +39,13 @@ export function Fab({
           onClick={() => setOpen(false)}
         />
       )}
-      <div className="fixed bottom-32 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
+      {/*
+        bottom-20 (80 px), not bottom-32. At 128 px the button floated a long way up into the page
+        and sat on top of whatever happened to be there — on the object screen that was the
+        messages card. Just above the bottom nav is where a floating action belongs, and the
+        content's own bottom padding (AppLayout) is what keeps it from covering anything.
+      */}
+      <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
         {open && children(close)}
         <button
           type="button"

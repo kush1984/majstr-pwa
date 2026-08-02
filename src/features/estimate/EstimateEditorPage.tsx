@@ -35,6 +35,8 @@ import { estimateName } from './estimateName.ts';
 import {
   useEstimate,
   useRemoveItem,
+  useDeleteItems,
+  useDuplicateEstimate,
   useUpdateItem,
   useUpdateEstimate,
   useReopenEstimate,
@@ -76,6 +78,14 @@ export function EstimateEditorPage() {
   const [templateName, setTemplateName] = useState('');
   const [templateTrade, setTemplateTrade] = useState<Trade | null>(null);
   const saveAsTemplate = useSaveAsTemplate(id);
+  // Bulk selection: picking lines to delete, or to mark up in a copy. `null` = off, which is what
+  // keeps the ordinary board's tap meaning exactly one thing.
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [markupOpen, setMarkupOpen] = useState(false);
+  const deleteItems = useDeleteItems(id);
+  const duplicate = useDuplicateEstimate(id);
+
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const { data: me } = useMe();
@@ -328,6 +338,19 @@ export function EstimateEditorPage() {
                   items={est.items}
                   signed={signed}
                   onEdit={setEditing}
+                  selection={picked === null ? undefined : {
+                    selected: picked,
+                    onToggle: (itemId) => setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (!next.delete(itemId)) next.add(itemId);
+                      return next;
+                    }),
+                    onToggleSection: (ids, select) => setPicked((prev) => {
+                      const next = new Set(prev);
+                      ids.forEach((itemId) => (select ? next.add(itemId) : next.delete(itemId)));
+                      return next;
+                    }),
+                  }}
                   onArrange={(arranged) => {
                     reorder.mutate(arranged, {
                       // The optimistic cache already shows the new arrangement, so a failure has to
@@ -343,10 +366,55 @@ export function EstimateEditorPage() {
                   <button
                     type="button"
                     onClick={() => setAddOpen(true)}
-                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
+                    // ml-8 for the same reason as the selection bar: it belongs to the CARD column,
+                    // which starts past the w-7 handle/tick gutter + gap-1 of every item row. The
+                    // width has to be spelled out — a <button> shrink-wraps at `width: auto` even
+                    // as a block-level flex container, so `w-full` minus the offset it is given.
+                    className="mt-1 ml-8 flex w-[calc(100%-2rem)] items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
                   >
                     {t('estimate.addItem')}
                   </button>
+                )}
+                {/*
+                  The selection bar lives INSIDE the list column and is sticky, not fixed to the
+                  viewport. Fixed meant it could only ever guess its width — first the whole screen,
+                  then the page's max width — while the positions it acts on sit in a narrower
+                  column beside the client card. Sticky inside the column means it simply IS the
+                  width of a position, because it is in the same box as one.
+
+                  The bottom offset clears the fixed mobile nav (~4.2rem + safe area), which is
+                  `lg:hidden` — hence the plain `bottom-4` back on desktop.
+
+                  `ml-8` is not a nudge: an item row is `w-7` tick column + `gap-1`, so the CARD
+                  starts exactly 2rem in. The bar acts on the cards, so it lines up with them, not
+                  with the column they sit in. Keep it in step with ItemRow if that gutter changes.
+                */}
+                {picked !== null && (
+                  <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 ml-8 mt-2 flex items-center gap-3 rounded-2xl bg-ink px-4 py-3 shadow-card-lg lg:bottom-4">
+                    <span className="flex-shrink-0 text-sm font-semibold text-white">
+                      {t('estimate.selectedCount', { count: picked.size })}
+                    </span>
+                    {/* The count reports, the buttons act — so they sit at the far edge instead of
+                        stretching to fill. Sized to their words; the 44px height is the tap target,
+                        which is a floor and not a look. */}
+                    <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={picked.size === 0}
+                        onClick={() => setBulkDeleteOpen(true)}
+                        className="min-h-[44px] rounded-xl bg-danger px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
+                      >
+                        {t('common.delete')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPicked(null)}
+                        className="min-h-[44px] rounded-xl px-3 text-sm font-semibold text-white/70"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>
             )}
@@ -364,7 +432,9 @@ export function EstimateEditorPage() {
       </div>
 
       {/* Mobile sticky total bar — totals only; actions live in the FAB */}
-      <div className="fixed inset-x-0 bottom-0 z-40 bg-ink px-5 pb-7 pt-3.5 text-white lg:hidden">
+      <div className={`fixed inset-x-0 bottom-0 z-40 bg-ink px-5 pb-7 pt-3.5 text-white lg:hidden ${
+        picked !== null ? 'hidden' : ''
+      }`}>
         <div className="flex items-end justify-between">
           <div>
             <div className="text-xs text-white/60">{t('estimate.toPay')}</div>
@@ -387,6 +457,27 @@ export function EstimateEditorPage() {
           <>
             {!signed && (
               <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => close(() => setAddOpen(true))} />
+            )}
+            {/* Entering selection from the FAB, not from a long press: the rows already carry drag
+                handles, and on Android a long press competes with text selection and the context
+                menu. A named action is also the only version a master can discover. */}
+            {!signed && est.items.length > 0 && (
+              <FabAction
+                icon="☑"
+                label={t('estimate.selectItems')}
+                onClick={() => close(() => setPicked(new Set()))}
+              />
+            )}
+            {/* Its own action, not a button inside the selection bar. Duplicating is a whole-sheet
+                decision — «зроби мені клієнтський варіант +15 %» — and it defaults to every WORK
+                line, so making the master first enter a picking mode was a step that bought
+                nothing. He adjusts individual prices in the copy afterwards if he wants to. */}
+            {est.items.length > 0 && (
+              <FabAction
+                icon="📄"
+                label={t('estimate.duplicateWithMarkup')}
+                onClick={() => close(() => setMarkupOpen(true))}
+              />
             )}
             {!signed && (
               <FabAction
@@ -582,7 +673,112 @@ export function EstimateEditorPage() {
         onConfirm={confirmDeleteItem}
         onClose={() => setDeletingItem(null)}
       />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={t('estimate.deleteSelectedTitle')}
+        // The COUNT, not a list of names: at thirty-plus lines a list is unreadable, and the number
+        // is the thing worth checking before an irreversible tap.
+        message={t('estimate.deleteSelectedConfirm', { count: picked?.size ?? 0 })}
+        confirmLabel={t('common.delete')}
+        loading={deleteItems.isPending}
+        onConfirm={() => {
+          const ids = [...(picked ?? [])];
+          setBulkDeleteOpen(false);
+          deleteItems.mutate(ids, {
+            onSuccess: () => {
+              setPicked(null);
+              toast.success(t('estimate.deletedCount', { count: ids.length }));
+            },
+            onError: (err) => toast.error(toAppError(err).message),
+          });
+        }}
+        onClose={() => setBulkDeleteOpen(false)}
+      />
+
+      <MarkupSheet
+        open={markupOpen}
+        count={est.items.filter((i) => i.type === 'WORK').length}
+        loading={duplicate.isPending}
+        onClose={() => setMarkupOpen(false)}
+        onConfirm={(markupPercent) => {
+          duplicate.mutate(
+            // The name is composed HERE, not on the server, because «Кошторис від 10 липня» is a
+            // display fallback the client invents for an estimate whose stored name is null. The
+            // server sees that null and could only ever produce a bare «Кошторис +15%» — a copy
+            // whose name has nothing to do with the sheet it came from.
+            //
+            // No itemIds: the server reads that as every WORK line and leaves materials at cost,
+            // which is the foreman's normal case. Materials are bought at their price and passed
+            // through — marking them up by default would inflate a client's estimate unasked.
+            {
+              markupPercent,
+              name: `${estimateName(est.name, est.createdAt)} +${markupPercent}%`,
+            },
+            {
+              onSuccess: (created) => {
+                setMarkupOpen(false);
+                toast.success(t('estimate.duplicated'));
+                void navigate(routes.estimate(created.id));
+              },
+              onError: (err) => toast.error(toAppError(err).message),
+            },
+          );
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * How much to add, and what it does to this estimate's works total.
+ *
+ * The preview is the point: a foreman is deciding a margin, and «+15 %» means nothing next to
+ * «2 430 ₴ → 2 795 ₴». Online only — see {@link useDuplicateEstimate} for why composing a copy
+ * offline would silently misreport the earnings.
+ */
+function MarkupSheet({
+  open, count, loading, onClose, onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: (percent: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { online, offlineTitle } = useOnlineGuard();
+  const [value, setValue] = useState('15');
+  const percent = Number(value.replace(',', '.'));
+  const valid = Number.isFinite(percent) && percent >= 0 && percent <= 1000;
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('estimate.duplicateWithMarkup')}>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">{t('estimate.markupHint', { count })}</p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted">
+            {t('estimate.markupPercent')}
+          </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="h-12 w-full rounded-xl border border-border bg-surface px-3.5 text-base text-primary"
+          />
+        </label>
+        {!online && <p className="text-xs text-danger">{offlineTitle}</p>}
+        <Button
+          fullWidth
+          loading={loading}
+          disabled={!valid || count === 0 || !online}
+          onClick={() => onConfirm(percent)}
+        >
+          {t('estimate.duplicateCreate')}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -306,6 +306,11 @@ export interface EstimateSummary {
   updatedAt: string;
   /** Whether this estimate counts toward the object's economy (income). */
   countInEconomy: boolean;
+  /** Set on a marked-up COPY — the list says only the markup reaches the economy. */
+  markupPercent?: number | null;
+  /** Set on a marked-up COPY: the estimate it came from. The PARENT is found by looking for its
+   *  own id here, which is how its row knows to say the crew prices are not earnings. */
+  duplicatedFromId?: string | null;
 }
 
 export interface EstimateItemResponse {
@@ -322,6 +327,19 @@ export interface EstimateItemResponse {
   measurementRefs: string[];
   /** True when the master edited the quantity by hand (drives the overwrite warning). */
   quantityManual: boolean;
+}
+
+/**
+ * POST /api/estimates/{id}/duplicate — the бригадир's two-price workflow.
+ *
+ * @param itemIds which lines get the markup. **Omit for every WORK line** — materials are bought
+ *                at cost and passed through, so marking them up by default would inflate the
+ *                client's estimate in a way the master never asked for.
+ */
+export interface EstimateDuplicateRequest {
+  name?: string;
+  markupPercent: number;
+  itemIds?: string[];
 }
 
 export interface EstimateResponse {

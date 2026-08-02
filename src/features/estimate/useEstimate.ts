@@ -7,6 +7,7 @@ import type {
   BatchCatalogItemEntry,
   CatalogItemResponse,
   EstimateCreateRequest,
+  EstimateDuplicateRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
@@ -310,6 +311,56 @@ export function useRemoveItem(estimateId: string) {
           patchEstimate(qc, estimateId, (items) => items.filter((i) => i.id !== itemId));
         },
       });
+    },
+  });
+}
+
+/**
+ * Delete several lines at once — the answer to «створив зі шаблону 167 позицій, треба 37 видалити».
+ *
+ * ONE outbox op for the whole selection, not one per line: the master watched the trim finish on
+ * screen, and a replay that stops half-way would leave him an estimate he has already stopped
+ * checking. Offline-capable — trimming a template down is exactly what happens on site.
+ */
+export function useDeleteItems(estimateId: string) {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateEstimate(estimateId);
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (itemIds: string[]): Promise<void> => {
+      return offlineMutate<void>({
+        entity: 'estimateItemsBulkDelete', entityId: estimateId, type: 'delete',
+        payload: { itemIds }, deps: [estimateId],
+        online: async () => { await estimatesApi.deleteItems(estimateId, itemIds); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          const gone = new Set(itemIds);
+          patchEstimate(qc, estimateId, (items) => items.filter((i) => !gone.has(i.id)));
+        },
+      });
+    },
+  });
+}
+
+/**
+ * Copy this estimate with a markup on the chosen lines — the foreman's crew price vs client price.
+ *
+ * <b>Online only, and that is a money decision rather than a shortcut.</b> Composing it on the
+ * device would have to create the copy through the ordinary "new estimate + N lines" path, and
+ * that path carries no `sourceUnitPrice`. The estimate would look perfectly right while the object
+ * economy silently counted the whole client total as earnings instead of just the markup. A clear
+ * "потрібен інтернет" beats quietly wrong money.
+ */
+export function useDuplicateEstimate(estimateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: EstimateDuplicateRequest) => estimatesApi.duplicate(estimateId, req),
+    onSuccess: (created) => {
+      // Both estimates changed: the copy is new, and the source just stopped counting in the
+      // economy, which the object screen shows.
+      void qc.invalidateQueries({ queryKey: ['project-estimates', created.projectId] });
+      void qc.invalidateQueries({ queryKey: ['economy', created.projectId] });
+      void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
     },
   });
 }

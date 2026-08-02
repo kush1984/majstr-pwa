@@ -477,7 +477,21 @@
     "dragSection": "Перетягнути розділ",
     "moveSectionTitle": "Змінити розділ позиції?",
     "moveSectionMessage": "Позиція переїде з «{{from}}» у «{{to}}». Це змінить її категорію.",
-    "moveSectionConfirm": "Перенести"
+    "moveSectionConfirm": "Перенести",
+    "selectItems": "Видалити позиції",
+    "selectSection": "Вибрати всю категорію «{{name}}»",
+    "selectedCount": "Вибрано: {{count}}",
+    "deleteSelected": "Видалити",
+    "deleteSelectedTitle": "Видалити позиції?",
+    "deleteSelectedConfirm": "Буде видалено позицій: {{count}}. Якщо з цього кошторису робили дубль із націнкою — ті самі позиції зникнуть і там (крім підписаного).",
+    "deletedCount": "Видалено позицій: {{count}}",
+    "duplicateWithMarkup": "Дубль +%",
+    "duplicateCreate": "Створити дубль",
+    "duplicated": "Дубль створено",
+    "markupPercent": "Націнка, %",
+    "markupHint": "Створимо копію кошторису. Націнка застосується до обраних позицій: {{count}}. У прибуток піде тільки різниця — те, що ви лишаєте собі.",
+    "duplicateMarkupHint": "Дубль: в економіку піде лише націнка +{{percent}}%",
+    "crewPricesHint": "Ціни для майстрів — зазвичай не рахуємо"
   },
   "economy": {
     "title": "Економіка об'єкту",

@@ -36,9 +36,9 @@ describe('position numbering', () => {
 
     // The point of the feature: the LAST number equals how many positions there are, so the
     // master can check his count in one glance. Per-category numbering would end at «1».
-    expect(screen.getByText('5')).toBeTruthy();
-    expect(screen.queryAllByText('1')).toHaveLength(1);
-    for (const n of ['1', '2', '3', '4', '5']) {
+    expect(screen.getByText('5.')).toBeTruthy();
+    expect(screen.queryAllByText('1.')).toHaveLength(1);
+    for (const n of ['1.', '2.', '3.', '4.', '5.']) {
       expect(screen.getByText(n)).toBeTruthy();
     }
   });
@@ -63,7 +63,7 @@ describe('position numbering', () => {
       item('x', 'Укладання декоративної плитки під «цеглу» або «камінь» (гіпсова, бетонна)', '', 0),
     ]);
 
-    const number = screen.getByText('1');
+    const number = screen.getByText('1.');
     const name = screen.getByText(/Укладання декоративної/);
     expect(number.contains(name)).toBe(false);
     expect(name.contains(number)).toBe(false);

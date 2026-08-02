@@ -103,7 +103,13 @@ export function AppLayout({ children }: { children?: ReactNode }) {
 
       {/* Content column */}
       <div className="flex-1">
-        <main className="mx-auto w-full max-w-app px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+        {/*
+          pb-36 (144 px) on mobile: the bottom nav is ~60 px and the floating action button sits
+          above it, ending 136 px up. At pb-24 the page's last card ran underneath it — which is
+          how the messages block ended up with an orange «+» sitting on its face. The padding is
+          what makes the button float over empty space instead of over content.
+        */}
+        <main className="mx-auto w-full max-w-app px-4 pb-36 pt-4 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
           <div className="mb-3 flex justify-end lg:mb-4">
             <NotificationBell />
           </div>

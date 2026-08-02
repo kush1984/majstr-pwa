@@ -19,6 +19,7 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
+import { economyPairHint } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
 import { useProject } from './useProjects.ts';
@@ -455,6 +456,8 @@ export function ProjectDetailPage() {
                   key={s.id}
                   summary={s}
                   economyLocked={!isPro}
+                  // A handful of estimates per object, so a scan beats memoising a Set.
+                  isCrewSource={list.some((other) => other.duplicatedFromId === s.id)}
                   onClick={() => navigate(routes.estimate(s.id))}
                   onMenu={() => setMenuFor(s)}
                   onToggleEconomy={(value) => rowEconomyToggle.mutate({ estId: s.id, value })}
@@ -502,12 +505,15 @@ export function ProjectDetailPage() {
 function EstimateRow({
   summary,
   economyLocked,
+  isCrewSource,
   onClick,
   onMenu,
   onToggleEconomy,
 }: {
   summary: EstimateSummary;
   economyLocked: boolean;
+  /** True when a marked-up copy of this estimate exists — i.e. this is the crew's price list. */
+  isCrewSource: boolean;
   onClick: () => void;
   onMenu: () => void;
   onToggleEconomy: (value: boolean) => void;
@@ -518,6 +524,7 @@ function EstimateRow({
   // On PRO it shows the real stored flag — default-on for every estimate except a
   // consolidated one — so upgrading immediately reflects them all in the economy.
   const checked = economyLocked ? false : summary.countInEconomy;
+  const pairHint = economyPairHint(summary, isCrewSource);
   return (
     <div className="rounded-card border border-border bg-surface">
       <div className="flex items-stretch">
@@ -579,6 +586,14 @@ function EstimateRow({
         </span>
         {economyLocked && <span className="ml-auto text-xs text-muted">🔒 PRO</span>}
       </button>
+      {/* Outside the button on purpose. Inside it, the note dimmed along with an un-ticked box and
+          read as "true only while the tick is on" — but it describes the standing arrangement of a
+          duplicated pair, which holds either way. */}
+      {pairHint && (
+        <p className="border-t border-border px-3.5 py-2 text-[11px] leading-snug text-muted">
+          ℹ️ {t(pairHint, { percent: summary.markupPercent })}
+        </p>
+      )}
     </div>
   );
 }

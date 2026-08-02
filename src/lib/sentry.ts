@@ -70,7 +70,33 @@ function scrubUrl(url: unknown): string | undefined {
 }
 
 // Exported for unit tests; used internally by `Sentry.init` above.
+/**
+ * Analytics beacons we neither ship nor can fix.
+ *
+ * Cloudflare injects `beacon.min.js` at the edge to measure Core Web Vitals. On an old browser its
+ * CLS observer throws — `this.i.at is not a function`, because `Array.prototype.at` arrived in
+ * Chrome 92 and a master turned up on Chrome 83 (Huawei P20, Android 10). Nothing about that is
+ * ours: the app itself runs there, which that very event proves — it carried our React context, so
+ * our bundle had parsed and initialised before the beacon failed.
+ *
+ * Deliberately a NAMED list rather than "drop anything not from our origin". The broad version
+ * would also swallow errors thrown from a browser extension's wrapper, a service-worker frame, or
+ * a stack we simply failed to symbolicate — and a rule that can hide our own bugs to reduce noise
+ * is a bad trade.
+ */
+const THIRD_PARTY_BEACONS = /(?:cloudflareinsights\.com|\/beacon\.min\.js)/i;
+
+/** True when EVERY frame comes from such a beacon — one of our frames anywhere keeps the event. */
+function isThirdPartyBeaconNoise(event: Sentry.ErrorEvent): boolean {
+  const frames = event.exception?.values?.flatMap((v) => v.stacktrace?.frames ?? []) ?? [];
+  if (frames.length === 0) return false;
+  return frames.every((f) => THIRD_PARTY_BEACONS.test(f.filename ?? f.abs_path ?? ''));
+}
+
 export function scrubEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
+  if (isThirdPartyBeaconNoise(event)) {
+    return null;
+  }
   const req = event.request;
   if (req) {
     scrubHeaders(req.headers);
