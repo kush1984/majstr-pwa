@@ -34,17 +34,23 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
       <button
         type="button"
         onClick={() => navigate(routes.project(project.id))}
-        className="flex w-full items-center gap-3 rounded-card border border-border bg-surface p-3.5 pr-11 text-left transition-transform active:scale-[0.99]"
+        className="flex w-full items-start gap-3 rounded-card border border-border bg-surface p-3.5 pr-11 text-left transition-transform active:scale-[0.99]"
       >
         <IconTile tone="brand">📁</IconTile>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-primary">{project.name}</div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
-            <span className="truncate">{project.address}</span>
+          {/* Wraps rather than truncates. A master names objects by street or by client, so what
+              tells «Квартира на Зубрівській» from «Квартира на Зеленій» sits at the END — precisely
+              what an ellipsis eats first on a 375 px screen. The address line wraps for the same
+              reason: cut to «вул. С. Б…» it identifies nothing. */}
+          <div className="break-words text-sm font-semibold leading-snug text-primary">
+            {project.name}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+            <span className="break-words">{project.address}</span>
             {project.clientFullName && (
               <>
                 <span className="h-[3px] w-[3px] flex-shrink-0 rounded-full bg-faint" />
-                <span className="truncate">{project.clientFullName}</span>
+                <span className="break-words">{project.clientFullName}</span>
               </>
             )}
           </div>

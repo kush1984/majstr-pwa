@@ -19,6 +19,7 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
+import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
@@ -63,8 +64,7 @@ export function ProjectDetailPage() {
   const [chatLinkOpen, setChatLinkOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [editClientOpen, setEditClientOpen] = useState(false);
-  // Quick actions menu on an estimate row, and the resulting confirm dialog.
-  const [menuFor, setMenuFor] = useState<EstimateSummary | null>(null);
+  // The action a row asked for, waiting on its confirm dialog.
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
 
   const estimates = useQuery({
@@ -214,40 +214,6 @@ export function ProjectDetailPage() {
         />
       )}
 
-      {/* Estimate row quick-actions: reopen (SIGNED) or delete (DRAFT/SENT). */}
-      <Modal
-        open={menuFor !== null}
-        onClose={() => setMenuFor(null)}
-        title={menuFor ? estimateName(menuFor.name, menuFor.createdAt) : ''}
-      >
-        {menuFor && (
-          <div className="space-y-2">
-            {menuFor.status === 'SIGNED' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirm({ kind: 'reopen', est: menuFor });
-                  setMenuFor(null);
-                }}
-                className="w-full rounded-lg border border-border py-2.5 text-sm font-semibold text-primary"
-              >
-                {t('estimate.reopen')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirm({ kind: 'delete', est: menuFor });
-                  setMenuFor(null);
-                }}
-                className="w-full rounded-lg border border-danger/40 py-2.5 text-sm font-semibold text-danger"
-              >
-                {t('estimate.deleteEstimate')}
-              </button>
-            )}
-          </div>
-        )}
-      </Modal>
 
       <ConfirmDialog
         open={confirm !== null}
@@ -459,7 +425,8 @@ export function ProjectDetailPage() {
                   // A handful of estimates per object, so a scan beats memoising a Set.
                   isCrewSource={list.some((other) => other.duplicatedFromId === s.id)}
                   onClick={() => navigate(routes.estimate(s.id))}
-                  onMenu={() => setMenuFor(s)}
+                  onReopen={() => setConfirm({ kind: 'reopen', est: s })}
+                  onDelete={() => setConfirm({ kind: 'delete', est: s })}
                   onToggleEconomy={(value) => rowEconomyToggle.mutate({ estId: s.id, value })}
                 />
               ))}
@@ -507,7 +474,8 @@ function EstimateRow({
   economyLocked,
   isCrewSource,
   onClick,
-  onMenu,
+  onReopen,
+  onDelete,
   onToggleEconomy,
 }: {
   summary: EstimateSummary;
@@ -515,7 +483,8 @@ function EstimateRow({
   /** True when a marked-up copy of this estimate exists — i.e. this is the crew's price list. */
   isCrewSource: boolean;
   onClick: () => void;
-  onMenu: () => void;
+  onReopen: () => void;
+  onDelete: () => void;
   onToggleEconomy: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -553,14 +522,24 @@ function EstimateRow({
             </span>
           </div>
         </button>
-        <button
-          type="button"
-          onClick={onMenu}
-          aria-label={t('estimate.actions')}
-          className="flex w-11 flex-shrink-0 items-center justify-center text-xl leading-none text-muted"
-        >
-          ⋮
-        </button>
+        <ActionMenu ariaLabel={t('estimate.actions')}>
+          {(close) =>
+            summary.status === 'SIGNED' ? (
+              <ActionMenuItem
+                icon="🔓"
+                label={t('estimate.reopen')}
+                onClick={() => { close(); onReopen(); }}
+              />
+            ) : (
+              <ActionMenuItem
+                icon="🗑"
+                danger
+                label={t('estimate.deleteEstimate')}
+                onClick={() => { close(); onDelete(); }}
+              />
+            )
+          }
+        </ActionMenu>
       </div>
       {/* Visible economy checkbox — much clearer than hiding it in the ⋮ menu.
           FREE can't see the object economy, so it's disabled (kept, not removed).

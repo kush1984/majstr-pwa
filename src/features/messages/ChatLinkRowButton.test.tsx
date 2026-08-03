@@ -11,7 +11,7 @@ import type { ProjectResponse } from '@/api/types.ts';
 /**
  * The chat link, as reached from a row of the object list.
  *
- * <p>The link is copied, never shown, so the toast is the only thing the master can judge — which makes
+ * <p>The item is a menuitem, not a button: the row ⋮ drops a menu now instead of opening a centred dialog. The link is copied, never shown, so the toast is the only thing the master can judge — which makes
  * "the clipboard refused but we said скопійовано" the failure worth pinning. The other is that the ⋯
  * must not open the object: the card underneath it is a navigation button.</p>
  */
@@ -51,7 +51,7 @@ const openSheet = async () => {
     </MemoryRouter>,
   );
   fireEvent.click(screen.getByRole('button', { name: /Квартира/ }));
-  return screen.findByRole('button', { name: 'Скопіювати посилання' });
+  return screen.findByRole('menuitem', { name: /Скопіювати посилання/ });
 };
 
 describe('ChatLinkRowButton', () => {
@@ -82,10 +82,10 @@ describe('ChatLinkRowButton', () => {
     // waiting to happen. Revoking lives on the object's own screen.
     await openSheet();
 
-    expect(screen.queryByRole('button', { name: 'Відкликати посилання' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Відкликати посилання/ })).toBeNull();
   });
 
-  it('the ⋯ on a list card opens the sheet without opening the object', async () => {
+  it('the ⋮ on a list card opens the sheet without opening the object', async () => {
     // What makes this work is structural: the ⋯ is a SIBLING of the card's navigation button, not a
     // child of it. Nest it and every tap would navigate too — so the DOM relationship is asserted here
     // rather than left to a stopPropagation call that would be invisible if lost.
@@ -102,7 +102,7 @@ describe('ChatLinkRowButton', () => {
 
     fireEvent.click(kebab);
 
-    expect(await screen.findByRole('button', { name: 'Скопіювати посилання' })).toBeTruthy();
+    expect(await screen.findByRole('menuitem', { name: /Скопіювати посилання/ })).toBeTruthy();
     expect(navigate).not.toHaveBeenCalled();
   });
 });
