@@ -14,7 +14,9 @@ import {
 } from '@/features/catalog/catalogItemSchema.ts';
 import { useCatalogCategories } from '@/features/catalog/useCatalog.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
+import { formatMoney } from '@/lib/format.ts';
+import { cn } from '@/lib/cn.ts';
+import type { EstimateItemRequest, EstimateItemResponse, PercentBaseKind } from '@/api/types.ts';
 import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
 import { MeasureCalculator } from './MeasureCalculator.tsx';
 import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx';
@@ -25,6 +27,8 @@ import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx
  */
 export function ItemForm({
   initial,
+  siblings = [],
+  estimateTotal = 0,
   objectId,
   showSaveToCatalog = false,
   enableAutocomplete = false,
@@ -35,6 +39,16 @@ export function ItemForm({
   deleting = false,
 }: {
   initial?: EstimateItemResponse | null;
+  /**
+   * The estimate's other lines — the base picker for a «%» line.
+   *
+   * <p>ORDINARY lines only reach the picker (filtered below). That filter IS the cycle protection:
+   * a percentage can never point at a percentage, so no chain of them can close on itself, and
+   * there is no graph to walk.</p>
+   */
+  siblings?: EstimateItemResponse[];
+  /** The estimate's current total — shown live under a «% від усього кошторису» line. */
+  estimateTotal?: number;
   /** The object (project) id — enables "Вибрати з замірів" when it has measurements.
    *  Pass undefined for a SIGNED estimate (measurements can't change a signed line). */
   objectId?: string;
@@ -56,10 +70,17 @@ export function ItemForm({
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
   const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // «%» is a share OF something. Default MANUAL — the shape «%» already had, a sum in the price
+  // field — so a line that never picks a base still behaves the way it reads.
+  const [baseKind, setBaseKind] = useState<PercentBaseKind>(initial?.percentBaseKind ?? 'MANUAL');
+  const [baseItemId, setBaseItemId] = useState<string | null>(initial?.percentBaseItemId ?? null);
+  // A POSITION «%» line must name the position it's a share of — surfaced inline, not swallowed.
+  const [baseError, setBaseError] = useState(false);
   const {
     register,
     control,
     setValue,
+    setError,
     watch,
     handleSubmit,
     formState: { errors },
@@ -93,7 +114,47 @@ export function ItemForm({
 
   const qtyReg = register('quantity');
 
+  const watchedUnit = watch('unit');
+  const isPercent = watchedUnit === 'PERCENT';
+  // The «Порахувати з розмірів» calculator only makes sense for a length/area/volume unit — for
+  // штука / кг / % / точка a size calc means nothing, so the tool is hidden there entirely.
+  const canMeasure = watchedUnit === 'M' || watchedUnit === 'M2'
+    || watchedUnit === 'LINEAR_METER' || watchedUnit === 'M3';
+  const pct = parseDecimal(watch('quantity')) || 0;
+  const manualBase = parseDecimal(watch('unitPrice')) || 0;
+  const baseLine = siblings.find((s) => s.id === baseItemId) ?? null;
+  const baseAmount = baseKind === 'MANUAL'
+    ? manualBase
+    : baseKind === 'TOTAL'
+      ? estimateTotal
+      : (baseLine?.lineTotal ?? 0);
+  const percentPreview = (() => {
+    const result = formatMoney(Math.round(((baseAmount * pct) / 100) * 100) / 100);
+    if (baseKind === 'MANUAL') {
+      return t('estimate.percentPreviewManual', { pct, sum: formatMoney(manualBase), result });
+    }
+    if (baseKind === 'TOTAL') {
+      return t('estimate.percentPreviewTotal', { pct, base: formatMoney(estimateTotal), result });
+    }
+    return baseLine
+      ? t('estimate.percentPreviewItem', {
+        pct, name: baseLine.name, base: formatMoney(baseLine.lineTotal), result,
+      })
+      : t('estimate.percentNoBaseYet');
+  })();
+
   const submit = handleSubmit((v) => {
+    // «%» validation the schema can't do — the base kind lives in component state, not the form.
+    if (v.unit === 'PERCENT') {
+      if (baseKind === 'MANUAL' && !(parseDecimal(v.unitPrice) > 0)) {
+        setError('unitPrice', { message: t('validation.enterPrice') });
+        return;
+      }
+      if (baseKind === 'POSITION' && !baseItemId) {
+        setBaseError(true);
+        return;
+      }
+    }
     const req: EstimateItemRequest = {
       type: v.type,
       name: v.name.trim(),
@@ -103,6 +164,9 @@ export function ItemForm({
       unitPrice: parseDecimal(v.unitPrice),
       measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
       quantityManual,
+      // Only a percentage line records a base; anything else sends none, whatever is in state.
+      percentBaseKind: v.unit === 'PERCENT' ? baseKind : undefined,
+      percentBaseItemId: v.unit === 'PERCENT' && baseKind === 'POSITION' ? baseItemId : undefined,
     };
     onSubmit(req, v.saveToCatalog);
   });
@@ -176,7 +240,12 @@ export function ItemForm({
       </FormField>
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label={t('estimate.quantity')} htmlFor="it-qty" required error={errors.quantity?.message}>
+        <FormField
+          label={isPercent ? t('estimate.percentLabel') : t('estimate.quantity')}
+          htmlFor="it-qty"
+          required
+          error={errors.quantity?.message}
+        >
           <Input
             id="it-qty"
             inputMode="decimal"
@@ -189,17 +258,90 @@ export function ItemForm({
             }}
           />
         </FormField>
-        <FormField label={t('estimate.unitPrice')} htmlFor="it-price" required error={errors.unitPrice?.message}>
-          <Input
-            id="it-price"
-            inputMode="decimal"
-            placeholder="0"
-            invalid={Boolean(errors.unitPrice)}
-            {...register('unitPrice')}
-          />
-        </FormField>
+        {/* A percentage of a LINE or of the TOTAL has no price of its own — the field would ask
+            for a number that means nothing. Only «своя сума» keeps it, relabelled for what it is. */}
+        {!isPercent || baseKind === 'MANUAL' ? (
+          <FormField
+            label={isPercent ? t('estimate.percentBaseSum') : t('estimate.unitPrice')}
+            htmlFor="it-price"
+            required
+            error={errors.unitPrice?.message}
+          >
+            <Input
+              id="it-price"
+              inputMode="decimal"
+              placeholder="0"
+              invalid={Boolean(errors.unitPrice)}
+              {...register('unitPrice')}
+            />
+          </FormField>
+        ) : (
+          <div />
+        )}
       </div>
 
+      {isPercent && (
+        <div className="space-y-2 rounded-xl border border-border bg-surface-sunken p-3">
+          <p className="text-xs font-semibold text-muted">{t('estimate.percentBase')}</p>
+          <div className="flex flex-wrap gap-2">
+            {(['MANUAL', 'POSITION', 'TOTAL'] as PercentBaseKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => {
+                  setBaseKind(kind);
+                  setBaseError(false);
+                  // The price field is hidden for a non-MANUAL base — drop any sum left in it so a
+                  // stale figure can't ride along on the request.
+                  if (kind !== 'MANUAL') setValue('unitPrice', '');
+                }}
+                className={cn(
+                  'min-h-[44px] rounded-xl border px-3 text-sm font-semibold',
+                  baseKind === kind
+                    ? 'border-brand bg-brand-soft/40 text-primary'
+                    : 'border-border text-muted',
+                )}
+              >
+                {t('estimate.percentBase' + (kind === 'MANUAL' ? 'Manual' : kind === 'POSITION' ? 'Item' : 'Total'))}
+              </button>
+            ))}
+          </div>
+
+          {baseKind === 'POSITION' && (
+            <>
+              <select
+                value={baseItemId ?? ''}
+                onChange={(e) => { setBaseItemId(e.target.value || null); setBaseError(false); }}
+                className={cn(
+                  'min-h-[44px] w-full rounded-xl border bg-surface px-3 text-sm text-primary',
+                  baseError ? 'border-danger' : 'border-border',
+                )}
+              >
+                <option value="">{t('estimate.percentNoBaseYet')}</option>
+                {/* Percentage lines are NOT offered — that is what makes a cycle unbuildable. */}
+                {siblings
+                  .filter((s) => s.unit !== 'PERCENT' && s.id !== initial?.id)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+              </select>
+              {baseError && (
+                <p className="text-xs text-danger">{t('estimate.percentPickBaseError')}</p>
+              )}
+            </>
+          )}
+
+          {/* The live figure, because a percentage the master cannot check is a percentage he will
+              not trust — and the client is the one asked to sign it. */}
+          <p className="text-sm font-semibold text-primary">{percentPreview}</p>
+
+          {initial?.baseDetached && (
+            <p className="text-xs text-amber">{t('estimate.percentReattach')}</p>
+          )}
+        </div>
+      )}
+
+      {canMeasure && (
       <div className="space-y-2">
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           <button
@@ -250,6 +392,7 @@ export function ItemForm({
           />
         )}
       </div>
+      )}
 
       <div className="flex gap-2 pt-1">
         {onDelete && (

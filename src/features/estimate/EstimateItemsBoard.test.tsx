@@ -15,7 +15,7 @@ import type { EstimateItemResponse } from '@/api/types.ts';
 const item = (id: string, name: string, category: string, sortOrder: number): EstimateItemResponse => ({
   id, type: 'WORK', name, category, unit: 'M2',
   quantity: 1, unitPrice: 100, lineTotal: 100, sortOrder,
-  measurementRefs: [], quantityManual: false,
+  measurementRefs: [], quantityManual: false, percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
 });
 
 function renderBoard(items: EstimateItemResponse[]) {

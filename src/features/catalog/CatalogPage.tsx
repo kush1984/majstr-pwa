@@ -7,11 +7,11 @@ import { Button } from '@/components/Button.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { formatMoney } from '@/lib/format.ts';
-import i18n from '@/lib/i18n.ts';
 import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
@@ -20,8 +20,10 @@ import {
   useCatalog,
   useCheckTemplateUpdates,
   useResetCatalog,
+  useDeleteCatalogItems,
 } from './useCatalog.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
+import { CatalogBoard } from './CatalogBoard.tsx';
 import { TradeFilterChips, tradeMatches, type TradeKey } from './TradeFilterChips.tsx';
 
 type TypeFilter = ItemType | 'ALL';
@@ -31,28 +33,16 @@ const FILTERS: { value: TypeFilter; labelKey: string }[] = [
   { value: 'MATERIAL', labelKey: 'catalog.filterMaterials' },
 ];
 
-/** Groups items by category, preserving the backend's category→name order. */
-function groupByCategory(items: CatalogItemResponse[]): [string, CatalogItemResponse[]][] {
-  const noCategory = i18n.t('catalog.noCategory');
-  const groups = new Map<string, CatalogItemResponse[]>();
-  for (const item of items) {
-    const key = item.category?.trim() || noCategory;
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(item);
-    else groups.set(key, [item]);
-  }
-  return [...groups.entries()];
-}
-
 export function CatalogPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TypeFilter>('ALL');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const { data: me } = useMe();
-  const { data, isPending, isError, error, refetch, isFetching } = useCatalog(
-    filter === 'ALL' ? undefined : filter,
-  );
+  // Fetch the WHOLE catalog and filter by type client-side: only then can we tell a genuinely
+  // empty catalog (→ onboarding) apart from a filter that simply matched nothing (→ a light hint).
+  // Server-side type filtering made «Матеріали» on a works-only catalog look like an empty catalog.
+  const { data, isPending, isError, error, refetch } = useCatalog();
   const reset = useResetCatalog();
   const checkUpdates = useCheckTemplateUpdates();
   const addNew = useAddNewFromTemplate();
@@ -64,14 +54,20 @@ export function CatalogPage() {
   // "Add new from library" flow: a count opens the confirm; `nothingNew` opens the info dialog.
   const [pendingNewCount, setPendingNewCount] = useState<number | null>(null);
   const [nothingNew, setNothingNew] = useState(false);
+  // Selection mode: `null` = off, which is what keeps an ordinary tap meaning exactly one thing.
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const deleteItems = useDeleteCatalogItems();
 
-  // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it.
+  // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it — both client-side.
   const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const visible = useMemo(
-    () => (data ?? []).filter((i) => tradeMatches(i.trade, tradeFilter)),
-    [data, tradeFilter],
+    () => (data ?? [])
+      .filter((i) => filter === 'ALL' || i.type === filter)
+      .filter((i) => tradeMatches(i.trade, tradeFilter)),
+    [data, filter, tradeFilter],
   );
-  const groups = useMemo(() => groupByCategory(visible), [visible]);
   // Prefill a new item's trade when the filter narrows to exactly one trade
   // (including "Інше"/OTHER — now a real trade). Ambiguous under a multi-select.
   const defaultTrade = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
@@ -112,14 +108,11 @@ export function CatalogPage() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
-          {t('catalog.title')}
-        </h1>
-        <Button onClick={() => setEditing(null)} className="hidden sm:inline-flex">
-          {t('catalog.addItem')}
-        </Button>
-      </div>
+      {/* Adding a position lives only in the FAB now (same as elsewhere), so the title is a plain
+          left-aligned heading like «Мої шаблони» / «Обʼєкти». */}
+      <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
+        {t('catalog.title')}
+      </h1>
 
       <TradeFilterChips
         userTrades={me?.trades ?? []}
@@ -146,7 +139,10 @@ export function CatalogPage() {
           what={t('offline.dataCatalog')}
           onRetry={() => void refetch()}
         />
-      ) : (data?.length ?? 0) === 0 ? (
+      ) : visible.length === 0 ? (
+        // Nothing to show — whether the catalog is genuinely empty OR the current filter matched
+        // none. Same onboarding either way ON PURPOSE: it carries «Стартовий набір», the master's
+        // one path to restore the default catalog after clearing it (incl. under a filter).
         <EmptyState
           icon="📖"
           title={t('catalog.emptyTitle')}
@@ -170,7 +166,7 @@ export function CatalogPage() {
           }
         />
       ) : (
-        <div className={isFetching ? 'opacity-60 transition-opacity' : undefined}>
+        <div>
           <div className="mb-4 flex justify-end gap-4">
             <button
               type="button"
@@ -190,50 +186,104 @@ export function CatalogPage() {
             </button>
           </div>
 
-          {groups.map(([category, items]) => (
-            <section key={category} className="mb-5">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
-                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                {category} · {items.length}
-              </div>
-              <div className="space-y-1.5">
-                {items.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setEditing(item)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
-                  >
-                    <span className="min-w-0 flex-1">
-                      {/* Wraps instead of truncating: catalog names are long and specific
-                          («Профіль/куточок для плитки алюмінієвий 10 мм»), and the tail is
-                          exactly what tells two positions apart — a master could not read
-                          which one they were tapping. Same treatment as the template rows. */}
-                      <span className="block break-words text-sm font-medium text-primary">
-                        {item.name}
-                      </span>
-                      <span className="block text-xs text-muted">
-                        {t('unitPer', { unit: t('units.' + item.unit) })}
-                      </span>
-                    </span>
-                    <span className="whitespace-nowrap text-sm font-bold text-primary">
-                      {formatMoney(item.defaultPrice)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
+          <CatalogBoard
+            items={visible}
+            onEdit={setEditing}
+            selection={picked === null ? undefined : {
+              selected: picked,
+              onToggle: (id) => setPicked((prev) => {
+                const next = new Set(prev);
+                if (!next.delete(id)) next.add(id);
+                return next;
+              }),
+              onToggleSection: (ids, select) => setPicked((prev) => {
+                const next = new Set(prev);
+                ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+                return next;
+              }),
+            }}
+          />
 
-          <button
-            type="button"
-            onClick={() => setEditing(null)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand py-3 text-sm font-semibold text-brand"
-          >
-            {t('catalog.addItem')}
-          </button>
+          {picked !== null && (
+            /* Sticky INSIDE the list, and `ml-8` clears the checkbox column so the bar is the width
+               of a POSITION card, not the full row — same as the estimate selection bar. The bottom
+               offset clears the mobile nav, which is lg:hidden. */
+            <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 ml-8 mt-2 flex items-center gap-3 rounded-2xl bg-ink px-4 py-3 shadow-card-lg lg:bottom-4">
+              <span className="flex-shrink-0 text-sm font-semibold text-white">
+                {t('catalog.selectedCount', { count: picked.size })}
+              </span>
+              <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={picked.size === 0}
+                  onClick={() => setBulkDeleteOpen(true)}
+                  className="min-h-[44px] rounded-xl bg-danger px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
+                >
+                  {t('common.delete')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPicked(null)}
+                  className="min-h-[44px] rounded-xl px-3 text-sm font-semibold text-white/70"
+                >
+                  {t('common.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* The catalog had no FAB at all — every action lived in small links above the list, which
+          is the one place a thumb does not reach on a phone. */}
+      <Fab ariaLabel={t('catalog.actionsMenu')}>
+        {(close) => (
+          <>
+            <FabAction icon="＋" label={t('catalog.addItemShort')}
+              onClick={() => close(() => setEditing(null))} />
+            <FabAction icon="☑" label={t('catalog.selectItems')}
+              onClick={() => close(() => setPicked(new Set()))} />
+            <FabAction icon="🗑" label={t('catalog.deleteAll')}
+              onClick={() => close(() => setDeleteAllOpen(true))} />
+          </>
+        )}
+      </Fab>
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={t('catalog.deleteSelectedTitle')}
+        message={t('catalog.deleteSelectedMessage', { count: picked?.size ?? 0 })}
+        confirmLabel={t('common.delete')}
+        onConfirm={() => {
+          const ids = [...(picked ?? [])];
+          setBulkDeleteOpen(false);
+          setPicked(null);
+          deleteItems.mutate(ids, {
+            onSuccess: () => toast.success(t('catalog.deleted', { count: ids.length })),
+            onError: (err) => toast.error(toAppError(err).message),
+          });
+        }}
+        onClose={() => setBulkDeleteOpen(false)}
+      />
+
+      {/* «Все» means everything the CURRENT FILTER shows, and the message says the number out
+          loud — deleting rows a master cannot see is not something a confirm can make safe. */}
+      <ConfirmDialog
+        open={deleteAllOpen}
+        title={t('catalog.deleteAllTitle')}
+        message={t('catalog.deleteAllMessage', { count: visible.length })}
+        confirmLabel={t('common.delete')}
+        onConfirm={() => {
+          const ids = visible.map((i) => i.id);
+          setDeleteAllOpen(false);
+          setPicked(null);
+          deleteItems.mutate(ids, {
+            onSuccess: () => toast.success(t('catalog.deleted', { count: ids.length })),
+            onError: (err) => toast.error(toAppError(err).message),
+          });
+        }}
+        onClose={() => setDeleteAllOpen(false)}
+      />
 
       <Modal
         open={editing !== undefined}

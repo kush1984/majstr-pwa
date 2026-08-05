@@ -144,6 +144,15 @@ export type EstimateStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 export type ItemType = 'WORK' | 'MATERIAL';
 
 /**
+ * What a «%» line is a percentage OF.
+ *
+ * Three kinds and no more: a percentage of another percentage is deliberately impossible, which is
+ * what makes cyclic dependencies unbuildable rather than merely detected. The base picker offers
+ * ordinary lines only, and that filter IS the protection.
+ */
+export type PercentBaseKind = 'MANUAL' | 'POSITION' | 'TOTAL';
+
+/**
  * Every unit, once. `Unit` is derived from this, zod schemas do `z.enum(UNITS)`, and the
  * pickers iterate it — so adding a unit is a one-line change here.
  *
@@ -327,6 +336,18 @@ export interface EstimateItemResponse {
   measurementRefs: string[];
   /** True when the master edited the quantity by hand (drives the overwrite warning). */
   quantityManual: boolean;
+  /**
+   * For a `PERCENT` line: what it is a percentage OF. Null on every other line.
+   *
+   * «%» is not a unit of measure — it is a share of something, and `quantity` holds the percent
+   * (10 = 10 %) while this says of what. Without it the row could only say «10 % · 500 ₴/%», which
+   * is five hundred hryvnia for one percent.
+   */
+  percentBaseKind: PercentBaseKind | null;
+  /** The line this percentage is measured against (`POSITION`); null otherwise. */
+  percentBaseItemId: string | null;
+  /** The live link is off — the amount was typed by hand, or the base was deleted. */
+  baseDetached: boolean;
 }
 
 /**
@@ -397,6 +418,10 @@ export interface EstimateItemRequest {
    *  server recomputes `quantity` from these (authoritative, unit-checked). */
   measurementRefs?: string[];
   quantityManual?: boolean;
+  /** For a `PERCENT` line: what it is a percentage OF. Omitted elsewhere. */
+  percentBaseKind?: PercentBaseKind | null;
+  /** Only with `percentBaseKind: 'POSITION'`, and only an ORDINARY line of the same estimate. */
+  percentBaseItemId?: string | null;
 }
 
 export interface EstimateItemFromCatalogRequest {
@@ -417,6 +442,11 @@ export interface CatalogItemResponse {
   type: ItemType;
   unit: Unit;
   defaultPrice: number;
+  /**
+   * The master's own arrangement (backend V87). Satisfies `Arrangeable`, so the catalog shares the
+   * estimate board's drag arithmetic instead of owning a second copy of it.
+   */
+  sortOrder: number;
   createdAt: string;
 }
 

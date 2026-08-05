@@ -44,9 +44,9 @@ const ownDetail: EstimateTemplateDetail = {
 };
 const catalog: CatalogItemResponse[] = [
   // already in the template by name → must be disabled in the picker
-  { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '' },
+  { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
   // fresh → selectable
-  { id: 'c2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, createdAt: '' },
+  { id: 'c2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
 ];
 
 function renderPage() {
@@ -103,7 +103,7 @@ describe('TemplatesPage — edit own template', () => {
     vi.mocked(estimateTemplatesApi.addItem).mockResolvedValue(ownDetail);
     vi.mocked(catalogApi.create).mockResolvedValue({
       id: 'cN', name: 'Нова робота', category: null, trade: null, type: 'WORK',
-      unit: 'M2', defaultPrice: 0, createdAt: '',
+      unit: 'M2', defaultPrice: 0, sortOrder: 0, createdAt: '',
     } as never);
 
     renderPage();

@@ -30,7 +30,7 @@ const worksKey = [...CATALOG_KEY, 'list', 'WORK'];
 function item(over: Partial<CatalogItemResponse> = {}): CatalogItemResponse {
   return {
     id: 'k1', name: 'Штукатурка', category: 'Стіни', trade: 'BUILDER',
-    type: 'WORK', unit: 'M2', defaultPrice: 250, createdAt: '2026-01-01', ...over,
+    type: 'WORK', unit: 'M2', defaultPrice: 250, sortOrder: 0, createdAt: '2026-01-01', ...over,
   };
 }
 

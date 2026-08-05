@@ -11,6 +11,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
+import { cn } from '@/lib/cn.ts';
+import { percentLabel } from './percentLine.ts';
 import type { EstimateItemResponse } from '@/api/types.ts';
 import {
   flatten, ITEM_ID, resolveDrag, SECTION_ID, sectionId, toSections, type Section,
@@ -79,8 +81,10 @@ export function EstimateItemsBoard({
 }) {
   const { t } = useTranslation();
   const sections = useMemo(() => toSections(items), [items]);
+  // Built once per render: a percentage row names the line it is measured against.
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   /** A cross-section move waiting on the master's yes — see the dialog at the bottom. */
-  const [pending, setPending] = useState<{ sections: Section[]; from: string; to: string } | null>(null);
+  const [pending, setPending] = useState<{ sections: Section<EstimateItemResponse>[]; from: string; to: string } | null>(null);
 
   const sensors = useSensors(
     // 8px before a drag begins: a tap on the grip still registers as a tap, and a swipe to scroll
@@ -122,6 +126,7 @@ export function EstimateItemsBoard({
               signed={signed}
               onEdit={onEdit}
               selection={selection}
+              byId={byId}
             />
           ))}
         </SortableContext>
@@ -167,9 +172,10 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function SectionBlock({
-  section, firstNumber, signed, onEdit, selection,
+  section, firstNumber, signed, onEdit, selection, byId,
 }: {
-  section: Section;
+  section: Section<EstimateItemResponse>;
+  byId: Map<string, EstimateItemResponse>;
   /** Position number of this section's first line, counted from the top of the whole estimate. */
   firstNumber: number;
   signed: boolean;
@@ -228,6 +234,7 @@ function SectionBlock({
               signed={signed}
               onEdit={onEdit}
               selection={selection}
+              byId={byId}
             />
           ))}
         </SortableContext>
@@ -237,9 +244,11 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, number, signed, onEdit, selection,
+  item, number, signed, onEdit, selection, byId,
 }: {
   item: EstimateItemResponse;
+  /** Every line by id, so a percentage row can name the line it is measured against. */
+  byId: Map<string, EstimateItemResponse>;
   number: number;
   signed: boolean;
   onEdit: (item: EstimateItemResponse) => void;
@@ -321,8 +330,10 @@ function ItemRow({
               {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
             </span>
             <span className="h-[3px] w-[3px] rounded-full bg-faint" />
-            <span>
-              {formatMoney(item.unitPrice)}/{t('units.' + item.unit)}
+            {/* A percentage has no price per unit — «500 ₴/%» meant nothing. It says what it is a
+                percentage OF, in the same words the PDF and the client's portal use. */}
+            <span className={cn(item.baseDetached && 'text-amber')}>
+              {percentLabel(item, byId) ?? `${formatMoney(item.unitPrice)}/${t('units.' + item.unit)}`}
             </span>
           </span>
         </span>

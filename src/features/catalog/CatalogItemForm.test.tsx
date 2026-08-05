@@ -24,14 +24,14 @@ vi.mock('@/hooks/useToast.ts', () => ({
 
 const catalog: CatalogItemResponse[] = [
   { id: '1', name: 'Розетка', category: 'Розетки', trade: 'ELECTRICAL',
-    type: 'WORK', unit: 'PIECE', defaultPrice: 100, createdAt: '' },
+    type: 'WORK', unit: 'PIECE', defaultPrice: 100, sortOrder: 0, createdAt: '' },
   { id: '2', name: 'Автомат', category: 'Щит', trade: 'ELECTRICAL',
-    type: 'WORK', unit: 'PIECE', defaultPrice: 200, createdAt: '' },
+    type: 'WORK', unit: 'PIECE', defaultPrice: 200, sortOrder: 0, createdAt: '' },
   { id: '3', name: 'Ще одна розетка', category: 'Розетки', trade: 'ELECTRICAL',
-    type: 'WORK', unit: 'PIECE', defaultPrice: 120, createdAt: '' },
+    type: 'WORK', unit: 'PIECE', defaultPrice: 120, sortOrder: 0, createdAt: '' },
   // another trade — must NOT show up under ELECTRICAL
   { id: '4', name: 'Плитка', category: 'Укладання', trade: 'TILING',
-    type: 'WORK', unit: 'M2', defaultPrice: 900, createdAt: '' },
+    type: 'WORK', unit: 'M2', defaultPrice: 900, sortOrder: 0, createdAt: '' },
 ];
 
 function renderForm(initial: CatalogItemResponse | null = null) {
@@ -116,7 +116,7 @@ describe('CatalogItemForm — category', () => {
     // the master had — a data loss with no warning and nothing on screen to explain it.
     renderForm({
       id: '9', name: 'Дивна позиція', category: 'Укладання', trade: 'ELECTRICAL',
-      type: 'WORK', unit: 'PIECE', defaultPrice: 300, createdAt: '',
+      type: 'WORK', unit: 'PIECE', defaultPrice: 300, sortOrder: 0, createdAt: '',
     });
     await waitFor(() => expect(options()).toContain('Розетки'));
 

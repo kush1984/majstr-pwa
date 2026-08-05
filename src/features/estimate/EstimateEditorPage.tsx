@@ -527,6 +527,10 @@ export function EstimateEditorPage() {
       <AddItemSheet
         estimateId={id}
         objectId={signed ? undefined : projectId}
+        // The other lines and the current total: a «%» line needs something to be a
+        // percentage OF, and the live figure under the picker is what makes it checkable.
+        siblings={est.items}
+        estimateTotal={est.total}
         nextSortOrder={nextSortOrder}
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -548,6 +552,8 @@ export function EstimateEditorPage() {
             key={editing.id}
             initial={editing}
             objectId={signed ? undefined : projectId}
+            siblings={est.items}
+            estimateTotal={est.total}
             submitLabel={t('common.save')}
             submitting={updateItem.isPending}
             deleting={removeItem.isPending}

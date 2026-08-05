@@ -25,6 +25,26 @@ export const catalogApi = {
   },
 
   /**
+   * Delete several positions at once. Returns how many actually went — smaller than the list when
+   * a row was already gone from another device, or when an offline delete is being replayed.
+   */
+  deleteItems(ids: string[]): Promise<{ deleted: number }> {
+    return api
+      .delete<{ deleted: number }>('/api/catalog/items', { data: { ids } })
+      .then((r) => r.data);
+  },
+
+  /**
+   * The master's own arrangement, stated in full rather than as a diff — so the offline outbox can
+   * replay it any number of times and land in the same place.
+   */
+  reorder(items: { id: string; category: string | null }[]): Promise<CatalogItemResponse[]> {
+    return api
+      .patch<CatalogItemResponse[]>('/api/catalog/items/order', { items })
+      .then((r) => r.data);
+  },
+
+  /**
    * Type-ahead search over the CURRENT contractor's catalog by partial name
    * (case-insensitive), capped server-side. Powers the add-item autocomplete.
    * Backend contract: `GET /api/catalog/search?q=<text>&limit=<n>` →

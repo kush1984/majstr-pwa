@@ -80,6 +80,10 @@ export function useCreateCatalogItem() {
         type: req.type,
         unit: req.unit,
         defaultPrice: req.defaultPrice,
+        // At the END, matching what the server does with a new position. A number bigger than any
+        // real one rather than a guessed index: the optimistic row only has to sort last until the
+        // server's own answer replaces it, and picking an index risks colliding with a real slot.
+        sortOrder: Number.MAX_SAFE_INTEGER,
         createdAt: new Date().toISOString(),
       };
       return offlineMutate<CatalogItemResponse>({
@@ -127,6 +131,33 @@ export function useDeleteCatalogItem() {
         online: async () => { await catalogApi.remove(id); },
         onOnlineSuccess: invalidate,
         optimistic: () => patchCatalog(qc, (items) => items.filter((i) => i.id !== id)),
+      }),
+  });
+}
+
+/**
+ * Delete several positions at once.
+ *
+ * <p>Queued through the outbox as ONE operation rather than N single deletes, and that is not just
+ * tidiness: replayed one by one, a 200-position clear-out is 200 requests that can half-succeed and
+ * leave the master looking at a list nobody chose. One operation either lands or does not.</p>
+ */
+export function useDeleteCatalogItems() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateCatalog();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (ids: string[]): Promise<void> =>
+      offlineMutate<void>({
+        // Keyed on the first id: the outbox needs a stable entity id, and a bulk delete is not
+        // something a later edit of one of these rows can meaningfully depend on — they are gone.
+        entity: 'catalogItem', entityId: ids[0], type: 'delete', payload: { ids }, deps: [],
+        online: async () => { await catalogApi.deleteItems(ids); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          const gone = new Set(ids);
+          patchCatalog(qc, (items) => items.filter((i) => !gone.has(i.id)));
+        },
       }),
   });
 }

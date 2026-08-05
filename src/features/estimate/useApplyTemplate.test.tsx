@@ -35,15 +35,15 @@ const template: EstimateTemplateDetail = {
 const catalog: CatalogItemResponse[] = [
   {
     id: 'c-1', name: 'штукатурка стін', category: 'Стіни', trade: 'TILING',
-    type: 'WORK', unit: 'M2', defaultPrice: 250, createdAt: '2026-01-01T00:00:00Z',
+    type: 'WORK', unit: 'M2', defaultPrice: 250, sortOrder: 0, createdAt: '2026-01-01T00:00:00Z',
   },
   {
     id: 'c-2', name: 'Плитка', category: null, trade: 'TILING',
-    type: 'MATERIAL', unit: 'M2', defaultPrice: 900, createdAt: '2026-01-01T00:00:00Z',
+    type: 'MATERIAL', unit: 'M2', defaultPrice: 900, sortOrder: 0, createdAt: '2026-01-01T00:00:00Z',
   },
   {
     id: 'c-3', name: 'ПЛИТКА', category: 'дубль', trade: null,
-    type: 'MATERIAL', unit: 'PIECE', defaultPrice: 1, createdAt: '2026-01-02T00:00:00Z',
+    type: 'MATERIAL', unit: 'PIECE', defaultPrice: 1, sortOrder: 0, createdAt: '2026-01-02T00:00:00Z',
   },
 ];
 

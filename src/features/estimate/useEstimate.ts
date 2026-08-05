@@ -22,13 +22,67 @@ export const ESTIMATE_KEY = ['estimate'] as const;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
+ * The three-step pass, mirroring the server's EstimateMath — <b>change the two together</b>.
+ *
+ * <p>«%» is a share OF something, which turns a flat list of independent multiplications into a
+ * small dependency graph. The order below is the design, not an implementation detail:</p>
+ *   1. ordinary lines — quantity × price;
+ *   2. percentages of a LINE or of a hand-typed sum;
+ *   3. percentages of the TOTAL, all against the sum of steps 1 and 2.
+ *
+ * <p>A percent of a percent is impossible by construction, so there is no graph to walk and no
+ * cycle to detect. Several TOTAL lines share ONE base — compounding them would make the answer
+ * depend on which was entered first.</p>
+ *
+ * <p>This computes for DISPLAY only. `lineTotal` is written by the server and never sent back;
+ * offline the master sees the right numbers until the sync re-derives them.</p>
+ */
+function recomputeLines(source: EstimateItemResponse[]): EstimateItemResponse[] {
+  const items = source.map((i) => ({ ...i }));
+  const amountById = new Map<string, number>();
+
+  for (const i of items) {
+    if (i.unit !== 'PERCENT') {
+      i.lineTotal = round2(i.quantity * i.unitPrice);
+      amountById.set(i.id, i.lineTotal);
+    }
+  }
+
+  const kindOf = (i: EstimateItemResponse) => i.percentBaseKind ?? 'MANUAL';
+  const share = (i: EstimateItemResponse, base: number | null) =>
+    // A missing base keeps the last computed amount: the master is charging for this line, and
+    // zeroing it because its base was deleted would be data loss dressed up as tidiness.
+    base == null ? i.lineTotal : round2((base * i.quantity) / 100);
+
+  for (const i of items) {
+    if (i.unit !== 'PERCENT' || kindOf(i) === 'TOTAL') continue;
+    const base = i.baseDetached
+      ? null
+      : kindOf(i) === 'MANUAL'
+        ? i.unitPrice
+        : (i.percentBaseItemId != null ? amountById.get(i.percentBaseItemId) ?? null : null);
+    i.lineTotal = share(i, base);
+  }
+
+  const baseForTotals = items
+    .filter((i) => !(i.unit === 'PERCENT' && kindOf(i) === 'TOTAL'))
+    .reduce((s, i) => s + i.lineTotal, 0);
+  for (const i of items) {
+    if (i.unit === 'PERCENT' && kindOf(i) === 'TOTAL') {
+      i.lineTotal = share(i, i.baseDetached ? null : round2(baseForTotals));
+    }
+  }
+  return items;
+}
+
+/**
  * Recompute the estimate's derived totals after an optimistic item edit — the same arithmetic the
  * server does, so an offline estimate shows correct sums until it syncs (the server stays the
- * source of truth and re-derives on reconnect). Mirrors: lineTotal = qty·price; works/materials
- * subtotals by type; total = works + materials; balance = total − deposit (clamped).
+ * source of truth and re-derives on reconnect). Mirrors: line amounts via {@link recomputeLines};
+ * works/materials subtotals by type; total = works + materials; balance = total − deposit (clamped).
  */
 function recompute(est: EstimateResponse): EstimateResponse {
-  const items = est.items.map((i) => ({ ...i, lineTotal: round2(i.quantity * i.unitPrice) }));
+  const items = recomputeLines(est.items);
   const sum = (t: 'WORK' | 'MATERIAL') =>
     round2(items.filter((i) => i.type === t).reduce((s, i) => s + i.lineTotal, 0));
   const worksSubtotal = sum('WORK');
@@ -134,6 +188,11 @@ export function useAddItem(estimateId: string) {
             lineTotal: round2(req.quantity * req.unitPrice),
             sortOrder: req.sortOrder ?? 0, measurementRefs: req.measurementRefs ?? [],
             quantityManual: req.quantityManual ?? false,
+            // Carried through so the optimistic row is computed by the same rules the server uses;
+            // the real amount arrives with the reply and replaces this one.
+            percentBaseKind: req.percentBaseKind ?? null,
+            percentBaseItemId: req.percentBaseItemId ?? null,
+            baseDetached: false,
           };
           patchEstimate(qc, estimateId, (items) => [...items, item]);
           return item;
@@ -233,6 +292,8 @@ function patchEstimateWithCatalogLines(
         sortOrder: e.sortOrder ?? 0,
         measurementRefs: [],
         quantityManual: false,
+        // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
+        percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
       }];
     });
     return [...items, ...lines];

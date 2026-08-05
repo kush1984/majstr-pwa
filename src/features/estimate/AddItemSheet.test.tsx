@@ -7,7 +7,7 @@ import { AddItemSheet } from './AddItemSheet.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimatesApi } from '@/api/estimates.ts';
-import type { CatalogItemResponse, UserResponse } from '@/api/types.ts';
+import type { CatalogItemResponse, EstimateItemResponse, UserResponse } from '@/api/types.ts';
 import { aUser, anEstimate } from '@/test/factories.ts';
 
 vi.mock('@/api/catalog.ts', () => ({
@@ -22,18 +22,18 @@ vi.mock('@/hooks/useToast.ts', () => ({
 
 const me: UserResponse = aUser();
 const catalog: CatalogItemResponse[] = [
-  { id: 'i1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '' },
-  { id: 'i2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, createdAt: '' },
+  { id: 'i1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
+  { id: 'i2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
 ];
 
-function renderSheet(onClose: () => void) {
+function renderSheet(onClose: () => void, siblings: EstimateItemResponse[] = []) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, me);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   return render(
-    <AddItemSheet estimateId="e1" nextSortOrder={5} open onClose={onClose} />,
+    <AddItemSheet estimateId="e1" nextSortOrder={5} siblings={siblings} open onClose={onClose} />,
     { wrapper },
   );
 }
@@ -102,7 +102,7 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
     } as never);
     vi.mocked(catalogApi.create).mockResolvedValue({
       id: 'c9', name: 'Демонтаж розетки', category: 'Демонтаж', trade: 'OTHER', type: 'WORK',
-      unit: 'PIECE', defaultPrice: 90, createdAt: '',
+      unit: 'PIECE', defaultPrice: 90, sortOrder: 0, createdAt: '',
     } as never);
     const onClose = vi.fn();
 
@@ -130,5 +130,69 @@ describe('AddItemSheet — manual add → save-to-catalog prompt', () => {
       }, expect.any(String)),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+});
+
+describe('AddItemSheet — «%» line with a base (regression: submit was silently blocked)', () => {
+  // The base line the percentage points at.
+  const base: EstimateItemResponse = {
+    id: 's1', type: 'WORK', name: 'Шафа', category: null, unit: 'PIECE',
+    quantity: 1, unitPrice: 12500, lineTotal: 12500, sortOrder: 0,
+    percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+  } as EstimateItemResponse;
+
+  async function openPercentManual() {
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Укрупнення' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '15' } });
+    fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
+  }
+
+  /** The base <select> has no id — reach it through the sibling option it renders. */
+  function baseSelect(): HTMLSelectElement {
+    return screen.getByRole('option', { name: 'Шафа' }).closest('select') as HTMLSelectElement;
+  }
+
+  it('adds a «% від позиції» line once a base is picked (the exact reported case)', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimatesApi.addItem).mockResolvedValue({
+      id: 'li9', type: 'WORK', name: 'Укрупнення', unit: 'PERCENT',
+      quantity: 15, unitPrice: 0, lineTotal: 1875, sortOrder: 5,
+      percentBaseKind: 'POSITION', percentBaseItemId: 's1',
+    } as never);
+    const onClose = vi.fn();
+    renderSheet(onClose, [base]);
+
+    await openPercentManual();
+    // «Від позиції» base, then pick the sibling in the base <select> (the 3rd combobox).
+    fireEvent.click(screen.getByRole('button', { name: 'Від позиції' }));
+    fireEvent.change(baseSelect(), { target: { value: 's1' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+
+    // The line is created with the base recorded — NOT swallowed by the hidden price field.
+    await waitFor(() =>
+      expect(estimatesApi.addItem).toHaveBeenCalledWith(
+        'e1',
+        expect.objectContaining({
+          unit: 'PERCENT', quantity: 15, percentBaseKind: 'POSITION', percentBaseItemId: 's1',
+        }),
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('blocks a «% від позиції» line with no base picked, and shows why (no silent no-op)', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    const onClose = vi.fn();
+    renderSheet(onClose, [base]);
+
+    await openPercentManual();
+    fireEvent.click(screen.getByRole('button', { name: 'Від позиції' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+
+    // Nothing is sent, and the master is told what's missing — the opposite of "nothing happens".
+    expect(await screen.findByText('Спершу оберіть позицію для відсотка')).toBeTruthy();
+    expect(estimatesApi.addItem).not.toHaveBeenCalled();
   });
 });
