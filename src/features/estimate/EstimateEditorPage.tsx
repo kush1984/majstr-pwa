@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/Badge.tsx';
@@ -64,6 +64,16 @@ export function EstimateEditorPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<EstimateItemResponse | null>(null);
+  // Positions added/edited while the master is on THIS estimate get a faint highlight, so a change
+  // doesn't get lost in a long list (especially after an edit on iOS). Session-scoped: cleared when the
+  // estimate id changes below, and gone entirely on navigating away (it's local state).
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  const markTouched = (ids: string[]) =>
+    setTouched((prev) => {
+      const next = new Set(prev);
+      ids.forEach((tid) => next.add(tid));
+      return next;
+    });
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
@@ -92,6 +102,10 @@ export function EstimateEditorPage() {
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
   // Actions that genuinely need the server (PDF, sharing, LLM recognition) say so when offline.
   const { guard } = useOnlineGuard();
+
+  // The route component is reused across estimates, so drop the highlight set when the id changes —
+  // yesterday's edits must not glow on a different sheet.
+  useEffect(() => { setTouched(new Set()); }, [id]);
 
   if (estimate.isPending) {
     return (
@@ -345,6 +359,7 @@ export function EstimateEditorPage() {
                 <EstimateItemsBoard
                   items={est.items}
                   signed={signed}
+                  touched={touched}
                   onEdit={setEditing}
                   selection={picked === null ? undefined : {
                     selected: picked,
@@ -521,6 +536,7 @@ export function EstimateEditorPage() {
         nextSortOrder={nextSortOrder}
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        onAdded={markTouched}
       />
 
       {projectId && (
@@ -546,6 +562,7 @@ export function EstimateEditorPage() {
             onSubmit={async (req) => {
               try {
                 await updateItem.mutateAsync({ itemId: editing.id, req });
+                markTouched([editing.id]);
                 toast.success(t('estimate.saved'));
                 setEditing(null);
               } catch (err) {

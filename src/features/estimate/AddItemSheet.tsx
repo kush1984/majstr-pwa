@@ -8,6 +8,7 @@ import { useOnline } from '@/lib/useOnline.ts';
 import { Chip } from '@/components/Chip.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
+import { newUuid } from '@/lib/uuid.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { useMe } from '@/features/auth/useMe.ts';
@@ -41,6 +42,7 @@ export function AddItemSheet({
   nextSortOrder,
   open,
   onClose,
+  onAdded,
 }: {
   estimateId: string;
   /** The estimate's existing lines — the base picker for a new «%» line, and the source of the
@@ -51,6 +53,8 @@ export function AddItemSheet({
   nextSortOrder: number;
   open: boolean;
   onClose: () => void;
+  /** Ids of the lines just added, so the editor can highlight them for the session. */
+  onAdded?: (ids: string[]) => void;
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('catalog');
@@ -91,7 +95,7 @@ export function AddItemSheet({
           </div>
 
           {tab === 'catalog' ? (
-            <CatalogPicker estimateId={estimateId} nextSortOrder={nextSortOrder} onDone={close} />
+            <CatalogPicker estimateId={estimateId} nextSortOrder={nextSortOrder} onDone={close} onAdded={onAdded} />
           ) : (
             <ItemForm
               objectId={objectId}
@@ -102,7 +106,8 @@ export function AddItemSheet({
               submitting={addItem.isPending}
               onSubmit={async (req, offerCatalog) => {
                 try {
-                  await addItem.mutateAsync({ ...req, sortOrder: nextSortOrder });
+                  const created = await addItem.mutateAsync({ ...req, sortOrder: nextSortOrder });
+                  onAdded?.([created.id]);
                   toast.success(t('estimate.itemAdded'));
                   // Offer to save a genuinely new manual item to the catalog (not
                   // one picked from the autocomplete — that's already there). The
@@ -140,10 +145,12 @@ function CatalogPicker({
   estimateId,
   nextSortOrder,
   onDone,
+  onAdded,
 }: {
   estimateId: string;
   nextSortOrder: number;
   onDone: () => void;
+  onAdded?: (ids: string[]) => void;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -174,13 +181,17 @@ function CatalogPicker({
 
   const add = async () => {
     if (selected.size === 0) return;
-    const items = [...selected].map((id, i) => ({
-      catalogItemId: id,
+    // Generate the line ids here (rather than letting the batch hook mint them) so the editor can be
+    // told which lines were just added and highlight them for the session.
+    const items = [...selected].map((catalogItemId, i) => ({
+      id: newUuid(),
+      catalogItemId,
       quantity: 1,
       sortOrder: nextSortOrder + i,
     }));
     try {
       await batch.mutateAsync(items);
+      onAdded?.(items.map((x) => x.id));
       toast.success(t('estimate.itemsAdded', { count: items.length }));
       onDone();
     } catch (err) {

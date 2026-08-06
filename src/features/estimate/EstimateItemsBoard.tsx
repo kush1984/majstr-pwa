@@ -55,6 +55,7 @@ const collisionDetection: CollisionDetection = (args) => {
 export function EstimateItemsBoard({
   items,
   signed,
+  touched,
   onEdit,
   onArrange,
   selection,
@@ -62,6 +63,8 @@ export function EstimateItemsBoard({
   items: EstimateItemResponse[];
   /** A signed estimate is read-only: no grips, no drags. */
   signed: boolean;
+  /** Ids added/edited this session — faintly highlighted so a change isn't lost in a long list. */
+  touched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   /** The new arrangement, flat and in order, each line carrying the section it now belongs to. */
   onArrange: (arranged: EstimateItemResponse[]) => void;
@@ -126,6 +129,7 @@ export function EstimateItemsBoard({
           sections={worksSections}
           startNumber={1}
           signed={signed}
+          touched={touched}
           onEdit={onEdit}
           selection={selection}
           byId={byId}
@@ -138,6 +142,7 @@ export function EstimateItemsBoard({
           sections={materialsSections}
           startNumber={works.length + 1}
           signed={signed}
+          touched={touched}
           onEdit={onEdit}
           selection={selection}
           byId={byId}
@@ -166,7 +171,7 @@ export function EstimateItemsBoard({
  * to this type, so a line or a category can never cross into the other.
  */
 function TypeGroup({
-  heading, sections, startNumber, signed, onEdit, selection, byId, onDragEnd,
+  heading, sections, startNumber, signed, touched, onEdit, selection, byId, onDragEnd,
 }: {
   /** The section heading, or null to render the block bare (a single-type estimate). */
   heading: string | null;
@@ -174,6 +179,7 @@ function TypeGroup({
   /** Position number of this group's first line, so numbering runs 1..N across both groups. */
   startNumber: number;
   signed: boolean;
+  touched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
   byId: Map<string, EstimateItemResponse>;
@@ -210,6 +216,7 @@ function TypeGroup({
               section={section}
               firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, startNumber)}
               signed={signed}
+              touched={touched}
               onEdit={onEdit}
               selection={selection}
               byId={byId}
@@ -246,13 +253,14 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function SectionBlock({
-  section, firstNumber, signed, onEdit, selection, byId,
+  section, firstNumber, signed, touched, onEdit, selection, byId,
 }: {
   section: Section<EstimateItemResponse>;
   byId: Map<string, EstimateItemResponse>;
   /** Position number of this section's first line, counted from the top of the whole estimate. */
   firstNumber: number;
   signed: boolean;
+  touched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
 }) {
@@ -306,6 +314,7 @@ function SectionBlock({
               item={item}
               number={firstNumber + i}
               signed={signed}
+              touched={touched}
               onEdit={onEdit}
               selection={selection}
               byId={byId}
@@ -318,13 +327,14 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, number, signed, onEdit, selection, byId,
+  item, number, signed, touched, onEdit, selection, byId,
 }: {
   item: EstimateItemResponse;
   /** Every line by id, so a percentage row can name the line it is measured against. */
   byId: Map<string, EstimateItemResponse>;
   number: number;
   signed: boolean;
+  touched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
 }) {
@@ -334,6 +344,9 @@ function ItemRow({
     disabled: signed || !!selection,
   });
   const picked = selection ? selection.selected.has(item.id) : false;
+  // Faint session highlight for a line just added or edited — but never over the selection state,
+  // which owns the row's look while picking.
+  const isTouched = !picked && (touched?.has(item.id) ?? false);
 
   return (
     <div
@@ -367,9 +380,12 @@ function ItemRow({
         disabled={signed && !selection}
         aria-pressed={selection ? picked : undefined}
         title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
-        className={`flex min-w-0 flex-1 gap-1.5 rounded-xl border bg-surface px-3 py-3 text-left transition-transform disabled:cursor-default active:scale-[0.99] disabled:active:scale-100 ${
-          picked ? 'border-brand bg-brand-soft/40' : 'border-border'
-        }`}
+        className={cn(
+          'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',
+          picked ? 'border-brand bg-brand-soft/40'
+            : isTouched ? 'border-brand/30 bg-brand-soft/20'
+              : 'border-border bg-surface',
+        )}
       >
         {/* The number is a GUTTER for the whole card, not a word inside the name.
             Putting it in the name's text flow was the first attempt and it read as a mess: a name

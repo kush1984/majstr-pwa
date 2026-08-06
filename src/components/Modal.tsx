@@ -40,10 +40,34 @@ export function Modal({
       if (dismissable && e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
+
+    // iOS-safe scroll lock. `overflow: hidden` on <body> does NOT stop iOS Safari from scrolling the
+    // page behind a fixed overlay — focusing an input in the modal makes iOS scroll the list, and on
+    // close the list is left scrolled down (the master's «після Зберегти стрибає майже вниз»; Android
+    // honours overflow:hidden, so it never showed there). Freezing the body with position:fixed at its
+    // current offset actually holds it, and the exact scroll is restored on close. A nested modal must
+    // not re-lock or it would restore to the wrong place, so only the FIRST one locks/unlocks.
+    const body = document.body;
+    const alreadyLocked = body.style.position === 'fixed';
+    const scrollY = window.scrollY;
+    if (!alreadyLocked) {
+      body.style.position = 'fixed';
+      body.style.top = `-${scrollY}px`;
+      body.style.left = '0';
+      body.style.right = '0';
+      body.style.width = '100%';
+    }
+
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      if (!alreadyLocked) {
+        body.style.position = '';
+        body.style.top = '';
+        body.style.left = '';
+        body.style.right = '';
+        body.style.width = '';
+        window.scrollTo(0, scrollY);
+      }
     };
   }, [open, onClose, dismissable]);
 
