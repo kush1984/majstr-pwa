@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+## Commands(Edited)
 
 - `npm run dev` — Vite dev server on port 5173 (binds `0.0.0.0` for LAN/phone access). PWA dev mode is enabled (`devOptions.enabled: true`), so the service worker registers even in dev.
 - `npm run build` — runs `tsc -b` then `vite build`. Type errors fail the build; there is no separate `typecheck` script.
