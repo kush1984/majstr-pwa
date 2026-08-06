@@ -3,11 +3,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { PhotosSection } from './PhotosSection.tsx';
 import { downscaleImage } from '@/lib/image.ts';
+import type { ProjectPhotoResponse } from '@/api/types.ts';
 
 const uploadMutate = vi.fn();
 
+// The photo tiles fetch their bytes over an authenticated stream — stub the viewers so the tests
+// exercise the grid, not the network.
+vi.mock('./PhotoView.tsx', () => ({
+  AuthPhoto: ({ alt }: { alt: string }) => <img alt={alt} />,
+  PhotoLightbox: () => null,
+}));
+
+const holder = vi.hoisted(() => ({ photos: [] as ProjectPhotoResponse[] }));
 vi.mock('./usePhotos.ts', () => ({
-  usePhotos: () => ({ data: [], isPending: false }),
+  usePhotos: () => ({ data: holder.photos, isPending: false }),
   useUploadPhoto: () => ({ mutate: uploadMutate, isPending: false }),
   useSetPhotoVisibility: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePhoto: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -18,7 +27,24 @@ vi.mock('@/features/plan/usePlanLimits.ts', () => ({
 }));
 vi.mock('@/lib/image.ts', () => ({ downscaleImage: vi.fn() }));
 
-beforeEach(() => vi.clearAllMocks());
+function photo(over: Partial<ProjectPhotoResponse>): ProjectPhotoResponse {
+  return {
+    id: 'x',
+    source: 'MANUAL',
+    visibility: 'PRIVATE',
+    caption: null,
+    estimateId: null,
+    estimateName: null,
+    fileUrl: '/api/projects/p1/photos/x/file',
+    createdAt: '2026-01-01T00:00:00Z',
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  holder.photos = [];
+});
 
 describe('PhotosSection', () => {
   it('offers BOTH a direct-camera input and a gallery input', () => {
@@ -55,6 +81,20 @@ describe('PhotosSection', () => {
 
     await waitFor(() => expect(uploadMutate).toHaveBeenCalled());
     expect(uploadMutate.mock.calls[0][0]).toEqual({ file: small, source: 'MANUAL' });
+  });
+
+  it('hides estimate-linked receipts from the object grid, keeps manual + orphan receipts', () => {
+    holder.photos = [
+      photo({ id: 'm1', source: 'MANUAL' }), // progress photo — shown
+      photo({ id: 'r1', source: 'RECEIPT', estimateId: 'e1' }), // belongs to an estimate — hidden here
+      photo({ id: 'r2', source: 'RECEIPT', estimateId: null }), // orphaned receipt — shown, so it's reachable
+    ];
+
+    render(<PhotosSection projectId="p1" />);
+
+    // Two tiles: the manual photo and the orphan receipt. The estimate-linked receipt lives under
+    // its estimate now, not in the «Фото» tab.
+    expect(screen.getAllByRole('img')).toHaveLength(2);
   });
 
   it('rejects a file that is still over the cap after downscaling', async () => {

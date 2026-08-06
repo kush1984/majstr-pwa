@@ -157,11 +157,14 @@ export const estimatesApi = {
    * be a plain <a href>. Fetch as a blob and hand back an object URL the
    * caller can open / download, plus a revoke fn to free it.
    */
-  async fetchPdf(id: string): Promise<{ url: string; revoke: () => void }> {
+  async fetchPdf(id: string, receiptIds: string[] = []): Promise<{ url: string; revoke: () => void }> {
     // Goes through ensureAccessToken so this bearer call gets the same
     // proactive-refresh guarantee as the axios paths.
     const access = await ensureAccessToken();
-    const resp = await fetch(`${config.apiBaseUrl}/api/estimates/${id}/pdf`, {
+    // Chosen receipts (if any) ride as `?receipts=id1,id2`; the server embeds only those genuinely
+    // linked to this estimate, so a bad id is harmless.
+    const query = receiptIds.length ? `?receipts=${receiptIds.join(',')}` : '';
+    const resp = await fetch(`${config.apiBaseUrl}/api/estimates/${id}/pdf${query}`, {
       headers: { Authorization: `Bearer ${access ?? ''}` },
     });
     if (!resp.ok) {

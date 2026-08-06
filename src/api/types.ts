@@ -383,6 +383,9 @@ export interface EstimateResponse {
   depositAmount?: number | null;
   /** total − deposit, clamped at 0 (залишок). Equals total when no deposit. */
   balance: number;
+  /** For a consolidated estimate: the ids of its source estimates (empty otherwise). Their
+   *  receipts are offered too when building this estimate's PDF. */
+  sourceEstimateIds?: string[];
 }
 
 export interface EstimateCreateRequest {

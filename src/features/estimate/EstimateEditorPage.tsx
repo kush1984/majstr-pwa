@@ -23,6 +23,7 @@ import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
+import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
@@ -45,6 +46,8 @@ import {
   useReorderItems,
 } from './useEstimate.ts';
 import { useSaveAsTemplate } from './useEstimateTemplates.ts';
+import { usePhotos } from '@/features/photos/usePhotos.ts';
+import { ReceiptPdfSheet } from './ReceiptPdfSheet.tsx';
 
 
 export function EstimateEditorPage() {
@@ -54,6 +57,7 @@ export function EstimateEditorPage() {
   const estimate = useEstimate(id);
   const projectId = estimate.data?.projectId ?? '';
   const project = useProject(projectId);
+  const photos = usePhotos(projectId);
   const updateItem = useUpdateItem(id);
   const removeItem = useRemoveItem(id);
   const updateEstimate = useUpdateEstimate(id);
@@ -97,6 +101,8 @@ export function EstimateEditorPage() {
   const duplicate = useDuplicateEstimate(id);
 
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [pdfSheetOpen, setPdfSheetOpen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const { data: me } = useMe();
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
@@ -151,22 +157,26 @@ export function EstimateEditorPage() {
   // A signed estimate is read-only in the UI (the backend also enforces 409):
   // hide edit/delete, show a "view only" banner with a master-only reopen.
   const signed = est.status === 'SIGNED';
+  // Receipts offered (default-on) for embedding in the PDF: this estimate's own, plus — for a
+  // consolidated estimate — those of its source estimates (their receipts stay on the sources).
+  // The object's progress photos are offered too (default-off) for a receipt saved as a plain photo.
+  const receiptEstimateIds = new Set([id, ...(est.sourceEstimateIds ?? [])]);
+  const receipts = (photos.data ?? []).filter(
+    (p) => p.source === 'RECEIPT' && p.estimateId !== null && receiptEstimateIds.has(p.estimateId),
+  );
+  const otherPhotos = (photos.data ?? []).filter((p) => p.source === 'MANUAL');
 
   const goBack = () => navigate(projectId ? routes.project(projectId) : routes.projects);
 
-  const onPdf = async () => {
-    // The PDF is a client-facing deliverable and now requires a verified email
-    // (anti-abuse). Bounce an unverified master straight to the verify modal
-    // instead of firing a doomed request — but ask the server first, because a
-    // cached `false` outlives a verification done in the mail app's browser.
-    if (!(await ensureEmailVerified())) {
-      setEmailGateOpen(true);
-      return;
-    }
+  // The actual download, given the receipts the master chose to attach ([] = none). Shared by the
+  // direct path (no receipts) and the picker sheet.
+  const runPdf = async (receiptIds: string[]) => {
+    setPdfLoading(true);
     try {
-      const { url, revoke } = await estimatesApi.fetchPdf(id);
+      const { url, revoke } = await estimatesApi.fetchPdf(id, receiptIds);
       window.open(url, '_blank');
       setTimeout(revoke, 60_000);
+      setPdfSheetOpen(false);
     } catch (err) {
       const failure = toAppError(err);
       if (failure.code === 'EMAIL_NOT_VERIFIED') {
@@ -178,7 +188,26 @@ export function EstimateEditorPage() {
       } else {
         toast.error(t('estimate.pdfFailed'));
       }
+    } finally {
+      setPdfLoading(false);
     }
+  };
+
+  const onPdf = async () => {
+    // The PDF is a client-facing deliverable and now requires a verified email
+    // (anti-abuse). Bounce an unverified master straight to the verify modal
+    // instead of firing a doomed request — but ask the server first, because a
+    // cached `false` outlives a verification done in the mail app's browser.
+    if (!(await ensureEmailVerified())) {
+      setEmailGateOpen(true);
+      return;
+    }
+    // Any photos to offer (linked receipts or object photos) → ask which to attach; else download straight.
+    if (receipts.length > 0 || otherPhotos.length > 0) {
+      setPdfSheetOpen(true);
+      return;
+    }
+    await runPdf([]);
   };
 
   const onShare = async () => {
@@ -441,6 +470,16 @@ export function EstimateEditorPage() {
                 )}
               </>
             )}
+
+            {/* Receipts attached to this estimate — sits directly under the Materials group (the
+                last block above), and shows even for an estimate with no lines (a receipt kept
+                without moving its positions in). Renders nothing when there are no receipts. */}
+            <EstimateReceipts
+              projectId={projectId}
+              estimateId={id}
+              sourceEstimateIds={est.sourceEstimateIds}
+              signed={signed}
+            />
           </div>
 
           {/* Desktop summary */}
@@ -517,6 +556,15 @@ export function EstimateEditorPage() {
       </Fab>
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+      {pdfSheetOpen && (
+        <ReceiptPdfSheet
+          receipts={receipts}
+          otherPhotos={otherPhotos}
+          downloading={pdfLoading}
+          onConfirm={runPdf}
+          onClose={() => setPdfSheetOpen(false)}
+        />
+      )}
       {project.data && (
         <SharePortalSheet
           open={shareOpen}
