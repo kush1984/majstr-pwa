@@ -28,11 +28,13 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * small dependency graph. The order below is the design, not an implementation detail:</p>
  *   1. ordinary lines — quantity × price;
  *   2. percentages of a LINE or of a hand-typed sum;
- *   3. percentages of the TOTAL, all against the sum of steps 1 and 2.
+ *   3. percentages of the ESTIMATE («% від кошторису»), each against the subtotal of ITS OWN type
+ *      (works or materials) — the split the master sees on the summary card.
  *
  * <p>A percent of a percent is impossible by construction, so there is no graph to walk and no
- * cycle to detect. Several TOTAL lines share ONE base — compounding them would make the answer
- * depend on which was entered first.</p>
+ * cycle to detect. Every «% від кошторису» of one type shares that type's base — compounding them
+ * would make the answer depend on which was entered first. Such a line may be signed: a minus is a
+ * discount off that subtotal.</p>
  *
  * <p>This computes for DISPLAY only. `lineTotal` is written by the server and never sent back;
  * offline the master sees the right numbers until the sync re-derives them.</p>
@@ -64,12 +66,16 @@ function recomputeLines(source: EstimateItemResponse[]): EstimateItemResponse[] 
     i.lineTotal = share(i, base);
   }
 
-  const baseForTotals = items
-    .filter((i) => !(i.unit === 'PERCENT' && kindOf(i) === 'TOTAL'))
-    .reduce((s, i) => s + i.lineTotal, 0);
+  const baseOfType = (type: 'WORK' | 'MATERIAL') =>
+    round2(items
+      .filter((i) => !(i.unit === 'PERCENT' && kindOf(i) === 'TOTAL') && i.type === type)
+      .reduce((s, i) => s + i.lineTotal, 0));
+  const worksBase = baseOfType('WORK');
+  const materialsBase = baseOfType('MATERIAL');
   for (const i of items) {
     if (i.unit === 'PERCENT' && kindOf(i) === 'TOTAL') {
-      i.lineTotal = share(i, i.baseDetached ? null : round2(baseForTotals));
+      const base = i.baseDetached ? null : (i.type === 'WORK' ? worksBase : materialsBase);
+      i.lineTotal = share(i, base);
     }
   }
   return items;

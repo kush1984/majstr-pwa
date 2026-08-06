@@ -195,4 +195,130 @@ describe('AddItemSheet — «%» line with a base (regression: submit was silent
     expect(await screen.findByText('Спершу оберіть позицію для відсотка')).toBeTruthy();
     expect(estimatesApi.addItem).not.toHaveBeenCalled();
   });
+
+  it('«Від кошторису» + «−» submits a NEGATIVE percent — the sign is the toggle, not a typed minus', async () => {
+    // Mobile decimal keypads have no minus key, so a «Від кошторису» discount is a +/− toggle and the
+    // field stays a positive magnitude; the sign is applied on submit. «Від позиції» has no toggle.
+    const work = {
+      id: 'w1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
+      quantity: 1, unitPrice: 1000, lineTotal: 1000, sortOrder: 0,
+      percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimatesApi.addItem).mockResolvedValue({
+      id: 'liD', type: 'WORK', name: 'Знижка', unit: 'PERCENT',
+      quantity: -15, unitPrice: 0, lineTotal: -150, sortOrder: 5,
+      percentBaseKind: 'TOTAL', percentBaseItemId: null,
+    } as never);
+    renderSheet(vi.fn(), [work]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Знижка' } });
+    fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '15' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
+    // The +/− sign toggle appears only for «Від кошторису»; pick «−» (U+2212).
+    fireEvent.click(screen.getByRole('button', { name: '−' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+
+    await waitFor(() =>
+      expect(estimatesApi.addItem).toHaveBeenCalledWith(
+        'e1',
+        expect.objectContaining({
+          unit: 'PERCENT', quantity: -15, percentBaseKind: 'TOTAL',
+        }),
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('«Від кошторису» preview base is the SAME-TYPE subtotal, excluding existing % lines (matches the server)', async () => {
+    // The bug: the preview used est.total (which folds in existing «% від кошторису» lines) while the
+    // server measures against Σ non-percent-of-total lines OF THAT TYPE. With a 3 000 ₴ total-% work
+    // line present, a WORK 10 % base must be 10 000 (the work), so 10 % = 1 000 — not 13 000 → 1 300.
+    const work = {
+      id: 'w1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
+      quantity: 1, unitPrice: 10000, lineTotal: 10000, sortOrder: 0,
+      percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    const existingTotalPct = {
+      id: 'p1', type: 'WORK', name: 'Транспортні', category: null, unit: 'PERCENT',
+      quantity: 30, unitPrice: 0, lineTotal: 3000, sortOrder: 1,
+      percentBaseKind: 'TOTAL', percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    renderSheet(vi.fn(), [work, existingTotalPct]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Надбавка' } });
+    fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
+
+    const preview = await screen.findByText(/від робіт.*=/);
+    const text = preview.textContent!.replace(/\s/g, '');
+    expect(text).toContain('10000'); // base = the work only
+    expect(text).toContain('=1000'); // 10 % of 10 000
+    expect(text).not.toContain('13000'); // NOT est.total (10 000 + 3 000)
+    expect(text).not.toContain('=1300');
+  });
+
+  it('«Від кошторису» is scoped by the line TYPE — a MATERIAL % ignores the works subtotal', async () => {
+    // Type scoping is the core new rule: a MATERIAL «Від кошторису» measures the materials subtotal
+    // only. With a 10 000 work and a 2 000 material present, a MATERIAL 10 % is 200 (of 2 000), never
+    // 1 200 (of 12 000) — the split the master reads on the summary card.
+    const work = {
+      id: 'w1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
+      quantity: 1, unitPrice: 10000, lineTotal: 10000, sortOrder: 0,
+      percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    const material = {
+      id: 'm1', type: 'MATERIAL', name: 'Плитка', category: null, unit: 'M2',
+      quantity: 1, unitPrice: 2000, lineTotal: 2000, sortOrder: 1,
+      percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    renderSheet(vi.fn(), [work, material]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Надбавка' } });
+    fireEvent.change(document.querySelector('#it-type')!, { target: { value: 'MATERIAL' } });
+    fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
+
+    const preview = await screen.findByText(/від матеріалів.*=/);
+    const text = preview.textContent!.replace(/\s/g, '');
+    expect(text).toContain('2000'); // base = the material only
+    expect(text).toContain('=200'); // 10 % of 2 000
+    expect(text).not.toContain('12000'); // NOT works + materials
+  });
+
+  it('blocks a SECOND «Від кошторису» of the same type — one markup/discount per works/materials', async () => {
+    // A markup AND a discount on the same works is not a real-world case and compounds confusingly,
+    // so a second «Від кошторису» of a type is refused with a warning (remove the first or cancel).
+    const work = {
+      id: 'w1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
+      quantity: 1, unitPrice: 10000, lineTotal: 10000, sortOrder: 0,
+      percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    const existingWorkTotal = {
+      id: 'p1', type: 'WORK', name: 'Націнка', category: null, unit: 'PERCENT',
+      quantity: 12, unitPrice: 0, lineTotal: 1200, sortOrder: 1,
+      percentBaseKind: 'TOTAL', percentBaseItemId: null, baseDetached: false,
+    } as EstimateItemResponse;
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    renderSheet(vi.fn(), [work, existingWorkTotal]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(document.querySelector('#it-name')!, { target: { value: 'Ще одна' } });
+    fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
+    fireEvent.change(document.querySelector('#it-qty')!, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
+
+    // The warning appears and nothing is sent (the button is disabled + a submit is guarded).
+    expect(await screen.findByText(/вже є націнка\/знижка/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+    expect(estimatesApi.addItem).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/Badge.tsx';
@@ -13,7 +13,7 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { formatMoney, initials } from '@/lib/format.ts';
+import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
@@ -439,25 +439,13 @@ export function EstimateEditorPage() {
         </div>
       </div>
 
-      {/* Mobile sticky total bar — totals only; actions live in the FAB */}
-      <div className={`fixed inset-x-0 bottom-0 z-40 bg-ink px-5 pb-7 pt-3.5 text-white lg:hidden ${
-        picked !== null ? 'hidden' : ''
-      }`}>
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="text-xs text-white/60">{t('estimate.toPay')}</div>
-            <div data-testid="estimate-total" className="text-2xl font-extrabold tracking-tight">
-              {formatMoney(est.total)}
-            </div>
-          </div>
-          <div className="text-right text-[11px] text-white/55">
-            {t('estimate.works')}: {formatMoney(est.worksSubtotal)}
-            <br />
-            {t('estimate.materials')}: {formatMoney(est.materialsSubtotal)}
-          </div>
-        </div>
-        <DepositRow est={est} onEdit={signed ? undefined : openDeposit} />
-      </div>
+      {/* Mobile summary — a peek bar that taps / swipes up to ~a third of the screen so the totals
+          stop eating the list. Hidden while selecting (the selection bar owns the bottom then). The
+          FAB floats above it (z-50) in the sheet's reserved bottom dock, so it never covers a number
+          and never jumps up with the sheet. */}
+      {picked === null && (
+        <MobileSummarySheet est={est} onEditDeposit={signed ? undefined : openDeposit} />
+      )}
 
       {/* Floating actions (speed-dial) — always in reach on every screen size */}
       <Fab ariaLabel={t('estimate.actionsMenu')}>
@@ -530,7 +518,6 @@ export function EstimateEditorPage() {
         // The other lines and the current total: a «%» line needs something to be a
         // percentage OF, and the live figure under the picker is what makes it checkable.
         siblings={est.items}
-        estimateTotal={est.total}
         nextSortOrder={nextSortOrder}
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -553,7 +540,6 @@ export function EstimateEditorPage() {
             initial={editing}
             objectId={signed ? undefined : projectId}
             siblings={est.items}
-            estimateTotal={est.total}
             submitLabel={t('common.save')}
             submitting={updateItem.isPending}
             deleting={removeItem.isPending}
@@ -715,7 +701,7 @@ export function EstimateEditorPage() {
         count={est.items.filter((i) => i.type === 'WORK').length}
         loading={duplicate.isPending}
         onClose={() => setMarkupOpen(false)}
-        onConfirm={(markupPercent) => {
+        onConfirm={(percent, discount) => {
           duplicate.mutate(
             // The name is composed HERE, not on the server, because «Кошторис від 10 липня» is a
             // display fallback the client invents for an estimate whose stored name is null. The
@@ -724,10 +710,11 @@ export function EstimateEditorPage() {
             //
             // No itemIds: the server reads that as every WORK line and leaves materials at cost,
             // which is the foreman's normal case. Materials are bought at their price and passed
-            // through — marking them up by default would inflate a client's estimate unasked.
+            // through — re-pricing them by default would move a client's estimate unasked.
             {
-              markupPercent,
-              name: `${estimateName(est.name, est.createdAt)} +${markupPercent}%`,
+              markupPercent: percent,
+              discount,
+              name: `${estimateName(est.name, est.createdAt)} ${discount ? '-' : '+'}${percent}%`,
             },
             {
               onSuccess: (created) => {
@@ -758,21 +745,42 @@ function MarkupSheet({
   count: number;
   loading: boolean;
   onClose: () => void;
-  onConfirm: (percent: number) => void;
+  onConfirm: (percent: number, discount: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { online, offlineTitle } = useOnlineGuard();
+  // Націнка (up) or Уцінка (down) — the same copy, only the sign of the change differs.
+  const [discount, setDiscount] = useState(false);
   const [value, setValue] = useState('15');
   const percent = Number(value.replace(',', '.'));
-  const valid = Number.isFinite(percent) && percent >= 0 && percent <= 1000;
+  // A discount cannot exceed 100 % (it would drive prices to zero or below); a markup is open-ended.
+  const max = discount ? 100 : 1000;
+  const valid = Number.isFinite(percent) && percent >= 0 && percent <= max;
 
   return (
     <Modal open={open} onClose={onClose} title={t('estimate.duplicateWithMarkup')}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">{t('estimate.markupHint', { count })}</p>
+        <div className="flex gap-1 rounded-xl bg-surface-sunken p-1">
+          {[false, true].map((d) => (
+            <button
+              key={String(d)}
+              type="button"
+              onClick={() => setDiscount(d)}
+              className={
+                'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ' +
+                (discount === d ? 'bg-surface text-primary shadow-card' : 'text-muted')
+              }
+            >
+              {d ? t('estimate.discount') : t('estimate.markup')}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-muted">
+          {t(discount ? 'estimate.discountHint' : 'estimate.markupHint', { count })}
+        </p>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-muted">
-            {t('estimate.markupPercent')}
+            {t(discount ? 'estimate.discountPercent' : 'estimate.markupPercent')}
           </span>
           <input
             type="text"
@@ -787,7 +795,7 @@ function MarkupSheet({
           fullWidth
           loading={loading}
           disabled={!valid || count === 0 || !online}
-          onClick={() => onConfirm(percent)}
+          onClick={() => onConfirm(percent, discount)}
         >
           {t('estimate.duplicateCreate')}
         </Button>
@@ -825,6 +833,157 @@ function DepositRow({ est, onEdit }: { est: EstimateResponse; onEdit?: () => voi
   ) : (
     <div className={cls}>{content}</div>
   );
+}
+
+/**
+ * Mobile summary — a bottom sheet that peeks with just «До сплати» and taps / swipes up to about a
+ * third of the screen to show the breakdown (works, materials, загальна знижка, deposit). It replaces
+ * the always-on bar that ate the bottom of every list.
+ *
+ * <p>The peek is LEFT-aligned and the expanded content reserves a tall bottom padding on purpose: the
+ * FAB is a separate fixed element (`bottom-20 right-4 z-50`) that floats ABOVE this sheet in that
+ * empty right/bottom «dock». So the FAB never covers a number, and — because it is anchored to the
+ * viewport, not to the sheet — it does not jump up when the sheet expands.</p>
+ */
+function MobileSummarySheet({
+  est,
+  onEditDeposit,
+}: {
+  est: EstimateResponse;
+  onEditDeposit?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const dragStartY = useRef<number | null>(null);
+
+  // The only line that can be negative is a «−% від кошторису»; their sum is the загальна знижка to
+  // flag. It is NOT subtracted again — est.total already includes it.
+  const discount = est.items.reduce((sum, i) => (i.lineTotal < 0 ? sum + i.lineTotal : sum), 0);
+  const hasDiscount = discount < 0;
+
+  const onPointerDown = (e: ReactPointerEvent) => { dragStartY.current = e.clientY; };
+  const onPointerUp = (e: ReactPointerEvent) => {
+    if (dragStartY.current == null) return;
+    const dy = e.clientY - dragStartY.current;
+    dragStartY.current = null;
+    // A real swipe wins; a small movement falls through to the onClick toggle.
+    if (dy < -24) setExpanded(true);
+    else if (dy > 24) setExpanded(false);
+  };
+
+  return (
+    <>
+      {/* Scrim while expanded — dims the list and taps to collapse. */}
+      {expanded && (
+        <button
+          type="button"
+          aria-label={t('common.close')}
+          onClick={() => setExpanded(false)}
+          className="fixed inset-0 z-30 bg-ink/40 lg:hidden"
+        />
+      )}
+      <div className="fixed inset-x-0 bottom-0 z-40 rounded-t-2xl bg-ink pb-[env(safe-area-inset-bottom)] text-white shadow-card-lg lg:hidden">
+        <div onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+          <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-white/25" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="flex w-full flex-col items-start px-5 pb-3 pt-1 text-left"
+          >
+            <span className="text-xs text-white/60">{t('estimate.toPay')}</span>
+            <span className="flex items-center gap-2">
+              <span data-testid="estimate-total" className="text-2xl font-extrabold tracking-tight">
+                {formatMoney(est.total)}
+              </span>
+              {hasDiscount && !expanded && (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/75">
+                  {t('estimate.summaryDiscount')} {formatMoney(Math.abs(discount))}
+                </span>
+              )}
+            </span>
+          </button>
+        </div>
+
+        {/* The big bottom padding IS the FAB dock — content stops well above the floating button. */}
+        {expanded && (
+          <div className="px-5 pb-[9.5rem]">
+            <div className="border-t border-white/10 pt-3">
+              <TypeBreakdown items={est.items} type="WORK" subtotal={est.worksSubtotal} label={t('estimate.works')} />
+              <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
+              <AdjustNote items={est.items} />
+            </div>
+            <DepositRow est={est} onEdit={onEditDeposit} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * A works/materials row in the dark summary (card + sheet), with the estimate-level «% від кошторису»
+ * broken out as a small sub-line («Надбавка 12 % +1 776» / «Знижка 5 % −725»). The main figure is the
+ * BASE (the type's subtotal minus that adjustment), so base + adjustment reconciles to the subtotal the
+ * total is built from — which is exactly what removes the «14 801 vs 16 577» confusion.
+ */
+function TypeBreakdown({ items, type, subtotal, label }: {
+  items: EstimateItemResponse[];
+  type: 'WORK' | 'MATERIAL';
+  subtotal: number;
+  label: string;
+}) {
+  const { t } = useTranslation();
+  const totalLines = items.filter(
+    (i) => i.type === type && i.unit === 'PERCENT' && (i.percentBaseKind ?? 'MANUAL') === 'TOTAL',
+  );
+  const adjust = totalLines.reduce((s, i) => s + i.lineTotal, 0);
+  // The percent is shown only when there is exactly ONE such line (the case the validation enforces);
+  // a legacy estimate with several shows just the summed amount, no single percent.
+  const percent = totalLines.length === 1 ? totalLines[0].quantity : null;
+  const base = Math.round((subtotal - adjust) * 100) / 100;
+  return (
+    <div className="mb-2.5">
+      <div className="flex justify-between text-[13px] text-white/75">
+        <span>{label}</span>
+        <span>{formatMoney(base)}</span>
+      </div>
+      {adjust !== 0 && (
+        <div className="mt-0.5 flex justify-between pl-3 text-xs text-white/55">
+          <span>
+            {t(adjust > 0 ? 'estimate.summaryMarkup' : 'estimate.summaryDiscount')}
+            {percent != null ? ` ${formatNumber(Math.abs(percent), 2)}%` : ''}
+          </span>
+          <span>{adjust > 0 ? `+${formatMoney(adjust)}` : formatMoney(adjust)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Estimate-wide «Від кошторису» totals, folded across both types (markup ≥ 0, discount ≤ 0). */
+function adjustTotals(items: EstimateItemResponse[]): { markup: number; discount: number } {
+  let markup = 0;
+  let discount = 0;
+  for (const i of items) {
+    if (i.unit === 'PERCENT' && (i.percentBaseKind ?? 'MANUAL') === 'TOTAL') {
+      if (i.lineTotal > 0) markup += i.lineTotal;
+      else if (i.lineTotal < 0) discount += i.lineTotal;
+    }
+  }
+  return { markup, discount };
+}
+
+/** The small grand-total note under «До сплати»: «Надбавка 1 776 ₴ · Знижка 725 ₴». */
+function AdjustNote({ items }: { items: EstimateItemResponse[] }) {
+  const { t } = useTranslation();
+  const { markup, discount } = adjustTotals(items);
+  if (markup <= 0 && discount >= 0) return null;
+  const parts = [
+    markup > 0 ? `${t('estimate.summaryMarkup')} ${formatMoney(markup)}` : null,
+    discount < 0 ? `${t('estimate.summaryDiscount')} ${formatMoney(-discount)}` : null,
+  ].filter(Boolean);
+  return <div className="text-xs text-white/55">{parts.join(' · ')}</div>;
 }
 
 function ClientBanner({ project }: { project: ProjectResponse }) {
@@ -870,18 +1029,13 @@ function SummaryCard({
           </div>
         </div>
       )}
-      <div className="mb-2.5 flex justify-between text-[13px] text-white/75">
-        <span>{t('estimate.works')}</span>
-        <span>{formatMoney(est.worksSubtotal)}</span>
-      </div>
-      <div className="mb-2.5 flex justify-between text-[13px] text-white/75">
-        <span>{t('estimate.materials')}</span>
-        <span>{formatMoney(est.materialsSubtotal)}</span>
-      </div>
+      <TypeBreakdown items={est.items} type="WORK" subtotal={est.worksSubtotal} label={t('estimate.works')} />
+      <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
       <div className="mt-1 border-t border-white/10 pt-3 text-[13px] font-semibold">{t('estimate.toPay')}</div>
       <div data-testid="estimate-total" className="my-1.5 text-2xl font-extrabold tracking-tight">
         {formatMoney(est.total)}
       </div>
+      <AdjustNote items={est.items} />
       {est.depositAmount != null ? (
         <div className="mt-2 border-t border-white/10 pt-2">
           <div className="flex justify-between text-[13px] text-white/75">

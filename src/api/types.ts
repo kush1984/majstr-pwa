@@ -359,7 +359,10 @@ export interface EstimateItemResponse {
  */
 export interface EstimateDuplicateRequest {
   name?: string;
+  /** The MAGNITUDE of the change, ≥ 0. `discount` decides the sign. */
   markupPercent: number;
+  /** false = markup (prices up), true = discount (prices down). */
+  discount?: boolean;
   itemIds?: string[];
 }
 

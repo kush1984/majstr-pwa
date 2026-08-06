@@ -80,34 +80,121 @@ export function EstimateItemsBoard({
   };
 }) {
   const { t } = useTranslation();
-  const sections = useMemo(() => toSections(items), [items]);
   // Built once per render: a percentage row names the line it is measured against.
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  /** A cross-section move waiting on the master's yes — see the dialog at the bottom. */
-  const [pending, setPending] = useState<{ sections: Section<EstimateItemResponse>[]; from: string; to: string } | null>(null);
+  // Split by TYPE first, like the PDF's РОБОТИ / МАТЕРІАЛИ sections. Each type gets its OWN
+  // DndContext below, which is what makes the works↔materials boundary impossible to cross by
+  // dragging: a drag started in one context can only ever drop on that context's droppables, so a
+  // line's type can never change by a drag, and a whole category can't jump the divide either.
+  const works = useMemo(() => items.filter((i) => i.type === 'WORK'), [items]);
+  const materials = useMemo(() => items.filter((i) => i.type === 'MATERIAL'), [items]);
+  const worksSections = useMemo(() => toSections(works), [works]);
+  const materialsSections = useMemo(() => toSections(materials), [materials]);
+  /** A cross-category move waiting on the master's yes — see the dialog at the bottom. */
+  const [pending, setPending] = useState<{ arranged: EstimateItemResponse[]; from: string; to: string } | null>(null);
 
+  // The saved order is always works-first: dragging within a type reorders that type, the other is
+  // carried through untouched, and the flat result mirrors the PDF (all works, then all materials).
+  const combine = (type: 'WORK' | 'MATERIAL', next: Section<EstimateItemResponse>[]) =>
+    type === 'WORK'
+      ? [...flatten(next), ...flatten(materialsSections)]
+      : [...flatten(worksSections), ...flatten(next)];
+
+  const onDragEndFor = (type: 'WORK' | 'MATERIAL', sections: Section<EstimateItemResponse>[]) =>
+    ({ active, over }: DragEndEvent) => {
+      const outcome = resolveDrag(sections, String(active.id), over ? String(over.id) : null);
+      if (outcome.kind === 'apply') {
+        onArrange(combine(type, outcome.sections));
+      } else if (outcome.kind === 'confirm') {
+        setPending({
+          arranged: combine(type, outcome.sections),
+          from: label(outcome.from, t),
+          to: label(outcome.to, t),
+        });
+      }
+    };
+
+  // Headings only when the estimate actually has both — a works-only sheet (the common case, the
+  // catalog is works-only) reads exactly as before, no «РОБОТИ» banner over a single block.
+  const bothTypes = works.length > 0 && materials.length > 0;
+
+  return (
+    <>
+      {works.length > 0 && (
+        <TypeGroup
+          heading={bothTypes ? t('estimate.works') : null}
+          sections={worksSections}
+          startNumber={1}
+          signed={signed}
+          onEdit={onEdit}
+          selection={selection}
+          byId={byId}
+          onDragEnd={onDragEndFor('WORK', worksSections)}
+        />
+      )}
+      {materials.length > 0 && (
+        <TypeGroup
+          heading={bothTypes ? t('estimate.materials') : null}
+          sections={materialsSections}
+          startNumber={works.length + 1}
+          signed={signed}
+          onEdit={onEdit}
+          selection={selection}
+          byId={byId}
+          onDragEnd={onDragEndFor('MATERIAL', materialsSections)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={pending !== null}
+        title={t('estimate.moveSectionTitle')}
+        message={t('estimate.moveSectionMessage', { from: pending?.from, to: pending?.to })}
+        confirmLabel={t('estimate.moveSectionConfirm')}
+        onConfirm={() => {
+          if (pending) onArrange(pending.arranged);
+          setPending(null);
+        }}
+        onClose={() => setPending(null)}
+      />
+    </>
+  );
+}
+
+/**
+ * One type's block: the РОБОТИ / МАТЕРІАЛИ heading (with its subtotal), then that type's category
+ * sections inside their OWN DndContext. The separate context is the whole point — it fences dragging
+ * to this type, so a line or a category can never cross into the other.
+ */
+function TypeGroup({
+  heading, sections, startNumber, signed, onEdit, selection, byId, onDragEnd,
+}: {
+  /** The section heading, or null to render the block bare (a single-type estimate). */
+  heading: string | null;
+  sections: Section<EstimateItemResponse>[];
+  /** Position number of this group's first line, so numbering runs 1..N across both groups. */
+  startNumber: number;
+  signed: boolean;
+  onEdit: (item: EstimateItemResponse) => void;
+  selection?: Selection;
+  byId: Map<string, EstimateItemResponse>;
+  onDragEnd: (e: DragEndEvent) => void;
+}) {
   const sensors = useSensors(
     // 8px before a drag begins: a tap on the grip still registers as a tap, and a swipe to scroll
     // is not stolen. The grip also sets touch-action:none so the browser does not scroll instead.
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  const onDragEnd = ({ active, over }: DragEndEvent) => {
-    const outcome = resolveDrag(sections, String(active.id), over ? String(over.id) : null);
-    if (outcome.kind === 'apply') {
-      onArrange(flatten(outcome.sections));
-    } else if (outcome.kind === 'confirm') {
-      setPending({
-        sections: outcome.sections,
-        from: label(outcome.from, t),
-        to: label(outcome.to, t),
-      });
-    }
-  };
+  const subtotal = sections.reduce((sum, s) => sum + s.items.reduce((n, i) => n + i.lineTotal, 0), 0);
 
   return (
-    <>
+    <div className="mb-2">
+      {heading && (
+        <div className="mb-2 mt-1 flex items-center justify-between border-b border-border pb-1.5">
+          <span className="text-sm font-extrabold uppercase tracking-wide text-primary">{heading}</span>
+          <span className="text-sm font-bold text-muted">{formatMoney(subtotal)}</span>
+        </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={collisionDetection}
@@ -115,14 +202,13 @@ export function EstimateItemsBoard({
         onDragEnd={onDragEnd}
       >
         <SortableContext items={sections.map(sectionId)} strategy={verticalListSortingStrategy}>
-          {/* The running number is computed HERE, across sections, not inside one: a master asked
-              for it to check how many positions he has, and a count that restarts at every
-              category cannot answer that. The last number on screen is the total. */}
+          {/* The running number is continued from startNumber, across sections AND across the two
+              groups, so the last number on screen is still the estimate's position count. */}
           {sections.map((section, s) => (
             <SectionBlock
               key={sectionId(section)}
               section={section}
-              firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, 1)}
+              firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, startNumber)}
               signed={signed}
               onEdit={onEdit}
               selection={selection}
@@ -131,19 +217,7 @@ export function EstimateItemsBoard({
           ))}
         </SortableContext>
       </DndContext>
-
-      <ConfirmDialog
-        open={pending !== null}
-        title={t('estimate.moveSectionTitle')}
-        message={t('estimate.moveSectionMessage', { from: pending?.from, to: pending?.to })}
-        confirmLabel={t('estimate.moveSectionConfirm')}
-        onConfirm={() => {
-          if (pending) onArrange(flatten(pending.sections));
-          setPending(null);
-        }}
-        onClose={() => setPending(null)}
-      />
-    </>
+    </div>
   );
 }
 

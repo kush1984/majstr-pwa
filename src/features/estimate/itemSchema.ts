@@ -6,6 +6,10 @@ import { decimalString } from '@/lib/decimal.ts';
 /**
  * Manual estimate line item — also used for editing an existing item
  * (saveToCatalog is simply ignored / hidden in edit mode).
+ *
+ * <p>The percent field always holds a POSITIVE magnitude: a «Від кошторису» line may be a discount,
+ * expressed by the +/− toggle in ItemForm which flips the sign at submit time — so the master never
+ * has to type a minus (the mobile decimal keypad has no minus key). «Від позиції» is always +.</p>
  */
 export const itemFormSchema = z
   .object({
@@ -17,11 +21,10 @@ export const itemFormSchema = z
     category: z.string().max(100, i18n.t('validation.categoryTooLongShort')),
     unit: z.enum(UNITS),
     quantity: decimalString(i18n.t('validation.enterQuantity')),
-    // Validated conditionally below, NOT with decimalString: a «%» line's price field is a base
-    // sum that only applies to the MANUAL base — for a POSITION/TOTAL base it is HIDDEN, so a
-    // required-here rule would block submit on a field the master can't see (and silently, since
-    // handleSubmit just doesn't fire). The MANUAL-sum requirement is enforced in ItemForm, where
-    // the base kind (component state) is known.
+    // Validated conditionally below, NOT with decimalString: a «%» line has no price of its own
+    // (the field is HIDDEN — «Від позиції»/«Від кошторису» measure another sum), so a required-here
+    // rule would block submit on a field the master can't see (and silently, since handleSubmit just
+    // doesn't fire). ItemForm sends unitPrice = 0 for a percent line.
     unitPrice: z.string(),
     saveToCatalog: z.boolean(),
   })

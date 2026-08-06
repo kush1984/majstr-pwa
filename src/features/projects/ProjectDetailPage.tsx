@@ -573,7 +573,7 @@ function EstimateRow({
           duplicated pair, which holds either way. */}
       {pairHint && (
         <p className="border-t border-border px-3.5 py-2 text-[11px] leading-snug text-muted">
-          ℹ️ {t(pairHint, { percent: summary.markupPercent })}
+          ℹ️ {t(pairHint, { percent: Math.abs(summary.markupPercent ?? 0) })}
         </p>
       )}
     </div>

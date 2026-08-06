@@ -6,6 +6,10 @@ describe('economy hint on an estimate row', () => {
     expect(economyPairHint({ markupPercent: 15 }, false)).toBe('estimate.duplicateMarkupHint');
   });
 
+  it('explains the discount on a discounted copy (signed negative percent)', () => {
+    expect(economyPairHint({ markupPercent: -15 }, false)).toBe('estimate.duplicateDiscountHint');
+  });
+
   it('explains the empty box on the estimate a copy was made from', () => {
     expect(economyPairHint({ markupPercent: null }, true)).toBe('estimate.crewPricesHint');
   });

@@ -13,8 +13,13 @@ import type { EstimateSummary } from '@/api/types.ts';
 export function economyPairHint(
   summary: Pick<EstimateSummary, 'markupPercent'>,
   isCrewSource: boolean,
-): 'estimate.duplicateMarkupHint' | 'estimate.crewPricesHint' | null {
-  if (summary.markupPercent != null) return 'estimate.duplicateMarkupHint';
+): 'estimate.duplicateMarkupHint' | 'estimate.duplicateDiscountHint' | 'estimate.crewPricesHint' | null {
+  // markupPercent is SIGNED: negative for a discount (уцінка). The percent shown is its magnitude.
+  if (summary.markupPercent != null) {
+    return summary.markupPercent < 0
+      ? 'estimate.duplicateDiscountHint'
+      : 'estimate.duplicateMarkupHint';
+  }
   if (isCrewSource) return 'estimate.crewPricesHint';
   return null;
 }

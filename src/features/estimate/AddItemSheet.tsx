@@ -37,17 +37,15 @@ const TYPE_FILTERS: { value: TypeFilter; labelKey: string }[] = [
 export function AddItemSheet({
   estimateId,
   siblings = [],
-  estimateTotal = 0,
   objectId,
   nextSortOrder,
   open,
   onClose,
 }: {
   estimateId: string;
-  /** The estimate's existing lines — the base picker for a new «%» line. */
+  /** The estimate's existing lines — the base picker for a new «%» line, and the source of the
+   *  «% від кошторису» base (computed inside ItemForm to match the server). */
   siblings?: EstimateItemResponse[];
-  /** The estimate's current total, for the live «% від усього кошторису» figure. */
-  estimateTotal?: number;
   /** The object (project) id — enables "Вибрати з замірів" in the manual tab. */
   objectId?: string;
   nextSortOrder: number;
@@ -98,7 +96,6 @@ export function AddItemSheet({
             <ItemForm
               objectId={objectId}
               siblings={siblings}
-              estimateTotal={estimateTotal}
               showSaveToCatalog
               enableAutocomplete
               submitLabel={t('common.add')}

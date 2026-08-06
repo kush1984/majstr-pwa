@@ -28,7 +28,6 @@ import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx
 export function ItemForm({
   initial,
   siblings = [],
-  estimateTotal = 0,
   objectId,
   showSaveToCatalog = false,
   enableAutocomplete = false,
@@ -40,15 +39,14 @@ export function ItemForm({
 }: {
   initial?: EstimateItemResponse | null;
   /**
-   * The estimate's other lines — the base picker for a «%» line.
+   * The estimate's other lines — the base picker for a «%» line, AND the source of the
+   * «% від кошторису» base (computed here, not passed in, so it always matches the server).
    *
    * <p>ORDINARY lines only reach the picker (filtered below). That filter IS the cycle protection:
    * a percentage can never point at a percentage, so no chain of them can close on itself, and
    * there is no graph to walk.</p>
    */
   siblings?: EstimateItemResponse[];
-  /** The estimate's current total — shown live under a «% від усього кошторису» line. */
-  estimateTotal?: number;
   /** The object (project) id — enables "Вибрати з замірів" when it has measurements.
    *  Pass undefined for a SIGNED estimate (measurements can't change a signed line). */
   objectId?: string;
@@ -70,17 +68,26 @@ export function ItemForm({
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
   const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // «%» is a share OF something. Default MANUAL — the shape «%» already had, a sum in the price
-  // field — so a line that never picks a base still behaves the way it reads.
-  const [baseKind, setBaseKind] = useState<PercentBaseKind>(initial?.percentBaseKind ?? 'MANUAL');
+  // «%» is a share OF something: «Від позиції» (a markup on one line) or «Від кошторису» (a share of
+  // the works- or materials-subtotal). Default POSITION — a legacy MANUAL/null line opens as POSITION
+  // too (MANUAL is gone from the product); a detached one keeps its frozen amount and says so.
+  const [baseKind, setBaseKind] = useState<PercentBaseKind>(
+    initial?.percentBaseKind === 'TOTAL' ? 'TOTAL' : 'POSITION',
+  );
   const [baseItemId, setBaseItemId] = useState<string | null>(initial?.percentBaseItemId ?? null);
   // A POSITION «%» line must name the position it's a share of — surfaced inline, not swallowed.
   const [baseError, setBaseError] = useState(false);
+  // Sign of a «Від кошторису» percent. The field holds a POSITIVE magnitude; this +/− toggle carries
+  // the sign (the mobile decimal keypad has no minus), so a «−» is a discount off the subtotal. Only
+  // «Від кошторису» may go negative — «Від позиції» is always a markup. An existing line opens on the
+  // right side by reading the sign of its stored percent.
+  const [percentMinus, setPercentMinus] = useState<boolean>(
+    initial?.unit === 'PERCENT' && (initial.quantity ?? 0) < 0,
+  );
   const {
     register,
     control,
     setValue,
-    setError,
     watch,
     handleSubmit,
     formState: { errors },
@@ -94,8 +101,11 @@ export function ItemForm({
           unit: initial.unit,
           // A 0 (e.g. an imported line the master hasn't filled) opens EMPTY, not "0",
           // so there's nothing to erase on mobile. Save still requires a positive number
-          // (itemFormSchema → decimalString: empty and 0 are both rejected).
-          quantity: initial.quantity ? String(initial.quantity) : '',
+          // (itemFormSchema → decimalString: empty and 0 are both rejected). A «%» line stores its
+          // percent SIGNED; the field shows the magnitude and the toggle carries the sign.
+          quantity: initial.quantity
+            ? String(initial.unit === 'PERCENT' ? Math.abs(initial.quantity) : initial.quantity)
+            : '',
           unitPrice: initial.unitPrice ? String(initial.unitPrice) : '',
           saveToCatalog: false,
         }
@@ -120,21 +130,35 @@ export function ItemForm({
   // штука / кг / % / точка a size calc means nothing, so the tool is hidden there entirely.
   const canMeasure = watchedUnit === 'M' || watchedUnit === 'M2'
     || watchedUnit === 'LINEAR_METER' || watchedUnit === 'M3';
-  const pct = parseDecimal(watch('quantity')) || 0;
-  const manualBase = parseDecimal(watch('unitPrice')) || 0;
+  const watchedType = watch('type');
+  // At most ONE «Від кошторису» per type: a markup AND a discount on the same works/materials is not a
+  // real-world case and compounds confusingly. A second one is blocked; editing the existing one is
+  // fine (it excludes itself).
+  const sameTypeTotalExists = isPercent && baseKind === 'TOTAL' && siblings.some(
+    (s) => s.id !== initial?.id
+      && s.type === watchedType
+      && s.unit === 'PERCENT'
+      && (s.percentBaseKind ?? 'MANUAL') === 'TOTAL',
+  );
+  // The field is a positive magnitude; a «Від кошторису» line may carry a «−» sign (a discount).
+  const pct = (isPercent && baseKind === 'TOTAL' && percentMinus ? -1 : 1)
+    * (parseDecimal(watch('quantity')) || 0);
   const baseLine = siblings.find((s) => s.id === baseItemId) ?? null;
-  const baseAmount = baseKind === 'MANUAL'
-    ? manualBase
-    : baseKind === 'TOTAL'
-      ? estimateTotal
-      : (baseLine?.lineTotal ?? 0);
+  // «Від кошторису» base = the subtotal of every line of THIS line's type that is not itself a
+  // «% від кошторису» — the exact rule EstimateMath uses server-side (a WORK percent measures works,
+  // a MATERIAL percent materials, and neither compounds). Passing the full est.total instead made
+  // the preview disagree with the saved line — the «косячок» the master spotted.
+  const totalBase = siblings
+    .filter((s) => s.type === watchedType
+      && !(s.unit === 'PERCENT' && (s.percentBaseKind ?? 'MANUAL') === 'TOTAL'))
+    .reduce((sum, s) => sum + (s.lineTotal ?? 0), 0);
+  const baseAmount = baseKind === 'TOTAL' ? totalBase : (baseLine?.lineTotal ?? 0);
   const percentPreview = (() => {
     const result = formatMoney(Math.round(((baseAmount * pct) / 100) * 100) / 100);
-    if (baseKind === 'MANUAL') {
-      return t('estimate.percentPreviewManual', { pct, sum: formatMoney(manualBase), result });
-    }
     if (baseKind === 'TOTAL') {
-      return t('estimate.percentPreviewTotal', { pct, base: formatMoney(estimateTotal), result });
+      const scope = t(watchedType === 'WORK'
+        ? 'estimate.percentScopeWorks' : 'estimate.percentScopeMaterials');
+      return t('estimate.percentPreviewTotal', { pct, scope, base: formatMoney(totalBase), result });
     }
     return baseLine
       ? t('estimate.percentPreviewItem', {
@@ -145,23 +169,24 @@ export function ItemForm({
 
   const submit = handleSubmit((v) => {
     // «%» validation the schema can't do — the base kind lives in component state, not the form.
-    if (v.unit === 'PERCENT') {
-      if (baseKind === 'MANUAL' && !(parseDecimal(v.unitPrice) > 0)) {
-        setError('unitPrice', { message: t('validation.enterPrice') });
-        return;
-      }
-      if (baseKind === 'POSITION' && !baseItemId) {
-        setBaseError(true);
-        return;
-      }
+    if (v.unit === 'PERCENT' && baseKind === 'POSITION' && !baseItemId) {
+      setBaseError(true);
+      return;
     }
+    if (v.unit === 'PERCENT' && baseKind === 'TOTAL' && sameTypeTotalExists) {
+      return; // one «Від кошторису» per type — the inline warning explains why
+    }
+    const isTotalPercent = v.unit === 'PERCENT' && baseKind === 'TOTAL';
     const req: EstimateItemRequest = {
       type: v.type,
       name: v.name.trim(),
       category: v.category.trim() || undefined,
       unit: v.unit,
-      quantity: parseDecimal(v.quantity),
-      unitPrice: parseDecimal(v.unitPrice),
+      // The field is a positive magnitude; a «Від кошторису» «−» makes the percent negative (a
+      // discount off the subtotal). «Від позиції» is always a positive markup.
+      quantity: isTotalPercent && percentMinus ? -parseDecimal(v.quantity) : parseDecimal(v.quantity),
+      // A «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure another sum.
+      unitPrice: v.unit === 'PERCENT' ? 0 : parseDecimal(v.unitPrice),
       measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
       quantityManual,
       // Only a percentage line records a base; anything else sends none, whatever is in state.
@@ -258,11 +283,13 @@ export function ItemForm({
             }}
           />
         </FormField>
-        {/* A percentage of a LINE or of the TOTAL has no price of its own — the field would ask
-            for a number that means nothing. Only «своя сума» keeps it, relabelled for what it is. */}
-        {!isPercent || baseKind === 'MANUAL' ? (
+        {/* A «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure another
+            sum, so the field would ask for a number that means nothing. */}
+        {isPercent ? (
+          <div />
+        ) : (
           <FormField
-            label={isPercent ? t('estimate.percentBaseSum') : t('estimate.unitPrice')}
+            label={t('estimate.unitPrice')}
             htmlFor="it-price"
             required
             error={errors.unitPrice?.message}
@@ -275,8 +302,6 @@ export function ItemForm({
               {...register('unitPrice')}
             />
           </FormField>
-        ) : (
-          <div />
         )}
       </div>
 
@@ -284,17 +309,11 @@ export function ItemForm({
         <div className="space-y-2 rounded-xl border border-border bg-surface-sunken p-3">
           <p className="text-xs font-semibold text-muted">{t('estimate.percentBase')}</p>
           <div className="flex flex-wrap gap-2">
-            {(['MANUAL', 'POSITION', 'TOTAL'] as PercentBaseKind[]).map((kind) => (
+            {(['POSITION', 'TOTAL'] as const).map((kind) => (
               <button
                 key={kind}
                 type="button"
-                onClick={() => {
-                  setBaseKind(kind);
-                  setBaseError(false);
-                  // The price field is hidden for a non-MANUAL base — drop any sum left in it so a
-                  // stale figure can't ride along on the request.
-                  if (kind !== 'MANUAL') setValue('unitPrice', '');
-                }}
+                onClick={() => { setBaseKind(kind); setBaseError(false); }}
                 className={cn(
                   'min-h-[44px] rounded-xl border px-3 text-sm font-semibold',
                   baseKind === kind
@@ -302,7 +321,7 @@ export function ItemForm({
                     : 'border-border text-muted',
                 )}
               >
-                {t('estimate.percentBase' + (kind === 'MANUAL' ? 'Manual' : kind === 'POSITION' ? 'Item' : 'Total'))}
+                {t(kind === 'POSITION' ? 'estimate.percentBaseItem' : 'estimate.percentBaseTotal')}
               </button>
             ))}
           </div>
@@ -329,6 +348,35 @@ export function ItemForm({
                 <p className="text-xs text-danger">{t('estimate.percentPickBaseError')}</p>
               )}
             </>
+          )}
+
+          {/* «Від кошторису» may add to or take off the subtotal — the master picks the sign, no
+              «націнка/знижка» wording, just + / −. «Від позиції» is always a markup, so no toggle. */}
+          {baseKind === 'TOTAL' && (
+            <div className="flex gap-1 rounded-xl bg-surface p-1">
+              {[false, true].map((minus) => (
+                <button
+                  key={String(minus)}
+                  type="button"
+                  onClick={() => setPercentMinus(minus)}
+                  className={cn(
+                    'flex-1 rounded-lg py-2 text-base font-bold transition-colors',
+                    percentMinus === minus ? 'bg-brand-soft/40 text-primary shadow-card' : 'text-muted',
+                  )}
+                >
+                  {minus ? '−' : '+'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {baseKind === 'TOTAL' && sameTypeTotalExists && (
+            <p className="text-xs text-danger">
+              {t('estimate.percentTotalDuplicate', {
+                scope: t(watchedType === 'WORK'
+                  ? 'estimate.percentScopeWorks' : 'estimate.percentScopeMaterials'),
+              })}
+            </p>
           )}
 
           {/* The live figure, because a percentage the master cannot check is a percentage he will
@@ -406,7 +454,7 @@ export function ItemForm({
             {t('common.delete')}
           </Button>
         )}
-        <Button type="submit" fullWidth loading={submitting}>
+        <Button type="submit" fullWidth loading={submitting} disabled={sameTypeTotalExists}>
           {submitLabel}
         </Button>
       </div>
