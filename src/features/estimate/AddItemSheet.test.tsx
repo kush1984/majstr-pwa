@@ -256,7 +256,7 @@ describe('AddItemSheet — «%» line with a base (regression: submit was silent
     fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
 
     const preview = await screen.findByText(/від робіт.*=/);
-    const text = preview.textContent!.replace(/\s/g, '');
+    const text = (preview.textContent ?? '').replace(/\s/g, '');
     expect(text).toContain('10000'); // base = the work only
     expect(text).toContain('=1000'); // 10 % of 10 000
     expect(text).not.toContain('13000'); // NOT est.total (10 000 + 3 000)
@@ -288,7 +288,7 @@ describe('AddItemSheet — «%» line with a base (regression: submit was silent
     fireEvent.click(screen.getByRole('button', { name: 'Від кошторису' }));
 
     const preview = await screen.findByText(/від матеріалів.*=/);
-    const text = preview.textContent!.replace(/\s/g, '');
+    const text = (preview.textContent ?? '').replace(/\s/g, '');
     expect(text).toContain('2000'); // base = the material only
     expect(text).toContain('=200'); // 10 % of 2 000
     expect(text).not.toContain('12000'); // NOT works + materials
