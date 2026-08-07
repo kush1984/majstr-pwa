@@ -4,6 +4,7 @@ import { messageLinkApi } from '@/api/messageLink.ts';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnline } from '@/lib/useOnline.ts';
+import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 
 /**
  * "Copy the message link" — the whole flow in one place, because it is offered from two: the object's
@@ -25,13 +26,13 @@ export function useMessageLink(projectId: string) {
     }
     setBusy(true);
     try {
-      const { url } = await messageLinkApi.state(projectId);
       // The clipboard can legitimately refuse (no permission, insecure context, Safari's focus rules)
       // while the link itself was minted fine — so never claim "скопійовано" unless it landed. Same
       // reasoning as the portal sheet.
-      const copied = navigator.clipboard
-        ? await navigator.clipboard.writeText(url).then(() => true, () => false)
-        : false;
+      const { copied, value: url } = await copyWhenReady(async () => {
+        const state = await messageLinkApi.state(projectId);
+        return state.url;
+      });
       if (copied) toast.success(t('messageLink.copied'));
       else toast.error(t('messageLink.copyFailed', { url }));
     } catch (err) {

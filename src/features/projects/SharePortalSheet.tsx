@@ -7,6 +7,7 @@ import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
+import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { portalApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
@@ -129,15 +130,15 @@ export function SharePortalSheet({
   const onCopy = async () => {
     setBusy('copy');
     try {
-      const state = await portalApi.update(project.id, [...ticked]);
       // Clipboard can legitimately fail (no permission, non-secure context,
       // Safari focus rules) while the portal itself published fine — never
       // show "скопійовано" unless it actually landed in the clipboard.
-      const copied = state.url && navigator.clipboard
-        ? await navigator.clipboard.writeText(state.url).then(() => true, () => false)
-        : false;
+      const { copied, value } = await copyWhenReady(async () => {
+        const state = await portalApi.update(project.id, [...ticked]);
+        return state.url ?? '';
+      });
       invalidateAfterShare();
-      if (copied) {
+      if (copied && value) {
         toast.success(t('estimate.linkCopied'));
         onClose();
       } else {

@@ -172,12 +172,24 @@ export function EstimateEditorPage() {
   // direct path (no receipts) and the picker sheet.
   const runPdf = async (receiptIds: string[]) => {
     setPdfLoading(true);
+    // Reserve a tab synchronously, before any await — iOS Safari treats the click's "user
+    // activation" as spent once an async gap (the PDF fetch) happens first, and silently drops a
+    // window.open() called after it (Android/desktop tolerate this fine, which is why it worked
+    // there). Filling in the reserved tab's location once the blob is ready keeps the same
+    // Android/desktop behaviour while fixing iOS. `reserved` is null if even the blank open was
+    // blocked — falls back to the original open-after-fetch attempt, same as before this fix.
+    const reserved = window.open('', '_blank');
     try {
       const { url, revoke } = await estimatesApi.fetchPdf(id, receiptIds);
-      window.open(url, '_blank');
+      if (reserved) {
+        reserved.location.href = url;
+      } else {
+        window.open(url, '_blank');
+      }
       setTimeout(revoke, 60_000);
       setPdfSheetOpen(false);
     } catch (err) {
+      reserved?.close();
       const failure = toAppError(err);
       if (failure.code === 'EMAIL_NOT_VERIFIED') {
         setEmailGateOpen(true);
