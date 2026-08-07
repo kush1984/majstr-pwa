@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Chip } from '@/components/Chip.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -14,20 +15,21 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
 import { formatMoney } from '@/lib/format.ts';
-import { TRADE_EMOJI } from '@/lib/labels.ts';
+import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { ITEM_TYPE_OPTIONS, UNIT_OPTIONS } from '@/features/catalog/catalogItemSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useCatalog } from '@/features/catalog/useCatalog.ts';
 import {
   TradeFilterChips,
   tradeMatches,
+  customTradeKey,
   type TradeKey,
 } from '@/features/catalog/TradeFilterChips.tsx';
 import {
   SaveToCatalogPrompt,
   type CatalogSaveDraft,
 } from '@/features/catalog/SaveToCatalogPrompt.tsx';
-import type { EstimateTemplateSummary, ItemType, Unit } from '@/api/types.ts';
+import type { EstimateTemplateSummary, ItemType, Trade, Unit } from '@/api/types.ts';
 import { TradeSelect } from './TradeSelect.tsx';
 import {
   useAddTemplateItem,
@@ -55,26 +57,44 @@ export function TemplatesPage() {
   const [editing, setEditing] = useState<EstimateTemplateSummary | null>(null);
   const [deleting, setDeleting] = useState<EstimateTemplateSummary | null>(null);
 
-  // Trade filter chips over the whole list — same pattern as the catalog. Built
-  // from the trades actually present (what the master sees), so it never shows an
-  // empty filter. Hidden by the chip component when fewer than two would appear.
+  // Trade filter chips over the whole list — same pattern as the catalog, but templates use
+  // GENERAL (not OTHER) for "no specific trade", so this stays its own small implementation
+  // rather than the shared TradeFilterChips (which hardcodes the catalog's OTHER semantics).
+  // Built from the trades actually present, so it never shows an empty filter.
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   // useCallback, not a plain arrow: the two memos below filter with it, and a fresh
   // function each render would either be a lying dependency list or defeat the memo.
+  // A custom trade is own-templates-only (a default can never carry one — the DB CHECK
+  // pins is_default=false alongside it), so passing it through here is always safe.
   const matchTrade = useCallback(
-    (trade: string | null) =>
-      tradeFilter.size === 0 || tradeFilter.has((trade ?? 'GENERAL') as TradeKey),
+    (trade: string | null, customTradeId?: string | null) => {
+      if (tradeFilter.size === 0) return true;
+      if (customTradeId) return tradeFilter.has(customTradeKey(customTradeId));
+      return tradeFilter.has((trade ?? 'GENERAL') as TradeKey);
+    },
     [tradeFilter],
   );
 
-  const presentTrades = useMemo<TradeKey[]>(() => {
-    const set = new Set<TradeKey>();
-    for (const tpl of data ?? []) set.add((tpl.trade ?? 'GENERAL'));
-    return [...set];
+  const presentTrades = useMemo(() => {
+    const system = new Set<Trade>();
+    const customs = new Map<string, string>();
+    for (const tpl of data ?? []) {
+      if (tpl.customTradeId) customs.set(tpl.customTradeId, tpl.customTradeName ?? '');
+      else system.add(tpl.trade ?? 'GENERAL');
+    }
+    return { system: [...system], customs: [...customs.entries()] };
   }, [data]);
+  const totalPresentTrades = presentTrades.system.length + presentTrades.customs.length;
+  const toggleTemplateTrade = (key: TradeKey) =>
+    setTradeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next.size >= totalPresentTrades ? new Set() : next;
+    });
 
   const own = useMemo(
-    () => (data ?? []).filter((x) => !x.isDefault && matchTrade(x.trade)),
+    () => (data ?? []).filter((x) => !x.isDefault && matchTrade(x.trade, x.customTradeId)),
     [data, matchTrade],
   );
   const defaultsByTrade = useMemo(() => {
@@ -120,12 +140,27 @@ export function TemplatesPage() {
         />
       ) : (
         <div className="space-y-6">
-          <TradeFilterChips
-            userTrades={presentTrades.filter((tr) => tr !== 'OTHER')}
-            hasOther={presentTrades.includes('OTHER')}
-            value={tradeFilter}
-            onChange={setTradeFilter}
-          />
+          {totalPresentTrades >= 2 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <Chip active={tradeFilter.size === 0} onClick={() => setTradeFilter(new Set())}>
+                {t('catalog.allTrades')}
+              </Chip>
+              {presentTrades.system.map((tr) => (
+                <Chip key={tr} active={tradeFilter.has(tr)} onClick={() => toggleTemplateTrade(tr)}>
+                  {TRADE_EMOJI[tr]} {t('trades.' + tr)}
+                </Chip>
+              ))}
+              {presentTrades.customs.map(([id, name]) => (
+                <Chip
+                  key={id}
+                  active={tradeFilter.has(customTradeKey(id))}
+                  onClick={() => toggleTemplateTrade(customTradeKey(id))}
+                >
+                  {CUSTOM_TRADE_EMOJI} {name}
+                </Chip>
+              ))}
+            </div>
+          )}
           {/* My templates */}
           <section>
             <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
@@ -254,19 +289,31 @@ function TradeMove({
   onMoved: (next: EstimateTemplateSummary) => void;
 }) {
   const { t } = useTranslation();
+  const { data: me } = useMe();
   const setTrade = useSetTemplateTrade();
   return (
     <div className="flex items-end gap-2">
       <div className="flex-1">
         <TradeSelect
-          value={(template.trade) ?? null}
+          value={{ trade: template.trade ?? null, customTradeId: template.customTradeId }}
           label={t('templates.tradeLabel')}
-          onChange={(trade) => {
+          // A system default is re-filed through the per-master override, which has no
+          // place for a custom trade — offer the picker only on the master's own template.
+          customTrades={template.isDefault ? [] : (me?.customTrades ?? [])}
+          onChange={(next) => {
+            const customTradeName = next.customTradeId
+              ? (me?.customTrades ?? []).find((ct) => ct.id === next.customTradeId)?.name ?? null
+              : null;
             setTrade.mutate(
-              { id: template.id, trade },
+              { id: template.id, trade: next.trade, customTradeId: next.customTradeId, customTradeName },
               {
                 onSuccess: () => {
-                  onMoved({ ...template, trade });
+                  onMoved({
+                    ...template,
+                    trade: next.customTradeId ? 'OTHER' : next.trade,
+                    customTradeId: next.customTradeId,
+                    customTradeName,
+                  });
                   toast.success(t('templates.tradeMoved'));
                 },
                 onError: (err) => toast.error(toAppError(err).message),
@@ -474,7 +521,6 @@ function CatalogPicker({
   const { t } = useTranslation();
   const online = useOnline();
   const { data, isPending } = useCatalog();
-  const { data: me } = useMe();
   const addItem = useAddTemplateItem(templateId);
   const [q, setQ] = useState('');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
@@ -485,11 +531,10 @@ function CatalogPicker({
     () => new Set(existingNames.map((n) => n.trim().toLowerCase())),
     [existingNames],
   );
-  const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (data ?? [])
-      .filter((i) => tradeMatches(i.trade, tradeFilter))
+      .filter((i) => tradeMatches(i, tradeFilter))
       .filter((i) => !needle || i.name.toLowerCase().includes(needle));
   }, [data, q, tradeFilter]);
 
@@ -522,12 +567,7 @@ function CatalogPicker({
 
   return (
     <div>
-      <TradeFilterChips
-        userTrades={me?.trades ?? []}
-        hasOther={hasOther}
-        value={tradeFilter}
-        onChange={setTradeFilter}
-      />
+      <TradeFilterChips items={data ?? []} value={tradeFilter} onChange={setTradeFilter} />
       <Input
         placeholder={t('estimate.searchCatalog')}
         value={q}

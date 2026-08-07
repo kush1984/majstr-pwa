@@ -11,7 +11,6 @@ import { toAppError } from '@/api/errors.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { useMe } from '@/features/auth/useMe.ts';
 import { useCatalog } from '@/features/catalog/useCatalog.ts';
 import {
   TradeFilterChips,
@@ -155,19 +154,17 @@ function CatalogPicker({
   const { t } = useTranslation();
   const online = useOnline();
   const { data, isPending } = useCatalog();
-  const { data: me } = useMe();
   const batch = useAddItemsFromCatalogBatch(estimateId);
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (data ?? [])
       .filter((i) => typeFilter === 'ALL' || i.type === typeFilter)
-      .filter((i) => tradeMatches(i.trade, tradeFilter))
+      .filter((i) => tradeMatches(i, tradeFilter))
       .filter((i) => !needle || i.name.toLowerCase().includes(needle));
   }, [data, q, typeFilter, tradeFilter]);
 
@@ -201,12 +198,7 @@ function CatalogPicker({
 
   return (
     <div>
-      <TradeFilterChips
-        userTrades={me?.trades ?? []}
-        hasOther={hasOther}
-        value={tradeFilter}
-        onChange={setTradeFilter}
-      />
+      <TradeFilterChips items={data ?? []} value={tradeFilter} onChange={setTradeFilter} />
       <div className="mb-3 flex gap-2">
         {TYPE_FILTERS.map((f) => (
           <Chip

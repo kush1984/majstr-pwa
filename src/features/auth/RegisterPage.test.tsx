@@ -68,6 +68,65 @@ describe('RegisterPage — privacy consent', () => {
   });
 });
 
+describe('RegisterPage — custom trade', () => {
+  function fillValidExceptTrade(container: HTMLElement) {
+    fireEvent.change(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
+    fireEvent.change(container.querySelector('#password')!, { target: { value: 'Sup3rPass!' } });
+    fireEvent.change(container.querySelector('#fullName')!, { target: { value: 'Іван' } });
+    fireEvent.change(container.querySelector('#phone')!, { target: { value: '+380501112233' } });
+    fireEvent.change(container.querySelector('#companyName')!, { target: { value: 'ФОП' } });
+    fireEvent.click(container.querySelector('input[name="consent"]')!);
+  }
+
+  it('blocks submit when neither a system trade nor a custom trade is chosen', async () => {
+    const { container } = renderPage();
+    fillValidExceptTrade(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    expect(await screen.findByText(/Оберіть хоча б один тип робіт/i)).toBeTruthy();
+    expect(authApi.register).not.toHaveBeenCalled();
+  });
+
+  it('registers with only a custom trade and no system trade selected', async () => {
+    vi.mocked(authApi.register).mockResolvedValue({
+      accessToken: 'a', refreshToken: 'r', tokenType: 'Bearer', expiresInSeconds: 900,
+      user: {} as never,
+    } as never);
+
+    const { container } = renderPage();
+    fillValidExceptTrade(container);
+
+    fireEvent.click(screen.getByText('+ Свій напрям'));
+    fireEvent.change(screen.getByPlaceholderText('Напр. Натяжні стелі'), {
+      target: { value: 'Натяжні стелі' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+    expect(screen.getByText(/Натяжні стелі/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    await waitFor(() => expect(authApi.register).toHaveBeenCalled());
+    expect(vi.mocked(authApi.register).mock.calls[0][0]).toMatchObject({
+      trades: [],
+      customTrades: ['Натяжні стелі'],
+    });
+  });
+
+  it('removes a custom trade from the local list before submit', () => {
+    renderPage();
+    fireEvent.click(screen.getByText('+ Свій напрям'));
+    fireEvent.change(screen.getByPlaceholderText('Напр. Натяжні стелі'), {
+      target: { value: 'Стеля' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+    expect(screen.getByText(/Стеля/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Видалити' }));
+    expect(screen.queryByText(/Стеля/)).toBeNull();
+  });
+});
+
 describe('RegisterPage — duplicate email', () => {
   it('shows a "log in" shortcut (email prefilled) on a 409 EMAIL_ALREADY_REGISTERED', async () => {
     vi.mocked(authApi.register).mockRejectedValue({

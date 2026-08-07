@@ -13,7 +13,6 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
-import { useMe } from '@/features/auth/useMe.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import {
   useAddNewFromTemplate,
@@ -38,7 +37,6 @@ export function CatalogPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TypeFilter>('ALL');
   const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
-  const { data: me } = useMe();
   // Fetch the WHOLE catalog and filter by type client-side: only then can we tell a genuinely
   // empty catalog (→ onboarding) apart from a filter that simply matched nothing (→ a light hint).
   // Server-side type filtering made «Матеріали» on a works-only catalog look like an empty catalog.
@@ -61,16 +59,16 @@ export function CatalogPage() {
   const deleteItems = useDeleteCatalogItems();
 
   // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it — both client-side.
-  const hasOther = useMemo(() => (data ?? []).some((i) => i.trade == null || i.trade === 'OTHER'), [data]);
   const visible = useMemo(
     () => (data ?? [])
       .filter((i) => filter === 'ALL' || i.type === filter)
-      .filter((i) => tradeMatches(i.trade, tradeFilter)),
+      .filter((i) => tradeMatches(i, tradeFilter)),
     [data, filter, tradeFilter],
   );
   // Prefill a new item's trade when the filter narrows to exactly one trade
-  // (including "Інше"/OTHER — now a real trade). Ambiguous under a multi-select.
-  const defaultTrade = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
+  // (including "Інше"/OTHER, or a custom trade — now a real filter target).
+  // Ambiguous under a multi-select.
+  const defaultTradeKey = tradeFilter.size === 1 ? [...tradeFilter][0] : undefined;
 
   const onReset = async () => {
     try {
@@ -114,12 +112,7 @@ export function CatalogPage() {
         {t('catalog.title')}
       </h1>
 
-      <TradeFilterChips
-        userTrades={me?.trades ?? []}
-        hasOther={hasOther}
-        value={tradeFilter}
-        onChange={setTradeFilter}
-      />
+      <TradeFilterChips items={data ?? []} value={tradeFilter} onChange={setTradeFilter} />
 
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
@@ -294,7 +287,7 @@ export function CatalogPage() {
         <CatalogItemForm
           key={editing?.id ?? 'new'}
           initial={editing ?? null}
-          defaultTrade={defaultTrade}
+          defaultTradeKey={defaultTradeKey}
           onDone={() => setEditing(undefined)}
         />
       </Modal>

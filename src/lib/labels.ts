@@ -27,6 +27,11 @@ export const TRADE_EMOJI: Record<Trade, string> = {
   OTHER: '📦',
 };
 
+/** Fixed placeholder icon for EVERY master-invented trade (v1) — deliberately not 🔧
+ *  (reads as plumbing) since custom trades cover anything. A per-trade emoji picker is
+ *  a future nicety, not this iteration. */
+export const CUSTOM_TRADE_EMOJI = '🏷️';
+
 /** Trades a template can be filed under — mirrors the backend CHECK on
  *  `estimate_templates.trade` (METAL is intentionally not among them). */
 export const TEMPLATE_TRADES: Trade[] = [

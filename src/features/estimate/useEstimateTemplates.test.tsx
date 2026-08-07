@@ -28,10 +28,10 @@ const detailKey = (id: string) => [...ESTIMATE_TEMPLATE_KEY, id];
 
 function seed(qc: QueryClient) {
   qc.setQueryData<EstimateTemplateSummary[]>(ESTIMATE_TEMPLATE_KEY, [
-    { id: 't1', name: 'Санвузол', trade: 'PLUMBING', isDefault: false, itemCount: 1 },
+    { id: 't1', name: 'Санвузол', trade: 'PLUMBING', customTradeId: null, customTradeName: null, isDefault: false, itemCount: 1 },
   ]);
   qc.setQueryData<EstimateTemplateDetail>(detailKey('t1'), {
-    id: 't1', name: 'Санвузол', trade: 'PLUMBING', isDefault: false,
+    id: 't1', name: 'Санвузол', trade: 'PLUMBING', customTradeId: null, customTradeName: null, isDefault: false,
     items: [{ id: 'i1', name: 'Монтаж унітаза', type: 'WORK', unit: 'PIECE', sortOrder: 0 }],
   });
 }

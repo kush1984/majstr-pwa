@@ -1,8 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi } from '@/api/catalog.ts';
-import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
+import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade, UserResponse } from '@/api/types.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+
+/** Look up a custom trade's CURRENT name from the cached profile, for an optimistic patch —
+ *  the server is the source of truth and will overwrite this on the next fetch. */
+function resolveCustomTradeName(
+  qc: ReturnType<typeof useQueryClient>,
+  customTradeId: string | null | undefined,
+): string | null {
+  if (!customTradeId) return null;
+  const me = qc.getQueryData<UserResponse>(ME_QUERY_KEY);
+  return me?.customTrades.find((ct) => ct.id === customTradeId)?.name ?? null;
+}
 
 export const CATALOG_KEY = ['catalog'] as const;
 
@@ -72,11 +84,14 @@ export function useCreateCatalogItem() {
     networkMode: 'always',
     mutationFn: (req: CatalogItemRequest): Promise<CatalogItemResponse> => {
       const id = newUuid();
+      const customTradeId = req.customTradeId ?? null;
       const optimistic: CatalogItemResponse = {
         id,
         name: req.name,
         category: req.category ?? null,
-        trade: req.trade ?? null,
+        trade: customTradeId ? 'OTHER' : (req.trade ?? null),
+        customTradeId,
+        customTradeName: resolveCustomTradeName(qc, customTradeId),
         type: req.type,
         unit: req.unit,
         defaultPrice: req.defaultPrice,
@@ -111,8 +126,12 @@ export function useUpdateCatalogItem() {
         online: async () => { await catalogApi.update(id, req); },
         onOnlineSuccess: invalidate,
         optimistic: () => {
+          const customTradeId = req.customTradeId ?? null;
           patchCatalog(qc, (items) => items.map((i) => (i.id === id ? {
-            ...i, name: req.name, category: req.category ?? null, trade: req.trade ?? i.trade,
+            ...i, name: req.name, category: req.category ?? null,
+            trade: customTradeId ? 'OTHER' : (req.trade ?? i.trade),
+            customTradeId,
+            customTradeName: resolveCustomTradeName(qc, customTradeId),
             type: req.type, unit: req.unit, defaultPrice: req.defaultPrice,
           } : i)));
         },

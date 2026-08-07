@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import i18n from '@/lib/i18n.ts';
-import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
@@ -36,8 +35,9 @@ export const catalogItemSchema = z.object({
   // one of the two ends up on the request (see CatalogItemForm.onSubmit).
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),
   newCategory: z.string().max(100, i18n.t('validation.categoryTooLong')),
-  // Always a trade — "no specific trade" is OTHER ("Інше"), the single catch-all.
-  trade: z.enum(TRADE_VALUES),
+  // Always a trade — "no specific trade" is OTHER ("Інше"), the single catch-all. Either a
+  // system Trade literal or `custom:<uuid>` for a master-invented trade (see TradeFilterChips).
+  tradeChoice: z.string().min(1),
   defaultPrice: priceString,
 });
 

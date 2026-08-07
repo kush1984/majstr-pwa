@@ -49,7 +49,7 @@ function useInvalidateTemplates() {
 export function useSaveAsTemplate(estimateId: string) {
   const invalidate = useInvalidateTemplates();
   return useMutation({
-    mutationFn: (req: { name: string; trade: Trade | null }) =>
+    mutationFn: (req: { name: string; trade: Trade | null; customTradeId?: string | null }) =>
       estimateTemplatesApi.saveFromEstimate(estimateId, req),
     onSuccess: invalidate,
   });
@@ -84,20 +84,32 @@ function patchDetail(
  * server-side state (an estimate's items, a new estimate) we can't reproduce locally.
  */
 
-/** Re-file a template into another trade (master's own setting). */
+/** Re-file a template into another trade (master's own setting). `customTradeId`/
+ *  `customTradeName` only take effect on the caller's OWN template — a system default
+ *  is re-filed through the per-master override, which has no place for a custom trade. */
 export function useSetTemplateTrade() {
   const qc = useQueryClient();
   const invalidate = useInvalidateTemplates();
   return useMutation({
     networkMode: 'always',
-    mutationFn: ({ id, trade }: { id: string; trade: Trade | null }): Promise<void> =>
+    mutationFn: ({ id, trade, customTradeId, customTradeName }: {
+      id: string; trade: Trade | null; customTradeId?: string | null; customTradeName?: string | null;
+    }): Promise<void> =>
       offlineMutate<void>({
-        entity: 'estimateTemplate', entityId: id, type: 'update', payload: { op: 'trade', trade }, deps: [],
-        online: async () => { await estimateTemplatesApi.setTrade(id, { trade }); },
+        entity: 'estimateTemplate', entityId: id, type: 'update',
+        payload: { op: 'trade', trade, customTradeId }, deps: [],
+        online: async () => { await estimateTemplatesApi.setTrade(id, { trade, customTradeId }); },
         onOnlineSuccess: invalidate,
         optimistic: () => {
-          patchSummary(qc, id, (t) => ({ ...t, trade }));
-          patchDetail(qc, id, (d) => ({ ...d, trade }));
+          const effectiveTrade = customTradeId ? 'OTHER' : trade;
+          patchSummary(qc, id, (t) => ({
+            ...t, trade: effectiveTrade,
+            customTradeId: customTradeId ?? null, customTradeName: customTradeName ?? null,
+          }));
+          patchDetail(qc, id, (d) => ({
+            ...d, trade: effectiveTrade,
+            customTradeId: customTradeId ?? null, customTradeName: customTradeName ?? null,
+          }));
         },
       }),
   });
@@ -315,7 +327,7 @@ async function applyTemplateOffline(
     unit: request.unit, quantity: 0, unitPrice: request.unitPrice,
     lineTotal: 0, sortOrder: request.sortOrder ?? 0, measurementRefs: [], quantityManual: false,
         // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
-        percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
   }));
   const optimistic: EstimateResponse = {
     id: estimateId, projectId, name: req.name ?? null, status: 'DRAFT',

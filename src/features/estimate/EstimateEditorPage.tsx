@@ -17,8 +17,8 @@ import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
-import type { EstimateItemResponse, EstimateResponse, ProjectResponse, Trade } from '@/api/types.ts';
-import { TradeSelect } from './TradeSelect.tsx';
+import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
+import { TradeSelect, type TradeChoice } from './TradeSelect.tsx';
 import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
@@ -90,7 +90,7 @@ export function EstimateEditorPage() {
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [templateTrade, setTemplateTrade] = useState<Trade | null>(null);
+  const [templateTradeChoice, setTemplateTradeChoice] = useState<TradeChoice>({ trade: null, customTradeId: null });
   const saveAsTemplate = useSaveAsTemplate(id);
   // Bulk selection: picking lines to delete, or to mark up in a copy. `null` = off, which is what
   // keeps the ordinary board's tap meaning exactly one thing.
@@ -268,13 +268,18 @@ export function EstimateEditorPage() {
   // Saving as a template reads the estimate's items on the server — online-only.
   const openSaveTemplate = guard(() => {
     setTemplateName(est.name ?? '');
+    setTemplateTradeChoice({ trade: null, customTradeId: null });
     setSaveTemplateOpen(true);
   });
 
   const saveTemplate = async () => {
     if (!templateName.trim()) return;
     try {
-      await saveAsTemplate.mutateAsync({ name: templateName.trim(), trade: templateTrade });
+      await saveAsTemplate.mutateAsync({
+        name: templateName.trim(),
+        trade: templateTradeChoice.trade,
+        customTradeId: templateTradeChoice.customTradeId,
+      });
       toast.success(t('templates.saved'));
       setSaveTemplateOpen(false);
     } catch (err) {
@@ -697,7 +702,12 @@ export function EstimateEditorPage() {
           className="mb-3"
         />
         <div className="mb-4">
-          <TradeSelect value={templateTrade} onChange={setTemplateTrade} label={t('templates.tradeLabel')} />
+          <TradeSelect
+            value={templateTradeChoice}
+            onChange={setTemplateTradeChoice}
+            label={t('templates.tradeLabel')}
+            customTrades={me?.customTrades ?? []}
+          />
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" fullWidth onClick={() => setSaveTemplateOpen(false)}>
@@ -992,7 +1002,7 @@ function MobileSummarySheet({
  * BASE (the type's subtotal minus that adjustment), so base + adjustment reconciles to the subtotal the
  * total is built from — which is exactly what removes the «14 801 vs 16 577» confusion.
  */
-function TypeBreakdown({ items, type, subtotal, label }: {
+export function TypeBreakdown({ items, type, subtotal, label }: {
   items: EstimateItemResponse[];
   type: 'WORK' | 'MATERIAL';
   subtotal: number;
@@ -1006,7 +1016,16 @@ function TypeBreakdown({ items, type, subtotal, label }: {
   // The percent is shown only when there is exactly ONE such line (the case the validation enforces);
   // a legacy estimate with several shows just the summed amount, no single percent.
   const percent = totalLines.length === 1 ? totalLines[0].quantity : null;
-  const base = Math.round((subtotal - adjust) * 100) / 100;
+  // Lines frozen into a consolidated rollup — always kind=MANUAL now, so the TOTAL breakdown
+  // above never sees them, and without this they'd fold silently into the base line with no hint
+  // that part of it is a carried-over discount/markup rather than a fresh position. Split by
+  // sign rather than netted: the type may carry BOTH a carried-over discount and a carried-over
+  // markup (from different source estimates), and a single netted row would hide one against the
+  // other — "we already know which is which" is the whole point of naming them separately.
+  const frozenLines = items.filter((i) => i.type === type && i.unit === 'PERCENT' && i.baseOriginLabel);
+  const frozenMarkup = frozenLines.filter((i) => i.lineTotal > 0).reduce((s, i) => s + i.lineTotal, 0);
+  const frozenDiscount = frozenLines.filter((i) => i.lineTotal < 0).reduce((s, i) => s + i.lineTotal, 0);
+  const base = Math.round((subtotal - adjust - frozenMarkup - frozenDiscount) * 100) / 100;
   return (
     <div className="mb-2.5">
       <div className="flex justify-between text-[13px] text-white/75">
@@ -1022,16 +1041,35 @@ function TypeBreakdown({ items, type, subtotal, label }: {
           <span>{adjust > 0 ? `+${formatMoney(adjust)}` : formatMoney(adjust)}</span>
         </div>
       )}
+      {frozenDiscount !== 0 && (
+        <div className="mt-0.5 flex justify-between pl-3 text-xs text-white/55">
+          <span>{t('estimate.summaryFrozenDiscount')}</span>
+          <span>{formatMoney(frozenDiscount)}</span>
+        </div>
+      )}
+      {frozenMarkup !== 0 && (
+        <div className="mt-0.5 flex justify-between pl-3 text-xs text-white/55">
+          <span>{t('estimate.summaryFrozenMarkup')}</span>
+          <span>{`+${formatMoney(frozenMarkup)}`}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Estimate-wide «Від кошторису» totals, folded across both types (markup ≥ 0, discount ≤ 0). */
-function adjustTotals(items: EstimateItemResponse[]): { markup: number; discount: number } {
+/**
+ * Estimate-wide «Від кошторису» totals, folded across both types (markup ≥ 0, discount ≤ 0).
+ * Also folds in FROZEN (consolidated-rollup) percent lines — a plain estimate never has any, so
+ * this widening is a no-op there; a consolidated one otherwise showed no recap under «До
+ * сплати» at all, since a frozen line is always kind=MANUAL, never TOTAL.
+ */
+export function adjustTotals(items: EstimateItemResponse[]): { markup: number; discount: number } {
   let markup = 0;
   let discount = 0;
   for (const i of items) {
-    if (i.unit === 'PERCENT' && (i.percentBaseKind ?? 'MANUAL') === 'TOTAL') {
+    const isTotalPercent = i.unit === 'PERCENT' && (i.percentBaseKind ?? 'MANUAL') === 'TOTAL';
+    const isFrozenPercent = i.unit === 'PERCENT' && Boolean(i.baseOriginLabel);
+    if (isTotalPercent || isFrozenPercent) {
       if (i.lineTotal > 0) markup += i.lineTotal;
       else if (i.lineTotal < 0) discount += i.lineTotal;
     }

@@ -23,6 +23,8 @@ const template: EstimateTemplateDetail = {
   id: 'tpl-1',
   name: 'Ванна під ключ',
   trade: 'TILING',
+  customTradeId: null,
+  customTradeName: null,
   isDefault: false,
   items: [
     { id: 'ti-1', name: 'Штукатурка стін', type: 'WORK', unit: 'M2', sortOrder: 0 },
@@ -34,15 +36,15 @@ const template: EstimateTemplateDetail = {
 /** Note the case difference and the duplicate — both matter for the matching rule. */
 const catalog: CatalogItemResponse[] = [
   {
-    id: 'c-1', name: 'штукатурка стін', category: 'Стіни', trade: 'TILING',
+    id: 'c-1', name: 'штукатурка стін', category: 'Стіни', trade: 'TILING', customTradeId: null, customTradeName: null,
     type: 'WORK', unit: 'M2', defaultPrice: 250, sortOrder: 0, createdAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'c-2', name: 'Плитка', category: null, trade: 'TILING',
+    id: 'c-2', name: 'Плитка', category: null, trade: 'TILING', customTradeId: null, customTradeName: null,
     type: 'MATERIAL', unit: 'M2', defaultPrice: 900, sortOrder: 0, createdAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'c-3', name: 'ПЛИТКА', category: 'дубль', trade: null,
+    id: 'c-3', name: 'ПЛИТКА', category: 'дубль', trade: null, customTradeId: null, customTradeName: null,
     type: 'MATERIAL', unit: 'PIECE', defaultPrice: 1, sortOrder: 0, createdAt: '2026-01-02T00:00:00Z',
   },
 ];
@@ -159,7 +161,8 @@ describe('useApplyTemplate offline', () => {
     // Every tiling bundle carries the primer. Applying two of them must not bill it twice — the
     // client would see the repeat on the estimate, so the offline path replays the server's rule.
     const second: EstimateTemplateDetail = {
-      id: 'tpl-2', name: 'Підлога плиткою', trade: 'TILING', isDefault: true,
+      id: 'tpl-2', name: 'Підлога плиткою', trade: 'TILING',
+      customTradeId: null, customTradeName: null, isDefault: true,
       items: [
         // Same position as tpl-1's first line, different case — matched all the same.
         { id: 'ti-4', name: 'ШТУКАТУРКА СТІН', type: 'WORK', unit: 'M2', sortOrder: 0 },

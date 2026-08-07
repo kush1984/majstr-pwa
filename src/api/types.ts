@@ -19,11 +19,20 @@ export type Trade =
 export type Plan = 'FREE' | 'PRO' | 'TEAM';
 export type Role = 'USER' | 'ADMIN';
 
+/** A master-invented trade (user_trade) — no reference catalog exists for it. */
+export interface UserTradeResponse {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
 export interface UserResponse {
   id: string;
   email: string;
   fullName: string;
   trades: Trade[];
+  /** Master-invented trades — ordered by the master's own arrangement. */
+  customTrades: UserTradeResponse[];
   phone: string;
   companyName: string;
   logoUrl: string | null;
@@ -85,7 +94,12 @@ export interface RegisterRequest {
   email: string;
   password: string;
   fullName: string;
+  /** May be empty — a master can rely entirely on `customTrades` below. At least one of
+   *  the two is required (enforced by the register form and again by the backend). */
   trades: Trade[];
+  /** Master-invented trade names to create alongside the account (e.g. "Натяжні стелі") —
+   *  the same free-text flow the profile screen offers post-registration. */
+  customTrades?: string[];
   phone: string;
   companyName: string;
   /** Explicit privacy-policy consent (the registration checkbox). */
@@ -348,6 +362,13 @@ export interface EstimateItemResponse {
   percentBaseItemId: string | null;
   /** The live link is off — the amount was typed by hand, or the base was deleted. */
   baseDetached: boolean;
+  /**
+   * Snapshot of what a FROZEN percent line meant before a consolidation froze it — the signed
+   * percent, what it was a share of, and the source estimate's name (e.g. `-15% від робіт ·
+   * кошторис «Квартира — чорнові»`). Null on every other line, including a detached-but-not-
+   * frozen line (a deleted POSITION base) — `baseDetached` alone covers that case.
+   */
+  baseOriginLabel: string | null;
 }
 
 /**
@@ -445,6 +466,10 @@ export interface CatalogItemResponse {
   category: string | null;
   /** Trade this position belongs to (for the catalog filter); null = "Інше". */
   trade: Trade | null;
+  /** Set only when filed under a master-invented trade — `trade` is then always OTHER.
+   *  Denormalized alongside its name (a live FK — always current, no snapshot). */
+  customTradeId: string | null;
+  customTradeName: string | null;
   type: ItemType;
   unit: Unit;
   defaultPrice: number;
@@ -459,8 +484,11 @@ export interface CatalogItemResponse {
 export interface CatalogItemRequest {
   name: string;
   category?: string;
-  /** Optional — which trade this position belongs to. */
+  /** Optional — which trade this position belongs to. Ignored (forced to OTHER) when
+   *  `customTradeId` is set. */
   trade?: Trade | null;
+  /** Optional — a master-invented trade instead of one of the above. */
+  customTradeId?: string | null;
   type: ItemType;
   unit: Unit;
   defaultPrice: number;
@@ -1018,6 +1046,10 @@ export interface EstimateTemplateSummary {
   id: string;
   name: string;
   trade: Trade | null;
+  /** Set only for a master's OWN template filed under a master-invented trade — always
+   *  null for a system default. */
+  customTradeId: string | null;
+  customTradeName: string | null;
   isDefault: boolean;
   itemCount: number;
 }
@@ -1041,6 +1073,8 @@ export interface EstimateTemplateDetail {
   id: string;
   name: string;
   trade: Trade | null;
+  customTradeId: string | null;
+  customTradeName: string | null;
   isDefault: boolean;
   items: EstimateTemplateItemView[];
 }
@@ -1050,9 +1084,13 @@ export interface SaveAsTemplateRequest {
   name: string;
   /** Trade to file it under; null/absent = general (shown under every trade). */
   trade?: Trade | null;
+  /** A master-invented trade instead of one of the above — wins over `trade` when set. */
+  customTradeId?: string | null;
 }
 
 /** Re-file a template under a trade; null = general. */
 export interface TemplateTradeRequest {
   trade: Trade | null;
+  /** Only takes effect on the caller's OWN template — ignored when re-filing a system default. */
+  customTradeId?: string | null;
 }

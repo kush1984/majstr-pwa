@@ -7,6 +7,7 @@ import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
 import { FormField } from '@/components/FormField.tsx';
+import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useRegister } from './useRegister.ts';
 import {
   registerSchema,
@@ -24,10 +25,17 @@ export function RegisterPage() {
   const { t } = useTranslation();
   const register$ = useRegister();
   const [emailTaken, setEmailTaken] = useState(false);
+  // Custom trade names are collected locally and created alongside the account on submit —
+  // there's no user yet to attach them to individually (unlike ProfileEditModal, which saves
+  // each one instantly through its own endpoint).
+  const [customTrades, setCustomTrades] = useState<string[]>([]);
+  const [addingCustomTrade, setAddingCustomTrade] = useState(false);
+  const [newCustomTradeName, setNewCustomTradeName] = useState('');
   const {
     register,
     handleSubmit,
     setError,
+    setValue,
     getValues,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
@@ -37,12 +45,33 @@ export function RegisterPage() {
       password: '',
       fullName: '',
       trades: [],
+      customTrades: [],
       phone: '',
       companyName: '',
       consent: false,
       promoCode: '',
     },
   });
+
+  const syncCustomTrades = (next: string[]) => {
+    setCustomTrades(next);
+    setValue('customTrades', next, { shouldValidate: true });
+  };
+
+  const onAddCustomTrade = () => {
+    const name = newCustomTradeName.trim();
+    if (!name || customTrades.some((t) => t.toLowerCase() === name.toLowerCase())) {
+      setNewCustomTradeName('');
+      setAddingCustomTrade(false);
+      return;
+    }
+    syncCustomTrades([...customTrades, name]);
+    setNewCustomTradeName('');
+    setAddingCustomTrade(false);
+  };
+
+  const onRemoveCustomTrade = (name: string) =>
+    syncCustomTrades(customTrades.filter((t) => t !== name));
 
   useEffect(() => {
     if (register$.isSuccess) {
@@ -56,6 +85,7 @@ export function RegisterPage() {
       await register$.mutateAsync({
         ...values,
         trades: values.trades,
+        customTrades: values.customTrades.length > 0 ? values.customTrades : undefined,
         // First-touch attribution: the stored ?ref= wins, the typed promo code is
         // a fallback. Absent → the backend attributes DIRECT.
         ref: getStoredRef(),
@@ -141,6 +171,68 @@ export function RegisterPage() {
           </div>
           {errors.trades && (
             <span className="mt-1 block text-xs text-red-600">{errors.trades.message}</span>
+          )}
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-1 block text-sm font-medium text-gray-700">
+            {t('profile.customTradesTitle')}
+          </legend>
+          {customTrades.length > 0 && (
+            <div className="space-y-1.5">
+              {customTrades.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    {CUSTOM_TRADE_EMOJI} {name}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex-shrink-0 text-xs font-semibold text-danger"
+                    onClick={() => onRemoveCustomTrade(name)}
+                  >
+                    {t('common.delete')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {addingCustomTrade ? (
+            <div className="mt-2 space-y-1.5">
+              <Input
+                autoFocus
+                placeholder={t('profile.customTradeNamePlaceholder')}
+                value={newCustomTradeName}
+                onChange={(e) => setNewCustomTradeName(e.target.value)}
+              />
+              <p className="text-xs text-muted">{t('profile.customTradeHonestNote')}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => {
+                    setAddingCustomTrade(false);
+                    setNewCustomTradeName('');
+                  }}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button type="button" fullWidth onClick={onAddCustomTrade}>
+                  {t('common.add')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mt-2 text-sm font-semibold text-brand"
+              onClick={() => setAddingCustomTrade(true)}
+            >
+              {t('profile.addCustomTrade')}
+            </button>
           )}
         </fieldset>
 

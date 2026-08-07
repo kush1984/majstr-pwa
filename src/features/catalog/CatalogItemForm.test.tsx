@@ -6,7 +6,7 @@ import '@/lib/i18n.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 import { catalogApi } from '@/api/catalog.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
-import type { CatalogItemResponse } from '@/api/types.ts';
+import type { CatalogItemResponse, UserResponse } from '@/api/types.ts';
 import { aUser } from '@/test/factories.ts';
 
 /**
@@ -23,25 +23,28 @@ vi.mock('@/hooks/useToast.ts', () => ({
 }));
 
 const catalog: CatalogItemResponse[] = [
-  { id: '1', name: 'Розетка', category: 'Розетки', trade: 'ELECTRICAL',
+  { id: '1', name: 'Розетка', category: 'Розетки', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null,
     type: 'WORK', unit: 'PIECE', defaultPrice: 100, sortOrder: 0, createdAt: '' },
-  { id: '2', name: 'Автомат', category: 'Щит', trade: 'ELECTRICAL',
+  { id: '2', name: 'Автомат', category: 'Щит', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null,
     type: 'WORK', unit: 'PIECE', defaultPrice: 200, sortOrder: 0, createdAt: '' },
-  { id: '3', name: 'Ще одна розетка', category: 'Розетки', trade: 'ELECTRICAL',
+  { id: '3', name: 'Ще одна розетка', category: 'Розетки', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null,
     type: 'WORK', unit: 'PIECE', defaultPrice: 120, sortOrder: 0, createdAt: '' },
   // another trade — must NOT show up under ELECTRICAL
-  { id: '4', name: 'Плитка', category: 'Укладання', trade: 'TILING',
+  { id: '4', name: 'Плитка', category: 'Укладання', trade: 'TILING', customTradeId: null, customTradeName: null,
     type: 'WORK', unit: 'M2', defaultPrice: 900, sortOrder: 0, createdAt: '' },
 ];
 
-function renderForm(initial: CatalogItemResponse | null = null) {
+function renderForm(
+  initial: CatalogItemResponse | null = null,
+  meOverrides: Partial<UserResponse> = {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // two trades, so the trade picker renders and the category list can be re-narrowed
-  qc.setQueryData(ME_QUERY_KEY, aUser({ trades: ['ELECTRICAL', 'TILING'] }));
+  qc.setQueryData(ME_QUERY_KEY, aUser({ trades: ['ELECTRICAL', 'TILING'], ...meOverrides }));
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<CatalogItemForm initial={initial} defaultTrade="ELECTRICAL" onDone={() => {}} />,
+  return render(<CatalogItemForm initial={initial} defaultTradeKey="ELECTRICAL" onDone={() => {}} />,
                 { wrapper });
 }
 
@@ -116,11 +119,42 @@ describe('CatalogItemForm — category', () => {
     // the master had — a data loss with no warning and nothing on screen to explain it.
     renderForm({
       id: '9', name: 'Дивна позиція', category: 'Укладання', trade: 'ELECTRICAL',
+      customTradeId: null, customTradeName: null,
       type: 'WORK', unit: 'PIECE', defaultPrice: 300, sortOrder: 0, createdAt: '',
     });
     await waitFor(() => expect(options()).toContain('Розетки'));
 
     expect(options()).toContain('Укладання');
     expect(sel('#ci-category').value).toBe('Укладання');
+  });
+});
+
+describe('CatalogItemForm — custom trades', () => {
+  it('offers a custom trade in the picker and saves customTradeId (trade omitted, forced OTHER server-side)', async () => {
+    vi.mocked(catalogApi.create).mockResolvedValue(catalog[0]);
+    renderForm(null, { customTrades: [{ id: 'ct1', name: 'Натяжні стелі', sortOrder: 0 }] });
+    await waitFor(() => expect(options()).toContain('Розетки'));
+
+    set('#ci-trade', 'custom:ct1');
+    set('#ci-name', 'Монтаж стелі');
+    set('#ci-price', '250');
+    fireEvent.click(screen.getByRole('button', { name: /Додати|Зберегти/ }));
+
+    await waitFor(() => expect(catalogApi.create).toHaveBeenCalled());
+    const sent = vi.mocked(catalogApi.create).mock.calls[0][0];
+    expect(sent.customTradeId).toBe('ct1');
+    expect(sent.trade).toBeUndefined();
+  });
+
+  it("keeps an existing item's custom trade selected even after it was removed from the profile", async () => {
+    // The custom trade behind this item is gone from `me.customTrades` (deleted, or the
+    // response is stale) — the picker still has to show it, not silently jump elsewhere.
+    renderForm({
+      id: '9', name: 'Стеля у залі', category: null, trade: 'OTHER',
+      customTradeId: 'ct-gone', customTradeName: 'Натяжні стелі',
+      type: 'WORK', unit: 'M2', defaultPrice: 300, sortOrder: 0, createdAt: '',
+    });
+
+    await waitFor(() => expect(sel('#ci-trade').value).toBe('custom:ct-gone'));
   });
 });

@@ -1,54 +1,85 @@
 import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
-import { TRADE_EMOJI } from '@/lib/labels.ts';
+import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
+import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import type { Trade } from '@/api/types.ts';
 
-/** A selected trade key. "No specific trade" is OTHER ("Інше") — the single
- *  catch-all; there is no separate untagged bucket. */
-export type TradeKey = Trade;
+/** A selected filter/picker key — a system Trade, or `custom:<id>` for a master-invented
+ *  trade (`user_trade`). Shared by the catalog filter, the estimate-template filter, and
+ *  any trade picker (`CatalogItemForm`, save-as-template) — they all key on the same shape. */
+export type TradeKey = Trade | `custom:${string}`;
 
-/**
- * Empty selection = all trades (no filter). Otherwise an item matches when its
- * trade is in the selected set. A null trade (defensive — the backend stores
- * OTHER) counts as OTHER.
- */
-export function tradeMatches(itemTrade: Trade | null, selected: ReadonlySet<TradeKey>): boolean {
-  if (selected.size === 0) return true;
-  return selected.has(itemTrade == null ? 'OTHER' : itemTrade);
+export function customTradeKey(id: string): TradeKey {
+  return `custom:${id}`;
+}
+
+/** `custom:<id>` → the id, or null for a system-trade key. */
+export function parseCustomTradeKey(key: TradeKey): string | null {
+  return key.startsWith('custom:') ? key.slice('custom:'.length) : null;
+}
+
+/** The minimal shape a trade filter/picker needs — a catalog item, a template summary,
+ *  anything carrying the system trade + optional custom-trade link. */
+export interface TradedEntity {
+  trade: Trade | null;
+  customTradeId: string | null;
+  customTradeName?: string | null;
 }
 
 /**
- * Multi-select trade filter above the type (Усі/Роботи/Матеріали) row. Click a
- * trade to add it to the filter; click it again to remove it (its positions
- * drop out). "Усі трейди" clears the selection. Selecting every available chip
- * collapses back to "Усі трейди". Hidden when fewer than two chips would show.
- * "Інше" (OTHER) is the single catch-all chip — shown when the master has the
- * OTHER trade OR some position is OTHER.
+ * Empty selection = all trades (no filter). A custom-trade entity matches only its own
+ * `custom:<id>` key — it is NEVER swept up by the "Інше" (OTHER) chip, even though its
+ * `trade` column also reads OTHER (the invariant V91 keeps on both catalog_items and
+ * estimate_templates: custom_trade_id set ⇒ trade = OTHER).
+ */
+export function tradeMatches(entity: TradedEntity, selected: ReadonlySet<TradeKey>): boolean {
+  if (selected.size === 0) return true;
+  if (entity.customTradeId) return selected.has(customTradeKey(entity.customTradeId));
+  return selected.has(entity.trade == null ? 'OTHER' : entity.trade);
+}
+
+/**
+ * Multi-select trade filter above the type (Усі/Роботи/Матеріали) row. Built from trades
+ * ACTUALLY PRESENT in `items` — not the master's profile trades. A trade removed from the
+ * profile still shows here as long as positions filed under it remain (nothing should
+ * become unfilterable just because he unchecked it), and a custom trade only appears once
+ * it has at least one position — otherwise there is nothing to filter to.
+ *
+ * Click a chip to add it to the filter; click again to remove it. "Усі трейди" clears the
+ * selection. Selecting every available chip collapses back to "Усі трейди". Hidden when
+ * fewer than two chips would show.
  */
 export function TradeFilterChips({
-  userTrades,
-  hasOther,
+  items,
   value,
   onChange,
 }: {
-  userTrades: Trade[];
-  hasOther: boolean;
+  items: readonly TradedEntity[];
   value: ReadonlySet<TradeKey>;
   onChange: (next: Set<TradeKey>) => void;
 }) {
   const { t } = useTranslation();
 
-  // One "Інше" = OTHER. Show it if the master has it or some item is OTHER; dedupe.
-  const chips: Trade[] = [...userTrades];
-  if (hasOther && !chips.includes('OTHER')) chips.push('OTHER');
-  if (chips.length < 2) return null;
+  const systemPresent = new Set<Trade>();
+  const customPresent = new Map<string, string>(); // id -> name
+  for (const item of items) {
+    if (item.customTradeId) {
+      customPresent.set(item.customTradeId, item.customTradeName ?? '');
+    } else {
+      systemPresent.add(item.trade ?? 'OTHER');
+    }
+  }
+  const systemChips = TRADE_VALUES.filter((tr) => systemPresent.has(tr));
+  const customChips = [...customPresent.entries()].sort((a, b) => a[1].localeCompare(b[1], 'uk'));
+  const total = systemChips.length + customChips.length;
+  if (total < 2) return null;
 
   const toggle = (key: TradeKey) => {
     const next = new Set(value);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     // Every chip selected = nothing actually filtered → fall back to "Усі трейди".
-    onChange(next.size >= chips.length ? new Set() : next);
+    onChange(next.size >= total ? new Set() : next);
   };
 
   return (
@@ -56,9 +87,14 @@ export function TradeFilterChips({
       <Chip active={value.size === 0} onClick={() => onChange(new Set())}>
         {t('catalog.allTrades')}
       </Chip>
-      {chips.map((tr) => (
+      {systemChips.map((tr) => (
         <Chip key={tr} active={value.has(tr)} onClick={() => toggle(tr)}>
           {TRADE_EMOJI[tr]} {t('trades.' + tr)}
+        </Chip>
+      ))}
+      {customChips.map(([id, name]) => (
+        <Chip key={id} active={value.has(customTradeKey(id))} onClick={() => toggle(customTradeKey(id))}>
+          {CUSTOM_TRADE_EMOJI} {name}
         </Chip>
       ))}
     </div>

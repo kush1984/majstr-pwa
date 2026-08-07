@@ -1,6 +1,10 @@
 import { api } from './client.ts';
 import type { ProfileUpdateRequest, UserResponse } from './types.ts';
 
+interface CustomTradeRequest {
+  name: string;
+}
+
 /** Contractor profile editing (#16) + company logo (multipart) for branded
  *  PDFs (PRO) and the client portal (all plans). */
 export const profileApi = {
@@ -46,5 +50,24 @@ export const profileApi = {
     return api
       .patch<UserResponse>(`/api/profile/auto-renew?enabled=${enabled}`)
       .then((r) => r.data);
+  },
+
+  /** Add a master-invented trade — no reference catalog exists for it. */
+  addCustomTrade(name: string): Promise<UserResponse> {
+    return api
+      .post<UserResponse>('/api/profile/custom-trades', { name } satisfies CustomTradeRequest)
+      .then((r) => r.data);
+  },
+
+  /** Rename a custom trade — a live FK, every position/template filed under it updates at once. */
+  renameCustomTrade(id: string, name: string): Promise<UserResponse> {
+    return api
+      .patch<UserResponse>(`/api/profile/custom-trades/${id}`, { name } satisfies CustomTradeRequest)
+      .then((r) => r.data);
+  },
+
+  /** Delete a custom trade — positions/templates filed under it fall back to "Інше". */
+  deleteCustomTrade(id: string): Promise<UserResponse> {
+    return api.delete<UserResponse>(`/api/profile/custom-trades/${id}`).then((r) => r.data);
   },
 };

@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { customTradeKey, parseCustomTradeKey, type TradeKey } from './TradeFilterChips.tsx';
 import type { CatalogItemRequest, CatalogItemResponse, Trade } from '@/api/types.ts';
 import {
   catalogItemSchema,
@@ -25,18 +26,24 @@ import {
   useUpdateCatalogItem,
 } from './useCatalog.ts';
 
+/** The item's current trade as a picker key — its custom trade if it has one, else its
+ *  system trade (never null: "Інше" is OTHER, never a bare null). */
+function itemTradeKey(item: { trade: Trade | null; customTradeId: string | null }): TradeKey {
+  return item.customTradeId ? customTradeKey(item.customTradeId) : (item.trade ?? 'OTHER');
+}
+
 /**
  * Create / edit a catalog item. Rendered inside a Modal by the page.
  * `initial` null → create mode; an item → edit mode (with a delete action).
  */
 export function CatalogItemForm({
   initial,
-  defaultTrade,
+  defaultTradeKey,
   onDone,
 }: {
   initial: CatalogItemResponse | null;
   /** Pre-select this trade on create (the catalog's active trade filter). */
-  defaultTrade?: Trade;
+  defaultTradeKey?: TradeKey;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
@@ -50,18 +57,27 @@ export function CatalogItemForm({
   const catalog = useCatalog();
   const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Only worth choosing a trade when the master has more than one.
-  const showTrade = (me?.trades.length ?? 0) >= 2;
-  // Always offer the item's CURRENT trade as an option, even if the master no
-  // longer works in it (removed from profile) — otherwise editing the item would
-  // silently fall back to the first option and wipe its trade on save.
-  const tradeOptions = (() => {
-    const opts = [...(me?.trades ?? [])];
+  // Always offer the item's CURRENT trade as an option, even if the master no longer works in
+  // it (removed from profile, or its custom trade was since deleted) — otherwise editing the
+  // item would silently fall back to the first option and wipe its trade on save.
+  const tradeOptions: { key: TradeKey; label: string }[] = (() => {
+    const opts: { key: TradeKey; label: string }[] = (me?.trades ?? [])
+      .map((tr) => ({ key: tr, label: t('trades.' + tr) }));
+    for (const ct of me?.customTrades ?? []) {
+      opts.push({ key: customTradeKey(ct.id), label: ct.name });
+    }
     // "Інше" (OTHER) is always offered — the single catch-all for no specific trade.
-    if (!opts.includes('OTHER')) opts.push('OTHER');
-    if (initial?.trade && !opts.includes(initial.trade)) opts.unshift(initial.trade);
+    if (!opts.some((o) => o.key === 'OTHER')) opts.push({ key: 'OTHER', label: t('trades.OTHER') });
+    if (initial) {
+      const current = itemTradeKey(initial);
+      if (!opts.some((o) => o.key === current)) {
+        opts.unshift({ key: current, label: initial.customTradeName ?? t('trades.' + initial.trade) });
+      }
+    }
     return opts;
   })();
+  // Only worth choosing a trade when there is more than one option.
+  const showTrade = tradeOptions.length >= 2;
 
   const {
     register,
@@ -77,7 +93,7 @@ export function CatalogItemForm({
           unit: initial.unit,
           category: initial.category ?? '',
           newCategory: '',
-          trade: initial.trade ?? 'OTHER',
+          tradeChoice: itemTradeKey(initial),
           defaultPrice: String(initial.defaultPrice),
         }
       : {
@@ -86,19 +102,19 @@ export function CatalogItemForm({
           unit: 'PIECE',
           category: '',
           newCategory: '',
-          trade: defaultTrade ?? 'OTHER',
+          tradeChoice: defaultTradeKey ?? 'OTHER',
           defaultPrice: '',
         },
   });
 
   // The trade is live: picking a different one re-narrows the category list under it.
-  const selectedTrade = watch('trade');
+  const selectedTradeChoice = watch('tradeChoice') as TradeKey;
   const selectedCategory = watch('category');
   const categoryOptions = useMemo(() => {
     const found = new Set<string>();
     for (const item of catalog.data ?? []) {
       const c = item.category?.trim();
-      if (c && (item.trade ?? 'OTHER') === selectedTrade) found.add(c);
+      if (c && itemTradeKey(item) === selectedTradeChoice) found.add(c);
     }
     // Whatever is currently selected stays on the list even when it belongs to another trade.
     // Without this, switching trade would leave the <select> pointing at a value it no longer
@@ -107,20 +123,21 @@ export function CatalogItemForm({
       if (own) found.add(own);
     }
     return [...found].sort((a, b) => a.localeCompare(b, 'uk'));
-  }, [catalog.data, selectedTrade, selectedCategory, initial?.category]);
+  }, [catalog.data, selectedTradeChoice, selectedCategory, initial?.category]);
 
   const submitting = create.isPending || update.isPending;
 
   const onSubmit = handleSubmit(async (v) => {
+    const customTradeId = parseCustomTradeKey(v.tradeChoice as TradeKey);
     const req: CatalogItemRequest = {
       name: v.name.trim(),
       type: v.type,
       unit: v.unit,
       // Picked from the list, or typed in when nothing was picked; blank in both means no category.
       category: (v.category.trim() || v.newCategory.trim()) || undefined,
-      // Always a trade (OTHER = "Інше" when unspecified); when the picker is hidden
-      // (single-trade master) the form value is the item's existing/default trade.
-      trade: v.trade,
+      // A custom trade wins over any system trade sent alongside it (forced to OTHER server-side).
+      trade: customTradeId ? undefined : (v.tradeChoice as Trade),
+      customTradeId: customTradeId ?? undefined,
       defaultPrice: parsePrice(v.defaultPrice),
     };
     try {
@@ -206,10 +223,10 @@ export function CatalogItemForm({
 
         {showTrade && (
           <FormField label={t('catalog.tradeLabel')} htmlFor="ci-trade">
-            <Select id="ci-trade" {...register('trade')}>
-              {tradeOptions.map((tr) => (
-                <option key={tr} value={tr}>
-                  {t('trades.' + tr)}
+            <Select id="ci-trade" {...register('tradeChoice')}>
+              {tradeOptions.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
                 </option>
               ))}
             </Select>

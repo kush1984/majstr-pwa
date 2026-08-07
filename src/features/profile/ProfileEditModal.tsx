@@ -5,12 +5,14 @@ import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
 import { FormField } from '@/components/FormField.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
+import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useAddCatalogTemplates } from '@/features/catalog/useCatalog.ts';
-import { useUpdateProfile } from './useProfile.ts';
+import { useAddCustomTrade, useDeleteCustomTrade, useRenameCustomTrade, useUpdateProfile } from './useProfile.ts';
 import type { Trade } from '@/api/types.ts';
 
 interface FormState {
@@ -31,6 +33,9 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   const { data: me } = useMe();
   const update = useUpdateProfile();
   const addTemplates = useAddCatalogTemplates();
+  const addCustomTrade = useAddCustomTrade();
+  const renameCustomTrade = useRenameCustomTrade();
+  const deleteCustomTrade = useDeleteCustomTrade();
   const emailEditable = me ? me.emailVerified === false : false;
 
   const [form, setForm] = useState<FormState>({ fullName: '', phone: '', companyName: '', email: '' });
@@ -42,9 +47,16 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     fullName?: boolean;
     phone?: boolean;
     companyName?: boolean;
-    trades?: boolean;
     email?: boolean;
   }>({});
+
+  // Custom trades are saved instantly (their own endpoint), independent of the
+  // "Зберегti"/save-profile flow below — same reasoning as the logo upload.
+  const [addingCustomTrade, setAddingCustomTrade] = useState(false);
+  const [newCustomTradeName, setNewCustomTradeName] = useState('');
+  const [renamingTradeId, setRenamingTradeId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deletingTradeId, setDeletingTradeId] = useState<string | null>(null);
 
   // Seed the form ONCE per open (when `me` is first available), not on every `me`
   // change. Saving the profile primes + invalidates the `['me']` cache, so `me`
@@ -77,7 +89,6 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       fullName: !form.fullName.trim(),
       phone: form.phone.trim().length < 5,
       companyName: !form.companyName.trim(),
-      trades: trades.length === 0,
       email: emailEditable && !form.email.includes('@'),
     };
     setErrors(next);
@@ -133,7 +144,45 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     onClose();
   };
 
+  const onAddCustomTrade = async () => {
+    const name = newCustomTradeName.trim();
+    if (!name) return;
+    try {
+      await addCustomTrade.mutateAsync(name);
+      toast.success(t('profile.customTradeAdded'));
+      setAddingCustomTrade(false);
+      setNewCustomTradeName('');
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const onConfirmRename = async (id: string) => {
+    const name = renameValue.trim();
+    if (!name) return;
+    try {
+      await renameCustomTrade.mutateAsync({ id, name });
+      toast.success(t('profile.customTradeRenamed'));
+      setRenamingTradeId(null);
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const onDeleteCustomTrade = async () => {
+    if (!deletingTradeId) return;
+    try {
+      await deleteCustomTrade.mutateAsync(deletingTradeId);
+      toast.success(t('profile.customTradeDeleted'));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setDeletingTradeId(null);
+    }
+  };
+
   return (
+    <>
     <Modal
       open={open}
       onClose={addPrompt ? skipAddSet : onClose}
@@ -202,8 +251,98 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
               />
             ))}
           </div>
-          {errors.trades && (
-            <span className="mt-1 block text-xs text-red-600">{t('validation.chooseTrade')}</span>
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-1 block text-sm font-medium text-gray-700">
+            {t('profile.customTradesTitle')}
+          </legend>
+          <div className="space-y-1.5">
+            {(me?.customTrades ?? []).map((ct) =>
+              renamingTradeId === ct.id ? (
+                <div key={ct.id} className="flex items-center gap-1.5">
+                  <Input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="secondary"
+                    loading={renameCustomTrade.isPending}
+                    onClick={() => void onConfirmRename(ct.id)}
+                  >
+                    {t('common.save')}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setRenamingTradeId(null)}>
+                    {t('common.cancel')}
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  key={ct.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    {CUSTOM_TRADE_EMOJI} {ct.name}
+                  </span>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-brand"
+                      onClick={() => {
+                        setRenamingTradeId(ct.id);
+                        setRenameValue(ct.name);
+                      }}
+                    >
+                      {t('common.edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-danger"
+                      onClick={() => setDeletingTradeId(ct.id)}
+                    >
+                      {t('common.delete')}
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+
+          {addingCustomTrade ? (
+            <div className="mt-2 space-y-1.5">
+              <Input
+                autoFocus
+                placeholder={t('profile.customTradeNamePlaceholder')}
+                value={newCustomTradeName}
+                onChange={(e) => setNewCustomTradeName(e.target.value)}
+              />
+              <p className="text-xs text-muted">{t('profile.customTradeHonestNote')}</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() => {
+                    setAddingCustomTrade(false);
+                    setNewCustomTradeName('');
+                  }}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button fullWidth loading={addCustomTrade.isPending} onClick={() => void onAddCustomTrade()}>
+                  {t('common.add')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mt-2 text-sm font-semibold text-brand"
+              onClick={() => setAddingCustomTrade(true)}
+            >
+              {t('profile.addCustomTrade')}
+            </button>
           )}
         </fieldset>
 
@@ -244,5 +383,15 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       </div>
       )}
     </Modal>
+
+    <ConfirmDialog
+      open={deletingTradeId !== null}
+      title={t('profile.customTradeDeleteTitle')}
+      message={t('profile.customTradeDeleteMessage')}
+      loading={deleteCustomTrade.isPending}
+      onConfirm={() => void onDeleteCustomTrade()}
+      onClose={() => setDeletingTradeId(null)}
+    />
+    </>
   );
 }

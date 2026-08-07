@@ -15,7 +15,7 @@ const line = (over: Partial<EstimateItemResponse> = {}): EstimateItemResponse =>
   id: 'i1', type: 'WORK', name: 'Позиція', category: null, unit: 'M2',
   quantity: 1, unitPrice: 100, lineTotal: 100, sortOrder: 0,
   measurementRefs: [], quantityManual: false,
-  percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+  percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
   ...over,
 });
 
@@ -53,6 +53,18 @@ describe('how a percentage line reads', () => {
   it('names the estimate for a percentage of the total', () => {
     const transport = line({ unit: 'PERCENT', quantity: 20, percentBaseKind: 'TOTAL' });
     expect(percentLabel(transport, new Map())).toMatch(/кошторис/);
+  });
+
+  it('shows the frozen provenance snapshot verbatim for a consolidated line, not the MANUAL wording', () => {
+    // A consolidated line is always kind=MANUAL (frozen), so without the baseOriginLabel
+    // branch this would read the generic "% від {reconstructed sum}" — a number nobody can
+    // place — instead of naming the source estimate.
+    const frozen = line({
+      unit: 'PERCENT', quantity: -15, unitPrice: 1000, percentBaseKind: 'MANUAL',
+      baseDetached: true, baseOriginLabel: '-15% від робіт · кошторис «Квартира — чорнові»',
+    });
+
+    expect(percentLabel(frozen, new Map())).toBe('-15% від робіт · кошторис «Квартира — чорнові»');
   });
 
   it('never says «₴/%» — the wording this whole feature exists to remove', () => {

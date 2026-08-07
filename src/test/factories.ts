@@ -33,6 +33,7 @@ export function aUser(overrides: Partial<UserResponse> = {}): UserResponse {
     email: 'master@example.com',
     fullName: 'Іван Майстер',
     trades: ['ELECTRICAL'],
+    customTrades: [],
     phone: '+380671112233',
     companyName: 'ФОП Іван',
     logoUrl: null,

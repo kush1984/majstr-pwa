@@ -16,6 +16,10 @@ export function percentLabel(
   byId: Map<string, EstimateItemResponse>,
 ): string | null {
   if (item.unit !== 'PERCENT') return null;
+  // A frozen line (copied into a consolidated rollup) carries its own provenance snapshot —
+  // show that verbatim instead of the generic MANUAL wording («% від {reconstructed sum}»),
+  // which reads as a percentage of a number nobody can place.
+  if (item.baseOriginLabel) return item.baseOriginLabel;
   const t = i18n.t.bind(i18n);
   const kind = item.percentBaseKind ?? 'MANUAL';
 

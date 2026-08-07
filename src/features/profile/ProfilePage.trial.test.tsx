@@ -17,7 +17,7 @@ vi.mock('@/api/billing.ts', () => ({
     // straight into the me cache, so it must be a complete UserResponse.
     startTrial: vi.fn(() =>
       Promise.resolve({
-        id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
+        id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], customTrades: [], phone: '1',
         companyName: 'C', logoUrl: null, plan: 'PRO', role: 'USER', emailVerified: true,
         createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
         planExpiresAt: '2026-07-18T00:00:00Z', autoRenew: false, cardMask: null,
@@ -42,10 +42,13 @@ vi.mock('./useProfile.ts', () => ({
   useUploadLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateProfile: () => ({ mutate: vi.fn(), isPending: false }),
+  useAddCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRenameCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const baseMe: UserResponse = {
-  id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], phone: '1',
+  id: 'u1', email: 'm@e.com', fullName: 'M', trades: ['ELECTRICAL'], customTrades: [], phone: '1',
   companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
   createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
   planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'refcode1',

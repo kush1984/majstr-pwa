@@ -17,10 +17,10 @@ vi.mock('@/api/estimateTemplates.ts', () => ({
 }));
 
 const own: EstimateTemplateSummary = {
-  id: 'own1', name: 'Моя ванна', trade: null, isDefault: false, itemCount: 3,
+  id: 'own1', name: 'Моя ванна', trade: null, customTradeId: null, customTradeName: null, isDefault: false, itemCount: 3,
 };
 const def: EstimateTemplateSummary = {
-  id: 'def1', name: 'Санвузол повний', trade: 'TILING', isDefault: true, itemCount: 8,
+  id: 'def1', name: 'Санвузол повний', trade: 'TILING', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 8,
 };
 
 function renderPicker(onPick: (t: EstimateTemplateSummary[]) => void) {
@@ -50,7 +50,7 @@ describe('TemplatePickerSheet', () => {
   it('lists my templates and the defaults, and previews → picks one', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
     const detail: EstimateTemplateDetail = {
-      id: 'def1', name: 'Санвузол повний', trade: 'TILING', isDefault: true,
+      id: 'def1', name: 'Санвузол повний', trade: 'TILING', customTradeId: null, customTradeName: null, isDefault: true,
       items: [{ id: 'ti1', name: 'Грунтовка поверхонь', type: 'WORK', unit: 'M2', sortOrder: 0 }],
     };
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(detail);
@@ -104,9 +104,12 @@ describe('TemplatePickerSheet', () => {
     // A master with one busy trade has 20+ bundles — the search box exists because that is a long
     // scroll. The filter must be a VIEW: a bundle ticked before searching still counts.
     const many: EstimateTemplateSummary[] = Array.from({ length: 12 }, (_, i) => ({
-      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', isDefault: true, itemCount: 5,
+      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 5,
     }));
-    many.push({ id: 'fence', name: 'Паркан профнастил', trade: 'BUILDER', isDefault: true, itemCount: 4 });
+    many.push({
+      id: 'fence', name: 'Паркан профнастил', trade: 'BUILDER', customTradeId: null, customTradeName: null,
+      isDefault: true, itemCount: 4,
+    });
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...many]);
     const onPick = vi.fn();
     renderPicker(onPick);
@@ -131,7 +134,7 @@ describe('TemplatePickerSheet', () => {
     // The empty-state texts claim the master saved nothing / has no bundles. Under a filter that
     // is a lie, and a scary one — it reads as data loss.
     const many: EstimateTemplateSummary[] = Array.from({ length: 12 }, (_, i) => ({
-      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', isDefault: true, itemCount: 5,
+      id: `d${i}`, name: `Кладка ${i}`, trade: 'BUILDER', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 5,
     }));
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...many]);
     renderPicker(vi.fn());

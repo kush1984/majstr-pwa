@@ -14,7 +14,7 @@ const line = (over: Partial<EstimateItemResponse>): EstimateItemResponse => ({
   id: 'x', type: 'WORK', name: 'Позиція', category: null, unit: 'M2',
   quantity: 1, unitPrice: 100, lineTotal: 100, sortOrder: 0,
   measurementRefs: [], quantityManual: false,
-  percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+  percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
   ...over,
 });
 

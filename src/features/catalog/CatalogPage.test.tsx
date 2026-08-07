@@ -21,7 +21,7 @@ vi.mock('@/hooks/useToast.ts', () => ({
 const LONG = 'Профіль/куточок для плитки алюмінієвий 10 мм полірований';
 
 const item: CatalogItemResponse = {
-  id: 'c1', name: LONG, category: 'Плитка', trade: 'TILING',
+  id: 'c1', name: LONG, category: 'Плитка', trade: 'TILING', customTradeId: null, customTradeName: null,
   type: 'MATERIAL', unit: 'PIECE', defaultPrice: 220, sortOrder: 0, createdAt: '',
 };
 
@@ -60,9 +60,9 @@ describe('CatalogPage — long position names', () => {
 
 describe('CatalogPage — the master arranges and prunes his own catalog', () => {
   const two: CatalogItemResponse[] = [
-    { id: 'c1', name: 'Укладання плитки', category: 'Плитка', trade: 'TILING',
+    { id: 'c1', name: 'Укладання плитки', category: 'Плитка', trade: 'TILING', customTradeId: null, customTradeName: null,
       type: 'WORK', unit: 'M2', defaultPrice: 500, sortOrder: 0, createdAt: '' },
-    { id: 'c2', name: 'Затирання швів', category: 'Плитка', trade: 'TILING',
+    { id: 'c2', name: 'Затирання швів', category: 'Плитка', trade: 'TILING', customTradeId: null, customTradeName: null,
       type: 'WORK', unit: 'M2', defaultPrice: 120, sortOrder: 1, createdAt: '' },
   ];
 

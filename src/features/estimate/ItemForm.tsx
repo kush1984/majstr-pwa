@@ -68,22 +68,30 @@ export function ItemForm({
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
   const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // A line copied into a consolidated rollup — its amount is FROZEN (baseDetached, kind forced to
+  // MANUAL server-side) and carries a provenance snapshot instead of a live base. The live
+  // POSITION/TOTAL picker would be actively misleading here (there is no real base to point at,
+  // and re-picking one would not do anything), so this renders a completely different, honest block.
+  const isFrozen = Boolean(initial?.baseOriginLabel);
   // «%» is a share OF something: «Від позиції» (a markup on one line) or «Від кошторису» (a share of
   // the works- or materials-subtotal). Default POSITION — a legacy MANUAL/null line opens as POSITION
-  // too (MANUAL is gone from the product); a detached one keeps its frozen amount and says so.
+  // too (MANUAL is gone from the product for a LIVE line); a detached one keeps its frozen amount and
+  // says so. A frozen (consolidated) line is always MANUAL — there is no picker to default into.
   const [baseKind, setBaseKind] = useState<PercentBaseKind>(
-    initial?.percentBaseKind === 'TOTAL' ? 'TOTAL' : 'POSITION',
+    isFrozen ? 'MANUAL' : initial?.percentBaseKind === 'TOTAL' ? 'TOTAL' : 'POSITION',
   );
   const [baseItemId, setBaseItemId] = useState<string | null>(initial?.percentBaseItemId ?? null);
   // A POSITION «%» line must name the position it's a share of — surfaced inline, not swallowed.
   const [baseError, setBaseError] = useState(false);
-  // Sign of a «Від кошторису» percent. The field holds a POSITIVE magnitude; this +/− toggle carries
-  // the sign (the mobile decimal keypad has no minus), so a «−» is a discount off the subtotal. Only
-  // «Від кошторису» may go negative — «Від позиції» is always a markup. An existing line opens on the
-  // right side by reading the sign of its stored percent.
+  // Sign of a «Від кошторису» percent, OR of a frozen consolidated line (which may just as well be
+  // a discount). The field holds a POSITIVE magnitude; this +/− toggle carries the sign (the mobile
+  // decimal keypad has no minus). «Від позиції» (a live one) is always a markup — no toggle there.
+  // An existing line opens on the right side by reading the sign of its stored percent.
   const [percentMinus, setPercentMinus] = useState<boolean>(
     initial?.unit === 'PERCENT' && (initial.quantity ?? 0) < 0,
   );
+  // Whether the sign toggle / a negative submitted percent applies — «Від кошторису» or frozen.
+  const percentCanBeNegative = baseKind === 'TOTAL' || isFrozen;
   const {
     register,
     control,
@@ -140,8 +148,9 @@ export function ItemForm({
       && s.unit === 'PERCENT'
       && (s.percentBaseKind ?? 'MANUAL') === 'TOTAL',
   );
-  // The field is a positive magnitude; a «Від кошторису» line may carry a «−» sign (a discount).
-  const pct = (isPercent && baseKind === 'TOTAL' && percentMinus ? -1 : 1)
+  // The field is a positive magnitude; a «Від кошторису» (or frozen) line may carry a «−» sign
+  // (a discount).
+  const pct = (isPercent && percentCanBeNegative && percentMinus ? -1 : 1)
     * (parseDecimal(watch('quantity')) || 0);
   const baseLine = siblings.find((s) => s.id === baseItemId) ?? null;
   // «Від кошторису» base = the subtotal of every line of THIS line's type that is not itself a
@@ -176,17 +185,19 @@ export function ItemForm({
     if (v.unit === 'PERCENT' && baseKind === 'TOTAL' && sameTypeTotalExists) {
       return; // one «Від кошторису» per type — the inline warning explains why
     }
-    const isTotalPercent = v.unit === 'PERCENT' && baseKind === 'TOTAL';
     const req: EstimateItemRequest = {
       type: v.type,
       name: v.name.trim(),
       category: v.category.trim() || undefined,
       unit: v.unit,
-      // The field is a positive magnitude; a «Від кошторису» «−» makes the percent negative (a
-      // discount off the subtotal). «Від позиції» is always a positive markup.
-      quantity: isTotalPercent && percentMinus ? -parseDecimal(v.quantity) : parseDecimal(v.quantity),
-      // A «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure another sum.
-      unitPrice: v.unit === 'PERCENT' ? 0 : parseDecimal(v.unitPrice),
+      // The field is a positive magnitude; a «Від кошторису» (or frozen) «−» makes the percent
+      // negative (a discount). «Від позиції» is always a positive markup.
+      quantity: isPercent && percentCanBeNegative && percentMinus
+        ? -parseDecimal(v.quantity) : parseDecimal(v.quantity),
+      // A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
+      // another sum. A FROZEN (MANUAL) line's price IS the base sum it was frozen against, and
+      // stays directly editable — there is no live base to derive it from any more.
+      unitPrice: isPercent ? (isFrozen ? parseDecimal(v.unitPrice) : 0) : parseDecimal(v.unitPrice),
       measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
       quantityManual,
       // Only a percentage line records a base; anything else sends none, whatever is in state.
@@ -283,13 +294,15 @@ export function ItemForm({
             }}
           />
         </FormField>
-        {/* A «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure another
-            sum, so the field would ask for a number that means nothing. */}
-        {isPercent ? (
+        {/* A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
+            another sum, so the field would ask for a number that means nothing. A FROZEN
+            (consolidated) line has no live base any more, so its price — the sum it was frozen
+            against — becomes the one thing left to edit directly. */}
+        {isPercent && !isFrozen ? (
           <div />
         ) : (
           <FormField
-            label={t('estimate.unitPrice')}
+            label={isFrozen ? t('estimate.percentFrozenBase') : t('estimate.unitPrice')}
             htmlFor="it-price"
             required
             error={errors.unitPrice?.message}
@@ -305,7 +318,18 @@ export function ItemForm({
         )}
       </div>
 
-      {isPercent && (
+      {isPercent && isFrozen && (
+        // Frozen (consolidated) line: no live base picker — there is nothing left to point at,
+        // and re-picking one would silently do nothing. Just the honest provenance snapshot;
+        // percent and base sum above are still directly editable (they're what's actually stored).
+        <div className="space-y-2 rounded-xl border border-amber/40 bg-amber/5 p-3">
+          <p className="text-xs font-semibold text-amber">{t('estimate.percentFrozenTitle')}</p>
+          <p className="text-sm text-primary">{initial?.baseOriginLabel}</p>
+          <p className="text-xs text-muted">{t('estimate.percentFrozenHint')}</p>
+        </div>
+      )}
+
+      {isPercent && !isFrozen && (
         <div className="space-y-2 rounded-xl border border-border bg-surface-sunken p-3">
           <p className="text-xs font-semibold text-muted">{t('estimate.percentBase')}</p>
           <div className="flex flex-wrap gap-2">

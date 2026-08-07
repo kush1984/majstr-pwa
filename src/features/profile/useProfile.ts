@@ -39,3 +39,42 @@ export function useDeleteLogo() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ME_QUERY_KEY }),
   });
 }
+
+/** Add a master-invented trade. Primes `['me']` with the returned profile
+ *  (customTrades now includes it) so the picker/list update immediately. */
+export function useAddCustomTrade() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => profileApi.addCustomTrade(name),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    },
+  });
+}
+
+/** Rename a custom trade — a live FK, so every position/template filed under
+ *  it picks up the new name as soon as `['me']` (and any refetch) reflects it. */
+export function useRenameCustomTrade() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => profileApi.renameCustomTrade(id, name),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    },
+  });
+}
+
+/** Delete a custom trade. Positions/templates filed under it fall back to
+ *  "Інше" server-side — nothing here needs to touch the catalog/template caches. */
+export function useDeleteCustomTrade() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => profileApi.deleteCustomTrade(id),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    },
+  });
+}

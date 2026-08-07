@@ -22,8 +22,8 @@ vi.mock('@/hooks/useToast.ts', () => ({
 
 const me: UserResponse = aUser();
 const catalog: CatalogItemResponse[] = [
-  { id: 'i1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
-  { id: 'i2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
+  { id: 'i1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
+  { id: 'i2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
 ];
 
 function renderSheet(onClose: () => void, siblings: EstimateItemResponse[] = []) {

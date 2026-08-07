@@ -36,22 +36,22 @@ vi.mock('@/hooks/useToast.ts', () => ({
 
 const me: UserResponse = aUser();
 const own: EstimateTemplateSummary = {
-  id: 'own1', name: 'Моя ванна', trade: null, isDefault: false, itemCount: 1,
+  id: 'own1', name: 'Моя ванна', trade: null, customTradeId: null, customTradeName: null, isDefault: false, itemCount: 1,
 };
 const ownDetail: EstimateTemplateDetail = {
-  id: 'own1', name: 'Моя ванна', trade: null, isDefault: false,
+  id: 'own1', name: 'Моя ванна', trade: null, customTradeId: null, customTradeName: null, isDefault: false,
   items: [{ id: 'it1', name: 'Розетка', type: 'WORK', unit: 'PIECE', sortOrder: 0 }],
 };
 const catalog: CatalogItemResponse[] = [
   // already in the template by name → must be disabled in the picker
-  { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
+  { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, type: 'WORK', unit: 'PIECE', defaultPrice: 180, sortOrder: 0, createdAt: '' },
   // fresh → selectable
-  { id: 'c2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
+  { id: 'c2', name: 'Кабель ВВГ', category: 'Кабель', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, type: 'MATERIAL', unit: 'M', defaultPrice: 38.5, sortOrder: 0, createdAt: '' },
 ];
 
-function renderPage() {
+function renderPage(meOverride: UserResponse = me) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(ME_QUERY_KEY, me);
+  qc.setQueryData(ME_QUERY_KEY, meOverride);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -146,9 +146,13 @@ describe('TemplatesPage — edit own template', () => {
   });
 
   it('re-files a SYSTEM template into another trade from the preview (own setting)', async () => {
-    const sys: EstimateTemplateSummary = { id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', isDefault: true, itemCount: 5 };
+    const sys: EstimateTemplateSummary = {
+      id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 5,
+    };
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
-    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', isDefault: true, items: [] });
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({
+      id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: true, items: [],
+    });
     vi.mocked(estimateTemplatesApi.setTrade).mockResolvedValue({ ...sys, trade: 'PAINTER' });
 
     renderPage();
@@ -158,14 +162,34 @@ describe('TemplatesPage — edit own template', () => {
     const select = await screen.findByDisplayValue(/Гіпсокартон/);
     fireEvent.change(select, { target: { value: 'PAINTER' } });
 
-    await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith('s1', { trade: 'PAINTER' }));
+    await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith(
+      's1', { trade: 'PAINTER', customTradeId: null }));
+  });
+
+  it('re-files MY OWN template into a custom trade — the picker offers it, a system default would not', async () => {
+    const meWithCustom = aUser({ customTrades: [{ id: 'ct1', name: 'Натяжні стелі', sortOrder: 0 }] });
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+    vi.mocked(estimateTemplatesApi.setTrade).mockResolvedValue({
+      ...own, trade: 'OTHER', customTradeId: 'ct1', customTradeName: 'Натяжні стелі',
+    });
+
+    renderPage(meWithCustom);
+    fireEvent.click(await screen.findByText('Моя ванна'));
+
+    const select = await screen.findByRole('combobox');
+    expect(screen.getByText(/Натяжні стелі/)).toBeTruthy();
+    fireEvent.change(select, { target: { value: 'custom:ct1' } });
+
+    await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith(
+      'own1', { trade: null, customTradeId: 'ct1' }));
   });
 });
 
 describe('TemplatesPage — trade filter chips', () => {
   const defaults: EstimateTemplateSummary[] = [
-    { id: 'd1', name: 'Електрика квартири', trade: 'ELECTRICAL', isDefault: true, itemCount: 3 },
-    { id: 'd2', name: 'Санвузол сантехніка', trade: 'PLUMBING', isDefault: true, itemCount: 4 },
+    { id: 'd1', name: 'Електрика квартири', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 3 },
+    { id: 'd2', name: 'Санвузол сантехніка', trade: 'PLUMBING', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 4 },
   ];
 
   it('narrows the list to the picked trade', async () => {
