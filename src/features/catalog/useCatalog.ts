@@ -100,6 +100,10 @@ export function useCreateCatalogItem() {
         // server's own answer replaces it, and picking an index risks colliding with a real slot.
         sortOrder: Number.MAX_SAFE_INTEGER,
         createdAt: new Date().toISOString(),
+        // Whether this brand-new position is also shipped under another trade is something only
+        // the server (catalog_templates) knows — invalidate() replaces this with the real answer
+        // as soon as the create round-trips.
+        sharedTrades: [],
       };
       return offlineMutate<CatalogItemResponse>({
         entity: 'catalogItem', entityId: id, type: 'create', payload: req, deps: [],

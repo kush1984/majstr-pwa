@@ -24,6 +24,12 @@ export interface TradedEntity {
   trade: Trade | null;
   customTradeId: string | null;
   customTradeName?: string | null;
+  /** Other trades that ALSO ship this exact position by name (backend-computed — see
+   *  `CatalogItemResponse.sharedTrades`). A catalog item has one row per (name, type, unit), so
+   *  a position two of the master's trades both use is filed under whichever claimed it first;
+   *  without this, selecting the OTHER trade's chip would hide a real, priced position. Absent
+   *  on entities that don't carry this data (e.g. estimate-template summaries) — treated as none. */
+  sharedTrades?: readonly Trade[];
 }
 
 /**
@@ -35,7 +41,8 @@ export interface TradedEntity {
 export function tradeMatches(entity: TradedEntity, selected: ReadonlySet<TradeKey>): boolean {
   if (selected.size === 0) return true;
   if (entity.customTradeId) return selected.has(customTradeKey(entity.customTradeId));
-  return selected.has(entity.trade == null ? 'OTHER' : entity.trade);
+  if (selected.has(entity.trade == null ? 'OTHER' : entity.trade)) return true;
+  return entity.sharedTrades?.some((tr) => selected.has(tr)) ?? false;
 }
 
 /**
@@ -68,6 +75,9 @@ export function TradeFilterChips({
     } else {
       systemPresent.add(item.trade ?? 'OTHER');
     }
+    // A shared position (see TradedEntity.sharedTrades) makes its OTHER trade's chip clickable
+    // even on the rare catalog where nothing is directly tagged with that trade yet.
+    for (const tr of item.sharedTrades ?? []) systemPresent.add(tr);
   }
   const systemChips = TRADE_VALUES.filter((tr) => systemPresent.has(tr));
   const customChips = [...customPresent.entries()].sort((a, b) => a[1].localeCompare(b[1], 'uk'));

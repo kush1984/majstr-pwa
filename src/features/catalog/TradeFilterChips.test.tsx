@@ -11,6 +11,10 @@ const ELECTRICAL = item('ELECTRICAL');
 const BUILDER = item('BUILDER');
 const OTHER = item('OTHER');
 const CUSTOM = item('OTHER', 'ct1', 'Натяжні стелі');
+// Filed under TILING (whichever trade claimed the (owner, name, type, unit) slot first), but the
+// same name/type/unit also ships under PAINTER per the default catalog — see
+// CatalogItemResponse.sharedTrades / CatalogService.sharedTradesFor.
+const SHARED_TILING_PAINTER: TradedEntity = { trade: 'TILING', customTradeId: null, customTradeName: null, sharedTrades: ['PAINTER'] };
 
 describe('tradeMatches', () => {
   it('empty selection means all trades', () => {
@@ -34,6 +38,14 @@ describe('tradeMatches', () => {
     expect(tradeMatches(CUSTOM, selCustom)).toBe(true);
     expect(tradeMatches(OTHER, selCustom)).toBe(false); // and the reverse never leaks either
   });
+
+  it('a position shared with another trade matches that trade too, not just its own', () => {
+    expect(tradeMatches(SHARED_TILING_PAINTER, new Set<TradeKey>(['TILING']))).toBe(true);
+    expect(tradeMatches(SHARED_TILING_PAINTER, new Set<TradeKey>(['PAINTER']))).toBe(true);
+    expect(tradeMatches(SHARED_TILING_PAINTER, new Set<TradeKey>(['BUILDER']))).toBe(false);
+    // No sharedTrades at all — behaves exactly as before, matches only its own trade.
+    expect(tradeMatches(ELECTRICAL, new Set<TradeKey>(['PAINTER']))).toBe(false);
+  });
 });
 
 describe('TradeFilterChips — multi-select, built from real presence', () => {
@@ -53,6 +65,14 @@ describe('TradeFilterChips — multi-select, built from real presence', () => {
     expect(screen.getByText(/Будівельник/)).toBeTruthy();
     expect(screen.getByText(/Натяжні стелі/)).toBeTruthy();
     expect(screen.queryByText(/Сантехніка/)).toBeNull();
+  });
+
+  it('shows a chip for a trade no item is directly tagged with, if a shared item recognizes it', () => {
+    // ELECTRICAL supplies the second chip so the ">= 2 chips" rule doesn't hide everything; the
+    // point under test is that PAINTER shows even though no item's OWN trade is PAINTER.
+    render(<TradeFilterChips items={[ELECTRICAL, SHARED_TILING_PAINTER]} value={new Set()} onChange={vi.fn()} />);
+    expect(screen.getByText(/Малярні роботи/)).toBeTruthy(); // PAINTER — no item's OWN trade, only shared
+    expect(screen.getByText(/Плитка/)).toBeTruthy(); // TILING — the item's own trade
   });
 
   it('shows a single "Інше" (OTHER) chip — never two, even alongside a custom trade also stored as OTHER', () => {

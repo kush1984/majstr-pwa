@@ -499,6 +499,13 @@ export interface CatalogItemResponse {
    */
   sortOrder: number;
   createdAt: string;
+  /** Other trades that ALSO recognize this exact (name, type, unit) per the default catalog —
+   *  never includes `trade` itself. A master's catalog has one row per (name, type, unit), so a
+   *  position two of his trades both ship under identical wording is filed under whichever trade
+   *  claimed it first; this is how the OTHER trade's filter chip still finds it. The server
+   *  always sends this (empty array when nothing is shared) — optional here only so fixtures/
+   *  optimistic objects that predate this field don't all need updating. */
+  sharedTrades?: Trade[];
 }
 
 export interface CatalogItemRequest {
