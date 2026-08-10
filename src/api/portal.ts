@@ -14,9 +14,9 @@ export const portalApi = {
       .then((r) => r.data);
   },
 
-  update(projectId: string, estimateIds: string[]): Promise<PortalStateResponse> {
+  update(projectId: string, estimateIds: string[], paymentsVisible: boolean): Promise<PortalStateResponse> {
     return api
-      .put<PortalStateResponse>(`/api/projects/${projectId}/portal`, { estimateIds })
+      .put<PortalStateResponse>(`/api/projects/${projectId}/portal`, { estimateIds, paymentsVisible })
       .then((r) => r.data);
   },
 

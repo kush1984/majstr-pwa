@@ -124,12 +124,14 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: messagesKey(p.id), queryFn: () => messagesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: PHOTOS_KEY(p.id), queryFn: () => photosApi.list(p.id) }));
+    // The economy tab's panels + payments are FREE-visible now (payments-economy-portal
+    // iteration) — prefetch on every plan; only its PRO internals field comes back null on FREE.
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: economyKeys.economy(p.id), queryFn: () => economyApi.economy(p.id) }));
     if (opts.isPro) {
-      // Measurements + economy are PRO-gated — prefetching them on FREE would just 403.
+      // Measurements + the expense journal stay PRO-gated — prefetching them on FREE would just 403.
       perProject.push(() =>
         qc.prefetchQuery({ queryKey: MEASUREMENTS_KEY(p.id), queryFn: () => measurementsApi.tree(p.id) }));
-      perProject.push(() =>
-        qc.prefetchQuery({ queryKey: economyKeys.economy(p.id), queryFn: () => economyApi.economy(p.id) }));
       perProject.push(() =>
         qc.prefetchQuery({ queryKey: economyKeys.expenses(p.id), queryFn: () => economyApi.listExpenses(p.id) }));
     }

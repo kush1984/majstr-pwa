@@ -49,3 +49,56 @@ describe('EstimateItemsBoard — works/materials split', () => {
     expect(screen.queryByText('Матеріали')).toBeNull();
   });
 });
+
+describe('EstimateItemsBoard — session edit highlight', () => {
+  const rowButton = (name: string) => screen.getByText(name).closest('button')!;
+
+  it('an untouched line gets neither highlight', () => {
+    render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: 'Позиція A' })]}
+        signed={false}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(rowButton('Позиція A').className).not.toContain('border-brand/30');
+    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
+  });
+
+  it('a line touched earlier this session gets the fainter brand highlight', () => {
+    render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: 'Позиція A' })]}
+        signed={false}
+        touched={new Set(['a'])}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(rowButton('Позиція A').className).toContain('border-brand/30');
+    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
+  });
+
+  it('the MOST RECENTLY touched line gets the brighter success highlight instead', () => {
+    render(
+      <EstimateItemsBoard
+        items={[
+          line({ id: 'a', name: 'Позиція A', sortOrder: 0 }),
+          line({ id: 'b', name: 'Позиція B', sortOrder: 1 }),
+        ]}
+        signed={false}
+        touched={new Set(['a', 'b'])}
+        lastTouched={new Set(['b'])}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    // Both were touched this session, but only the LAST one gets the brighter treatment — the
+    // earlier one keeps the plain "touched" look, never both at once.
+    expect(rowButton('Позиція A').className).toContain('border-brand/30');
+    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
+    expect(rowButton('Позиція B').className).toContain('border-success/50');
+    expect(rowButton('Позиція B').className).not.toContain('border-brand/30');
+  });
+});

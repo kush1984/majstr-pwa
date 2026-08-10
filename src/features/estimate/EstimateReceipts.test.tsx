@@ -15,6 +15,7 @@ const holder = vi.hoisted(() => ({ photos: [] as ProjectPhotoResponse[] }));
 vi.mock('@/features/photos/usePhotos.ts', () => ({
   usePhotos: () => ({ data: holder.photos, isPending: false }),
   useDeletePhoto: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetPhotoVisibility: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function receipt(id: string, estimateId: string | null): ProjectPhotoResponse {
@@ -82,5 +83,13 @@ describe('EstimateReceipts', () => {
 
     expect(screen.getByText(/Чеки/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Видалити/ })).toBeNull();
+  });
+
+  it('offers the same "show to client" toggle a progress photo has, even on a signed estimate', () => {
+    holder.photos = [receipt('r1', 'e1')];
+
+    render(<EstimateReceipts projectId="p1" estimateId="e1" signed />);
+
+    expect(screen.getByRole('button', { name: /Показати клієнту/ })).toBeTruthy();
   });
 });

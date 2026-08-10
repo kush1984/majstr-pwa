@@ -37,6 +37,7 @@ const state: PortalStateResponse = {
     { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
     { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: false },
   ],
+  paymentsVisible: false,
 };
 
 function renderSheet(preselect?: string) {
@@ -58,7 +59,8 @@ describe('SharePortalSheet', () => {
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
+    // Two estimate checkboxes + the payments-visible toggle (off by default).
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false, false]);
   });
 
   it('publishes exactly the ticked set before copying the link', async () => {
@@ -84,7 +86,7 @@ describe('SharePortalSheet', () => {
 
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true]);
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true, false]);
   });
 
   it('unticking everything offers "hide all" instead of copy', async () => {
@@ -97,6 +99,19 @@ describe('SharePortalSheet', () => {
     const hideBtn = await screen.findByRole('button', { name: /Прибрати все/ });
     fireEvent.click(hideBtn);
 
-    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', []));
+    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', [], false));
+  });
+
+  it('ticking the payments toggle publishes paymentsVisible:true', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue(state);
+    vi.mocked(portalApi.update).mockResolvedValue(state);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSheet();
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    fireEvent.click(screen.getAllByRole('checkbox')[2]); // the payments toggle
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', ['e1'], true));
   });
 });

@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { usePhotos, useDeletePhoto } from '@/features/photos/usePhotos.ts';
+import { cn } from '@/lib/cn.ts';
+import { usePhotos, useDeletePhoto, useSetPhotoVisibility } from '@/features/photos/usePhotos.ts';
 import { AuthPhoto, PhotoLightbox } from '@/features/photos/PhotoView.tsx';
 import type { ProjectPhotoResponse } from '@/api/types.ts';
 
@@ -31,6 +32,7 @@ export function EstimateReceipts({
   const { t } = useTranslation();
   const photos = usePhotos(projectId);
   const del = useDeletePhoto(projectId);
+  const setVisibility = useSetPhotoVisibility(projectId);
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<ProjectPhotoResponse | null>(null);
 
@@ -62,21 +64,40 @@ export function EstimateReceipts({
       {/* Thumbnails, three across on a phone — a receipt is a reference the master glances at, not
           the estimate's content, so it reads smaller than a position card. */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        {receipts.map((photo, i) => (
-          <div key={photo.id} className="overflow-hidden rounded-card border border-border bg-surface">
-            <AuthPhoto fileUrl={photo.fileUrl} alt={t('photos.receipt')} onView={() => setViewIndex(i)} />
-            {!signed && (
+        {receipts.map((photo, i) => {
+          const shared = photo.visibility === 'SHARED';
+          return (
+            <div key={photo.id} className="overflow-hidden rounded-card border border-border bg-surface">
+              <AuthPhoto fileUrl={photo.fileUrl} alt={t('photos.receipt')} onView={() => setViewIndex(i)} />
               <button
                 type="button"
-                onClick={() => setDeleting(photo)}
-                aria-label={t('common.delete')}
-                className="w-full py-1 text-[11px] text-faint hover:text-danger"
+                onClick={() =>
+                  setVisibility.mutate(
+                    { photoId: photo.id, visibility: shared ? 'PRIVATE' : 'SHARED' },
+                    { onError: (err) => toast.error(toAppError(err).message) },
+                  )
+                }
+                disabled={setVisibility.isPending}
+                className={cn(
+                  'w-full px-1 py-1 text-[10px] font-semibold leading-tight disabled:opacity-60',
+                  shared ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-muted',
+                )}
               >
-                🗑
+                {shared ? t('photos.shownToClient') : t('photos.showToClient')}
               </button>
-            )}
-          </div>
-        ))}
+              {!signed && (
+                <button
+                  type="button"
+                  onClick={() => setDeleting(photo)}
+                  aria-label={t('common.delete')}
+                  className="w-full py-1 text-[11px] text-faint hover:text-danger"
+                >
+                  🗑
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {viewIndex !== null && receipts[viewIndex] && (

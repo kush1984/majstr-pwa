@@ -1,13 +1,24 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ObjectEconomySection } from './ObjectEconomySection.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { economyApi } from '@/api/economy.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
-import type { UserResponse } from '@/api/types.ts';
+import { estimatesApi } from '@/api/estimates.ts';
+import { formatMoney } from '@/lib/format.ts';
+import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse } from '@/api/types.ts';
+
+// Intl.NumberFormat('uk-UA') groups digits with U+00A0 (NBSP). RTL's default text normalizer
+// collapses whitespace in the RENDERED node text before comparing, but does NOT touch a plain
+// string matcher — so passing a raw `formatMoney(...)` result never matches. Normalize it here
+// the same way RTL normalizes the DOM side (collapse any whitespace run to one ASCII space).
+function money(n: number): string {
+  return formatMoney(n).replace(/\s+/g, ' ');
+}
 
 vi.mock('@/api/economy.ts', () => ({
   economyApi: {
@@ -19,7 +30,14 @@ vi.mock('@/api/economy.ts', () => ({
   },
 }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
+vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 function baseMe(plan: UserResponse['plan']): UserResponse {
   return {
@@ -30,11 +48,44 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
   };
 }
 
+function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEstimatePanelResponse {
+  return {
+    id: 'e1', name: 'Кухня', works: 10000, materials: 5000, markup: 0, discount: 0,
+    total: 15000, countedInEconomy: true, signedAt: '2026-07-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
+  contractedTotal: 15000,
+  received: 3000,
+  remaining: 12000,
+  payments: [
+    { id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс', paidAmount: 3000, paidAt: '2026-07-01T00:00:00Z', status: 'RECEIVED', sortOrder: 0 },
+  ],
+};
+
+/** Mirrors the real backend: `payments`/`internals` are gated TOGETHER (economy-polish
+ *  iteration) — both null, or both present. `estimates` is independent. */
+function economyFixture(opts: {
+  estimates?: SignedEstimatePanelResponse[];
+  pro?: { expenses: number; profit: number } | null;
+} = {}): ObjectEconomyResponse {
+  const pro = opts.pro ?? null;
+  return {
+    estimates: opts.estimates ?? [panel()],
+    payments: pro ? SAMPLE_PAYMENTS : null,
+    internals: pro,
+  };
+}
+
 function renderSection(plan: UserResponse['plan']) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, baseMe(plan));
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<ObjectEconomySection objectId="p1" />, { wrapper });
 }
@@ -42,37 +93,119 @@ function renderSection(plan: UserResponse['plan']) {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ObjectEconomySection', () => {
-  it('FREE: shows a locked teaser (no figures) and opens the upgrade modal on click', () => {
+  it('FREE: sees only the acts list — summary/payments/internals are ONE locked block', async () => {
+    // economy-polish: the gate widened from "internals only" to "everything except the acts".
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture());
+
     renderSection('FREE');
 
-    expect(screen.getByText(/у PRO/)).toBeTruthy();
-    // No economy fetch for FREE (query disabled).
-    expect(economyApi.economy).not.toHaveBeenCalled();
+    await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByText('Кухня')).toBeTruthy(); // per-estimate panel, still free
+    expect(screen.getByText(/у PRO/)).toBeTruthy(); // single lock teaser
+    expect(screen.queryByText('Аванс')).toBeNull(); // payments: no longer FREE-visible
+    expect(screen.queryByText('Загалом по підписаних')).toBeNull(); // summary panel: same
+    // The expense journal itself stays hard PRO-gated (unrelated to the internals field).
+    expect(economyApi.listExpenses).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText(/Відкрити PRO/));
     expect(upgradeApi.click).toHaveBeenCalledWith('OBJECT_PROFIT');
   });
 
-  it('PRO: shows profit / negative cash + the works/materials breakdown and the expense list', async () => {
-    // Store-run: deposit 3000, receipts 5000 → materials cash −2000; profit = works − manual.
-    vi.mocked(economyApi.economy).mockResolvedValue({
-      works: 15000, materials: 6000, received: 3000,
-      spentReceipts: 5000, spentManual: 0, profit: 15000, cashBalance: -2000,
-    });
-    vi.mocked(economyApi.listExpenses).mockResolvedValue([
-      { id: 'e1', amount: 450, category: 'MATERIALS', source: 'MANUAL', note: 'клей', spentAt: '2026-07-01', createdAt: '' },
-    ]);
+  it('PRO: shows the summary panel and payments, but Прибуток/Витрати stays parked', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({ pro: { expenses: 3500, profit: 10500 } }));
 
     renderSection('PRO');
 
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
-    // Panel renders once the summary resolves (Spinner → figures).
-    expect(await screen.findByText('Заробіток')).toBeTruthy();
-    expect(screen.getByText('Каса (матеріали)')).toBeTruthy();
-    expect(screen.getByText('Роботи')).toBeTruthy();
+    expect(await screen.findByText('Загалом по підписаних')).toBeTruthy(); // summary panel
+    expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
+    // economy-hide-internals: parked behind INTERNALS_ENABLED — backend still sends `internals`
+    // (used above to build the fixture), the component just doesn't render it.
+    expect(screen.queryByText('Заробіток')).toBeNull();
+    expect(screen.queryByText('Витрати')).toBeNull();
+    expect(screen.queryByText('+ Витрата')).toBeNull();
+    // Not fetched either — no point requesting a journal nobody sees.
+    expect(economyApi.listExpenses).not.toHaveBeenCalled();
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
-    // The logged expense (its note) appears in the journal.
-    expect(await screen.findByText(/клей/)).toBeTruthy();
+  });
+
+  it('a panel excluded from the counted total says so honestly', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({ estimates: [panel({ countedInEconomy: false })] }),
+    );
+
+    renderSection('FREE');
+
+    expect(await screen.findByText('Кухня')).toBeTruthy();
+    expect(screen.getByText(/не враховано/i)).toBeTruthy();
+  });
+
+  it('clicking a panel navigates to the read-only estimate view', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture());
+
+    renderSection('FREE');
+
+    fireEvent.click(await screen.findByText('Кухня'));
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('e1'));
+  });
+
+  it('the act card shows a discount/markup recap with a derived percent', async () => {
+    // works 8000 + materials 2000 - markup 0 - discount(-1500) = base 11500; 1500/11500 ≈ 13.04%.
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({ works: 8000, materials: 2000, markup: 0, discount: -1500, total: 8500 })],
+    }));
+
+    renderSection('FREE');
+
+    // formatNumber(_, 2) still renders up to 3 fraction digits (same quirk TypeBreakdown's own
+    // percent already has — `number3` ignores the requested precision past the >0 gate).
+    expect(await screen.findByText(/Знижка\s+13[.,]043%\s+-1\s500/)).toBeTruthy();
+  });
+
+  it('the act ⋮ menu toggles counted-in-economy via the existing PATCH', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({ estimates: [panel({ countedInEconomy: true })] }),
+    );
+    vi.mocked(estimatesApi.setCountInEconomy).mockResolvedValue({} as never);
+
+    renderSection('FREE');
+
+    await screen.findByText('Кухня');
+    fireEvent.click(screen.getByLabelText('Дії'));
+    fireEvent.click(await screen.findByText('Не враховувати цей акт'));
+
+    await waitFor(() => expect(estimatesApi.setCountInEconomy).toHaveBeenCalledWith('e1', false));
+  });
+
+  it('the summary panel sums only COUNTED signed estimates, with a markup/discount recap', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      pro: { expenses: 0, profit: 0 },
+      estimates: [
+        panel({ id: 'e1', name: 'Кухня', works: 10000, materials: 5000, markup: 1000, discount: 0, total: 15000, countedInEconomy: true }),
+        panel({ id: 'e2', name: 'Ванна', works: 4000, materials: 1000, markup: 0, discount: -500, total: 5000, countedInEconomy: false }),
+      ],
+    }));
+
+    renderSection('PRO');
+
+    const heading = await screen.findByText('Загалом по підписаних');
+    const summary = heading.closest('div') as HTMLElement;
+    // Only e1 counts: works 10000, materials 5000, markup 1000 shown, discount from e2 excluded.
+    expect(within(summary).getByText(money(10000))).toBeTruthy();
+    expect(within(summary).getByText(`Надбавка +${money(1000)}`)).toBeTruthy();
+    expect(within(summary).queryByText(/Знижка/)).toBeNull();
+  });
+
+  it('no summary panel when nothing is counted (even on PRO)', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      pro: { expenses: 0, profit: 0 },
+      estimates: [panel({ countedInEconomy: false })],
+    }));
+
+    renderSection('PRO');
+
+    await screen.findByText('Кухня');
+    expect(screen.queryByText('Загалом по підписаних')).toBeNull();
   });
 });

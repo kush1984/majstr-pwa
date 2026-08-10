@@ -75,6 +75,12 @@ export const estimatesApi = {
       .then((r) => r.data);
   },
 
+  /** Dismiss the "auto-reopened, a duplicate got signed instead" banner without touching
+   *  anything else on the estimate. */
+  dismissSuperseded(id: string): Promise<EstimateResponse> {
+    return api.post<EstimateResponse>(`/api/estimates/${id}/dismiss-superseded`).then((r) => r.data);
+  },
+
   // ---- items ----
   /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
   addItem(estimateId: string, req: EstimateItemRequest, id?: string): Promise<EstimateItemResponse> {

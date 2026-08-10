@@ -55,15 +55,19 @@ export function SharePortalSheet({
 
   // null = "not initialised yet" — seeded from the server state once loaded.
   const [selected, setSelected] = useState<Set<string> | null>(null);
+  // Off by default — the master opts in explicitly (mirrors the backend default).
+  const [paymentsOn, setPaymentsOn] = useState<boolean | null>(null);
   useEffect(() => {
     if (!open) {
       setSelected(null);
+      setPaymentsOn(null);
       return;
     }
     if (portal.data && selected === null) {
       const initial = new Set(portal.data.estimates.filter((e) => e.visible).map((e) => e.id));
       if (preselectEstimateId) initial.add(preselectEstimateId);
       setSelected(initial);
+      setPaymentsOn(portal.data.paymentsVisible);
     }
   }, [open, portal.data, selected, preselectEstimateId]);
 
@@ -127,6 +131,8 @@ export function SharePortalSheet({
     }
   };
 
+  const paymentsTicked = paymentsOn ?? false;
+
   const onCopy = async () => {
     setBusy('copy');
     try {
@@ -134,7 +140,7 @@ export function SharePortalSheet({
       // Safari focus rules) while the portal itself published fine — never
       // show "скопійовано" unless it actually landed in the clipboard.
       const { copied, value } = await copyWhenReady(async () => {
-        const state = await portalApi.update(project.id, [...ticked]);
+        const state = await portalApi.update(project.id, [...ticked], paymentsTicked);
         return state.url ?? '';
       });
       invalidateAfterShare();
@@ -154,7 +160,7 @@ export function SharePortalSheet({
   const onEmail = async () => {
     setBusy('email');
     try {
-      await portalApi.update(project.id, [...ticked]);
+      await portalApi.update(project.id, [...ticked], paymentsTicked);
       await portalApi.sendEmail(project.id);
       invalidateAfterShare();
       toast.success(t('estimate.emailSent'));
@@ -170,7 +176,7 @@ export function SharePortalSheet({
   const onHideAll = async () => {
     setBusy('hide');
     try {
-      await portalApi.update(project.id, []);
+      await portalApi.update(project.id, [], false);
       invalidateAfterShare();
       toast.success(t('portal.hiddenAll'));
       onClose();
@@ -265,6 +271,21 @@ export function SharePortalSheet({
               </label>
             ))}
           </div>
+        )}
+
+        {!portal.isPending && !portal.isError && (
+          <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+            <input
+              type="checkbox"
+              checked={paymentsTicked}
+              onChange={() => setPaymentsOn((prev) => !(prev ?? false))}
+              className="mt-0.5 h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-primary">{t('portal.showPayments')}</span>
+              <span className="block text-xs text-muted">{t('portal.showPaymentsHint')}</span>
+            </span>
+          </label>
         )}
 
         {email && (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -14,7 +14,6 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
@@ -49,10 +48,30 @@ import { useSaveAsTemplate } from './useEstimateTemplates.ts';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { ReceiptPdfSheet } from './ReceiptPdfSheet.tsx';
 
+// Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
+// iteration) — the backend endpoint and this component's own handler/dialog stay fully wired so
+// re-enabling later is a one-line flip, same pattern as ELECTRICAL_MEASUREMENTS_ENABLED. See the
+// sibling flip in ProjectDetailPage.tsx's row-level menu.
+const REOPEN_ENABLED: boolean = false;
+
+/** Where «← назад» (and a post-delete redirect) should land — the object page, on the SAME tab
+ *  the master opened this estimate from (`fromTab`, off this page's own `?from=` param), or the
+ *  default Кошторис tab when absent. Pulled out of the component for a test that doesn't need to
+ *  mount the whole page (economy-nav-and-discount iteration). */
+export function resolveBackUrl(projectId: string, fromTab: string | null): string {
+  if (!projectId) return routes.projects;
+  return `${routes.project(projectId)}${fromTab ? `?tab=${fromTab}` : ''}`;
+}
 
 export function EstimateEditorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  // Which object tab to return to (economy-nav-and-discount iteration) — `?from=act` when opened
+  // from the Економіка tab's act card, absent (→ default Кошторис tab) everywhere else, including
+  // direct entry. Read once at mount: navigating away and back re-mounts this page with a fresh
+  // `id`/URL anyway, so there's no case where it needs to change mid-visit.
+  const [searchParams] = useSearchParams();
+  const fromTab = searchParams.get('from');
   const { t } = useTranslation();
   const estimate = useEstimate(id);
   const projectId = estimate.data?.projectId ?? '';
@@ -72,20 +91,24 @@ export function EstimateEditorPage() {
   // doesn't get lost in a long list (especially after an edit on iOS). Session-scoped: cleared when the
   // estimate id changes below, and gone entirely on navigating away (it's local state).
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
-  const markTouched = (ids: string[]) =>
+  // Just the ids from the MOST RECENT edit/add, shown a step brighter than the rest of `touched` —
+  // going down a long list, the master can see at a glance which line he last worked on, distinct
+  // from everything he already touched earlier in the same pass.
+  const [lastTouched, setLastTouched] = useState<ReadonlySet<string>>(() => new Set());
+  const markTouched = (ids: string[]) => {
     setTouched((prev) => {
       const next = new Set(prev);
       ids.forEach((tid) => next.add(tid));
       return next;
     });
+    setLastTouched(new Set(ids));
+  };
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const ensureEmailVerified = useEmailGate();
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [depositOpen, setDepositOpen] = useState(false);
-  const [depositValue, setDepositValue] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -111,7 +134,7 @@ export function EstimateEditorPage() {
 
   // The route component is reused across estimates, so drop the highlight set when the id changes —
   // yesterday's edits must not glow on a different sheet.
-  useEffect(() => { setTouched(new Set()); }, [id]);
+  useEffect(() => { setTouched(new Set()); setLastTouched(new Set()); }, [id]);
 
   if (estimate.isPending) {
     return (
@@ -166,7 +189,11 @@ export function EstimateEditorPage() {
   );
   const otherPhotos = (photos.data ?? []).filter((p) => p.source === 'MANUAL');
 
-  const goBack = () => navigate(projectId ? routes.project(projectId) : routes.projects);
+  // Returns to the SAME object tab the master opened this estimate from (economy-nav-and-discount
+  // iteration) — `fromTab` came in on this page's own URL, so this works identically whether the
+  // master uses this in-app button or the browser's own back (which restores that URL directly).
+  const backUrl = resolveBackUrl(projectId, fromTab);
+  const goBack = () => navigate(backUrl);
 
   // The actual download, given the receipts the master chose to attach ([] = none). Shared by the
   // direct path (no receipts) and the picker sheet.
@@ -238,8 +265,6 @@ export function EstimateEditorPage() {
     setEditOpen(true);
   };
 
-  // Name + deposit share one PUT — always send BOTH so saving one never clears
-  // the other. Name edits keep the current deposit; deposit edits keep the name.
   const saveName = async () => {
     try {
       await updateEstimate.mutateAsync({
@@ -247,31 +272,9 @@ export function EstimateEditorPage() {
         validUntil: est.validUntil ?? undefined,
         notes: est.notes ?? undefined,
         name: renameValue.trim() || undefined,
-        depositAmount: est.depositAmount ?? null,
       });
       toast.success(t('estimate.saved'));
       setEditOpen(false);
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    }
-  };
-
-  const openDeposit = () => {
-    setDepositValue(est.depositAmount != null ? String(est.depositAmount) : '');
-    setDepositOpen(true);
-  };
-
-  const saveDeposit = async (clear = false) => {
-    try {
-      await updateEstimate.mutateAsync({
-        status: est.status,
-        validUntil: est.validUntil ?? undefined,
-        notes: est.notes ?? undefined,
-        name: est.name ?? undefined,
-        depositAmount: clear || depositValue.trim() === '' ? null : parseDecimal(depositValue),
-      });
-      toast.success(t('estimate.saved'));
-      setDepositOpen(false);
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -316,7 +319,7 @@ export function EstimateEditorPage() {
     try {
       await deleteEstimate.mutateAsync();
       toast.success(t('estimate.estimateDeleted'));
-      void navigate(projectId ? routes.project(projectId) : routes.projects, { replace: true });
+      void navigate(backUrl, { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -377,9 +380,11 @@ export function EstimateEditorPage() {
             <span className="flex-1 text-sm font-semibold text-primary">
               {t('estimate.signedViewOnly')}
             </span>
-            <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>
-              {t('estimate.reopen')}
-            </Button>
+            {REOPEN_ENABLED && (
+              <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>
+                {t('estimate.reopen')}
+              </Button>
+            )}
           </div>
         )}
 
@@ -406,6 +411,7 @@ export function EstimateEditorPage() {
                   items={est.items}
                   signed={signed}
                   touched={touched}
+                  lastTouched={lastTouched}
                   onEdit={setEditing}
                   selection={picked === null ? undefined : {
                     selected: picked,
@@ -501,11 +507,7 @@ export function EstimateEditorPage() {
 
           {/* Desktop summary */}
           <div className="hidden lg:sticky lg:top-8 lg:block">
-            <SummaryCard
-              est={est}
-              project={project.data}
-              onEditDeposit={signed ? undefined : openDeposit}
-            />
+            <SummaryCard est={est} project={project.data} />
           </div>
         </div>
       </div>
@@ -514,9 +516,7 @@ export function EstimateEditorPage() {
           stop eating the list. Hidden while selecting (the selection bar owns the bottom then). The
           FAB floats above it (z-50) in the sheet's reserved bottom dock, so it never covers a number
           and never jumps up with the sheet. */}
-      {picked === null && (
-        <MobileSummarySheet est={est} onEditDeposit={signed ? undefined : openDeposit} />
-      )}
+      {picked === null && <MobileSummarySheet est={est} />}
 
       {/* Floating actions (speed-dial) — always in reach on every screen size */}
       <Fab ariaLabel={t('estimate.actionsMenu')}>
@@ -669,35 +669,6 @@ export function EstimateEditorPage() {
         >
           {t('estimate.deleteEstimate')}
         </button>
-      </Modal>
-
-      {/* Deposit — edited here from the summary card / total bar. */}
-      <Modal open={depositOpen} onClose={() => setDepositOpen(false)} title={t('estimate.depositTitle')}>
-        <label htmlFor="est-deposit" className="mb-1.5 block text-[13px] font-semibold text-muted">
-          {t('estimate.depositLabel')}
-        </label>
-        <Input
-          id="est-deposit"
-          inputMode="decimal"
-          value={depositValue}
-          placeholder="0"
-          onChange={(e) => setDepositValue(e.target.value)}
-        />
-        <div className="mt-4 flex gap-2">
-          {est.depositAmount != null && (
-            <Button
-              variant="secondary"
-              fullWidth
-              loading={updateEstimate.isPending}
-              onClick={() => void saveDeposit(true)}
-            >
-              {t('estimate.depositRemove')}
-            </Button>
-          )}
-          <Button fullWidth loading={updateEstimate.isPending} onClick={() => void saveDeposit()}>
-            {t('common.save')}
-          </Button>
-        </div>
       </Modal>
 
       <Modal
@@ -892,36 +863,6 @@ function MarkupSheet({
 }
 
 
-/** Deposit line for the mobile total bar: shows завдаток/залишок or an "add
- *  deposit" affordance; tapping opens the deposit editor. Read-only when signed. */
-function DepositRow({ est, onEdit }: { est: EstimateResponse; onEdit?: () => void }) {
-  const { t } = useTranslation();
-  if (est.depositAmount == null && !onEdit) return null;
-
-  const content =
-    est.depositAmount != null ? (
-      <>
-        <span className="text-white/70">
-          {t('estimate.deposit')}: {formatMoney(est.depositAmount)}
-        </span>
-        <span className="font-semibold text-white">
-          {t('estimate.balance')}: {formatMoney(est.balance)}
-        </span>
-      </>
-    ) : (
-      <span className="font-semibold text-brand">＋ {t('estimate.depositAdd')}</span>
-    );
-
-  const cls = 'mt-2 flex w-full items-center justify-between border-t border-white/10 pt-2 text-[12px]';
-  return onEdit ? (
-    <button type="button" onClick={onEdit} className={cls}>
-      {content}
-    </button>
-  ) : (
-    <div className={cls}>{content}</div>
-  );
-}
-
 /**
  * Mobile summary — a bottom sheet that peeks with just «До сплати» and taps / swipes up to about a
  * third of the screen to show the breakdown (works, materials, загальна знижка, deposit). It replaces
@@ -932,13 +873,7 @@ function DepositRow({ est, onEdit }: { est: EstimateResponse; onEdit?: () => voi
  * empty right/bottom «dock». So the FAB never covers a number, and — because it is anchored to the
  * viewport, not to the sheet — it does not jump up when the sheet expands.</p>
  */
-function MobileSummarySheet({
-  est,
-  onEditDeposit,
-}: {
-  est: EstimateResponse;
-  onEditDeposit?: () => void;
-}) {
+function MobileSummarySheet({ est }: { est: EstimateResponse }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const dragStartY = useRef<number | null>(null);
@@ -1000,7 +935,6 @@ function MobileSummarySheet({
               <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
               <AdjustNote items={est.items} />
             </div>
-            <DepositRow est={est} onEdit={onEditDeposit} />
           </div>
         )}
       </div>
@@ -1121,12 +1055,9 @@ function ClientBanner({ project }: { project: ProjectResponse }) {
 function SummaryCard({
   est,
   project,
-  onEditDeposit,
 }: {
   est: EstimateResponse;
   project: ProjectResponse | undefined;
-  /** Undefined when the estimate is signed (read-only) — hides deposit editing. */
-  onEditDeposit?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -1151,33 +1082,6 @@ function SummaryCard({
         {formatMoney(est.total)}
       </div>
       <AdjustNote items={est.items} />
-      {est.depositAmount != null ? (
-        <div className="mt-2 border-t border-white/10 pt-2">
-          <div className="flex justify-between text-[13px] text-white/75">
-            <span>{t('estimate.deposit')}</span>
-            <span>{formatMoney(est.depositAmount)}</span>
-          </div>
-          <div className="flex justify-between text-[13px] font-semibold text-white">
-            <span>{t('estimate.balance')}</span>
-            <span>{formatMoney(est.balance)}</span>
-          </div>
-          {onEditDeposit && (
-            <button type="button" onClick={onEditDeposit} className="mt-2 text-xs font-semibold text-brand">
-              {t('estimate.depositEdit')}
-            </button>
-          )}
-        </div>
-      ) : (
-        onEditDeposit && (
-          <button
-            type="button"
-            onClick={onEditDeposit}
-            className="mt-3 w-full rounded-[10px] border border-white/25 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-          >
-            ＋ {t('estimate.depositAdd')}
-          </button>
-        )
-      )}
     </div>
   );
 }

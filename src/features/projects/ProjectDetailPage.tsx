@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/Badge.tsx';
@@ -17,7 +17,6 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
-import { cn } from '@/lib/cn.ts';
 import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint } from './economyNote.ts';
@@ -38,10 +37,14 @@ import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 import { NotesSection } from '@/features/notes/NotesSection.tsx';
-import { useMe } from '@/features/auth/useMe.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
-type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
+// Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
+// iteration) — same flip point as EstimateEditorPage.tsx's REOPEN_ENABLED; the backend endpoint
+// and this component's own handler/dialog stay fully wired so re-enabling is a one-line flip.
+const REOPEN_ENABLED: boolean = false;
+
+export type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
 const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
   { key: 'estimate', labelKey: 'projects.tabEstimate' },
   { key: 'measurements', labelKey: 'projects.tabMeasurements' },
@@ -50,16 +53,31 @@ const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
   { key: 'act', labelKey: 'projects.tabAct', shortLabelKey: 'projects.tabActShort' },
 ];
 
+/** The `?tab=` URL param → an active {@link Tab}, defaulting to «Кошторис» for anything
+ *  unrecognized (absent, malformed, or a stale value from a since-removed tab key) — the same
+ *  fallback direct entry always had. Pulled out of the component so the URL↔tab mapping has a
+ *  test that doesn't need to mount the whole page (economy-nav-and-discount iteration). */
+export function resolveTab(tabParam: string | null): Tab {
+  return TABS.some((def) => def.key === tabParam) ? (tabParam as Tab) : 'estimate';
+}
+
 export function ProjectDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
   const { guard } = useOnlineGuard(); // for the server-only actions (portal share)
   const project = useProject(id);
-  const [tab, setTab] = useState<Tab>('estimate');
+  // The active tab lives in the URL (economy-nav-and-discount iteration), not plain state — so
+  // opening an act/estimate and coming back (in-app «← назад» OR the browser's own back) restores
+  // the tab the master was actually on, instead of always landing back on «Кошторис». `replace`
+  // on every tab switch: browser back from a fresh tab pick should leave the page, not step
+  // through a stack of tabs the master never asked to navigate between.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: Tab = resolveTab(searchParams.get('tab'));
+  const setTab = (next: Tab) => {
+    setSearchParams(next === 'estimate' ? {} : { tab: next }, { replace: true });
+  };
   const [shareOpen, setShareOpen] = useState(false);
   const [chatLinkOpen, setChatLinkOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
@@ -98,12 +116,9 @@ export function ProjectDetailPage() {
     },
     onError: (err) => toast.error(toAppError(err).message),
   });
-  const rowEconomyToggle = useMutation({
-    mutationFn: (v: { estId: string; value: boolean }) => estimatesApi.setCountInEconomy(v.estId, v.value),
-    onSuccess: () => {
-      invalidateAfterRowAction();
-      void qc.invalidateQueries({ queryKey: ['object-economy', id] });
-    },
+  const dismissSuperseded = useMutation({
+    mutationFn: (estId: string) => estimatesApi.dismissSuperseded(estId),
+    onSuccess: () => invalidateAfterRowAction(),
     onError: (err) => toast.error(toAppError(err).message),
   });
 
@@ -157,6 +172,10 @@ export function ProjectDetailPage() {
 
   const p = project.data;
   const list = estimates.data ?? [];
+  // A SIGNED estimate lives only in «Економіка» now (economy-rework iteration) — this tab shows
+  // the working set (DRAFT/SENT/REJECTED) only. `list` itself stays the full set: the estimate
+  // limit, the consolidate-source picker, and "share with client" all still need every estimate.
+  const activeList = list.filter((s) => s.status !== 'SIGNED');
   // FREE caps estimates per project (closes the unlimited-drafts hole). Block
   // "new estimate" preemptively once this project hits the cap; deleting one
   // frees a slot (count is live). Backend still enforces it.
@@ -366,7 +385,7 @@ export function ProjectDetailPage() {
               estimates below the fold for actions taken once a job, so they moved into the FAB. */}
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13px] font-bold uppercase tracking-wide text-primary">
-              {t('projects.estimatesCount', { count: list.length })}
+              {t('projects.estimatesCount', { count: activeList.length })}
             </h2>
             <div className="flex items-center gap-3">
               {list.length >= 2 && (
@@ -392,6 +411,12 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
+          {list.length > activeList.length && (
+            // Only the moment it's actually true for this object — a master with no signed
+            // estimates yet has nowhere for this hint to point to.
+            <p className="mb-3 text-xs text-muted">{t('projects.signedMovedToEconomyHint')}</p>
+          )}
+
           {atEstimateLimit && (
             <UpgradeBanner
               text={t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject })}
@@ -401,7 +426,7 @@ export function ProjectDetailPage() {
 
           {estimates.isPending ? (
             <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
-          ) : list.length === 0 ? (
+          ) : activeList.length === 0 ? (
             <EmptyState
               icon="🧾"
               title={t('projects.noEstimatesTitle')}
@@ -417,17 +442,23 @@ export function ProjectDetailPage() {
             />
           ) : (
             <div className="space-y-2">
-              {list.map((s) => (
+              {activeList.map((s) => (
                 <EstimateRow
                   key={s.id}
                   summary={s}
-                  economyLocked={!isPro}
                   // A handful of estimates per object, so a scan beats memoising a Set.
                   isCrewSource={list.some((other) => other.duplicatedFromId === s.id)}
-                  onClick={() => navigate(routes.estimate(s.id))}
+                  // Both sides of a supersede pair belong to the same project's full list — the
+                  // duplicate that superseded this row is SIGNED, so it only lives in `list`, not
+                  // `activeList`.
+                  supersededByName={(() => {
+                    const by = list.find((other) => other.id === s.supersededByEstimateId);
+                    return by ? estimateName(by.name, by.createdAt) : null;
+                  })()}
+                  onClick={() => navigate(`${routes.estimate(s.id)}?from=${tab}`)}
                   onReopen={() => setConfirm({ kind: 'reopen', est: s })}
                   onDelete={() => setConfirm({ kind: 'delete', est: s })}
-                  onToggleEconomy={(value) => rowEconomyToggle.mutate({ estId: s.id, value })}
+                  onDismissSuperseded={() => dismissSuperseded.mutate(s.id)}
                 />
               ))}
             </div>
@@ -471,31 +502,47 @@ export function ProjectDetailPage() {
  *  row's main button to avoid invalid nested buttons. */
 function EstimateRow({
   summary,
-  economyLocked,
   isCrewSource,
+  supersededByName,
   onClick,
   onReopen,
   onDelete,
-  onToggleEconomy,
+  onDismissSuperseded,
 }: {
   summary: EstimateSummary;
-  economyLocked: boolean;
   /** True when a marked-up copy of this estimate exists — i.e. this is the crew's price list. */
   isCrewSource: boolean;
+  /** Set when this estimate was auto-reopened because this duplicate got signed instead —
+   *  its name, for the banner. Null in the ordinary case. */
+  supersededByName: string | null;
   onClick: () => void;
   onReopen: () => void;
   onDelete: () => void;
-  onToggleEconomy: (value: boolean) => void;
+  onDismissSuperseded: () => void;
 }) {
   const { t } = useTranslation();
   const full = useEstimate(summary.id);
-  // FREE can't use the economy, so its checkbox reads unchecked (and is disabled).
-  // On PRO it shows the real stored flag — default-on for every estimate except a
-  // consolidated one — so upgrading immediately reflects them all in the economy.
-  const checked = economyLocked ? false : summary.countInEconomy;
   const pairHint = economyPairHint(summary, isCrewSource);
   return (
     <div className="rounded-card border border-border bg-surface">
+      {/* Economy-rework: a discounted duplicate got signed while this one was still SIGNED, so
+          the server auto-reopened it to DRAFT — say why, and let the master decide its fate. */}
+      {supersededByName && (
+        <div className="flex items-start gap-2 rounded-t-card border-b border-amber/30 bg-amber-soft px-3.5 py-2.5">
+          <span className="text-sm leading-none" aria-hidden>⚠️</span>
+          <p className="min-w-0 flex-1 text-[11px] leading-snug text-primary">
+            {t('estimate.supersededBanner', { name: supersededByName })}
+          </p>
+          <button
+            type="button"
+            onClick={onDismissSuperseded}
+            aria-label={t('common.close')}
+            className="flex-shrink-0 text-sm text-muted"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex items-stretch">
         <button
           type="button"
@@ -522,55 +569,32 @@ function EstimateRow({
             </span>
           </div>
         </button>
-        <ActionMenu ariaLabel={t('estimate.actions')}>
-          {(close) =>
-            summary.status === 'SIGNED' ? (
-              <ActionMenuItem
-                icon="🔓"
-                label={t('estimate.reopen')}
-                onClick={() => { close(); onReopen(); }}
-              />
-            ) : (
-              <ActionMenuItem
-                icon="🗑"
-                danger
-                label={t('estimate.deleteEstimate')}
-                onClick={() => { close(); onDelete(); }}
-              />
-            )
-          }
-        </ActionMenu>
-      </div>
-      {/* Visible economy checkbox — much clearer than hiding it in the ⋮ menu.
-          FREE can't see the object economy, so it's disabled (kept, not removed).
-          Generous 44px tap target — the old one was hard to hit on a phone. */}
-      <button
-        type="button"
-        disabled={economyLocked}
-        aria-checked={checked}
-        role="checkbox"
-        onClick={() => onToggleEconomy(!checked)}
-        className={cn(
-          'flex min-h-[44px] w-full items-center gap-2.5 border-t border-border px-3.5 py-2.5 text-left',
-          economyLocked ? 'cursor-not-allowed opacity-55' : 'active:bg-surface-sunken',
+        {(summary.status !== 'SIGNED' || REOPEN_ENABLED) && (
+          <ActionMenu ariaLabel={t('estimate.actions')}>
+            {(close) =>
+              summary.status === 'SIGNED' ? (
+                <ActionMenuItem
+                  icon="🔓"
+                  label={t('estimate.reopen')}
+                  onClick={() => { close(); onReopen(); }}
+                />
+              ) : (
+                <ActionMenuItem
+                  icon="🗑"
+                  danger
+                  label={t('estimate.deleteEstimate')}
+                  onClick={() => { close(); onDelete(); }}
+                />
+              )
+            }
+          </ActionMenu>
         )}
-      >
-        <span
-          className={cn(
-            'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border text-xs',
-            checked ? 'border-brand bg-brand text-white' : 'border-border text-transparent',
-          )}
-        >
-          ✓
-        </span>
-        <span className={cn('text-xs', checked ? 'font-semibold text-primary' : 'text-muted')}>
-          {t('estimate.countInEconomy')}
-        </span>
-        {economyLocked && <span className="ml-auto text-xs text-muted">🔒 PRO</span>}
-      </button>
-      {/* Outside the button on purpose. Inside it, the note dimmed along with an un-ticked box and
-          read as "true only while the tick is on" — but it describes the standing arrangement of a
-          duplicated pair, which holds either way. */}
+      </div>
+      {/* economy-polish: the "Враховувати в економіці" checkbox used to live here, but every row
+          on this tab is now DRAFT/SENT (SIGNED estimates moved to «Економіка» — economy-rework
+          iteration), and toggling it before a client has even signed is a decision with nothing
+          to act on yet. The control moved to the act's own ⋮ menu in ObjectEconomySection, where
+          it actually matters. */}
       {pairHint && (
         <p className="border-t border-border px-3.5 py-2 text-[11px] leading-snug text-muted">
           ℹ️ {t(pairHint, { percent: Math.abs(summary.markupPercent ?? 0) })}

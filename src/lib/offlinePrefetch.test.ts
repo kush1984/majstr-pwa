@@ -89,11 +89,17 @@ describe('prefetchForOffline', () => {
     expect(qc.getQueryData([...ESTIMATE_TEMPLATE_KEY, 't1'])).toBeTruthy();
   });
 
-  it('skips PRO-only measurements and economy on FREE (would just 403)', async () => {
+  it('skips PRO-only measurements + the expense journal on FREE (would just 403)', async () => {
     const qc = client();
     await prefetchForOffline(qc, { isPro: false });
     expect(measurementsApi.tree).not.toHaveBeenCalled();
-    expect(economyApi.economy).not.toHaveBeenCalled();
+    expect(economyApi.listExpenses).not.toHaveBeenCalled();
+  });
+
+  it('still prefetches economy() on FREE — panels + payments are FREE-visible now', async () => {
+    const qc = client();
+    await prefetchForOffline(qc, { isPro: false });
+    expect(economyApi.economy).toHaveBeenCalledWith('p1');
   });
 
   it('keeps going when one request fails (best-effort warming)', async () => {

@@ -20,10 +20,12 @@ const MAX_BYTES = 10 * 1024 * 1024; // pre-check on the original; downscale shri
 const canCapture = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
 
 /**
- * «Фото» tab: the object's photos. Manual progress photos can be shown to the
- * client (SHARED → they appear on the portal); receipt photos are private and
- * labelled by their estimate. Files come from an authenticated stream, so each
- * tile fetches its blob with the bearer token (`AuthPhoto`).
+ * «Фото» tab: two folders — «Фото прогресу» (MANUAL) and «Чеки» (RECEIPT with no estimate link:
+ * either uploaded straight here, or orphaned because its estimate was deleted). Either source can
+ * be shown to the client (SHARED → appears on the portal, payments-economy-portal iteration lifted
+ * the old "receipts always PRIVATE" rule). A receipt tied to an estimate lives under that
+ * estimate's Materials section instead — this tab never shows it twice. Files come from an
+ * authenticated stream, so each tile fetches its blob with the bearer token (`AuthPhoto`).
  */
 export function PhotosSection({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
@@ -33,24 +35,24 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   const limits = usePlanLimits();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const receiptFileRef = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<ProjectPhotoResponse | null>(null);
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const del = useDeletePhoto(projectId);
 
   const manualCount = (photos.data ?? []).filter((p) => p.source === 'MANUAL').length;
   const atPhotoLimit = isAtLimit(manualCount, limits.data?.maxPhotosPerObject);
+  const receiptCount = (photos.data ?? []).filter((p) => p.source === 'RECEIPT').length;
+  const atReceiptLimit = isAtLimit(receiptCount, limits.data?.maxReceiptPhotosPerObject);
 
-  const onPick = async (file: File | undefined) => {
-    if (!file) return;
-    // A photo upload streams to the server — there's no offline queue for blobs yet, so tell the
-    // master plainly instead of letting the upload fail with a network error.
+  const validateAndDownscale = async (file: File) => {
     if (!online) {
       toast.error(t('offline.needConnection'));
-      return;
+      return null;
     }
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
       toast.error(t('photos.badType'));
-      return;
+      return null;
     }
     // Size-check AFTER downscaling — a raw camera shot can exceed 10 MB and still
     // compress to a few hundred KB; rejecting it up front would break the
@@ -58,10 +60,32 @@ export function PhotosSection({ projectId }: { projectId: string }) {
     const compact = await downscaleImage(file);
     if (compact.size > MAX_BYTES) {
       toast.error(t('photos.tooLarge'));
-      return;
+      return null;
     }
+    return compact;
+  };
+
+  const onPick = async (file: File | undefined) => {
+    if (!file) return;
+    const compact = await validateAndDownscale(file);
+    if (!compact) return;
     upload.mutate(
       { file: compact, source: 'MANUAL' },
+      {
+        onSuccess: () => toast.success(t('photos.uploaded')),
+        onError: (err) => toast.error(toAppError(err).message),
+      },
+    );
+  };
+
+  // No estimateId — lands directly in this tab's «Чеки» folder, for a master who doesn't want to
+  // build an estimate for it.
+  const onPickReceipt = async (file: File | undefined) => {
+    if (!file) return;
+    const compact = await validateAndDownscale(file);
+    if (!compact) return;
+    upload.mutate(
+      { file: compact, source: 'RECEIPT' },
       {
         onSuccess: () => toast.success(t('photos.uploaded')),
         onError: (err) => toast.error(toAppError(err).message),
@@ -80,10 +104,11 @@ export function PhotosSection({ projectId }: { projectId: string }) {
     }
   };
 
-  // A receipt tied to an estimate now lives under that estimate's Materials section, not here — the
-  // «Фото» tab is for object/progress photos. Receipts with no estimate (its estimate was deleted →
-  // estimateId set null) stay visible here so they can't be orphaned out of reach.
-  const list = (photos.data ?? []).filter((p) => p.source !== 'RECEIPT' || p.estimateId === null);
+  const progressPhotos = (photos.data ?? []).filter((p) => p.source === 'MANUAL');
+  // A receipt tied to an estimate lives under that estimate's Materials section, not here.
+  // Receipts with no estimate (uploaded straight here, or orphaned by an estimate delete) show up.
+  const receiptPhotos = (photos.data ?? []).filter((p) => p.source === 'RECEIPT' && p.estimateId === null);
+  const list = [...progressPhotos, ...receiptPhotos]; // shared index space for the lightbox
 
   return (
     <section>
@@ -146,20 +171,64 @@ export function PhotosSection({ projectId }: { projectId: string }) {
         <div className="py-8 text-center">
           <Spinner />
         </div>
-      ) : list.length === 0 ? (
-        <EmptyState icon="📷" title={t('photos.emptyTitle')} text={t('photos.emptyText')} />
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {list.map((photo, i) => (
-            <PhotoTile
-              key={photo.id}
-              projectId={projectId}
-              photo={photo}
-              onView={() => setViewIndex(i)}
-              onDelete={() => setDeleting(photo)}
+        <>
+          {progressPhotos.length === 0 ? (
+            <EmptyState icon="📷" title={t('photos.emptyTitle')} text={t('photos.emptyText')} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {progressPhotos.map((photo) => (
+                <PhotoTile
+                  key={photo.id}
+                  projectId={projectId}
+                  photo={photo}
+                  onView={() => setViewIndex(list.indexOf(photo))}
+                  onDelete={() => setDeleting(photo)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Always reachable — a master's first action on an object may be a receipt,
+              not a progress photo, so this folder never hides behind the empty state above. */}
+          <div className="mb-2 mt-5 flex items-center justify-between">
+            <h3 className="text-[13px] font-semibold text-muted">🧾 {t('photos.receiptsFolderTitle')}</h3>
+            <button
+              type="button"
+              onClick={() => receiptFileRef.current?.click()}
+              disabled={upload.isPending || atReceiptLimit}
+              title={atReceiptLimit ? t('photos.limitReached') : undefined}
+              className="text-[13px] font-semibold text-brand disabled:opacity-60"
+            >
+              + {t('photos.addReceipt')}
+            </button>
+            <input
+              ref={receiptFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                void onPickReceipt(e.target.files?.[0]);
+                e.target.value = '';
+              }}
             />
-          ))}
-        </div>
+          </div>
+          {receiptPhotos.length === 0 ? (
+            <p className="text-[13px] text-muted">{t('photos.noReceipts')}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {receiptPhotos.map((photo) => (
+                <PhotoTile
+                  key={photo.id}
+                  projectId={projectId}
+                  photo={photo}
+                  onView={() => setViewIndex(list.indexOf(photo))}
+                  onDelete={() => setDeleting(photo)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {viewIndex !== null && list[viewIndex] && (
@@ -211,26 +280,23 @@ function PhotoTile({
     <div className="overflow-hidden rounded-card border border-border bg-surface">
       <AuthPhoto fileUrl={photo.fileUrl} alt={photo.caption ?? t('photos.title')} onView={onView} />
       <div className="p-2">
-        {isReceipt ? (
+        {isReceipt && (
           <p className="truncate text-[11px] text-muted">
             🧾 {photo.estimateName ? t('photos.receiptOf', { name: photo.estimateName }) : t('photos.receipt')}
           </p>
-        ) : (
-          <>
-            {photo.caption && <p className="truncate text-[11px] text-primary">{photo.caption}</p>}
-            <button
-              type="button"
-              onClick={toggleShare}
-              disabled={setVisibility.isPending}
-              className={cn(
-                'mt-1 w-full rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-60',
-                shared ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-muted',
-              )}
-            >
-              {shared ? t('photos.shownToClient') : t('photos.showToClient')}
-            </button>
-          </>
         )}
+        {!isReceipt && photo.caption && <p className="truncate text-[11px] text-primary">{photo.caption}</p>}
+        <button
+          type="button"
+          onClick={toggleShare}
+          disabled={setVisibility.isPending}
+          className={cn(
+            'mt-1 w-full rounded-lg px-2 py-1 text-[11px] font-semibold disabled:opacity-60',
+            shared ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-muted',
+          )}
+        >
+          {shared ? t('photos.shownToClient') : t('photos.showToClient')}
+        </button>
         <button
           type="button"
           onClick={onDelete}

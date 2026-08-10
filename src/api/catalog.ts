@@ -103,15 +103,24 @@ export const catalogApi = {
       .then((r) => r.data);
   },
 
-  /** A pending "we changed your catalog" notice, written by a catalog migration that rewrote the
-   *  master's own catalog without them asking. `pending: false` when there is nothing to show. */
-  updateNotice(): Promise<CatalogUpdateNoticeResponse> {
+  /** Every pending "we changed your catalog" notice — a queue, not a single slot. A migration's
+   *  count notice and/or a community price-drift notice per repriced position can all be pending
+   *  at once. Empty array is the normal "nothing to show" answer. */
+  updateNotices(): Promise<CatalogUpdateNoticeResponse[]> {
     return api
-      .get<CatalogUpdateNoticeResponse>('/api/catalog/update-notice')
+      .get<CatalogUpdateNoticeResponse[]>('/api/catalog/update-notice')
       .then((r) => r.data);
   },
 
-  dismissUpdateNotice(): Promise<void> {
-    return api.post('/api/catalog/update-notice/dismiss').then(() => undefined);
+  /** Declines a price-drift notice's proposal (or just closes a count notice) — never changes
+   *  the master's own catalog price. */
+  dismissUpdateNotice(id: string): Promise<void> {
+    return api.post(`/api/catalog/update-notice/${id}/dismiss`).then(() => undefined);
+  },
+
+  /** Accepts a price-drift notice: the master's own LIBRARY item updates to the new price, but
+   *  only if it still carries the old price the notice named (a self-edited price is untouched). */
+  acceptUpdateNotice(id: string): Promise<void> {
+    return api.post(`/api/catalog/update-notice/${id}/accept`).then(() => undefined);
   },
 };

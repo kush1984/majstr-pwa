@@ -56,6 +56,7 @@ export function EstimateItemsBoard({
   items,
   signed,
   touched,
+  lastTouched,
   onEdit,
   onArrange,
   selection,
@@ -65,6 +66,9 @@ export function EstimateItemsBoard({
   signed: boolean;
   /** Ids added/edited this session — faintly highlighted so a change isn't lost in a long list. */
   touched?: ReadonlySet<string>;
+  /** Ids from the MOST RECENT add/edit — a step brighter than the rest of `touched`, so the master
+   *  can see at a glance which line he last worked on while stepping through a long estimate. */
+  lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   /** The new arrangement, flat and in order, each line carrying the section it now belongs to. */
   onArrange: (arranged: EstimateItemResponse[]) => void;
@@ -130,6 +134,7 @@ export function EstimateItemsBoard({
           startNumber={1}
           signed={signed}
           touched={touched}
+          lastTouched={lastTouched}
           onEdit={onEdit}
           selection={selection}
           byId={byId}
@@ -143,6 +148,7 @@ export function EstimateItemsBoard({
           startNumber={works.length + 1}
           signed={signed}
           touched={touched}
+          lastTouched={lastTouched}
           onEdit={onEdit}
           selection={selection}
           byId={byId}
@@ -171,7 +177,7 @@ export function EstimateItemsBoard({
  * to this type, so a line or a category can never cross into the other.
  */
 function TypeGroup({
-  heading, sections, startNumber, signed, touched, onEdit, selection, byId, onDragEnd,
+  heading, sections, startNumber, signed, touched, lastTouched, onEdit, selection, byId, onDragEnd,
 }: {
   /** The section heading, or null to render the block bare (a single-type estimate). */
   heading: string | null;
@@ -180,6 +186,7 @@ function TypeGroup({
   startNumber: number;
   signed: boolean;
   touched?: ReadonlySet<string>;
+  lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
   byId: Map<string, EstimateItemResponse>;
@@ -217,6 +224,7 @@ function TypeGroup({
               firstNumber={sections.slice(0, s).reduce((n, prev) => n + prev.items.length, startNumber)}
               signed={signed}
               touched={touched}
+              lastTouched={lastTouched}
               onEdit={onEdit}
               selection={selection}
               byId={byId}
@@ -253,7 +261,7 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function SectionBlock({
-  section, firstNumber, signed, touched, onEdit, selection, byId,
+  section, firstNumber, signed, touched, lastTouched, onEdit, selection, byId,
 }: {
   section: Section<EstimateItemResponse>;
   byId: Map<string, EstimateItemResponse>;
@@ -261,6 +269,7 @@ function SectionBlock({
   firstNumber: number;
   signed: boolean;
   touched?: ReadonlySet<string>;
+  lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
 }) {
@@ -315,6 +324,7 @@ function SectionBlock({
               number={firstNumber + i}
               signed={signed}
               touched={touched}
+              lastTouched={lastTouched}
               onEdit={onEdit}
               selection={selection}
               byId={byId}
@@ -327,7 +337,7 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, number, signed, touched, onEdit, selection, byId,
+  item, number, signed, touched, lastTouched, onEdit, selection, byId,
 }: {
   item: EstimateItemResponse;
   /** Every line by id, so a percentage row can name the line it is measured against. */
@@ -335,6 +345,7 @@ function ItemRow({
   number: number;
   signed: boolean;
   touched?: ReadonlySet<string>;
+  lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
 }) {
@@ -344,9 +355,10 @@ function ItemRow({
     disabled: signed || !!selection,
   });
   const picked = selection ? selection.selected.has(item.id) : false;
-  // Faint session highlight for a line just added or edited — but never over the selection state,
-  // which owns the row's look while picking.
-  const isTouched = !picked && (touched?.has(item.id) ?? false);
+  // Just-edited gets the brighter (success) highlight; touched-earlier-this-session keeps the
+  // fainter brand one; neither applies while the selection state owns the row's look.
+  const isLastTouched = !picked && (lastTouched?.has(item.id) ?? false);
+  const isTouched = !picked && !isLastTouched && (touched?.has(item.id) ?? false);
 
   return (
     <div
@@ -383,8 +395,9 @@ function ItemRow({
         className={cn(
           'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',
           picked ? 'border-brand bg-brand-soft/40'
-            : isTouched ? 'border-brand/30 bg-brand-soft/20'
-              : 'border-border bg-surface',
+            : isLastTouched ? 'border-success/50 bg-success-soft'
+              : isTouched ? 'border-brand/30 bg-brand-soft/20'
+                : 'border-border bg-surface',
         )}
       >
         {/* The number is a GUTTER for the whole card, not a word inside the name.

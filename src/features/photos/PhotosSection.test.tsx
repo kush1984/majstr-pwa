@@ -22,7 +22,7 @@ vi.mock('./usePhotos.ts', () => ({
   useDeletePhoto: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('@/features/plan/usePlanLimits.ts', () => ({
-  usePlanLimits: () => ({ data: { maxPhotosPerObject: 10 } }),
+  usePlanLimits: () => ({ data: { maxPhotosPerObject: 10, maxReceiptPhotosPerObject: 10 } }),
   isAtLimit: () => false,
 }));
 vi.mock('@/lib/image.ts', () => ({ downscaleImage: vi.fn() }));
@@ -47,16 +47,18 @@ beforeEach(() => {
 });
 
 describe('PhotosSection', () => {
-  it('offers BOTH a direct-camera input and a gallery input', () => {
+  it('offers a direct-camera input, a gallery input, and a receipt-folder input', () => {
     render(<PhotosSection projectId="p1" />);
 
     const inputs = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')];
-    expect(inputs).toHaveLength(2);
+    expect(inputs).toHaveLength(3);
     // Camera path: capture forces the camera app to open right on the object.
     expect(inputs[0].getAttribute('capture')).toBe('environment');
     expect(inputs[0].accept).toBe('image/*');
     // Gallery path: a plain picker, no capture.
     expect(inputs[1].hasAttribute('capture')).toBe(false);
+    // Receipts folder: always reachable, even with an empty gallery.
+    expect(inputs[2].hasAttribute('capture')).toBe(false);
   });
 
   it('hides the take-photo button on a non-touch device (desktop has no camera flow)', () => {
@@ -95,6 +97,33 @@ describe('PhotosSection', () => {
     // Two tiles: the manual photo and the orphan receipt. The estimate-linked receipt lives under
     // its estimate now, not in the «Фото» tab.
     expect(screen.getAllByRole('img')).toHaveLength(2);
+  });
+
+  it('shows the receipts folder + its upload button even with zero photos', () => {
+    // A master's first action on an object may be a receipt, not a progress photo.
+    render(<PhotosSection projectId="p1" />);
+
+    expect(screen.getByText('Ще немає чеків без прив\'язки до кошторису')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Додати чек/ })).toBeTruthy();
+  });
+
+  it('uploading via the receipts folder sends source RECEIPT with no estimateId', async () => {
+    const file = new File([new Uint8Array(1)], 'chek.jpg', { type: 'image/jpeg' });
+    vi.mocked(downscaleImage).mockResolvedValue(file);
+    render(<PhotosSection projectId="p1" />);
+
+    const receiptInput = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')].at(-1)!;
+    fireEvent.change(receiptInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(uploadMutate).toHaveBeenCalled());
+    expect(uploadMutate.mock.calls[0][0]).toEqual({ file, source: 'RECEIPT' });
+  });
+
+  it('a receipt tile shows the same "show to client" toggle a progress photo has', () => {
+    holder.photos = [photo({ id: 'r1', source: 'RECEIPT', estimateId: null })];
+    render(<PhotosSection projectId="p1" />);
+
+    expect(screen.getByRole('button', { name: /Показати клієнту/ })).toBeTruthy();
   });
 
   it('rejects a file that is still over the cap after downscaling', async () => {

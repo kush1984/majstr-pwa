@@ -289,6 +289,8 @@ export interface PortalStateResponse {
   /** Shareable portal URL; null until the first publish mints the link. */
   url: string | null;
   estimates: PortalEstimateFlag[];
+  /** Whether the object-level payments card shows on the portal. Off by default. */
+  paymentsVisible: boolean;
 }
 
 /**
@@ -334,6 +336,10 @@ export interface EstimateSummary {
   /** Set on a marked-up COPY: the estimate it came from. The PARENT is found by looking for its
    *  own id here, which is how its row knows to say the crew prices are not earnings. */
   duplicatedFromId?: string | null;
+  /** Set when this estimate was auto-reopened to DRAFT because a duplicate of it got signed while
+   *  it was still SIGNED — the id of that duplicate. Drives the "клієнт підписав похідний" banner;
+   *  the duplicate's own name is found by looking for its id in this same list. */
+  supersededByEstimateId?: string | null;
 }
 
 export interface EstimateItemResponse {
@@ -420,8 +426,6 @@ export interface EstimateUpdateRequest {
   validUntil?: string;
   notes?: string;
   name?: string;
-  /** Deposit (завдаток); null clears it. Balance is computed server-side. */
-  depositAmount?: number | null;
 }
 
 /**
@@ -532,21 +536,90 @@ export interface ExpenseRequest {
   source?: ExpenseSource;
 }
 
-export interface ObjectEconomyResponse {
-  /** Works (labour) subtotal of counted estimates — the master's earnings base. */
+/** One panel in the economy tab's per-estimate list — every SIGNED estimate, regardless of
+ *  `countedInEconomy` (the "act" framing). Flag a panel whose amount is NOT in the summary
+ *  below it when `countedInEconomy` is false — never silently. */
+export interface SignedEstimatePanelResponse {
+  id: string;
+  name: string | null;
   works: number;
-  /** Materials subtotal of counted estimates — passthrough, reference only. */
   materials: number;
-  /** Deposits received from the client. */
-  received: number;
-  /** Real material cost (receipt-logged expenses). */
-  spentReceipts: number;
-  /** Unforeseen (hand-entered) expenses. */
-  spentManual: number;
-  /** works − spentManual (+ leftover materials cash once the object is COMPLETED). */
+  /** «% від кошторису» recap, same split as the app's black summary panel — already folded into
+   *  works/materials by type, so `total = works + materials` stays correct without adding these. */
+  markup: number;
+  discount: number;
+  total: number;
+  countedInEconomy: boolean;
+  signedAt: string;
+}
+
+/** PRO-only internals — null on `ObjectEconomyResponse` for FREE. Deliberately two numbers
+ *  (economy-rework iteration): profit = contracted(counted) − expenses, no works/materials/cash
+ *  split — what the master pays out (crew wages included) is logged as an expense instead. */
+export interface ObjectEconomyInternalsResponse {
+  expenses: number;
   profit: number;
-  /** received − spentReceipts (materials pot); NOT clamped — negative = out of pocket. */
-  cashBalance: number;
+}
+
+export type ProjectPaymentStatus = 'PLANNED' | 'PARTIAL' | 'RECEIVED' | 'OVERDUE';
+
+export interface ProjectPaymentResponse {
+  id: string;
+  amount: number;
+  dueDate: string | null;
+  nextStage: string | null;
+  purpose: string;
+  paidAmount: number | null;
+  paidAt: string | null;
+  status: ProjectPaymentStatus;
+  sortOrder: number;
+}
+
+export interface ProjectPaymentRequest {
+  amount: number;
+  dueDate?: string | null;
+  nextStage?: string | null;
+  purpose: string;
+  paidAmount?: number | null;
+  paidAt?: string | null;
+}
+
+/** The owner's money summary — PRO-only on `ObjectEconomyResponse.payments` (economy-polish
+ *  iteration; null for FREE). Distinct from the portal's own payments card, which stays gated
+ *  only by the `payments_visible` toggle regardless of plan. */
+export interface PaymentsSummaryResponse {
+  contractedTotal: number;
+  received: number;
+  remaining: number;
+  payments: ProjectPaymentResponse[];
+}
+
+export type PaymentSplitPreset = 'FIFTY_FIFTY' | 'THIRTY_FORTY_THIRTY' | 'THIRTY_THIRTY_FORTY' | 'CUSTOM';
+
+export interface PaymentSplitRequest {
+  preset: PaymentSplitPreset;
+  /** Required (and must sum to 100) only when `preset === 'CUSTOM'`. */
+  customPercents?: number[];
+}
+
+export interface PaymentSplitRow {
+  purpose: string;
+  amount: number;
+}
+
+export interface PaymentSplitPreviewResponse {
+  contractedTotal: number;
+  rows: PaymentSplitRow[];
+}
+
+export interface ObjectEconomyResponse {
+  /** Every SIGNED estimate of the object — FREE + PRO, always present. */
+  estimates: SignedEstimatePanelResponse[];
+  /** Contracted/received/remaining + the payment schedule. PRO only as of the economy-polish
+   *  iteration — null for FREE, gated together with `internals` behind one lock teaser. */
+  payments: PaymentsSummaryResponse | null;
+  /** Profit/cash/expenses — PRO only; null for FREE (render the lock teaser). */
+  internals: ObjectEconomyInternalsResponse | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -968,10 +1041,17 @@ export interface TemplateUpdatesResponse {
  * V82–V84 tiling rebuild was the first). `pending: false` is the normal answer, so this is a 200
  * with a flag rather than a 404.
  */
+/** One pending "your catalog was updated" notice. `kind` tells the two shapes apart: 'COUNT'
+ *  carries added/removed (positionName/oldPrice/newPrice null); 'PRICE_DRIFT' carries the other
+ *  three (added/removed both 0). The endpoint returns a LIST — a master can have several at once. */
 export interface CatalogUpdateNoticeResponse {
-  pending: boolean;
+  id: string;
+  kind: 'COUNT' | 'PRICE_DRIFT';
   added: number;
   removed: number;
+  positionName: string | null;
+  oldPrice: number | null;
+  newPrice: number | null;
 }
 
 // ---------------------------------------------------------------------------

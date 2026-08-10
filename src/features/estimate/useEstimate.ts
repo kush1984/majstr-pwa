@@ -434,7 +434,8 @@ export function useDuplicateEstimate(estimateId: string) {
 }
 
 /**
- * Edit the estimate's own fields — status, name, valid-until, notes, deposit.
+ * Edit the estimate's own fields — status, name, valid-until, notes. Money moved to
+ * `project_payment` (payments-economy-portal iteration) — no deposit field here anymore.
  *
  * Offline-capable: marking an estimate «Надіслано» or naming a variant on site is core work,
  * and it used to go straight to the network and fail. `SIGNED` never reaches here from the UI
@@ -454,7 +455,7 @@ export function useUpdateEstimate(estimateId: string) {
         onOnlineSuccess: invalidate,
         optimistic: () => {
           qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], (old) =>
-            old ? { ...old, ...req, depositAmount: req.depositAmount ?? old.depositAmount } : old);
+            old ? { ...old, ...req } : old);
           // The object's estimate list shows status + name on each card.
           qc.setQueriesData<EstimateSummary[]>({ queryKey: ['project-estimates'] }, (old) =>
             (old ?? []).map((e) => (e.id === estimateId ? { ...e, status: req.status, name: req.name ?? e.name } : e)));
