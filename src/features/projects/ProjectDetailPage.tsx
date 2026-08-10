@@ -17,12 +17,12 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
-import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
+import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
-import { useProject } from './useProjects.ts';
+import { useProject, useSetProjectStatus } from './useProjects.ts';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
@@ -84,6 +84,11 @@ export function ProjectDetailPage() {
   const [editClientOpen, setEditClientOpen] = useState(false);
   // The action a row asked for, waiting on its confirm dialog.
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
+  // Object-level manual transitions (object-status-unification) — a SEPARATE confirm target from
+  // the estimate-row one above, since they patch a different kind of thing and shouldn't share a
+  // union that has to know about both.
+  const [objectAction, setObjectAction] = useState<'complete' | 'reopen' | 'cancel' | 'restore' | null>(null);
+  const setProjectStatus = useSetProjectStatus();
 
   const estimates = useQuery({
     queryKey: ['project-estimates', id],
@@ -216,6 +221,20 @@ export function ProjectDetailPage() {
     setShareOpen(true);
   });
 
+  // The four manual object transitions all reuse the SAME PATCH .../status endpoint — see
+  // useSetProjectStatus's own doc comment for why this wasn't split into new endpoints.
+  const OBJECT_ACTION_STATUS = { complete: 'COMPLETED', reopen: 'IN_PROGRESS', cancel: 'CANCELLED', restore: 'IN_PROGRESS' } as const;
+  const confirmObjectAction = () => {
+    if (!objectAction) return;
+    setProjectStatus.mutate(
+      { id, status: OBJECT_ACTION_STATUS[objectAction] },
+      {
+        onError: (err) => toast.error(toAppError(err).message),
+        onSettled: () => setObjectAction(null),
+      },
+    );
+  };
+
   return (
     <>
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
@@ -246,6 +265,16 @@ export function ProjectDetailPage() {
           else rowDelete.mutate(confirm.est.id);
         }}
         onClose={() => setConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={objectAction !== null}
+        title={t('projects.objectActionTitle.' + (objectAction ?? 'complete'))}
+        message={t('projects.objectActionConfirm.' + (objectAction ?? 'complete'))}
+        confirmLabel={t('projects.objectActionTitle.' + (objectAction ?? 'complete'))}
+        loading={setProjectStatus.isPending}
+        onConfirm={confirmObjectAction}
+        onClose={() => setObjectAction(null)}
       />
 
       <Modal
@@ -314,15 +343,49 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Hero */}
-      <div className="mb-4 rounded-card border border-border bg-surface-sunken p-4">
-        <div className="mb-1.5 flex items-center gap-2 text-[17px] font-bold text-primary">
+      <div className="relative mb-4 rounded-card border border-border bg-surface-sunken p-4">
+        <div className="mb-1.5 flex items-center gap-2 pr-8 text-[17px] font-bold text-primary">
           <IconTile tone="brand" size={32}>
             📁
           </IconTile>
           <span className="min-w-0 truncate">{p.name}</span>
         </div>
         <div className="mb-3 text-xs text-muted">📍 {p.address}</div>
-        <Badge variant={PROJECT_STATUS_VARIANT[p.status]}>{t('status.project.' + p.status)}</Badge>
+        <Badge variant={OBJECT_STAGE_VARIANT[p.stage]}>{t('status.stage.' + p.stage)}</Badge>
+        <div className="absolute right-2 top-2">
+          <ActionMenu ariaLabel={t('estimate.actions')}>
+            {(close) => (
+              <>
+                {p.stage === 'COMPLETED' ? (
+                  <ActionMenuItem
+                    icon="↩️"
+                    label={t('projects.objectActionTitle.reopen')}
+                    onClick={() => { close(); setObjectAction('reopen'); }}
+                  />
+                ) : (
+                  <ActionMenuItem
+                    icon="✓"
+                    label={t('projects.objectActionTitle.complete')}
+                    onClick={() => { close(); setObjectAction('complete'); }}
+                  />
+                )}
+                {p.stage === 'CANCELLED' ? (
+                  <ActionMenuItem
+                    icon="↩️"
+                    label={t('projects.objectActionTitle.restore')}
+                    onClick={() => { close(); setObjectAction('restore'); }}
+                  />
+                ) : (
+                  <ActionMenuItem
+                    icon="🚫"
+                    label={t('projects.objectActionTitle.cancel')}
+                    onClick={() => { close(); setObjectAction('cancel'); }}
+                  />
+                )}
+              </>
+            )}
+          </ActionMenu>
+        </div>
         {p.clientFullName && (
           <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">

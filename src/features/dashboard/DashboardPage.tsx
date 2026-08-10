@@ -125,15 +125,15 @@ export function DashboardPage() {
               hint={t('dashboard.metricActiveHint')}
               icon="📁"
               tone="brand"
-              onClick={() => navigate(`${routes.projects}?status=IN_PROGRESS`)}
+              onClick={() => navigate(`${routes.projects}?stage=IN_PROGRESS`)}
             />
             <MetricCard
               label={t('dashboard.metricPending')}
-              value={m?.pendingEstimates ?? 0}
+              value={m?.pendingObjects ?? 0}
               hint={t('dashboard.metricPendingHint')}
               icon="⏳"
               tone="amber"
-              onClick={() => navigate(`${routes.projects}?status=SENT`)}
+              onClick={() => navigate(`${routes.projects}?stage=PENDING_SIGNATURE`)}
             />
             <MetricCard
               className="hidden lg:block"
@@ -144,7 +144,7 @@ export function DashboardPage() {
               })}
               icon="✓"
               tone="green"
-              onClick={() => navigate(`${routes.projects}?status=COMPLETED`)}
+              onClick={() => navigate(`${routes.projects}?stage=COMPLETED`)}
             />
           </>
         )}

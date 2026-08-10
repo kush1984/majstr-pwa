@@ -90,7 +90,7 @@ describe('ChatLinkRowButton', () => {
     // child of it. Nest it and every tap would navigate too — so the DOM relationship is asserted here
     // rather than left to a stopPropagation call that would be invisible if lost.
     const project = {
-      id: 'p1', name: 'Квартира', address: 'вул. 1', status: 'IN_PROGRESS',
+      id: 'p1', name: 'Квартира', address: 'вул. 1', status: 'IN_PROGRESS', stage: 'IN_PROGRESS',
       clientFullName: null, clientId: null, description: null,
       unreadQuestions: 0, latestEstimateTotal: null, estimateStatus: null,
       createdAt: '2026-07-20T10:00:00Z',

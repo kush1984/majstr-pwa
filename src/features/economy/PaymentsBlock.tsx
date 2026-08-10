@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
@@ -199,7 +200,10 @@ function PaymentSheet({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
+            <span className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted">
+              {t('economy.amount')}
+              <InfoPopover text={t('economy.amountVsReceivedInfo')} label={t('economy.amount')} />
+            </span>
             <Input
               autoFocus={!editing}
               inputMode="decimal"
@@ -211,7 +215,10 @@ function PaymentSheet({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.dueDate')}</span>
+            <span className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted">
+              {t('economy.dueDate')}
+              <InfoPopover text={t('economy.dueDateConditionInfo')} label={t('economy.dueDate')} />
+            </span>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </label>
 
@@ -594,15 +601,24 @@ export function PaymentsBlock({ objectId, summary }: { objectId: string; summary
       <div className="mt-2 grid grid-cols-3 gap-2 text-center">
         <div>
           <div className="text-sm font-bold text-primary">{formatMoney(summary.contractedTotal)}</div>
-          <div className="mt-0.5 text-[11px] text-muted">{t('economy.contracted')}</div>
+          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
+            {t('economy.contracted')}
+            <InfoPopover text={t('economy.contractedInfo')} label={t('economy.contracted')} />
+          </div>
         </div>
         <div>
           <div className="text-sm font-bold text-primary">{formatMoney(summary.received)}</div>
-          <div className="mt-0.5 text-[11px] text-muted">{t('economy.received')}</div>
+          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
+            {t('economy.received')}
+            <InfoPopover text={t('economy.receivedInfo')} label={t('economy.received')} />
+          </div>
         </div>
         <div>
           <div className="text-sm font-bold text-primary">{formatMoney(summary.remaining)}</div>
-          <div className="mt-0.5 text-[11px] text-muted">{t('economy.remaining')}</div>
+          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
+            {t('economy.remaining')}
+            <InfoPopover text={t('economy.remainingInfo')} label={t('economy.remaining')} />
+          </div>
         </div>
       </div>
 

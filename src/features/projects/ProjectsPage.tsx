@@ -2,43 +2,49 @@ import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { routes } from '@/lib/config.ts';
-import type { ProjectResponse } from '@/api/types.ts';
+import type { ObjectStage, ProjectResponse } from '@/api/types.ts';
 import { useProjects } from './useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
- * Filter is URL-driven (`?status=`) so the dashboard metric cards can deep-link
- * straight into a filtered list. SENT filters by the latest estimate's status
- * (awaiting signature); the others by the project's own status.
+ * Filter is URL-driven (`?stage=`) so the dashboard metric cards can deep-link straight into a
+ * filtered list — one vocabulary, the derived {@link ObjectStage} (object-status-unification), not
+ * a mix of the project's own status and the latest estimate's. CANCELLED has no dedicated chip
+ * (a master rarely wants to filter TO it), but "Усі" still counts/shows cancelled objects — hiding
+ * them from the list entirely would make a mis-click unrecoverable from the UI.
  */
-type Filter = 'ALL' | 'IN_PROGRESS' | 'SENT' | 'COMPLETED';
+type Filter = 'ALL' | Exclude<ObjectStage, 'CANCELLED'>;
 
 const FILTERS: { value: Filter; labelKey: string }[] = [
   { value: 'ALL', labelKey: 'projects.filterAll' },
+  { value: 'ASSESSMENT', labelKey: 'projects.filterAssessment' },
+  { value: 'PENDING_SIGNATURE', labelKey: 'projects.filterPending' },
   { value: 'IN_PROGRESS', labelKey: 'projects.filterInProgress' },
-  { value: 'SENT', labelKey: 'projects.filterPending' },
   { value: 'COMPLETED', labelKey: 'projects.filterCompleted' },
 ];
 
-function matches(p: ProjectResponse, f: Filter): boolean {
-  if (f === 'ALL') return true;
-  if (f === 'SENT') return p.estimateStatus === 'SENT';
-  return p.status === f;
+/** Exported for a standalone test (object-status-unification) — this one function is the whole
+ *  fix for the "1 vs 0" bug report: everything now reads the SAME derived `stage`, never a mix of
+ *  the object's own status and the latest estimate's. */
+export function matches(p: ProjectResponse, f: Filter): boolean {
+  return f === 'ALL' || p.stage === f;
 }
 
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
-  const raw = params.get('status');
+  const raw = params.get('stage');
   const filter: Filter =
-    raw === 'IN_PROGRESS' || raw === 'SENT' || raw === 'COMPLETED' ? raw : 'ALL';
+    raw === 'ASSESSMENT' || raw === 'PENDING_SIGNATURE' || raw === 'IN_PROGRESS' || raw === 'COMPLETED'
+      ? raw : 'ALL';
 
   // Fetch all once and filter client-side so the chips can show live counts.
   const { data, isPending, isError, refetch } = useProjects();
@@ -52,16 +58,17 @@ export function ProjectsPage() {
   const counts = useMemo<Record<Filter, number>>(
     () => ({
       ALL: all.length,
-      IN_PROGRESS: all.filter((p) => p.status === 'IN_PROGRESS').length,
-      SENT: all.filter((p) => p.estimateStatus === 'SENT').length,
-      COMPLETED: all.filter((p) => p.status === 'COMPLETED').length,
+      ASSESSMENT: all.filter((p) => p.stage === 'ASSESSMENT').length,
+      PENDING_SIGNATURE: all.filter((p) => p.stage === 'PENDING_SIGNATURE').length,
+      IN_PROGRESS: all.filter((p) => p.stage === 'IN_PROGRESS').length,
+      COMPLETED: all.filter((p) => p.stage === 'COMPLETED').length,
     }),
     [all],
   );
   const shown = useMemo(() => all.filter((p) => matches(p, filter)), [all, filter]);
 
   const setFilter = (f: Filter) =>
-    setParams(f === 'ALL' ? {} : { status: f }, { replace: true });
+    setParams(f === 'ALL' ? {} : { stage: f }, { replace: true });
   // Combined flow (object + first estimate) vs. object-only. Both consume the
   // FREE object quota, so both are gated the same way.
   const newCombined = () => {
@@ -99,12 +106,15 @@ export function ProjectsPage() {
         <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
       )}
 
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        {FILTERS.map((f) => (
-          <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
-            {t(f.labelKey)} · {counts[f.value]}
-          </Chip>
-        ))}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
+          {FILTERS.map((f) => (
+            <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
+              {t(f.labelKey)} · {counts[f.value]}
+            </Chip>
+          ))}
+        </div>
+        <InfoPopover text={t('projects.stageLegend')} label={t('projects.stageLegendLabel')} />
       </div>
 
       {isPending ? (

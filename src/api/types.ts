@@ -153,6 +153,19 @@ export type ProjectStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
+/**
+ * The ONE object-status vocabulary the UI shows (object-status-unification) — derived
+ * server-side (see backend `ObjectStage.derive`), not stored. Read this everywhere a master-facing
+ * "status" is shown; `ProjectResponse.status` (the raw {@link ProjectStatus}) is largely vestigial
+ * now — only `CANCELLED` on it still means anything, and `stage` already accounts for that.
+ */
+export type ObjectStage =
+  | 'ASSESSMENT'
+  | 'PENDING_SIGNATURE'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
 export type EstimateStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 
 export type ItemType = 'WORK' | 'MATERIAL';
@@ -215,6 +228,7 @@ export interface ProjectResponse {
   name: string;
   address: string;
   status: ProjectStatus;
+  stage: ObjectStage;
   description: string | null;
   clientId: string | null;
   clientFullName: string | null;
@@ -309,7 +323,9 @@ export interface MessageLinkState {
 
 export interface DashboardMetrics {
   activeProjects: number;
-  pendingEstimates: number;
+  /** Objects in the derived PENDING_SIGNATURE stage — renamed from `pendingEstimates`
+   *  (object-status-unification): it counts OBJECTS, not estimates. */
+  pendingObjects: number;
   completedThisMonth: {
     count: number;
     totalAmount: number;

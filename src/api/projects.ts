@@ -1,5 +1,6 @@
 import { api } from './client.ts';
 import type {
+  ObjectStage,
   ProjectRequest,
   ProjectResponse,
   ProjectStatus,
@@ -7,10 +8,12 @@ import type {
 
 /** Projects (construction sites) CRUD + status changes. */
 export const projectsApi = {
-  list(status?: ProjectStatus): Promise<ProjectResponse[]> {
+  /** Filters on the derived {@link ObjectStage}, not the raw {@link ProjectStatus} column —
+   *  object-status-unification. */
+  list(stage?: ObjectStage): Promise<ProjectResponse[]> {
     return api
       .get<ProjectResponse[]>('/api/projects', {
-        params: status ? { status } : undefined,
+        params: stage ? { stage } : undefined,
       })
       .then((r) => r.data);
   },

@@ -5,6 +5,7 @@ import { Badge } from '@/components/Badge.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -377,8 +378,9 @@ export function EstimateEditorPage() {
 
         {signed && (
           <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-border bg-brand-soft px-3.5 py-3">
-            <span className="flex-1 text-sm font-semibold text-primary">
+            <span className="flex flex-1 items-center gap-1 text-sm font-semibold text-primary">
               {t('estimate.signedViewOnly')}
+              <InfoPopover text={t('estimate.signedViewOnlyInfo')} label={t('estimate.signedViewOnly')} />
             </span>
             {REOPEN_ENABLED && (
               <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>

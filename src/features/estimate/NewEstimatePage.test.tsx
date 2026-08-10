@@ -27,7 +27,7 @@ vi.mock('@/hooks/useToast.ts', () => ({
 }));
 
 const proj: ProjectResponse = {
-  id: 'p1', name: 'Хата', address: 'вул. 1', status: 'IN_PROGRESS', description: null,
+  id: 'p1', name: 'Хата', address: 'вул. 1', status: 'IN_PROGRESS', stage: 'IN_PROGRESS', description: null,
   clientId: null, clientFullName: null, latestEstimateTotal: null, estimateStatus: null,
   unreadQuestions: 0, completedAt: null, createdAt: '', updatedAt: '',
 };

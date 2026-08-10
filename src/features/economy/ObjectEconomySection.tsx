@@ -12,6 +12,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { useEconomy, useExpenses, useDeleteExpense, useToggleEstimateCounted } from './useEconomy.ts';
 import { ExpenseSheet } from './ExpenseSheet.tsx';
 import { PaymentsBlock } from './PaymentsBlock.tsx';
@@ -90,42 +91,50 @@ function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse
   };
 
   return (
-    <div className="flex items-stretch rounded-card border border-border border-l-4 border-l-brand-soft-2 bg-surface">
-      <button
-        type="button"
-        onClick={() => navigate(`${routes.estimate(panel.id)}?from=act`)}
-        className="min-w-0 flex-1 p-3 text-left transition-transform active:scale-[0.99]"
-      >
-        <div className="flex items-center gap-2">
-          <span aria-hidden>🔒</span>
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-            {panel.name ?? t('economy.unnamedEstimate')}
-          </span>
-          <span className="flex-shrink-0 text-xs text-muted">{fmtSignedDate(panel.signedAt)}</span>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-          <EcoRef label={t('economy.works')} value={panel.works} />
-          <EcoRef label={t('economy.materials')} value={panel.materials} />
-          <EcoRef label={t('economy.total')} value={panel.total} />
-        </div>
-        <AdjustLine
-          markup={panel.markup}
-          discount={panel.discount}
-          base={panel.works + panel.materials - panel.markup - panel.discount}
-        />
-        {!panel.countedInEconomy && (
-          <p className="mt-2 text-[11px] text-muted">{t('economy.notCountedNote')}</p>
-        )}
-      </button>
-      <ActionMenu ariaLabel={t('estimate.actions')}>
-        {(close) => (
-          <ActionMenuItem
-            icon={panel.countedInEconomy ? '🚫' : '✓'}
-            label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
-            onClick={() => { close(); onToggle(); }}
+    <div className="rounded-card border border-border border-l-4 border-l-brand-soft-2 bg-surface">
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          onClick={() => navigate(`${routes.estimate(panel.id)}?from=act`)}
+          className="min-w-0 flex-1 p-3 text-left transition-transform active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2">
+            <span aria-hidden>🔒</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
+              {panel.name ?? t('economy.unnamedEstimate')}
+            </span>
+            <span className="flex-shrink-0 text-xs text-muted">{fmtSignedDate(panel.signedAt)}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+            <EcoRef label={t('economy.works')} value={panel.works} />
+            <EcoRef label={t('economy.materials')} value={panel.materials} />
+            <EcoRef label={t('economy.total')} value={panel.total} />
+          </div>
+          <AdjustLine
+            markup={panel.markup}
+            discount={panel.discount}
+            base={panel.works + panel.materials - panel.markup - panel.discount}
           />
-        )}
-      </ActionMenu>
+        </button>
+        <ActionMenu ariaLabel={t('estimate.actions')}>
+          {(close) => (
+            <ActionMenuItem
+              icon={panel.countedInEconomy ? '🚫' : '✓'}
+              label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
+              onClick={() => { close(); onToggle(); }}
+            />
+          )}
+        </ActionMenu>
+      </div>
+      {/* A SIBLING of the navigate button, not nested inside it — InfoPopover is itself a button,
+          and a button inside a button swallows taps (same class of bug the ⋮ menu already avoids
+          by being a sibling too). */}
+      {!panel.countedInEconomy && (
+        <p className="flex items-center gap-1 px-3 pb-3 text-[11px] text-muted">
+          {t('economy.notCountedNote')}
+          <InfoPopover text={t('economy.notCountedInfo')} label={t('economy.notCountedNote')} />
+        </p>
+      )}
     </div>
   );
 }
@@ -237,7 +246,17 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
           <>
             <EstimatesSummaryPanel panels={panels} />
 
-            {eco?.payments && <PaymentsBlock objectId={objectId} summary={eco.payments} />}
+            {/* economy-contracted-signed-only-fix: with contracted now correctly 0 for an object
+                with nothing SIGNED yet, a PaymentsBlock full of 0/0/0 is noise rather than
+                information — show a neutral empty state instead, UNLESS the master already
+                created payment rows by hand (those stay visible as-is, per the prompt). */}
+            {eco?.payments && (panels.length > 0 || eco.payments.payments.length > 0) ? (
+              <PaymentsBlock objectId={objectId} summary={eco.payments} />
+            ) : eco?.payments ? (
+              <p className="rounded-card border border-dashed border-border bg-surface p-3 text-center text-sm text-muted">
+                {t('economy.paymentsEmpty')}
+              </p>
+            ) : null}
 
             {/* economy-hide-internals: Прибуток/Витрати + the expense journal are parked (see
                 INTERNALS_ENABLED above) — today's profit formula reads as an honest "заробіток"

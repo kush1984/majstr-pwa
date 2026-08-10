@@ -3,28 +3,25 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from './Badge.tsx';
 import { IconTile } from './IconTile.tsx';
 import { formatMoney } from '@/lib/format.ts';
-import { ESTIMATE_STATUS_VARIANT, PROJECT_STATUS_VARIANT } from '@/lib/labels.ts';
+import { OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { ChatLinkRowButton } from '@/features/messages/ChatLinkRowButton.tsx';
 
 /**
- * Project (site) list card. Sum + badge come from the backend's
- * latestEstimateTotal / estimateStatus; when there's no estimate yet we fall
- * back to the project's own status and show no sum.
+ * Project (site) list card. The badge shows the object's derived {@link ObjectStage}
+ * (object-status-unification) — the ONE status vocabulary, everywhere. It used to switch between
+ * the latest estimate's own status and the object's raw status depending on whether an estimate
+ * existed yet — two different vocabularies in the same badge slot, which is what let the
+ * dashboard's "Очікує" metric and this card's own filter chip disagree on the same object.
  */
 export function ProjectCard({ project }: { project: ProjectResponse }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const badge = project.estimateStatus
-    ? {
-        label: t('status.estimate.' + project.estimateStatus),
-        variant: ESTIMATE_STATUS_VARIANT[project.estimateStatus],
-      }
-    : {
-        label: t('status.project.' + project.status),
-        variant: PROJECT_STATUS_VARIANT[project.status],
-      };
+  const badge = {
+    label: t('status.stage.' + project.stage),
+    variant: OBJECT_STAGE_VARIANT[project.stage],
+  };
 
   return (
     // The menu is a SIBLING of the card button, not a child: a button inside a button is invalid and

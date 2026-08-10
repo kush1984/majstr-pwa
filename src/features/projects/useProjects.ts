@@ -3,7 +3,7 @@ import { projectsApi } from '@/api/projects.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { CLIENTS_KEY } from '@/features/clients/useClients.ts';
-import type { ClientResponse, ProjectRequest, ProjectResponse, ProjectStatus } from '@/api/types.ts';
+import type { ClientResponse, ObjectStage, ProjectRequest, ProjectResponse, ProjectStatus } from '@/api/types.ts';
 
 export const PROJECTS_KEY = ['projects'] as const;
 
@@ -14,10 +14,10 @@ function clientName(qc: QueryClient, clientId?: string): string | null {
   return list?.find((c) => c.id === clientId)?.fullName ?? null;
 }
 
-export function useProjects(status?: ProjectStatus) {
+export function useProjects(stage?: ObjectStage) {
   return useQuery({
-    queryKey: [...PROJECTS_KEY, 'list', status ?? 'all'],
-    queryFn: () => projectsApi.list(status),
+    queryKey: [...PROJECTS_KEY, 'list', stage ?? 'all'],
+    queryFn: () => projectsApi.list(stage),
     // Overrides the global `false`. This list carries `unreadQuestions`, which feeds the header bell
     // and the row badges — the one thing that changes while the master is NOT looking at the app.
     // Without this, a message that arrived as a push stayed invisible until a manual refresh.
@@ -58,7 +58,7 @@ export function useCreateProject() {
       const id = newUuid();
       const now = new Date().toISOString();
       const optimistic: ProjectResponse = {
-        id, name: req.name, address: req.address, status: 'DRAFT',
+        id, name: req.name, address: req.address, status: 'DRAFT', stage: 'ASSESSMENT',
         description: req.description ?? null,
         clientId: req.clientId ?? null,
         clientFullName: clientName(qc, req.clientId),
@@ -134,9 +134,32 @@ export function useDeleteProject() {
 }
 
 /**
+ * Best-effort optimistic {@link ObjectStage} for a `PATCH .../status` write, mirroring the
+ * backend's `ObjectStage.derive` priority (object-status-unification). CANCELLED and COMPLETED are
+ * always exactly right here — they're top priority regardless of estimates. The fallback ("back to
+ * active" — Повернути в роботу / Відновити, both send `IN_PROGRESS`) can't be derived precisely
+ * client-side: the cache only carries the LATEST estimate's status, not "has any estimate ever been
+ * SIGNED", so it's a reasonable guess from that field, corrected a moment later by the real refetch
+ * (`onOnlineSuccess: invalidate` below) — never the value actually shown to rest on.
+ */
+export function resolveOptimisticStage(current: ProjectResponse, newStatus: ProjectStatus): ObjectStage {
+  if (newStatus === 'CANCELLED') return 'CANCELLED';
+  if (newStatus === 'COMPLETED') return 'COMPLETED';
+  if (current.estimateStatus === 'SIGNED') return 'IN_PROGRESS';
+  if (current.estimateStatus === 'SENT') return 'PENDING_SIGNATURE';
+  return 'ASSESSMENT';
+}
+
+/**
  * Change the object's status (planning → in progress → done). A separate outbox entity from
  * the field update: a queue can outlive an app update, so reshaping the existing `project`
  * update payload would break ops already sitting in a master's IndexedDB.
+ *
+ * Reused as-is for the manual complete/reopen/cancel/restore actions (object-status-unification) —
+ * no new endpoints, so any op already queued offline from before this iteration keeps replaying
+ * correctly. The optimistic patch also updates `completedAt` (mirrors the backend's
+ * `applyCompletedAt`: stamped entering COMPLETED, cleared leaving it) and `stage`
+ * ({@link resolveOptimisticStage}).
  */
 export function useSetProjectStatus() {
   const qc = useQueryClient();
@@ -150,10 +173,16 @@ export function useSetProjectStatus() {
         online: async () => { await projectsApi.setStatus(id, status); },
         onOnlineSuccess: invalidate,
         optimistic: () => {
+          const patch = (p: ProjectResponse): ProjectResponse => ({
+            ...p,
+            status,
+            stage: resolveOptimisticStage(p, status),
+            completedAt: status === 'COMPLETED' ? (p.completedAt ?? new Date().toISOString()) : null,
+          });
           qc.setQueriesData<ProjectResponse[]>({ queryKey: [...PROJECTS_KEY, 'list'] }, (old) =>
-            (old ?? []).map((p) => (p.id === id ? { ...p, status } : p)));
+            (old ?? []).map((p) => (p.id === id ? patch(p) : p)));
           qc.setQueryData<ProjectResponse>([...PROJECTS_KEY, 'detail', id], (old) =>
-            (old ? { ...old, status } : old));
+            (old ? patch(old) : old));
         },
       }),
   });

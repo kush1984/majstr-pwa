@@ -70,11 +70,12 @@ const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
 function economyFixture(opts: {
   estimates?: SignedEstimatePanelResponse[];
   pro?: { expenses: number; profit: number } | null;
+  payments?: NonNullable<ObjectEconomyResponse['payments']>;
 } = {}): ObjectEconomyResponse {
   const pro = opts.pro ?? null;
   return {
     estimates: opts.estimates ?? [panel()],
-    payments: pro ? SAMPLE_PAYMENTS : null,
+    payments: pro ? (opts.payments ?? SAMPLE_PAYMENTS) : null,
     internals: pro,
   };
 }
@@ -128,6 +129,36 @@ describe('ObjectEconomySection', () => {
     expect(economyApi.listExpenses).not.toHaveBeenCalled();
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
+  });
+
+  it('economy-contracted-signed-only-fix: no SIGNED acts + no payments → neutral empty state, not 0/0/0', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [],
+      pro: { expenses: 0, profit: 0 },
+      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [] },
+    }));
+
+    renderSection('PRO');
+
+    await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByText('Ще немає підписаних кошторисів')).toBeTruthy();
+    // No summary panel (nothing counted) and no 0/0/0 payments card.
+    expect(screen.queryByText('Загалом по підписаних')).toBeNull();
+    expect(screen.queryByText('Платежі')).toBeNull(); // PaymentsBlock's own header
+  });
+
+  it('economy-contracted-signed-only-fix: manually-created payments still show even with no SIGNED acts', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [],
+      pro: { expenses: 0, profit: 0 },
+      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [SAMPLE_PAYMENTS.payments[0]] },
+    }));
+
+    renderSection('PRO');
+
+    // The master already logged a payment by hand — show it as-is, not the empty state.
+    expect(await screen.findByText('Аванс')).toBeTruthy();
+    expect(screen.queryByText('Ще немає підписаних кошторисів')).toBeNull();
   });
 
   it('a panel excluded from the counted total says so honestly', async () => {
