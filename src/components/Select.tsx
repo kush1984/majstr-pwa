@@ -14,7 +14,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       ref={ref}
       {...rest}
       className={cn(
-        'w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-gray-900',
+        // Same iOS Safari zoom-on-focus fix as Input.tsx — see the comment there.
+        'w-full rounded-lg border bg-white px-3 py-2.5 text-base text-gray-900',
         'focus:outline-none focus:ring-2 focus:ring-offset-0',
         invalid
           ? 'border-red-400 focus:ring-red-300'
