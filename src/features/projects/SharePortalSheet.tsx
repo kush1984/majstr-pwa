@@ -37,6 +37,7 @@ export function SharePortalSheet({
   project,
   preselectEstimateId,
   onNeedEmailVerify,
+  estimatesFilter,
 }: {
   open: boolean;
   onClose: () => void;
@@ -44,6 +45,15 @@ export function SharePortalSheet({
   /** Ticked in addition to the already-visible set (the editor's own estimate). */
   preselectEstimateId?: string;
   onNeedEmailVerify: () => void;
+  /**
+   * Matches the picker to the tab it was opened from — showing an estimate that "belongs" to a
+   * different tab is exactly the confusion this exists to avoid: 'signed' from Економіка (which
+   * only ever shows SIGNED acts — DRAFT/SENT/REJECTED live under Кошторис and don't belong here),
+   * 'unsigned' from Кошторис (the mirror case — a SIGNED estimate moved to Економіка and is
+   * managed/shared from there instead). Undefined (any other tab, no estimate-list context of its
+   * own) — every estimate, the original unfiltered behaviour.
+   */
+  estimatesFilter?: 'signed' | 'unsigned';
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -90,9 +100,15 @@ export function SharePortalSheet({
   });
 
   const email = client.data?.email ?? null;
-  const list = portal.data?.estimates ?? [];
+  const allEstimates = portal.data?.estimates ?? [];
+  // An estimate already published from the OTHER tab stays published either way (still counted in
+  // `ticked`/`serverVisibleCount` below, computed from the unfiltered list) — this picker just
+  // doesn't render or touch it here, it doesn't unpublish it.
+  const list = estimatesFilter === 'signed' ? allEstimates.filter((e) => e.status === 'SIGNED')
+    : estimatesFilter === 'unsigned' ? allEstimates.filter((e) => e.status !== 'SIGNED')
+    : allEstimates;
   const ticked = selected ?? new Set<string>();
-  const serverVisibleCount = list.filter((e) => e.visible).length;
+  const serverVisibleCount = allEstimates.filter((e) => e.visible).length;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -243,12 +259,18 @@ export function SharePortalSheet({
   return (
     <Modal open={open} onClose={onClose} title={t('portal.sheetTitle')}>
       <div className="space-y-3">
-        <p className="text-sm text-muted">{t('portal.pickHint')}</p>
+        <p className="text-sm text-muted">
+          {t(estimatesFilter === 'signed' ? 'portal.pickHintSigned' : 'portal.pickHint')}
+        </p>
 
         {portal.isPending ? (
           <div className="py-6 text-center"><Spinner /></div>
         ) : portal.isError ? (
           <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
+        ) : estimatesFilter && list.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted">
+            {t(estimatesFilter === 'signed' ? 'portal.noSignedEstimates' : 'portal.noUnsignedEstimates')}
+          </p>
         ) : (
           <div className="space-y-1.5">
             {list.map((e) => (
@@ -263,7 +285,7 @@ export function SharePortalSheet({
                 <span className="min-w-0 flex-1 truncate text-sm text-primary">
                   {estimateName(e.name, e.createdAt)}
                 </span>
-                {e.status === 'SIGNED' && (
+                {estimatesFilter !== 'signed' && e.status === 'SIGNED' && (
                   <span className="whitespace-nowrap text-[11px] font-semibold text-success">
                     ✓ {t('status.estimate.SIGNED')}
                   </span>

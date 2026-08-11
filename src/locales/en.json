@@ -358,6 +358,7 @@
     "itemsCount": "{{count}} items",
     "tabActShort": "Economy",
     "actionsMenu": "Object actions",
+    "rowActionsAria": "Object actions: {{name}}",
     "objectActionTitle": {
       "complete": "Complete object",
       "reopen": "Resume work",
@@ -1381,6 +1382,9 @@
   "portal": {
     "sheetTitle": "Client portal",
     "pickHint": "Pick the estimates the client will see. They all share one page — each is signed separately.",
+    "pickHintSigned": "Pick the signed estimates the client will see. They all share one page.",
+    "noSignedEstimates": "No signed estimates yet — they'll appear here as soon as one is signed.",
+    "noUnsignedEstimates": "No estimates awaiting a signature — signed ones are shown in the Economy tab.",
     "loadError": "Could not load the estimates",
     "hideAll": "Remove everything from the portal",
     "hiddenAll": "Portal cleared — estimates hidden",

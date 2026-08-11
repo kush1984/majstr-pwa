@@ -22,7 +22,8 @@ import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
-import { useProject, useSetProjectStatus } from './useProjects.ts';
+import { useProject, useObjectStatusAction } from './useProjects.ts';
+import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
@@ -84,11 +85,9 @@ export function ProjectDetailPage() {
   const [editClientOpen, setEditClientOpen] = useState(false);
   // The action a row asked for, waiting on its confirm dialog.
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
-  // Object-level manual transitions (object-status-unification) — a SEPARATE confirm target from
-  // the estimate-row one above, since they patch a different kind of thing and shouldn't share a
-  // union that has to know about both.
-  const [objectAction, setObjectAction] = useState<'complete' | 'reopen' | 'cancel' | 'restore' | null>(null);
-  const setProjectStatus = useSetProjectStatus();
+  // Object-level manual transitions (object-status-unification) — shared with the list row menu
+  // (ProjectRowMenu) via useObjectStatusAction, so a master can do this without opening the object.
+  const { objectAction, chooseAction: setObjectAction, confirm: confirmObjectAction, isPending: objectActionPending } = useObjectStatusAction(id);
 
   const estimates = useQuery({
     queryKey: ['project-estimates', id],
@@ -221,20 +220,6 @@ export function ProjectDetailPage() {
     setShareOpen(true);
   });
 
-  // The four manual object transitions all reuse the SAME PATCH .../status endpoint — see
-  // useSetProjectStatus's own doc comment for why this wasn't split into new endpoints.
-  const OBJECT_ACTION_STATUS = { complete: 'COMPLETED', reopen: 'IN_PROGRESS', cancel: 'CANCELLED', restore: 'IN_PROGRESS' } as const;
-  const confirmObjectAction = () => {
-    if (!objectAction) return;
-    setProjectStatus.mutate(
-      { id, status: OBJECT_ACTION_STATUS[objectAction] },
-      {
-        onError: (err) => toast.error(toAppError(err).message),
-        onSettled: () => setObjectAction(null),
-      },
-    );
-  };
-
   return (
     <>
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
@@ -243,6 +228,7 @@ export function ProjectDetailPage() {
         onClose={() => setShareOpen(false)}
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
+        estimatesFilter={tab === 'act' ? 'signed' : tab === 'estimate' ? 'unsigned' : undefined}
       />
       {p.clientId && (
         <ClientEditModal
@@ -267,12 +253,9 @@ export function ProjectDetailPage() {
         onClose={() => setConfirm(null)}
       />
 
-      <ConfirmDialog
-        open={objectAction !== null}
-        title={t('projects.objectActionTitle.' + (objectAction ?? 'complete'))}
-        message={t('projects.objectActionConfirm.' + (objectAction ?? 'complete'))}
-        confirmLabel={t('projects.objectActionTitle.' + (objectAction ?? 'complete'))}
-        loading={setProjectStatus.isPending}
+      <ObjectStatusConfirmDialog
+        objectAction={objectAction}
+        loading={objectActionPending}
         onConfirm={confirmObjectAction}
         onClose={() => setObjectAction(null)}
       />
@@ -355,34 +338,7 @@ export function ProjectDetailPage() {
         <div className="absolute right-2 top-2">
           <ActionMenu ariaLabel={t('estimate.actions')}>
             {(close) => (
-              <>
-                {p.stage === 'COMPLETED' ? (
-                  <ActionMenuItem
-                    icon="↩️"
-                    label={t('projects.objectActionTitle.reopen')}
-                    onClick={() => { close(); setObjectAction('reopen'); }}
-                  />
-                ) : (
-                  <ActionMenuItem
-                    icon="✓"
-                    label={t('projects.objectActionTitle.complete')}
-                    onClick={() => { close(); setObjectAction('complete'); }}
-                  />
-                )}
-                {p.stage === 'CANCELLED' ? (
-                  <ActionMenuItem
-                    icon="↩️"
-                    label={t('projects.objectActionTitle.restore')}
-                    onClick={() => { close(); setObjectAction('restore'); }}
-                  />
-                ) : (
-                  <ActionMenuItem
-                    icon="🚫"
-                    label={t('projects.objectActionTitle.cancel')}
-                    onClick={() => { close(); setObjectAction('cancel'); }}
-                  />
-                )}
-              </>
+              <ObjectStatusMenuItems stage={p.stage} onChoose={(a) => { close(); setObjectAction(a); }} />
             )}
           </ActionMenu>
         </div>

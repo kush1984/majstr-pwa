@@ -6,7 +6,7 @@ import { formatMoney } from '@/lib/format.ts';
 import { OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { ProjectResponse } from '@/api/types.ts';
-import { ChatLinkRowButton } from '@/features/messages/ChatLinkRowButton.tsx';
+import { ProjectRowMenu } from '@/features/projects/ProjectRowMenu.tsx';
 
 /**
  * Project (site) list card. The badge shows the object's derived {@link ObjectStage}
@@ -67,7 +67,7 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
         </div>
       </button>
       <div className="absolute right-1 top-1/2 -translate-y-1/2">
-        <ChatLinkRowButton projectId={project.id} projectName={project.name} />
+        <ProjectRowMenu project={project} />
       </div>
     </div>
   );

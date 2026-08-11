@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { projectsApi } from '@/api/projects.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { toast } from '@/hooks/useToast.ts';
+import { toAppError } from '@/api/errors.ts';
 import { CLIENTS_KEY } from '@/features/clients/useClients.ts';
 import type { ClientResponse, ObjectStage, ProjectRequest, ProjectResponse, ProjectStatus } from '@/api/types.ts';
 
@@ -186,4 +189,35 @@ export function useSetProjectStatus() {
         },
       }),
   });
+}
+
+export type ObjectAction = 'complete' | 'reopen' | 'cancel' | 'restore';
+
+/** The four manual object transitions all reuse the SAME PATCH .../status endpoint — see
+ *  {@link useSetProjectStatus}'s own doc comment for why this wasn't split into new endpoints. */
+const OBJECT_ACTION_STATUS: Record<ObjectAction, ProjectStatus> = {
+  complete: 'COMPLETED', reopen: 'IN_PROGRESS', cancel: 'CANCELLED', restore: 'IN_PROGRESS',
+};
+
+/**
+ * "Завершити/Скасувати об'єкт" etc — the confirm-then-mutate flow in one place, because it is
+ * offered from two spots: the object's own hero menu, and every row of the object list (so a
+ * master doesn't have to open an object just to close it out).
+ */
+export function useObjectStatusAction(projectId: string) {
+  const setProjectStatus = useSetProjectStatus();
+  const [objectAction, setObjectAction] = useState<ObjectAction | null>(null);
+
+  const confirm = () => {
+    if (!objectAction) return;
+    setProjectStatus.mutate(
+      { id: projectId, status: OBJECT_ACTION_STATUS[objectAction] },
+      {
+        onError: (err) => toast.error(toAppError(err).message),
+        onSettled: () => setObjectAction(null),
+      },
+    );
+  };
+
+  return { objectAction, chooseAction: setObjectAction, confirm, isPending: setProjectStatus.isPending };
 }
