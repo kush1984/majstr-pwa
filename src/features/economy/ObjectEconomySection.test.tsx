@@ -61,8 +61,13 @@ const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
   received: 3000,
   remaining: 12000,
   payments: [
-    { id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс', paidAmount: 3000, paidAt: '2026-07-01T00:00:00Z', status: 'RECEIVED', sortOrder: 0 },
+    {
+      id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс',
+      received: 3000, remaining: 0, status: 'RECEIVED', sortOrder: 0,
+      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 3000, receivedAt: '2026-07-01' }],
+    },
   ],
+  unplannedReceipts: [],
 };
 
 /** Mirrors the real backend: `payments`/`internals` are gated TOGETHER (economy-polish
@@ -135,7 +140,7 @@ describe('ObjectEconomySection', () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
-      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [] },
+      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [], unplannedReceipts: [] },
     }));
 
     renderSection('PRO');
@@ -151,7 +156,7 @@ describe('ObjectEconomySection', () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
-      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [SAMPLE_PAYMENTS.payments[0]] },
+      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [SAMPLE_PAYMENTS.payments[0]], unplannedReceipts: [] },
     }));
 
     renderSection('PRO');

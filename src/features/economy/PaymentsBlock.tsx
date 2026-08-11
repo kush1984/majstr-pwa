@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -15,11 +15,17 @@ import {
   useDeletePayment,
   usePreviewSplit,
   useCommitSplit,
+  useAddReceipt,
+  useAddReceiptTransfer,
+  useEditReceipt,
+  useDeleteReceipt,
+  useTransferSurplus,
 } from './useEconomy.ts';
 import type {
   PaymentsSummaryResponse,
   PaymentSplitPreset,
   PaymentSplitRow,
+  PaymentReceiptResponse,
   ProjectPaymentRequest,
   ProjectPaymentResponse,
   ProjectPaymentStatus,
@@ -57,6 +63,23 @@ function conditionText(row: { dueDate: string | null; nextStage: string | null }
   return null;
 }
 
+// ---- soft date validation (client-side only — never blocks save) -----------
+
+function receivedDateWarning(iso: string, objectCreatedAt: string | undefined, t: (k: string) => string): string | null {
+  if (!iso) return null;
+  if (iso > today()) return t('economy.dateWarningFuture');
+  if (objectCreatedAt) {
+    const created = new Date(objectCreatedAt).toISOString().slice(0, 10);
+    if (iso < created) return t('economy.dateWarningBeforeObject');
+  }
+  return null;
+}
+
+function dueDateWarning(iso: string, isCreate: boolean, t: (k: string) => string): string | null {
+  if (!iso || !isCreate) return null;
+  return iso < today() ? t('economy.dateWarningPastDue') : null;
+}
+
 /** Horizontal progress bar — filled = received, empty = remaining. Mobile-first: one bar, a
  *  caption spelling out the split, no legend, no charting library. */
 function PaymentStrip({ received, total }: { received: number; total: number }) {
@@ -74,78 +97,186 @@ function PaymentStrip({ received, total }: { received: number; total: number }) 
   );
 }
 
-/** One row of the vertical payment timeline — a status dot + connector (via the border on the
- *  wrapping list), list-like on a phone, timeline-like at a glance. */
-function PaymentListRow({
-  row,
-  onEdit,
-}: {
-  row: ProjectPaymentResponse;
-  onEdit: () => void;
-}) {
-  const condition = conditionText(row);
+// ---------------------------------------------------------------------------
+// One shared vertical timeline — plan stages (with their own receipt history
+// nested underneath) and unplanned receipts, merged and sorted by date.
+// ---------------------------------------------------------------------------
+
+type TimelineNode =
+  | { kind: 'stage'; key: string; date: string | null; stage: ProjectPaymentResponse }
+  | { kind: 'unplanned'; key: string; date: string | null; receipt: PaymentReceiptResponse };
+
+function buildTimeline(summary: PaymentsSummaryResponse): TimelineNode[] {
+  const stageNodes: TimelineNode[] = summary.payments.map((stage) => ({
+    kind: 'stage',
+    key: stage.id,
+    date: stage.dueDate ?? stage.receipts?.[0]?.receivedAt ?? null,
+    stage,
+  }));
+  const unplannedNodes: TimelineNode[] = (summary.unplannedReceipts ?? []).map((receipt) => ({
+    kind: 'unplanned',
+    key: receipt.id,
+    date: receipt.receivedAt,
+    receipt,
+  }));
+  return [...stageNodes, ...unplannedNodes].sort((a, b) => {
+    if (a.date === b.date) return 0;
+    if (a.date === null) return 1; // undated stages sink to the bottom
+    if (b.date === null) return -1;
+    return a.date < b.date ? -1 : 1;
+  });
+}
+
+function ReceiptHistoryRow({ receipt, onEdit }: { receipt: PaymentReceiptResponse; onEdit: () => void }) {
   return (
     <button
       type="button"
       onClick={onEdit}
-      className="flex w-full items-start gap-3 border-b border-border py-2.5 text-left last:border-b-0"
+      className="flex w-full items-center justify-between py-1 pl-6 text-left text-xs text-muted"
     >
-      <span className={cn('mt-1.5 h-3 w-3 flex-shrink-0 rounded-full', STATUS_DOT[row.status])} aria-hidden />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-primary">{row.purpose}</span>
-        {condition && <span className="mt-0.5 block text-xs text-muted">{condition}</span>}
-      </span>
-      <span className="flex-shrink-0 text-right text-sm font-semibold text-primary">
-        {row.paidAmount != null && row.paidAmount > 0
-          ? `${formatMoney(row.paidAmount)} / ${formatMoney(row.amount)}`
-          : formatMoney(row.amount)}
-      </span>
+      <span>＋{formatMoney(receipt.amount)}</span>
+      <span>{fmtDate(receipt.receivedAt)}</span>
     </button>
   );
 }
 
-function fmtPaidAt(iso: string): string {
-  return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
+function PaymentTimelineNode({
+  node,
+  onEditStage,
+  onQuickPay,
+  onEditReceipt,
+}: {
+  node: TimelineNode;
+  onEditStage: (stage: ProjectPaymentResponse) => void;
+  onQuickPay: (stage: ProjectPaymentResponse) => void;
+  onEditReceipt: (receipt: PaymentReceiptResponse) => void;
+}) {
+  const { t } = useTranslation();
+  if (node.kind === 'unplanned') {
+    const r = node.receipt;
+    return (
+      <div className="border-b border-border py-2.5 last:border-b-0">
+        <button type="button" onClick={() => onEditReceipt(r)} className="flex w-full items-start gap-3 text-left">
+          <span className="mt-1.5 h-3 w-3 flex-shrink-0 rounded-full bg-success" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-primary">{r.displayLabel}</span>
+            <span className="mt-0.5 block text-xs text-muted">{fmtDate(r.receivedAt)}</span>
+          </span>
+          <span className="flex-shrink-0 text-right text-sm font-semibold text-primary">{formatMoney(r.amount)}</span>
+        </button>
+      </div>
+    );
+  }
+
+  const stage = node.stage;
+  const condition = conditionText(stage);
+  const notFullyReceived = stage.remaining > 0;
+  return (
+    <div className="border-b border-border py-2.5 last:border-b-0">
+      <button type="button" onClick={() => onEditStage(stage)} className="flex w-full items-start gap-3 text-left">
+        <span className={cn('mt-1.5 h-3 w-3 flex-shrink-0 rounded-full', STATUS_DOT[stage.status])} aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-primary">{stage.purpose}</span>
+          {condition && <span className="mt-0.5 block text-xs text-muted">{condition}</span>}
+        </span>
+        <span className="flex-shrink-0 text-right text-sm font-semibold text-primary">
+          {stage.received > 0 ? `${formatMoney(stage.received)} / ${formatMoney(stage.amount)}` : formatMoney(stage.amount)}
+        </span>
+      </button>
+      {notFullyReceived && (
+        <button
+          type="button"
+          onClick={() => onQuickPay(stage)}
+          className="ml-6 mt-1 text-xs font-semibold text-brand"
+        >
+          + {t('economy.receivePayment')}
+        </button>
+      )}
+      {stage.receipts && stage.receipts.length > 0 && (
+        <div className="mt-1">
+          {stage.receipts.map((r) => (
+            <ReceiptHistoryRow key={r.id} receipt={r} onEdit={() => onEditReceipt(r)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-/** Add/edit the PLANNED side of a payment row — purpose, amount, due-date condition, next stage.
- *  No "Отримано" field here (economy-rework iteration: plan and fact are two separate flows, so
- *  filling in a planned amount never also asks "and how much came in?" in the same breath). When
- *  editing an existing row, a status line + action hands off to {@link MarkReceivedSheet} for the
- *  fact side instead of duplicating it inline. */
+function PaymentTimeline({
+  summary,
+  onEditStage,
+  onQuickPay,
+  onEditReceipt,
+}: {
+  summary: PaymentsSummaryResponse;
+  onEditStage: (stage: ProjectPaymentResponse) => void;
+  onQuickPay: (stage: ProjectPaymentResponse) => void;
+  onEditReceipt: (receipt: PaymentReceiptResponse) => void;
+}) {
+  const nodes = useMemo(() => buildTimeline(summary), [summary]);
+  if (nodes.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-border pt-1">
+      {nodes.map((n) => (
+        <PaymentTimelineNode
+          key={n.key}
+          node={n}
+          onEditStage={onEditStage}
+          onQuickPay={onQuickPay}
+          onEditReceipt={onEditReceipt}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PLAN — «Запланований». No fact fields at all: mark-received routes through
+// ReceivePaymentSheet now, never a PATCH on this row.
+// ---------------------------------------------------------------------------
+
 function PaymentSheet({
   open,
   onClose,
   objectId,
   editing,
-  onMarkReceived,
+  summary,
+  onReceivePayment,
 }: {
   open: boolean;
   onClose: () => void;
   objectId: string;
   editing: ProjectPaymentResponse | null;
-  /** Opens the mark-received flow for `editing` — a no-op while creating (button hidden then). */
-  onMarkReceived: () => void;
+  summary: PaymentsSummaryResponse;
+  /** Opens the "Отриманий платіж" flow preselected on `editing` — a no-op while creating. */
+  onReceivePayment: () => void;
 }) {
   const { t } = useTranslation();
   const add = useAddPayment(objectId);
   const update = useUpdatePayment(objectId);
   const del = useDeletePayment(objectId);
+  const transferSurplus = useTransferSurplus(objectId);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  // "На «X» отримано більше — перенести сюди?", offered after creating a new stage while another
+  // one is sitting over-received (RESERVE). `toId` is the just-created stage's id.
+  const [surplusPrompt, setSurplusPrompt] = useState<{ fromId: string; fromPurpose: string; surplus: number; toId: string } | null>(null);
 
   const [purpose, setPurpose] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [nextStage, setNextStage] = useState('');
 
-  // Prime the form when opened (edit → existing values, create → defaults) — mirrors ExpenseSheet.
   useEffect(() => {
     if (!open) return;
     setPurpose(editing?.purpose ?? '');
     setAmount(editing ? String(editing.amount) : '');
     setDueDate(editing?.dueDate ?? '');
     setNextStage(editing?.nextStage ?? '');
+    setSurplusPrompt(null);
   }, [open, editing]);
+
+  const dueWarning = dueDateWarning(dueDate, !editing, t);
 
   const submit = async () => {
     const amountValue = Number(amount.replace(',', '.'));
@@ -153,26 +284,42 @@ function PaymentSheet({
       toast.error(t('economy.paymentInvalid'));
       return;
     }
-    // The fact side (paidAmount/paidAt) is untouched by this form — carry the existing values
-    // through on an edit (update() is a full replace), stay null on a fresh planned row.
     const req: ProjectPaymentRequest = {
       purpose: purpose.trim(),
       amount: amountValue,
       dueDate: dueDate || null,
       nextStage: nextStage.trim() || null,
-      paidAmount: editing?.paidAmount ?? null,
-      paidAt: editing?.paidAt ?? null,
     };
     try {
       if (editing) {
         await update.mutateAsync({ id: editing.id, req });
-      } else {
-        await add.mutateAsync(req);
+        onClose();
+        return;
+      }
+      const created = await add.mutateAsync(req);
+      const overReceived = summary.payments.find((p) => p.received > p.amount);
+      if (overReceived) {
+        setSurplusPrompt({
+          fromId: overReceived.id, fromPurpose: overReceived.purpose,
+          surplus: overReceived.received - overReceived.amount, toId: created.id,
+        });
+        return; // keep the sheet open behind the prompt until the master answers
       }
       onClose();
     } catch (err) {
       toast.error(toAppError(err).message);
     }
+  };
+
+  const confirmTransferSurplus = async () => {
+    if (!surplusPrompt) return;
+    try {
+      await transferSurplus.mutateAsync({ fromPaymentId: surplusPrompt.fromId, toPaymentId: surplusPrompt.toId });
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+    setSurplusPrompt(null);
+    onClose();
   };
 
   const confirmDelete = async () => {
@@ -200,10 +347,7 @@ function PaymentSheet({
           </label>
 
           <label className="block">
-            <span className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted">
-              {t('economy.amount')}
-              <InfoPopover text={t('economy.amountVsReceivedInfo')} label={t('economy.amount')} />
-            </span>
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
             <Input
               autoFocus={!editing}
               inputMode="decimal"
@@ -220,6 +364,7 @@ function PaymentSheet({
               <InfoPopover text={t('economy.dueDateConditionInfo')} label={t('economy.dueDate')} />
             </span>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            {dueWarning && <span className="mt-1 block text-xs text-amber">{dueWarning}</span>}
           </label>
 
           <label className="block">
@@ -230,16 +375,15 @@ function PaymentSheet({
           {editing && (
             <div className="flex items-center justify-between rounded-xl bg-surface-sunken p-3">
               <span className="text-xs text-muted">
-                {editing.paidAmount != null
-                  ? t('economy.receivedSummary', {
-                      amount: formatMoney(editing.paidAmount),
-                      date: editing.paidAt ? fmtPaidAt(editing.paidAt) : '',
-                    })
-                  : t('economy.paidAmount') + ': —'}
+                {editing.received > 0
+                  ? `${t('economy.received')}: ${formatMoney(editing.received)} / ${formatMoney(editing.amount)}`
+                  : `${t('economy.received')}: —`}
               </span>
-              <button type="button" onClick={onMarkReceived} className="text-xs font-semibold text-brand">
-                {editing.paidAmount != null ? t('economy.changeReceived') : t('economy.markReceived')}
-              </button>
+              {editing.remaining > 0 && (
+                <button type="button" onClick={onReceivePayment} className="text-xs font-semibold text-brand">
+                  {t('economy.receivePayment')}
+                </button>
+              )}
             </div>
           )}
 
@@ -263,52 +407,302 @@ function PaymentSheet({
         onConfirm={confirmDelete}
         onClose={() => setConfirmDeleteOpen(false)}
       />
+
+      {surplusPrompt && (
+        <ConfirmDialog
+          open
+          title={t('economy.surplusHintTitle')}
+          message={t('economy.surplusHintMessage', {
+            purpose: surplusPrompt.fromPurpose, amount: formatMoney(surplusPrompt.surplus),
+          })}
+          confirmLabel={t('economy.surplusHintConfirm')}
+          loading={transferSurplus.isPending}
+          onConfirm={confirmTransferSurplus}
+          onClose={() => { setSurplusPrompt(null); onClose(); }}
+        />
+      )}
     </>
   );
 }
 
-/** The FACT side, split out on its own — date (default today) + amount (default the planned
- *  amount, editable down to a partial payment). Reachable from an existing row's "Позначити
- *  отриманим" / "Змінити", never duplicated into the planned-fields form above. */
-function MarkReceivedSheet({
+// ---------------------------------------------------------------------------
+// FACT — «Отриманий платіж». The ONE path money enters through: pick a plan
+// stage (or "Своє"), amount defaults to the stage's remaining balance, an
+// overpayment asks the master how to resolve it before saving.
+// ---------------------------------------------------------------------------
+
+type OverflowChoice = 'TRANSFER' | 'INCREASE' | 'RESERVE';
+
+function OverflowConfirmSheet({
+  open,
+  onClose,
+  diff,
+  nextPurpose,
+  receivedTotal,
+  onChoose,
+  loading,
+}: {
+  open: boolean;
+  onClose: () => void;
+  diff: number;
+  nextPurpose: string | null;
+  receivedTotal: number;
+  onChoose: (choice: OverflowChoice) => void;
+  loading: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal open={open} onClose={onClose} title={t('economy.overflowTitle')}>
+      <div className="space-y-3">
+        <p className="text-sm text-muted">{t('economy.overflowMessage', { amount: formatMoney(diff) })}</p>
+        {nextPurpose && (
+          <Button fullWidth variant="secondary" loading={loading} onClick={() => onChoose('TRANSFER')}>
+            {t('economy.overflowTransfer', { purpose: nextPurpose })}
+          </Button>
+        )}
+        <Button fullWidth variant="secondary" loading={loading} onClick={() => onChoose('INCREASE')}>
+          {t('economy.overflowIncrease', { amount: formatMoney(receivedTotal) })}
+        </Button>
+        {!nextPurpose && (
+          <Button fullWidth variant="secondary" loading={loading} onClick={() => onChoose('RESERVE')}>
+            {t('economy.overflowReserve')}
+          </Button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ReceivePaymentSheet({
   open,
   onClose,
   objectId,
-  payment,
+  summary,
+  preselectedStageId,
+  objectCreatedAt,
 }: {
   open: boolean;
   onClose: () => void;
   objectId: string;
-  payment: ProjectPaymentResponse | null;
+  summary: PaymentsSummaryResponse;
+  preselectedStageId: string | null;
+  objectCreatedAt: string | undefined;
 }) {
   const { t } = useTranslation();
-  const update = useUpdatePayment(objectId);
+  const addReceipt = useAddReceipt(objectId);
+  const addTransfer = useAddReceiptTransfer(objectId);
+  const openStages = summary.payments.filter((p) => p.remaining > 0);
+
+  const [stageId, setStageId] = useState<string | null>(null);
+  const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
+  const [overflow, setOverflow] = useState<{ diff: number; nextPurpose: string | null } | null>(null);
 
   useEffect(() => {
-    if (!open || !payment) return;
-    setAmount(String(payment.paidAmount ?? payment.amount));
-    setDate(payment.paidAt ? payment.paidAt.slice(0, 10) : today());
-  }, [open, payment]);
+    if (!open) return;
+    const initial = preselectedStageId ?? openStages[0]?.id ?? null;
+    setStageId(initial);
+    setLabel('');
+    const stage = initial ? openStages.find((s) => s.id === initial) : null;
+    setAmount(stage ? String(stage.remaining) : '');
+    setDate(today());
+    setOverflow(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, preselectedStageId]);
+
+  const selectedStage = stageId ? summary.payments.find((p) => p.id === stageId) ?? null : null;
+  const dateWarning = receivedDateWarning(date, objectCreatedAt, t);
+
+  const nextOpenStageAfter = (stage: ProjectPaymentResponse): ProjectPaymentResponse | null => {
+    const idx = summary.payments.findIndex((p) => p.id === stage.id);
+    if (idx < 0) return null;
+    return summary.payments.slice(idx + 1).find((p) => p.remaining > 0) ?? null;
+  };
+
+  const doSubmit = async (resolution?: OverflowChoice) => {
+    const amountValue = Number(amount.replace(',', '.'));
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      toast.error(t('economy.receivedAmountInvalid'));
+      return;
+    }
+    if (!stageId && !label.trim()) {
+      toast.error(t('economy.labelRequired'));
+      return;
+    }
+    if (!stageId) {
+      const conflict = summary.payments.some(
+        (p) => p.purpose.trim().toLowerCase() === label.trim().toLowerCase(),
+      );
+      if (conflict) {
+        toast.error(t('economy.labelConflict'));
+        return;
+      }
+    }
+    const req = {
+      planPaymentId: stageId,
+      label: stageId ? null : label.trim(),
+      amount: amountValue,
+      receivedAt: date,
+      resolution: resolution ?? null,
+    };
+    try {
+      if (resolution === 'TRANSFER') {
+        await addTransfer.mutateAsync(req);
+      } else {
+        await addReceipt.mutateAsync(req);
+      }
+      setOverflow(null);
+      onClose();
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
 
   const submit = async () => {
-    if (!payment) return;
+    const amountValue = Number(amount.replace(',', '.'));
+    if (selectedStage && Number.isFinite(amountValue)) {
+      const diff = amountValue - selectedStage.remaining;
+      if (diff > 0.004) {
+        const next = nextOpenStageAfter(selectedStage);
+        setOverflow({ diff, nextPurpose: next?.purpose ?? null });
+        return;
+      }
+    }
+    await doSubmit();
+  };
+
+  const loading = addReceipt.isPending || addTransfer.isPending;
+
+  return (
+    <>
+      <Modal open={open} onClose={onClose} title={t('economy.receivePaymentTitle')}>
+        <div className="space-y-4">
+          <div>
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.purpose')}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {openStages.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => { setStageId(s.id); setAmount(String(s.remaining)); }}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-semibold',
+                    stageId === s.id ? 'border-brand bg-brand-soft text-primary' : 'border-border text-muted',
+                  )}
+                >
+                  {s.purpose} · {formatMoney(s.remaining)}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { setStageId(null); setAmount(''); }}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-xs font-semibold',
+                  stageId === null ? 'border-brand bg-brand-soft text-primary' : 'border-border text-muted',
+                )}
+              >
+                {t('economy.customLabelOption')}
+              </button>
+            </div>
+          </div>
+
+          {stageId === null && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.customLabelName')}</span>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('economy.customLabelPlaceholder')} />
+            </label>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
+            <Input
+              autoFocus
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0 ₴"
+              className="text-lg font-bold"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.date')}</span>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            {dateWarning && <span className="mt-1 block text-xs text-amber">{dateWarning}</span>}
+          </label>
+
+          <Button fullWidth loading={loading} onClick={submit}>
+            {t('common.save')}
+          </Button>
+        </div>
+      </Modal>
+
+      {overflow && (
+        <OverflowConfirmSheet
+          open
+          onClose={() => setOverflow(null)}
+          diff={overflow.diff}
+          nextPurpose={overflow.nextPurpose}
+          receivedTotal={(selectedStage?.received ?? 0) + Number(amount.replace(',', '.') || 0)}
+          loading={loading}
+          onChoose={(choice) => void doSubmit(choice)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Edit/delete one already-recorded receipt — amount/date/label only. */
+function EditReceiptSheet({
+  open,
+  onClose,
+  objectId,
+  receipt,
+}: {
+  open: boolean;
+  onClose: () => void;
+  objectId: string;
+  receipt: PaymentReceiptResponse | null;
+}) {
+  const { t } = useTranslation();
+  const edit = useEditReceipt(objectId);
+  const del = useDeleteReceipt(objectId);
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState('');
+  const [label, setLabel] = useState('');
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || !receipt) return;
+    setAmount(String(receipt.amount));
+    setDate(receipt.receivedAt);
+    setLabel(receipt.label ?? '');
+  }, [open, receipt]);
+
+  const submit = async () => {
+    if (!receipt) return;
     const value = Number(amount.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
       toast.error(t('economy.receivedAmountInvalid'));
       return;
     }
-    const req: ProjectPaymentRequest = {
-      purpose: payment.purpose,
-      amount: payment.amount,
-      dueDate: payment.dueDate,
-      nextStage: payment.nextStage,
-      paidAmount: value,
-      paidAt: new Date(`${date}T00:00:00`).toISOString(),
-    };
     try {
-      await update.mutateAsync({ id: payment.id, req });
+      await edit.mutateAsync({
+        id: receipt.id,
+        req: { amount: value, receivedAt: date, label: receipt.planPaymentId ? null : label.trim() },
+      });
+      onClose();
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!receipt) return;
+    try {
+      await del.mutateAsync(receipt.id);
+      setConfirmDeleteOpen(false);
       onClose();
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -316,110 +710,47 @@ function MarkReceivedSheet({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={t('economy.markReceived')}>
-      <div className="space-y-4">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.date')}</span>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
-          <Input
-            autoFocus
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0 ₴"
-            className="text-lg font-bold"
-          />
-        </label>
-        <Button fullWidth loading={update.isPending} onClick={submit}>
-          {t('common.save')}
-        </Button>
-      </div>
-    </Modal>
+    <>
+      <Modal open={open} onClose={onClose} title={t('economy.editReceiptTitle')}>
+        <div className="space-y-4">
+          {receipt && !receipt.planPaymentId && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.customLabelName')}</span>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+            </label>
+          )}
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
+            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-lg font-bold" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.date')}</span>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+          <Button fullWidth loading={edit.isPending} onClick={submit}>
+            {t('common.save')}
+          </Button>
+          <Button variant="secondary" fullWidth onClick={() => setConfirmDeleteOpen(true)}>
+            {t('common.delete')}
+          </Button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title={t('economy.deleteReceiptTitle')}
+        message={t('economy.deleteReceiptMessage')}
+        confirmLabel={t('common.delete')}
+        loading={del.isPending}
+        onConfirm={confirmDelete}
+        onClose={() => setConfirmDeleteOpen(false)}
+      />
+    </>
   );
 }
 
-/** "+ Отриманий платіж" — a deposit or payment already in hand: purpose + amount + date in one
- *  step, planned and received set equal (no due-date/next-stage — it's already resolved). */
-function QuickReceivedSheet({
-  open,
-  onClose,
-  objectId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  objectId: string;
-}) {
-  const { t } = useTranslation();
-  const add = useAddPayment(objectId);
-  const [purpose, setPurpose] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState('');
-
-  useEffect(() => {
-    if (!open) return;
-    setPurpose('');
-    setAmount('');
-    setDate(today());
-  }, [open]);
-
-  const submit = async () => {
-    const value = Number(amount.replace(',', '.'));
-    if (!purpose.trim() || !Number.isFinite(value) || value <= 0) {
-      toast.error(t('economy.paymentInvalid'));
-      return;
-    }
-    const req: ProjectPaymentRequest = {
-      purpose: purpose.trim(),
-      amount: value,
-      dueDate: null,
-      nextStage: null,
-      paidAmount: value,
-      paidAt: new Date(`${date}T00:00:00`).toISOString(),
-    };
-    try {
-      await add.mutateAsync(req);
-      onClose();
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={t('economy.quickReceivedTitle')}>
-      <div className="space-y-4">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.purpose')}</span>
-          <Input autoFocus value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={t('economy.purposePlaceholder')} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.amount')}</span>
-          <Input
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0 ₴"
-            className="text-lg font-bold"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.date')}</span>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <Button fullWidth loading={add.isPending} onClick={submit}>
-          {t('common.save')}
-        </Button>
-      </div>
-    </Modal>
-  );
-}
-
-/** "+ Платіж" fans out into two flows rather than one form trying to be both — a planned amount
- *  and a payment already in hand are different enough moments that picking wrong (and having to
- *  backtrack through fields) is worse than one extra tap. Mirrors the estimate-creation choice
- *  modal in ProjectDetailPage. */
+/** "+ Платіж" fans out into two flows — a planned amount and a payment already in hand are
+ *  different enough moments that picking wrong is worse than one extra tap. */
 function AddPaymentChoiceModal({
   open,
   onClose,
@@ -561,23 +892,37 @@ function SplitSheet({ open, onClose, objectId }: { open: boolean; onClose: () =>
 
 /**
  * Object-level payments (завдаток + графік виплат) — FREE + PRO. "Гроші", never "прибуток": the
- * contracted/received/remaining summary and the schedule itself, no cost/profit anywhere here.
+ * contracted/received/remaining summary and one shared vertical timeline (plan stages + their
+ * receipt history + unplanned receipts), no cost/profit anywhere here.
  */
-export function PaymentsBlock({ objectId, summary }: { objectId: string; summary: PaymentsSummaryResponse }) {
+export function PaymentsBlock({
+  objectId,
+  summary,
+  objectCreatedAt,
+}: {
+  objectId: string;
+  summary: PaymentsSummaryResponse;
+  /** For the soft "not before the object existed" check on a received date — optional, the
+   *  check is simply skipped when the caller doesn't have it handy. */
+  objectCreatedAt?: string;
+}) {
   const { t } = useTranslation();
   const [addChoiceOpen, setAddChoiceOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [quickReceivedOpen, setQuickReceivedOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectPaymentResponse | null>(null);
-  // The mark-received target: either an existing row (opened from its own sheet or list row) or
-  // the row just picked from AddPaymentChoiceModal's "already received" quick-create — that one
-  // goes through QuickReceivedSheet instead, so this is only ever an EXISTING row here.
-  const [receivedFor, setReceivedFor] = useState<ProjectPaymentResponse | null>(null);
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [receivePreselect, setReceivePreselect] = useState<string | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<PaymentReceiptResponse | null>(null);
 
   const openEdit = (row: ProjectPaymentResponse | null) => {
     setEditing(row);
     setSheetOpen(true);
+  };
+
+  const openReceive = (preselect: string | null) => {
+    setReceivePreselect(preselect);
+    setReceiveOpen(true);
   };
 
   return (
@@ -624,34 +969,41 @@ export function PaymentsBlock({ objectId, summary }: { objectId: string; summary
 
       <PaymentStrip received={summary.received} total={summary.contractedTotal} />
 
-      {summary.payments.length > 0 && (
-        <div className="mt-3 border-t border-border pt-1">
-          {summary.payments.map((row) => (
-            <PaymentListRow key={row.id} row={row} onEdit={() => openEdit(row)} />
-          ))}
-        </div>
-      )}
+      <PaymentTimeline
+        summary={summary}
+        onEditStage={openEdit}
+        onQuickPay={(stage) => openReceive(stage.id)}
+        onEditReceipt={setEditingReceipt}
+      />
 
       <AddPaymentChoiceModal
         open={addChoiceOpen}
         onClose={() => setAddChoiceOpen(false)}
         onPlanned={() => { setAddChoiceOpen(false); openEdit(null); }}
-        onReceived={() => { setAddChoiceOpen(false); setQuickReceivedOpen(true); }}
+        onReceived={() => { setAddChoiceOpen(false); openReceive(null); }}
       />
       <PaymentSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         objectId={objectId}
         editing={editing}
-        onMarkReceived={() => { if (editing) { setSheetOpen(false); setReceivedFor(editing); } }}
+        summary={summary}
+        onReceivePayment={() => { if (editing) { setSheetOpen(false); openReceive(editing.id); } }}
       />
-      <MarkReceivedSheet
-        open={receivedFor !== null}
-        onClose={() => setReceivedFor(null)}
+      <ReceivePaymentSheet
+        open={receiveOpen}
+        onClose={() => setReceiveOpen(false)}
         objectId={objectId}
-        payment={receivedFor}
+        summary={summary}
+        preselectedStageId={receivePreselect}
+        objectCreatedAt={objectCreatedAt}
       />
-      <QuickReceivedSheet open={quickReceivedOpen} onClose={() => setQuickReceivedOpen(false)} objectId={objectId} />
+      <EditReceiptSheet
+        open={editingReceipt !== null}
+        onClose={() => setEditingReceipt(null)}
+        objectId={objectId}
+        receipt={editingReceipt}
+      />
       <SplitSheet open={splitOpen} onClose={() => setSplitOpen(false)} objectId={objectId} />
     </section>
   );

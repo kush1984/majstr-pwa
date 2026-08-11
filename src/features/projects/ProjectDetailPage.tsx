@@ -441,7 +441,7 @@ export function ProjectDetailPage() {
       ) : tab === 'notes' ? (
         <NotesSection objectId={id} />
       ) : tab === 'act' ? (
-        <ObjectEconomySection objectId={id} />
+        <ObjectEconomySection objectId={id} objectCreatedAt={p.createdAt} />
       ) : (
         <>
           {/* The two share links used to be full-width cards here. On a phone they pushed the

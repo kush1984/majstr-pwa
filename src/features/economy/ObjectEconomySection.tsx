@@ -173,7 +173,7 @@ function EstimatesSummaryPanel({ panels }: { panels: SignedEstimatePanelResponse
  * </ul>
  * Owner-only; nothing here reaches the client (see PublicPortalView instead).
  */
-export function ObjectEconomySection({ objectId }: { objectId: string }) {
+export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: string; objectCreatedAt?: string }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
@@ -251,7 +251,7 @@ export function ObjectEconomySection({ objectId }: { objectId: string }) {
                 information — show a neutral empty state instead, UNLESS the master already
                 created payment rows by hand (those stay visible as-is, per the prompt). */}
             {eco?.payments && (panels.length > 0 || eco.payments.payments.length > 0) ? (
-              <PaymentsBlock objectId={objectId} summary={eco.payments} />
+              <PaymentsBlock objectId={objectId} summary={eco.payments} objectCreatedAt={objectCreatedAt} />
             ) : eco?.payments ? (
               <p className="rounded-card border border-dashed border-border bg-surface p-3 text-center text-sm text-muted">
                 {t('economy.paymentsEmpty')}

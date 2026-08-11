@@ -8,7 +8,12 @@ import type {
   ExpenseRequest,
   ExpenseResponse,
   ObjectEconomyResponse,
+  PaymentReceiptEditRequest,
+  PaymentReceiptRequest,
+  PaymentReceiptResponse,
+  PaymentsSummaryResponse,
   PaymentSplitRequest,
+  PaymentSurplusTransferRequest,
   ProjectPaymentRequest,
   ProjectPaymentResponse,
   ProjectPaymentStatus,
@@ -149,11 +154,12 @@ function patchExpenses(
 // same reasoning useAddExpense gives for not re-deriving profit locally.
 // ---------------------------------------------------------------------------
 
-/** Mirrors ProjectPayment.status(today) server-side — used only for the brief optimistic
- *  window before a real fetch confirms the authoritative value. */
-function deriveStatus(amount: number, paidAmount: number | null, dueDate: string | null): ProjectPaymentStatus {
-  if (paidAmount != null && paidAmount >= amount) return 'RECEIVED';
-  if (paidAmount != null && paidAmount > 0) return 'PARTIAL';
+/** Mirrors ProjectPayment.status(today, received) server-side — used only for the brief
+ *  optimistic window before a real fetch confirms the authoritative value (offline only; see
+ *  offlineMutate — this never runs on a normal online success). */
+function deriveStageStatus(amount: number, received: number, dueDate: string | null): ProjectPaymentStatus {
+  if (received >= amount) return 'RECEIVED';
+  if (received > 0) return 'PARTIAL';
   if (dueDate && dueDate < new Date().toISOString().slice(0, 10)) return 'OVERDUE';
   return 'PLANNED';
 }
@@ -171,23 +177,42 @@ function patchPayments(
   });
 }
 
+/** Same guard as patchPayments, but hands the edit function the WHOLE summary — for receipt
+ *  mutations, which touch both a stage's nested history and the object-level totals at once. */
+function patchSummary(
+  qc: QueryClient,
+  objectId: string,
+  edit: (summary: PaymentsSummaryResponse) => PaymentsSummaryResponse,
+): void {
+  qc.setQueryData<ObjectEconomyResponse>(economyKeys.economy(objectId), (old) => {
+    if (!old || !old.payments) return old;
+    return { ...old, payments: edit(old.payments) };
+  });
+}
+
+/** Returns the created stage (not void) — the "surplus transfer" hint (see PaymentSheet) needs
+ *  the new stage's real id to target the transfer at. */
 export function useAddPayment(objectId: string) {
   const qc = useQueryClient();
   return useMutation({
     networkMode: 'always',
     mutationFn: (req: ProjectPaymentRequest) => {
       const id = newUuid();
-      return offlineMutate<void>({
+      return offlineMutate<ProjectPaymentResponse>({
         entity: 'project-payment', entityId: id, type: 'create', payload: { objectId, req },
         deps: [objectId],
-        online: async () => { await paymentsApi.add(objectId, req, id); },
+        online: () => paymentsApi.add(objectId, req, id),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
-        optimistic: () => patchPayments(qc, objectId, (list) => [...list, {
-          id, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
-          purpose: req.purpose, paidAmount: req.paidAmount ?? null, paidAt: req.paidAt ?? null,
-          status: deriveStatus(req.amount, req.paidAmount ?? null, req.dueDate ?? null),
-          sortOrder: list.length,
-        }]),
+        optimistic: () => {
+          const created: ProjectPaymentResponse = {
+            id, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
+            purpose: req.purpose, received: 0, remaining: req.amount,
+            status: deriveStageStatus(req.amount, 0, req.dueDate ?? null),
+            sortOrder: 0, receipts: [],
+          };
+          patchPayments(qc, objectId, (list) => [...list, { ...created, sortOrder: list.length }]);
+          return created;
+        },
       });
     },
   });
@@ -205,8 +230,7 @@ export function useUpdatePayment(objectId: string) {
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => patchPayments(qc, objectId, (list) => list.map((p) => (p.id === id ? {
           ...p, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
-          purpose: req.purpose, paidAmount: req.paidAmount ?? null, paidAt: req.paidAt ?? null,
-          status: deriveStatus(req.amount, req.paidAmount ?? null, req.dueDate ?? null),
+          purpose: req.purpose, status: deriveStageStatus(req.amount, p.received, req.dueDate ?? null),
         } : p))),
       }),
   });
@@ -224,6 +248,138 @@ export function useDeletePayment(objectId: string) {
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => patchPayments(qc, objectId, (list) => list.filter((p) => p.id !== paymentId)),
       }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// FACT — payment_receipt (V100). The one path money enters through.
+// ---------------------------------------------------------------------------
+
+/** The common case: a partial/full close against a known stage, or an unplanned receipt — no
+ *  overpayment. Offline-first, single entity id, mirrors useAddPayment. The optimistic patch is a
+ *  simplification (it doesn't model RESERVE/INCREASE bumping the plan amount) — acceptable since
+ *  it only ever shows while offline; the next sync replaces it with the server's real numbers. */
+export function useAddReceipt(objectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: async (req: PaymentReceiptRequest) => {
+      const id = newUuid();
+      const result = await offlineMutate<PaymentReceiptResponse[]>({
+        entity: 'payment-receipt', entityId: id, type: 'create', payload: { objectId, req },
+        deps: [objectId],
+        online: () => paymentsApi.addReceipt(objectId, req, id),
+        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        optimistic: () => {
+          const label = req.label?.trim() || null;
+          const receipt: PaymentReceiptResponse = {
+            id, planPaymentId: req.planPaymentId ?? null, label,
+            displayLabel: label ?? 'Оплата', amount: req.amount, receivedAt: req.receivedAt,
+          };
+          patchSummary(qc, objectId, (s) => {
+            if (!req.planPaymentId) {
+              return {
+                ...s, received: s.received + req.amount, remaining: Math.max(0, s.remaining - req.amount),
+                unplannedReceipts: [...s.unplannedReceipts, receipt],
+              };
+            }
+            const payments = s.payments.map((p) => {
+              if (p.id !== req.planPaymentId) return p;
+              const received = p.received + req.amount;
+              return {
+                ...p, received, remaining: Math.max(0, p.amount - received),
+                status: deriveStageStatus(p.amount, received, p.dueDate),
+                receipts: [...p.receipts, { ...receipt, label: null, displayLabel: p.purpose }],
+              };
+            });
+            return { ...s, payments, received: s.received + req.amount, remaining: Math.max(0, s.remaining - req.amount) };
+          });
+          return [receipt];
+        },
+      });
+      // Wait for the cache to actually be fresh before the mutation resolves — an invalidated
+      // query only starts a background refetch, so a master submitting several receipts against
+      // the same stage back-to-back could otherwise reopen "Отримати платіж" while the sheet
+      // still shows pre-mutation numbers, under-detecting a real overflow (money-critical: the
+      // client's own overflow check is what decides whether the confirm dialog even shows).
+      await qc.refetchQueries({ queryKey: economyKeys.economy(objectId), type: 'active' });
+      return result;
+    },
+  });
+}
+
+/** TRANSFER creates TWO receipts from one submission (this stage's closing amount + the surplus
+ *  on the next open stage) — doesn't fit the outbox's one-entity-per-op model, so it's online-only,
+ *  same as split preview/commit. */
+export function useAddReceiptTransfer(objectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: PaymentReceiptRequest) => {
+      const result = await paymentsApi.addReceipt(objectId, req);
+      await qc.refetchQueries({ queryKey: economyKeys.economy(objectId), type: 'active' }); // see useAddReceipt
+      return result;
+    },
+  });
+}
+
+export function useEditReceipt(objectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: ({ id, req }: { id: string; req: PaymentReceiptEditRequest }) =>
+      offlineMutate<PaymentReceiptResponse>({
+        entity: 'payment-receipt', entityId: id, type: 'update', payload: { objectId, req },
+        deps: [objectId],
+        online: () => paymentsApi.editReceipt(objectId, id, req),
+        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        optimistic: () => {
+          let updated: PaymentReceiptResponse | null = null;
+          const editOne = (r: PaymentReceiptResponse): PaymentReceiptResponse => {
+            if (r.id !== id) return r;
+            const label = r.planPaymentId ? r.label : (req.label?.trim() || r.label);
+            updated = { ...r, amount: req.amount, receivedAt: req.receivedAt, label,
+              displayLabel: r.planPaymentId ? r.displayLabel : (label ?? r.displayLabel) };
+            return updated;
+          };
+          patchSummary(qc, objectId, (s) => ({
+            ...s,
+            payments: s.payments.map((p) => ({ ...p, receipts: p.receipts.map(editOne) })),
+            unplannedReceipts: s.unplannedReceipts.map(editOne),
+          }));
+          return updated ?? { id, planPaymentId: null, label: req.label ?? null,
+            displayLabel: req.label ?? 'Оплата', amount: req.amount, receivedAt: req.receivedAt };
+        },
+      }),
+  });
+}
+
+export function useDeleteReceipt(objectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (receiptId: string) =>
+      offlineMutate<void>({
+        entity: 'payment-receipt', entityId: receiptId, type: 'delete', payload: { objectId },
+        deps: [objectId],
+        online: async () => { await paymentsApi.removeReceipt(objectId, receiptId); },
+        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        optimistic: () => patchSummary(qc, objectId, (s) => ({
+          ...s,
+          payments: s.payments.map((p) => ({ ...p, receipts: p.receipts.filter((r) => r.id !== receiptId) })),
+          unplannedReceipts: s.unplannedReceipts.filter((r) => r.id !== receiptId),
+        })),
+      }),
+  });
+}
+
+/** "На «X» отримано більше — перенести сюди?" follow-up, offered when creating a new plan stage
+ *  while another one is over-received (RESERVE). Online-only, same reasoning as split/TRANSFER —
+ *  it mutates two stages' receipt histories server-side in one call. */
+export function useTransferSurplus(objectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: PaymentSurplusTransferRequest) => paymentsApi.transferSurplus(objectId, req),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
   });
 }
 
