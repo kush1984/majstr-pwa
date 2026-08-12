@@ -7,7 +7,6 @@ import '@/lib/i18n.ts';
 import { ObjectEconomySection } from './ObjectEconomySection.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { economyApi } from '@/api/economy.ts';
-import { upgradeApi } from '@/api/upgrade.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { formatMoney } from '@/lib/format.ts';
 import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse } from '@/api/types.ts';
@@ -99,22 +98,20 @@ function renderSection(plan: UserResponse['plan']) {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ObjectEconomySection', () => {
-  it('FREE: sees only the acts list — summary/payments/internals are ONE locked block', async () => {
-    // economy-polish: the gate widened from "internals only" to "everything except the acts".
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture());
+  it('FREE: temporarily gets the full economy tab too — no lock teaser, summary + payments unlocked', async () => {
+    // TEMPORARY business decision (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY): the backend now
+    // returns real payments/internals for FREE too (Feature.OBJECT_ECONOMY granted to FREE in
+    // PlanConfig), and the component's own isPro check is overridden the same way — so the
+    // single lock teaser this used to show for FREE never renders.
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({ pro: { expenses: 3500, profit: 10500 } }));
 
     renderSection('FREE');
 
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
-    expect(await screen.findByText('Кухня')).toBeTruthy(); // per-estimate panel, still free
-    expect(screen.getByText(/у PRO/)).toBeTruthy(); // single lock teaser
-    expect(screen.queryByText('Аванс')).toBeNull(); // payments: no longer FREE-visible
-    expect(screen.queryByText('Загалом по підписаних')).toBeNull(); // summary panel: same
-    // The expense journal itself stays hard PRO-gated (unrelated to the internals field).
-    expect(economyApi.listExpenses).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByText(/Відкрити PRO/));
-    expect(upgradeApi.click).toHaveBeenCalledWith('OBJECT_PROFIT');
+    expect(await screen.findByText('Кухня')).toBeTruthy(); // per-estimate panel
+    expect(await screen.findByText('Загалом по підписаних')).toBeTruthy(); // summary panel
+    expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
+    expect(screen.queryByText(/у PRO$/)).toBeNull(); // no lock teaser
   });
 
   it('PRO: shows the summary panel and payments, but Прибуток/Витрати stays parked', async () => {

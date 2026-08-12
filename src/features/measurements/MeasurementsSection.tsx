@@ -13,6 +13,7 @@ import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { MeasurementItemForm } from './MeasurementItemForm.tsx';
 import { SketchReviewSheet } from './SketchReviewSheet.tsx';
 import { ProjectImportSheet } from './ProjectImportSheet.tsx';
@@ -93,12 +94,13 @@ type EditTarget = {
  * The «Заміри» tab, split into two clearly-labelled blocks so «план» vs «ескіз» never
  * confuse again: «Кімнати · площі» (area measured by room, from a sketch or by hand) and
  * «⚡ Електрика» (electrician-only: points counted off a plan + the chase calculator).
- * Electrical rows are the seed of the future «Калькулятори» hub. PRO-gated; owner-only.
+ * Electrical rows are the seed of the future «Калькулятори» hub. PRO-gated; owner-only —
+ * temporarily open to FREE too, see {@link TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY}.
  */
 export function MeasurementsSection({ objectId }: { objectId: string }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
   const hasElectrical = ELECTRICAL_MEASUREMENTS_ENABLED && (me?.trades ?? []).includes('ELECTRICAL');
 
   const online = useOnline();

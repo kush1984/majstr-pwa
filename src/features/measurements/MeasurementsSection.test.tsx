@@ -52,9 +52,9 @@ const baseMe: UserResponse = {
   planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'r1',
 };
 
-function renderSection(trades: Trade[]) {
+function renderSection(trades: Trade[], plan: UserResponse['plan'] = 'PRO') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(ME_QUERY_KEY, { ...baseMe, trades });
+  qc.setQueryData(ME_QUERY_KEY, { ...baseMe, trades, plan });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -98,6 +98,16 @@ describe('MeasurementsSection — площі vs ⚡ Електрика', () => {
     expect(await screen.findByText('Кімнати · площі')).toBeTruthy();
     expect(screen.queryByText('📷 Розпізнати план чи ескіз')).toBeNull();
     expect(screen.queryByText('📁 Імпорт проєкту')).toBeNull();
+  });
+
+  // TEMPORARY business decision (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY) — see the comment on
+  // Plan.FREE in the backend's PlanConfig: Заміри opened up to FREE while the AI-calling flows
+  // are hidden to cut AI spend, so the PRO lock screen no longer shows for FREE either.
+  it('FREE: temporarily gets Заміри too — no PRO lock screen', async () => {
+    renderSection(['TILING'], 'FREE');
+
+    expect(await screen.findByText('Кімнати · площі')).toBeTruthy();
+    expect(screen.queryByText('Заміри об\'єкта — у PRO')).toBeNull();
   });
 
   it('tapping a room name opens a rename dialog and saves name + floor', async () => {

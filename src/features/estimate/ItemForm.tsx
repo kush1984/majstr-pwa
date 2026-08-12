@@ -14,6 +14,7 @@ import {
 } from '@/features/catalog/catalogItemSchema.ts';
 import { useCatalogCategories } from '@/features/catalog/useCatalog.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import type { EstimateItemRequest, EstimateItemResponse, PercentBaseKind } from '@/api/types.ts';
@@ -62,7 +63,9 @@ export function ItemForm({
   const { t } = useTranslation();
   const categories = useCatalogCategories();
   const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE'; // measurements are PRO — only then offer the picker
+  // measurements are PRO — only then offer the picker (temporarily open to FREE too, see
+  // TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY)
+  const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
   const [calcOpen, setCalcOpen] = useState(false);
   // Measurement substitution (Stage 2): selection memory + manual-edit priority.
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);

@@ -5,6 +5,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
+import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
@@ -168,15 +169,16 @@ function EstimatesSummaryPanel({ panels }: { panels: SignedEstimatePanelResponse
  *       read-only estimate view. "Here are the deals I've signed" — the one thing every plan
  *       sees.</li>
  *   <li><b>PRO only, one lock teaser:</b> the Σ summary panel and the payment schedule, behind a
- *       SINGLE gate. Прибуток/Витрати (+ the expense journal) used to be a third piece here but
- *       is parked for now — see {@code INTERNALS_ENABLED} above.</li>
+ *       SINGLE gate — temporarily open to FREE too, see {@link TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY}.
+ *       Прибуток/Витрати (+ the expense journal) used to be a third piece here but is parked for
+ *       now — see {@code INTERNALS_ENABLED} above.</li>
  * </ul>
  * Owner-only; nothing here reaches the client (see PublicPortalView instead).
  */
 export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: string; objectCreatedAt?: string }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
