@@ -199,6 +199,13 @@ const OBJECT_ACTION_STATUS: Record<ObjectAction, ProjectStatus> = {
   complete: 'COMPLETED', reopen: 'IN_PROGRESS', cancel: 'CANCELLED', restore: 'IN_PROGRESS',
 };
 
+/** COMPLETED/CANCELLED are dead ends with exactly one way out (reopen/restore) — no sharing, no
+ *  cancelling a completed object, no completing a cancelled one. Everything status- or
+ *  sharing-related that only makes sense on a live object gates on this. */
+export function isTerminalStage(stage: ObjectStage): boolean {
+  return stage === 'COMPLETED' || stage === 'CANCELLED';
+}
+
 /**
  * "Завершити/Скасувати об'єкт" etc — the confirm-then-mutate flow in one place, because it is
  * offered from two spots: the object's own hero menu, and every row of the object list (so a

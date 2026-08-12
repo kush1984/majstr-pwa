@@ -36,9 +36,9 @@ function renderCard(p: ProjectResponse) {
 }
 
 describe('ProjectCard — the badge shows the ONE derived stage (object-status-unification)', () => {
-  it('shows «Оцінка» for ASSESSMENT even with no estimate yet', () => {
+  it('shows «Чернетка» for ASSESSMENT even with no estimate yet', () => {
     renderCard(project({ stage: 'ASSESSMENT', estimateStatus: null }));
-    expect(screen.getByText('Оцінка')).toBeTruthy();
+    expect(screen.getByText('Чернетка')).toBeTruthy();
   });
 
   it('shows «В роботі» once there is a SIGNED estimate — not the estimate\'s own status label', () => {

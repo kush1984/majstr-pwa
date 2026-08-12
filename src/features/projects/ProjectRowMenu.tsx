@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { useMessageLink } from '@/features/messages/useMessageLink.ts';
-import { useObjectStatusAction } from './useProjects.ts';
+import { useObjectStatusAction, isTerminalStage } from './useProjects.ts';
 import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import type { ProjectResponse } from '@/api/types.ts';
 
@@ -16,6 +16,9 @@ import type { ProjectResponse } from '@/api/types.ts';
  * about that link a master needs to be sure of before sending it. Portal-link revoke is still
  * deliberately absent from a list row: a destructive action next to quick status changes is a
  * mis-tap waiting to happen, and the object's own screen has room for it.</p>
+ *
+ * <p>The chat-link item disappears once the object is COMPLETED/CANCELLED — {@link isTerminalStage}
+ * — leaving only the reopen/restore way back in, same rule as the detail page's FAB.</p>
  */
 export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
   const { t } = useTranslation();
@@ -27,15 +30,21 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
       <ActionMenu ariaLabel={t('projects.rowActionsAria', { name: project.name })}>
         {(close) => (
           <>
-            <ActionMenuItem
-              icon="🔗"
-              label={t('messageLink.copy')}
-              onClick={() => { close(); void copy(); }}
-            />
-            <p className="border-t border-border px-4 py-2 text-[11px] leading-snug text-muted">
-              {t('messageLink.hint')}
-            </p>
-            <div className="border-t border-border">
+            {/* Hidden once COMPLETED/CANCELLED — nothing to share a chat link about on a closed
+                object. */}
+            {!isTerminalStage(project.stage) && (
+              <>
+                <ActionMenuItem
+                  icon="🔗"
+                  label={t('messageLink.copy')}
+                  onClick={() => { close(); void copy(); }}
+                />
+                <p className="border-t border-border px-4 py-2 text-[11px] leading-snug text-muted">
+                  {t('messageLink.hint')}
+                </p>
+              </>
+            )}
+            <div className={isTerminalStage(project.stage) ? undefined : 'border-t border-border'}>
               <ObjectStatusMenuItems stage={project.stage} onChoose={(a) => { close(); chooseAction(a); }} />
             </div>
           </>

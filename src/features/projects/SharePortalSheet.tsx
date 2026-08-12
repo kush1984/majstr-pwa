@@ -52,6 +52,11 @@ export function SharePortalSheet({
    * 'unsigned' from Кошторис (the mirror case — a SIGNED estimate moved to Економіка and is
    * managed/shared from there instead). Undefined (any other tab, no estimate-list context of its
    * own) — every estimate, the original unfiltered behaviour.
+   *
+   * <p>'unsigned' also hides the payments-visibility toggle (a contract concern that belongs with
+   * the signed estimate, not a still-in-progress one) and, when the filtered list is empty,
+   * collapses the whole sheet to just the neutral "nothing yet" message — no picker/payments/publish
+   * chrome left dangling over an empty list.</p>
    */
   estimatesFilter?: 'signed' | 'unsigned';
 }) {
@@ -148,6 +153,9 @@ export function SharePortalSheet({
   };
 
   const paymentsTicked = paymentsOn ?? false;
+  // Nothing to publish from this tab's angle — just say so. Any pick/publish/payments chrome below
+  // would dangle over an empty list (and payments visibility is a Економіка-tab concern anyway).
+  const filteredEmpty = Boolean(estimatesFilter) && !portal.isPending && !portal.isError && list.length === 0;
 
   const onCopy = async () => {
     setBusy('copy');
@@ -259,146 +267,154 @@ export function SharePortalSheet({
   return (
     <Modal open={open} onClose={onClose} title={t('portal.sheetTitle')}>
       <div className="space-y-3">
-        <p className="text-sm text-muted">
-          {t(estimatesFilter === 'signed' ? 'portal.pickHintSigned' : 'portal.pickHint')}
-        </p>
-
-        {portal.isPending ? (
-          <div className="py-6 text-center"><Spinner /></div>
-        ) : portal.isError ? (
-          <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
-        ) : estimatesFilter && list.length === 0 ? (
+        {filteredEmpty ? (
+          // Nothing this tab can publish — the plain fact, no picker/payments/publish chrome
+          // dangling under it (there is nothing here for those to act on).
           <p className="py-4 text-center text-sm text-muted">
             {t(estimatesFilter === 'signed' ? 'portal.noSignedEstimates' : 'portal.noUnsignedEstimates')}
           </p>
         ) : (
-          <div className="space-y-1.5">
-            {list.map((e) => (
-              <label key={e.id}
-                className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+          <>
+            <p className="text-sm text-muted">
+              {t(estimatesFilter === 'signed' ? 'portal.pickHintSigned' : 'portal.pickHint')}
+            </p>
+
+            {portal.isPending ? (
+              <div className="py-6 text-center"><Spinner /></div>
+            ) : portal.isError ? (
+              <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
+            ) : (
+              <div className="space-y-1.5">
+                {list.map((e) => (
+                  <label key={e.id}
+                    className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={ticked.has(e.id)}
+                      onChange={() => toggle(e.id)}
+                      className="h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm text-primary">
+                      {estimateName(e.name, e.createdAt)}
+                    </span>
+                    {estimatesFilter !== 'signed' && e.status === 'SIGNED' && (
+                      <span className="whitespace-nowrap text-[11px] font-semibold text-success">
+                        ✓ {t('status.estimate.SIGNED')}
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* Payments visibility is a contract concern — only offered alongside signed estimates
+                (Економіка), not here where the picker only shows DRAFT/SENT ones. */}
+            {estimatesFilter !== 'unsigned' && !portal.isPending && !portal.isError && (
+              <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
                 <input
                   type="checkbox"
-                  checked={ticked.has(e.id)}
-                  onChange={() => toggle(e.id)}
-                  className="h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
+                  checked={paymentsTicked}
+                  onChange={() => setPaymentsOn((prev) => !(prev ?? false))}
+                  className="mt-0.5 h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
                 />
-                <span className="min-w-0 flex-1 truncate text-sm text-primary">
-                  {estimateName(e.name, e.createdAt)}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-primary">{t('portal.showPayments')}</span>
+                  <span className="block text-xs text-muted">{t('portal.showPaymentsHint')}</span>
                 </span>
-                {estimatesFilter !== 'signed' && e.status === 'SIGNED' && (
-                  <span className="whitespace-nowrap text-[11px] font-semibold text-success">
-                    ✓ {t('status.estimate.SIGNED')}
-                  </span>
-                )}
               </label>
-            ))}
-          </div>
-        )}
+            )}
 
-        {!portal.isPending && !portal.isError && (
-          <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
-            <input
-              type="checkbox"
-              checked={paymentsTicked}
-              onChange={() => setPaymentsOn((prev) => !(prev ?? false))}
-              className="mt-0.5 h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm text-primary">{t('portal.showPayments')}</span>
-              <span className="block text-xs text-muted">{t('portal.showPaymentsHint')}</span>
-            </span>
-          </label>
-        )}
+            {email && (
+              <Button fullWidth disabled={ticked.size === 0} loading={busy === 'email'} onClick={onEmail}>
+                {t('estimate.sendToEmail', { email })}
+              </Button>
+            )}
 
-        {email && (
-          <Button fullWidth disabled={ticked.size === 0} loading={busy === 'email'} onClick={onEmail}>
-            {t('estimate.sendToEmail', { email })}
-          </Button>
-        )}
+            <Button
+              variant={email ? 'secondary' : 'primary'}
+              fullWidth
+              disabled={ticked.size === 0}
+              loading={busy === 'copy'}
+              onClick={onCopy}
+            >
+              {t('estimate.copyLink')}
+            </Button>
 
-        <Button
-          variant={email ? 'secondary' : 'primary'}
-          fullWidth
-          disabled={ticked.size === 0}
-          loading={busy === 'copy'}
-          onClick={onCopy}
-        >
-          {t('estimate.copyLink')}
-        </Button>
+            {ticked.size === 0 && serverVisibleCount > 0 && (
+              <Button variant="secondary" fullWidth loading={busy === 'hide'} onClick={onHideAll}>
+                {t('portal.hideAll')}
+              </Button>
+            )}
 
-        {ticked.size === 0 && serverVisibleCount > 0 && (
-          <Button variant="secondary" fullWidth loading={busy === 'hide'} onClick={onHideAll}>
-            {t('portal.hideAll')}
-          </Button>
-        )}
+            {!clientId && (
+              <div className="rounded-xl bg-surface-sunken p-3">
+                <p className="mb-2 text-xs text-muted">{t('estimate.noClientShareHint')}</p>
+                {showClientPicker ? (
+                  <div className="space-y-2">
+                    <ClientPicker value={clientDraft} onChange={setClientDraft} allowNone={false} />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        onClick={() => setShowClientPicker(false)}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        fullWidth
+                        loading={createClient.isPending || updateProject.isPending}
+                        onClick={onAttachClient}
+                      >
+                        {t('estimate.addClientToShare')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button variant="secondary" fullWidth onClick={() => setShowClientPicker(true)}>
+                    {t('estimate.addClientToShare')}
+                  </Button>
+                )}
+              </div>
+            )}
 
-        {!clientId && (
-          <div className="rounded-xl bg-surface-sunken p-3">
-            <p className="mb-2 text-xs text-muted">{t('estimate.noClientShareHint')}</p>
-            {showClientPicker ? (
-              <div className="space-y-2">
-                <ClientPicker value={clientDraft} onChange={setClientDraft} allowNone={false} />
-                <div className="flex gap-2">
+            {!email && clientId && (
+              <div className="rounded-xl bg-surface-sunken p-3">
+                <p className="mb-2 text-xs text-muted">
+                  {t('estimate.addClientEmailHint')}
+                </p>
+                {showAddEmail ? (
+                  <div className="space-y-2">
+                    <Input
+                      type="email"
+                      inputMode="email"
+                      placeholder={t('estimate.clientEmailPlaceholder')}
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="secondary" fullWidth onClick={() => setShowAddEmail(false)}>
+                        {t('common.cancel')}
+                      </Button>
+                      <Button fullWidth loading={updateClient.isPending} onClick={onSaveEmail}>
+                        {t('common.save')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
                   <Button
                     variant="secondary"
                     fullWidth
-                    onClick={() => setShowClientPicker(false)}
+                    onClick={() => {
+                      setEmailInput('');
+                      setShowAddEmail(true);
+                    }}
                   >
-                    {t('common.cancel')}
+                    {t('estimate.addClientEmail')}
                   </Button>
-                  <Button
-                    fullWidth
-                    loading={createClient.isPending || updateProject.isPending}
-                    onClick={onAttachClient}
-                  >
-                    {t('estimate.addClientToShare')}
-                  </Button>
-                </div>
+                )}
               </div>
-            ) : (
-              <Button variant="secondary" fullWidth onClick={() => setShowClientPicker(true)}>
-                {t('estimate.addClientToShare')}
-              </Button>
             )}
-          </div>
-        )}
-
-        {!email && clientId && (
-          <div className="rounded-xl bg-surface-sunken p-3">
-            <p className="mb-2 text-xs text-muted">
-              {t('estimate.addClientEmailHint')}
-            </p>
-            {showAddEmail ? (
-              <div className="space-y-2">
-                <Input
-                  type="email"
-                  inputMode="email"
-                  placeholder={t('estimate.clientEmailPlaceholder')}
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button variant="secondary" fullWidth onClick={() => setShowAddEmail(false)}>
-                    {t('common.cancel')}
-                  </Button>
-                  <Button fullWidth loading={updateClient.isPending} onClick={onSaveEmail}>
-                    {t('common.save')}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                variant="secondary"
-                fullWidth
-                onClick={() => {
-                  setEmailInput('');
-                  setShowAddEmail(true);
-                }}
-              >
-                {t('estimate.addClientEmail')}
-              </Button>
-            )}
-          </div>
+          </>
         )}
       </div>
     </Modal>

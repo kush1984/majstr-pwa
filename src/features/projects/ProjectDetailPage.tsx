@@ -22,8 +22,8 @@ import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
-import { useProject, useObjectStatusAction } from './useProjects.ts';
-import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
+import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
+import { ObjectStatusFabActions, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
@@ -326,8 +326,8 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Hero */}
-      <div className="relative mb-4 rounded-card border border-border bg-surface-sunken p-4">
-        <div className="mb-1.5 flex items-center gap-2 pr-8 text-[17px] font-bold text-primary">
+      <div className="mb-4 rounded-card border border-border bg-surface-sunken p-4">
+        <div className="mb-1.5 flex items-center gap-2 text-[17px] font-bold text-primary">
           <IconTile tone="brand" size={32}>
             📁
           </IconTile>
@@ -335,13 +335,6 @@ export function ProjectDetailPage() {
         </div>
         <div className="mb-3 text-xs text-muted">📍 {p.address}</div>
         <Badge variant={OBJECT_STAGE_VARIANT[p.stage]}>{t('status.stage.' + p.stage)}</Badge>
-        <div className="absolute right-2 top-2">
-          <ActionMenu ariaLabel={t('estimate.actions')}>
-            {(close) => (
-              <ObjectStatusMenuItems stage={p.stage} onChoose={(a) => { close(); setObjectAction(a); }} />
-            )}
-          </ActionMenu>
-        </div>
         {p.clientFullName && (
           <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">
@@ -494,21 +487,29 @@ export function ProjectDetailPage() {
         allowRevoke
       />
 
-      {/* The object's two share links. Both reach the server to mint or publish, so both go through
-          `guard` — offline they say so rather than failing silently. */}
+      {/* The object's two share links (both reach the server to mint or publish, so both go
+          through `guard` — offline they say so rather than failing silently; hidden once the
+          object is COMPLETED/CANCELLED — nothing to share about a closed object), plus the
+          stage-transition actions that used to live in a separate ⋮ menu on the hero — one
+          action surface instead of two competing ones on the same screen. */}
       <Fab ariaLabel={t('projects.actionsMenu')}>
         {(close) => (
           <>
-            <FabAction
-              icon="📤"
-              label={t('projects.shareWithClient')}
-              onClick={() => close(openShare)}
-            />
-            <FabAction
-              icon="💬"
-              label={t('messageLink.title')}
-              onClick={() => close(guard(() => setChatLinkOpen(true)))}
-            />
+            {!isTerminalStage(p.stage) && (
+              <>
+                <FabAction
+                  icon="📤"
+                  label={t('projects.shareWithClient')}
+                  onClick={() => close(openShare)}
+                />
+                <FabAction
+                  icon="💬"
+                  label={t('messageLink.title')}
+                  onClick={() => close(guard(() => setChatLinkOpen(true)))}
+                />
+              </>
+            )}
+            <ObjectStatusFabActions stage={p.stage} onChoose={(a) => close(() => setObjectAction(a))} />
           </>
         )}
       </Fab>

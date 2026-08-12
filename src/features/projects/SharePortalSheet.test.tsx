@@ -130,6 +130,8 @@ describe('SharePortalSheet', () => {
       expect(screen.queryByText('Преміум')).toBeNull(); // not signed — not shown here
       expect(screen.getByText(/Оберіть підписані кошториси/)).toBeTruthy();
       expect(screen.queryByText(/кожен підписується окремо/)).toBeNull();
+      // Payments visibility is a signed-contract concern — offered here, unlike from Кошторис.
+      expect(screen.getByText('Показувати платежі клієнту')).toBeTruthy();
     });
 
     it('a not-yet-signed estimate already published from Кошторис stays published, just not shown', async () => {
@@ -154,11 +156,14 @@ describe('SharePortalSheet', () => {
       expect([...ids].sort()).toEqual(['e1', 'e2']);
     });
 
-    it('shows a neutral empty state when nothing is signed yet', async () => {
+    it('collapses to just the neutral message when nothing is signed yet — no picker/payments/publish chrome', async () => {
       vi.mocked(portalApi.state).mockResolvedValue({ ...state, estimates: [] });
       renderSheet(undefined, 'signed');
 
       expect(await screen.findByText(/Ще немає підписаних кошторисів/)).toBeTruthy();
+      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
+      expect(screen.queryByText(/Оберіть підписані кошториси/)).toBeNull();
     });
   });
 
@@ -176,6 +181,8 @@ describe('SharePortalSheet', () => {
       await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
       expect(screen.queryByText('Преміум')).toBeNull(); // signed — moved to Економіка, not shown here
       expect(screen.queryByText(/✓ Підписано/)).toBeNull();
+      // Payments visibility is a signed-contract concern — not offered from this picker.
+      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
     });
 
     it('a SIGNED estimate already published from elsewhere stays published, just not shown', async () => {
@@ -198,7 +205,7 @@ describe('SharePortalSheet', () => {
       expect([...ids].sort()).toEqual(['e1', 'e2']);
     });
 
-    it('shows a neutral empty state when everything is already signed', async () => {
+    it('collapses to just the neutral message when everything is already signed — no picker/publish chrome', async () => {
       vi.mocked(portalApi.state).mockResolvedValue({
         ...state,
         estimates: [
@@ -208,6 +215,9 @@ describe('SharePortalSheet', () => {
       renderSheet(undefined, 'unsigned');
 
       expect(await screen.findByText(/Немає кошторисів, які ще очікують підпису/)).toBeTruthy();
+      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
+      expect(screen.queryByText(/Оберіть кошториси/)).toBeNull();
     });
   });
 });

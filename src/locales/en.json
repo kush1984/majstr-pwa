@@ -175,7 +175,7 @@
       "REJECTED": "Rejected"
     },
     "stage": {
-      "ASSESSMENT": "Assessment",
+      "ASSESSMENT": "Draft",
       "PENDING_SIGNATURE": "Pending",
       "IN_PROGRESS": "In progress",
       "COMPLETED": "Completed",
@@ -326,11 +326,11 @@
   "projects": {
     "title": "Objects",
     "filterAll": "All",
-    "filterAssessment": "Assessment",
+    "filterAssessment": "Draft",
     "filterInProgress": "In progress",
     "filterPending": "Pending",
     "filterCompleted": "Completed",
-    "stageLegend": "Assessment — you're preparing the estimate. Pending — sent to the client, awaiting signature. In progress — the client signed. Completed — you closed the object.",
+    "stageLegend": "Draft — you're preparing the estimate. Pending — sent to the client, awaiting signature. In progress — the client signed. Completed — you closed the object.",
     "stageLegendLabel": "Status legend",
     "loadErrorTitle": "Couldn't load objects",
     "loadErrorText": "Check your connection and try again.",

@@ -137,22 +137,27 @@ describe('ProjectRowMenu — object status actions', () => {
     await waitFor(() => expect(projectsApi.setStatus).toHaveBeenCalledWith('p1', 'COMPLETED'));
   });
 
-  it('a COMPLETED object offers Повернути в роботу instead of Завершити', async () => {
+  it('a COMPLETED object offers ONLY Повернути в роботу — no Завершити, no Скасувати, no chat link', async () => {
     renderMenu(project({ stage: 'COMPLETED' }));
 
     fireEvent.click(screen.getByRole('button', { name: /Квартира/ }));
 
     expect(await screen.findByRole('menuitem', { name: /Повернути в роботу/ })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /^Завершити/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /^Скасувати/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Скопіювати посилання/ })).toBeNull();
+    expect(screen.queryByText(/жодних цін/)).toBeNull(); // the chat-link hint text too
   });
 
-  it('a CANCELLED object offers Відновити instead of Скасувати', async () => {
+  it('a CANCELLED object offers ONLY Відновити — no Завершити, no Скасувати, no chat link', async () => {
     renderMenu(project({ stage: 'CANCELLED' }));
 
     fireEvent.click(screen.getByRole('button', { name: /Квартира/ }));
 
     expect(await screen.findByRole('menuitem', { name: /Відновити об.єкт/ })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /^Скасувати/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /^Завершити/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Скопіювати посилання/ })).toBeNull();
   });
 
   it('cancelling from the row menu calls setStatus(CANCELLED) after confirm', async () => {
