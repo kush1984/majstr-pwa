@@ -33,6 +33,13 @@ const fmtNum = (n: number): string => n.toLocaleString('uk-UA', { maximumFractio
  */
 const ELECTRICAL_MEASUREMENTS_ENABLED: boolean = false;
 
+/**
+ * «Розпізнати план чи ескіз» and «Імпорт проєкту» both call the vision LLM to read a photo/PDF —
+ * hidden for now to cut AI spend. All the code (SketchReviewSheet, ProjectImportSheet, the backend
+ * endpoints) stays intact; flip this to `true` to bring both entry points back.
+ */
+const AI_MEASUREMENT_IMPORT_ENABLED: boolean = false;
+
 /** Area/room element types (площі) vs electrical ones. Electrical lives in its own block. */
 const AREA_TYPES: MeasurementType[] = ['SURFACE', 'PARTITION', 'LINEAR'];
 const isElectrical = (t: MeasurementType): boolean =>
@@ -296,16 +303,18 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setSketchOpen(true)}
-            className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
-            {t('sketch.button')}
-          </button>
-          <button type="button" onClick={() => setImportOpen(true)}
-            className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
-            {t('projectImport.button')}
-          </button>
-        </div>
+        {AI_MEASUREMENT_IMPORT_ENABLED && (
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setSketchOpen(true)}
+              className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
+              {t('sketch.button')}
+            </button>
+            <button type="button" onClick={() => setImportOpen(true)}
+              className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
+              {t('projectImport.button')}
+            </button>
+          </div>
+        )}
 
         {(() => {
           // Rooms shown in площі: their non-electrical items only; an electrical-only room
@@ -322,7 +331,9 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
                 text={t('measure.emptyText')}
                 action={
                   <div className="flex flex-col gap-2">
-                    <Button onClick={() => setSketchOpen(true)}>{t('sketch.button')}</Button>
+                    {AI_MEASUREMENT_IMPORT_ENABLED && (
+                      <Button onClick={() => setSketchOpen(true)}>{t('sketch.button')}</Button>
+                    )}
                     <Button variant="secondary" onClick={() => setRoomModalOpen(true)}>{t('measure.addRoom')}</Button>
                   </div>
                 }

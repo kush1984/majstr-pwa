@@ -90,6 +90,16 @@ describe('MeasurementsSection — площі vs ⚡ Електрика', () => {
     expect(screen.queryByText('Кабель · кухня')).toBeNull();
   });
 
+  // The AI-calling entry points (both call the vision LLM) are hidden to cut AI spend
+  // (AI_MEASUREMENT_IMPORT_ENABLED=false), same shape as the parked ⚡ block above.
+  it('hides both AI-calling entry points — «Розпізнати план чи ескіз» and «Імпорт проєкту»', async () => {
+    renderSection(['TILING']);
+
+    expect(await screen.findByText('Кімнати · площі')).toBeTruthy();
+    expect(screen.queryByText('📷 Розпізнати план чи ескіз')).toBeNull();
+    expect(screen.queryByText('📁 Імпорт проєкту')).toBeNull();
+  });
+
   it('tapping a room name opens a rename dialog and saves name + floor', async () => {
     vi.mocked(measurementsApi.updateRoom).mockResolvedValue(tree);
     renderSection(['TILING']);

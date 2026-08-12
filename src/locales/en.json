@@ -1196,7 +1196,7 @@
     "enableAutoRenewNoCardHint": "No saved card yet. Paying for the next period saves it for auto-renewal — you can cancel anytime after.",
     "autoRenewOn": "Auto-renewal enabled",
     "autoRenewOff": "Auto-renewal off. PRO active until {{date}}",
-    "tryTrial": "Try PRO free for 5 days",
+    "tryTrial": "Try PRO free for 30 days",
     "trialStarted": "PRO activated free until {{date}}",
     "proVerifyTitle": "Verify your email first",
     "proVerifyMessage": "PRO (both the free trial and a purchase) is available once your email is verified — that's how we send receipts and renewal reminders. It's one click on the email.",
