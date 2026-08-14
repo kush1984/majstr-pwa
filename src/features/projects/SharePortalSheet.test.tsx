@@ -4,12 +4,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
-import { portalApi } from '@/api/portal.ts';
+import { portalApi, economyPortalApi } from '@/api/portal.ts';
 import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
 import { asInput } from '@/test/dom.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
+  economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
 }));
 vi.mock('@/features/clients/useClients.ts', () => ({
   useClient: () => ({ data: { id: 'c1', fullName: 'Клієнт', phone: '+380', email: 'client@x.ua' } }),
@@ -31,6 +32,7 @@ const project = {
   id: 'p1', name: 'Квартира', address: 'вул. Тестова 1', clientId: 'c1',
 } as ProjectResponse;
 
+// Non-SIGNED estimates — the shape the SIGNATURE (mode: 'portal') picker filters to.
 const state: PortalStateResponse = {
   url: 'https://majstr.pro/portal/index.html?p=tok',
   estimates: [
@@ -40,30 +42,31 @@ const state: PortalStateResponse = {
   paymentsVisible: false,
 };
 
-function renderSheet(preselect?: string, estimatesFilter?: 'signed' | 'unsigned') {
+function renderSheet(preselect?: string, mode: 'portal' | 'economy' = 'portal') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   render(
     <SharePortalSheet open onClose={() => {}} project={project}
-      preselectEstimateId={preselect} onNeedEmailVerify={() => {}} estimatesFilter={estimatesFilter} />,
+      preselectEstimateId={preselect} onNeedEmailVerify={() => {}} mode={mode} />,
     { wrapper },
   );
 }
 
-describe('SharePortalSheet', () => {
-  it('seeds the checkboxes from the server visibility state', async () => {
+describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
+  it('seeds the checkboxes from the server visibility state, with no payments toggle', async () => {
     vi.mocked(portalApi.state).mockResolvedValue(state);
     renderSheet();
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    // Two estimate checkboxes + the payments-visible toggle (off by default).
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false, false]);
+    // Two estimate checkboxes only — SIGNATURE never has a payments card.
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
+    expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
   });
 
-  it('publishes exactly the ticked set before copying the link', async () => {
+  it('publishes exactly the ticked set before copying the link, via the SIGNATURE endpoint', async () => {
     vi.mocked(portalApi.state).mockResolvedValue(state);
     vi.mocked(portalApi.update).mockResolvedValue(state);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -77,6 +80,7 @@ describe('SharePortalSheet', () => {
     await waitFor(() => expect(portalApi.update).toHaveBeenCalled());
     const ids = vi.mocked(portalApi.update).mock.calls[0][1];
     expect([...ids].sort()).toEqual(['e1', 'e2']);
+    expect(economyPortalApi.update).not.toHaveBeenCalled();
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(state.url);
   });
 
@@ -86,7 +90,7 @@ describe('SharePortalSheet', () => {
 
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
     const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true, false]);
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true]);
   });
 
   it('unticking everything offers "hide all" instead of copy', async () => {
@@ -99,125 +103,170 @@ describe('SharePortalSheet', () => {
     const hideBtn = await screen.findByRole('button', { name: /Прибрати все/ });
     fireEvent.click(hideBtn);
 
-    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', [], false));
+    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', []));
   });
 
-  it('ticking the payments toggle publishes paymentsVisible:true', async () => {
-    vi.mocked(portalApi.state).mockResolvedValue(state);
+  it('shows only non-SIGNED estimates — a SIGNED one that moved to Економіка is excluded', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({
+      ...state,
+      estimates: [
+        { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
+        { id: 'e2', name: 'Преміум', status: 'SIGNED', createdAt: '2026-07-02T00:00:00Z', visible: true },
+      ],
+    });
+    renderSheet();
+
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+    expect(screen.queryByText('Преміум')).toBeNull(); // signed — moved to Економіка, not shown here
+    // Payments visibility is a signed-contract concern — not offered from this picker.
+    expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+  });
+
+  it('a SIGNED estimate already published from elsewhere stays published, just not shown', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({
+      ...state,
+      estimates: [
+        { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
+        { id: 'e2', name: 'Преміум', status: 'SIGNED', createdAt: '2026-07-02T00:00:00Z', visible: true },
+      ],
+    });
     vi.mocked(portalApi.update).mockResolvedValue(state);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
     renderSheet();
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole('checkbox')[2]); // the payments toggle
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
-    await waitFor(() => expect(portalApi.update).toHaveBeenCalledWith('p1', ['e1'], true));
+    await waitFor(() => expect(portalApi.update).toHaveBeenCalled());
+    const ids = vi.mocked(portalApi.update).mock.calls[0][1];
+    expect([...ids].sort()).toEqual(['e1', 'e2']);
   });
 
-  describe("opened from the Економіка tab (estimatesFilter: 'signed')", () => {
-    it('shows only SIGNED estimates, with copy that does not talk about signing', async () => {
-      vi.mocked(portalApi.state).mockResolvedValue({
-        ...state,
-        estimates: [
-          { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
-          { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: false },
-        ],
-      });
-      renderSheet(undefined, 'signed');
-
-      await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-      expect(screen.queryByText('Преміум')).toBeNull(); // not signed — not shown here
-      expect(screen.getByText(/Оберіть підписані кошториси/)).toBeTruthy();
-      expect(screen.queryByText(/кожен підписується окремо/)).toBeNull();
-      // Payments visibility is a signed-contract concern — offered here, unlike from Кошторис.
-      expect(screen.getByText('Показувати платежі клієнту')).toBeTruthy();
+  it('collapses to just the neutral message when everything is already signed — no picker/publish chrome', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({
+      ...state,
+      estimates: [
+        { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
+      ],
     });
+    renderSheet();
 
-    it('a not-yet-signed estimate already published from Кошторис stays published, just not shown', async () => {
-      // e2 (DRAFT) is visible:true on the server — published earlier from the Кошторис tab. The
-      // signed-only picker must not silently drop it from what gets re-published.
-      vi.mocked(portalApi.state).mockResolvedValue({
-        ...state,
-        estimates: [
-          { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
-          { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: true },
-        ],
-      });
-      vi.mocked(portalApi.update).mockResolvedValue(state);
-      Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-      renderSheet(undefined, 'signed');
-      await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-
-      fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
-
-      await waitFor(() => expect(portalApi.update).toHaveBeenCalled());
-      const ids = vi.mocked(portalApi.update).mock.calls[0][1];
-      expect([...ids].sort()).toEqual(['e1', 'e2']);
-    });
-
-    it('collapses to just the neutral message when nothing is signed yet — no picker/payments/publish chrome', async () => {
-      vi.mocked(portalApi.state).mockResolvedValue({ ...state, estimates: [] });
-      renderSheet(undefined, 'signed');
-
-      expect(await screen.findByText(/Ще немає підписаних кошторисів/)).toBeTruthy();
-      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
-      expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
-      expect(screen.queryByText(/Оберіть підписані кошториси/)).toBeNull();
-    });
+    expect(await screen.findByText(/Немає кошторисів, які ще очікують підпису/)).toBeTruthy();
+    expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
+    expect(screen.queryByText(/Оберіть кошториси/)).toBeNull();
   });
 
-  describe("opened from the Кошторис tab (estimatesFilter: 'unsigned')", () => {
-    it('shows only non-SIGNED estimates — a SIGNED one that moved to Економіка is excluded', async () => {
-      vi.mocked(portalApi.state).mockResolvedValue({
-        ...state,
-        estimates: [
-          { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
-          { id: 'e2', name: 'Преміум', status: 'SIGNED', createdAt: '2026-07-02T00:00:00Z', visible: true },
-        ],
-      });
-      renderSheet(undefined, 'unsigned');
-
-      await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-      expect(screen.queryByText('Преміум')).toBeNull(); // signed — moved to Економіка, not shown here
-      expect(screen.queryByText(/✓ Підписано/)).toBeNull();
-      // Payments visibility is a signed-contract concern — not offered from this picker.
-      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+  it('auto-selects the sole pickable estimate when nothing is published yet', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({
+      ...state,
+      estimates: [
+        { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: false },
+      ],
     });
+    renderSheet();
 
-    it('a SIGNED estimate already published from elsewhere stays published, just not shown', async () => {
-      vi.mocked(portalApi.state).mockResolvedValue({
-        ...state,
-        estimates: [
-          { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
-          { id: 'e2', name: 'Преміум', status: 'SIGNED', createdAt: '2026-07-02T00:00:00Z', visible: true },
-        ],
-      });
-      vi.mocked(portalApi.update).mockResolvedValue(state);
-      Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-      renderSheet(undefined, 'unsigned');
-      await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+    expect(asInput(screen.getAllByRole('checkbox')[0]).checked).toBe(true);
+  });
 
-      fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
-
-      await waitFor(() => expect(portalApi.update).toHaveBeenCalled());
-      const ids = vi.mocked(portalApi.update).mock.calls[0][1];
-      expect([...ids].sort()).toEqual(['e1', 'e2']);
+  it('auto-selects the most recently created estimate when several are pickable and none published', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({
+      ...state,
+      estimates: [
+        { id: 'e1', name: 'Старший', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: false },
+        { id: 'e2', name: 'Новіший', status: 'DRAFT', createdAt: '2026-07-05T00:00:00Z', visible: false },
+      ],
     });
+    renderSheet();
 
-    it('collapses to just the neutral message when everything is already signed — no picker/publish chrome', async () => {
-      vi.mocked(portalApi.state).mockResolvedValue({
-        ...state,
-        estimates: [
-          { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
-        ],
-      });
-      renderSheet(undefined, 'unsigned');
+    await waitFor(() => expect(screen.getByText('Новіший')).toBeTruthy());
+    const boxes = screen.getAllByRole('checkbox');
+    // e1 (older) first in list order, e2 (newer) second — only the newer one is pre-ticked.
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([false, true]);
+  });
+});
 
-      expect(await screen.findByText(/Немає кошторисів, які ще очікують підпису/)).toBeTruthy();
-      expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
-      expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
-      expect(screen.queryByText(/Оберіть кошториси/)).toBeNull();
+describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => {
+  const economyState: PortalStateResponse = {
+    url: 'https://majstr.pro/portal/index.html?e=tok',
+    estimates: [
+      { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
+      { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: false },
+    ],
+    paymentsVisible: false,
+  };
+
+  it('shows only SIGNED estimates plus the payments toggle, seeded off by default', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
+    renderSheet(undefined, 'economy');
+
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+    expect(screen.queryByText('Преміум')).toBeNull(); // not signed — not shown here
+    expect(screen.getByText(/Оберіть підписані кошториси/)).toBeTruthy();
+    // Payments visibility is a signed-contract concern — offered here, unlike from Кошторис.
+    const boxes = screen.getAllByRole('checkbox');
+    // One estimate checkbox (ticked, already visible) + the payments toggle (off by default).
+    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
+    expect(screen.getByText('Показувати платежі клієнту')).toBeTruthy();
+  });
+
+  it('publishes exactly the ticked set via the ECONOMY endpoint, never the SIGNATURE one', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
+    vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSheet(undefined, 'economy');
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', ['e1'], false));
+    expect(portalApi.update).not.toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(economyState.url);
+  });
+
+  it('ticking the payments toggle publishes paymentsVisible:true', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
+    vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSheet(undefined, 'economy');
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1]); // the payments toggle
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', ['e1'], true));
+  });
+
+  it('a not-yet-signed estimate already published from Кошторис stays published, just not shown', async () => {
+    // e2 (DRAFT) is visible:true on the server — published earlier from the Кошторис tab. The
+    // signed-only picker must not silently drop it from what gets re-published.
+    vi.mocked(economyPortalApi.state).mockResolvedValue({
+      ...economyState,
+      estimates: [
+        { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
+        { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: true },
+      ],
     });
+    vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSheet(undefined, 'economy');
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalled());
+    const ids = vi.mocked(economyPortalApi.update).mock.calls[0][1];
+    expect([...ids].sort()).toEqual(['e1', 'e2']);
+  });
+
+  it('collapses to just the neutral message when nothing is signed yet — no picker/payments/publish chrome', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue({ ...economyState, estimates: [] });
+    renderSheet(undefined, 'economy');
+
+    expect(await screen.findByText(/Ще немає підписаних кошторисів/)).toBeTruthy();
+    expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
+    expect(screen.queryByText(/Оберіть підписані кошториси/)).toBeNull();
   });
 });

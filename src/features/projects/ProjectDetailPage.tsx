@@ -228,7 +228,7 @@ export function ProjectDetailPage() {
         onClose={() => setShareOpen(false)}
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
-        estimatesFilter={tab === 'act' ? 'signed' : tab === 'estimate' ? 'unsigned' : undefined}
+        mode={tab === 'act' ? 'economy' : 'portal'}
       />
       {p.clientId && (
         <ClientEditModal

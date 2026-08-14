@@ -22,6 +22,12 @@ export function formatMoneyExact(value: number | null | undefined): string {
   return `${number2.format(value ?? 0)} ₴`;
 }
 
+/** "61 070" — no currency glyph, for a row inside a list whose currency is already established
+ *  by a header above it (e.g. a compact payments row). */
+export function formatAmount(value: number | null | undefined): string {
+  return number0.format(value ?? 0);
+}
+
 /** Plain number with uk grouping, e.g. unit price "200" or quantity "18,5". */
 export function formatNumber(value: number | null | undefined, fraction = 0): string {
   return (fraction > 0 ? number3 : number0).format(value ?? 0);

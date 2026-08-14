@@ -14,6 +14,7 @@ import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useEconomy, useExpenses, useDeleteExpense, useToggleEstimateCounted } from './useEconomy.ts';
 import { ExpenseSheet } from './ExpenseSheet.tsx';
 import { PaymentsBlock } from './PaymentsBlock.tsx';
@@ -52,7 +53,8 @@ function fmtSignedDate(iso: string): string {
  *  black summary panel's `TypeBreakdown` (markup prefixed with «+», discount keeps its natural
  *  minus), so the figures match 1-to-1 wherever this renders.
  *
- *  `base` (optional — the pre-adjustment subtotal: works+materials minus both adjustments) turns
+ *  `base` (optional — the pre-adjustment subtotal, `works + materials`; both already gross since
+ *  `SignedEstimatePanelResponse` backs the adjustment OUT of them, same as `TypeBreakdown`) turns
  *  on a percent, computed the same way `TypeBreakdown` derives its own («amount / base × 100»,
  *  economy-polish iteration). Omitted on the multi-estimate summary panel below: markup/discount
  *  there can come from several estimates at different percentages, and a single blended % would
@@ -102,7 +104,7 @@ function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse
           <div className="flex items-center gap-2">
             <span aria-hidden>🔒</span>
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-              {panel.name ?? t('economy.unnamedEstimate')}
+              {estimateName(panel.name, panel.signedAt)}
             </span>
             <span className="flex-shrink-0 text-xs text-muted">{fmtSignedDate(panel.signedAt)}</span>
           </div>
@@ -114,7 +116,7 @@ function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse
           <AdjustLine
             markup={panel.markup}
             discount={panel.discount}
-            base={panel.works + panel.materials - panel.markup - panel.discount}
+            base={panel.works + panel.materials}
           />
         </button>
         <ActionMenu ariaLabel={t('estimate.actions')}>

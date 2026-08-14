@@ -8,7 +8,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
-import { portalApi } from '@/api/portal.ts';
+import { portalApi, economyPortalApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
@@ -37,7 +37,7 @@ export function SharePortalSheet({
   project,
   preselectEstimateId,
   onNeedEmailVerify,
-  estimatesFilter,
+  mode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -46,25 +46,24 @@ export function SharePortalSheet({
   preselectEstimateId?: string;
   onNeedEmailVerify: () => void;
   /**
-   * Matches the picker to the tab it was opened from — showing an estimate that "belongs" to a
-   * different tab is exactly the confusion this exists to avoid: 'signed' from Економіка (which
-   * only ever shows SIGNED acts — DRAFT/SENT/REJECTED live under Кошторис and don't belong here),
-   * 'unsigned' from Кошторис (the mirror case — a SIGNED estimate moved to Економіка and is
-   * managed/shared from there instead). Undefined (any other tab, no estimate-list context of its
-   * own) — every estimate, the original unfiltered behaviour.
+   * Which of the two genuinely separate portal contexts this sheet publishes to — they are
+   * different links/tokens on the server, so this isn't just a display filter:
+   * - 'portal' (SIGNATURE, Кошторис tab) — any non-SIGNED estimate, for the client to sign; never
+   *   has a payments toggle. A SIGNED estimate lives only in Економіка (economy-rework iteration),
+   *   so the picker excludes it here even though the server would technically accept it.
+   * - 'economy' (ECONOMY, Економіка tab) — SIGNED acts only (the server rejects anything else),
+   *   plus an opt-in payments-visibility toggle.
    *
-   * <p>'unsigned' also hides the payments-visibility toggle (a contract concern that belongs with
-   * the signed estimate, not a still-in-progress one) and, when the filtered list is empty,
-   * collapses the whole sheet to just the neutral "nothing yet" message — no picker/payments/publish
-   * chrome left dangling over an empty list.</p>
+   * Either way, when the filtered list is empty the sheet collapses to just the neutral "nothing
+   * yet" message — no picker/payments/publish chrome left dangling over an empty list.
    */
-  estimatesFilter?: 'signed' | 'unsigned';
+  mode: 'portal' | 'economy';
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const portal = useQuery({
-    queryKey: ['portal', project.id],
-    queryFn: () => portalApi.state(project.id),
+    queryKey: ['portal', project.id, mode],
+    queryFn: () => (mode === 'economy' ? economyPortalApi.state(project.id) : portalApi.state(project.id)),
     enabled: open,
   });
 
@@ -81,10 +80,25 @@ export function SharePortalSheet({
     if (portal.data && selected === null) {
       const initial = new Set(portal.data.estimates.filter((e) => e.visible).map((e) => e.id));
       if (preselectEstimateId) initial.add(preselectEstimateId);
+      // First-ever publish (nothing already shown, no editor-context preselect): default to the
+      // obvious choice rather than an empty picker — the one pickable estimate if there's only
+      // one, otherwise the most recently created one (the rest stay optional, one tap away).
+      if (initial.size === 0) {
+        const pickable = mode === 'economy'
+          ? portal.data.estimates.filter((e) => e.status === 'SIGNED')
+          : portal.data.estimates.filter((e) => e.status !== 'SIGNED');
+        const defaultPick = pickable.length === 1
+          ? pickable[0]
+          : pickable.reduce<typeof pickable[number] | null>(
+              (latest, e) => (!latest || e.createdAt > latest.createdAt ? e : latest),
+              null,
+            );
+        if (defaultPick) initial.add(defaultPick.id);
+      }
       setSelected(initial);
       setPaymentsOn(portal.data.paymentsVisible);
     }
-  }, [open, portal.data, selected, preselectEstimateId]);
+  }, [open, portal.data, selected, preselectEstimateId, mode]);
 
   // A client just attached in this sheet (project prop is from the parent and
   // won't update until it refetches) — fold it in so email becomes available.
@@ -106,12 +120,12 @@ export function SharePortalSheet({
 
   const email = client.data?.email ?? null;
   const allEstimates = portal.data?.estimates ?? [];
-  // An estimate already published from the OTHER tab stays published either way (still counted in
-  // `ticked`/`serverVisibleCount` below, computed from the unfiltered list) — this picker just
-  // doesn't render or touch it here, it doesn't unpublish it.
-  const list = estimatesFilter === 'signed' ? allEstimates.filter((e) => e.status === 'SIGNED')
-    : estimatesFilter === 'unsigned' ? allEstimates.filter((e) => e.status !== 'SIGNED')
-    : allEstimates;
+  // An estimate already published from the OTHER context stays published either way (still
+  // counted in `ticked`/`serverVisibleCount` below, computed from the unfiltered list) — this
+  // picker just doesn't render or touch it here, it doesn't unpublish it.
+  const list = mode === 'economy'
+    ? allEstimates.filter((e) => e.status === 'SIGNED')
+    : allEstimates.filter((e) => e.status !== 'SIGNED');
   const ticked = selected ?? new Set<string>();
   const serverVisibleCount = allEstimates.filter((e) => e.visible).length;
 
@@ -153,9 +167,16 @@ export function SharePortalSheet({
   };
 
   const paymentsTicked = paymentsOn ?? false;
-  // Nothing to publish from this tab's angle — just say so. Any pick/publish/payments chrome below
-  // would dangle over an empty list (and payments visibility is a Економіка-tab concern anyway).
-  const filteredEmpty = Boolean(estimatesFilter) && !portal.isPending && !portal.isError && list.length === 0;
+  // Nothing to publish from this context's angle — just say so. Any pick/publish/payments chrome
+  // below would dangle over an empty list.
+  const filteredEmpty = !portal.isPending && !portal.isError && list.length === 0;
+
+  /** Publishes the ticked set on the link that matches `mode` — the SIGNATURE endpoint has no
+   *  payments concept at all, the ECONOMY one always carries the toggle's current value. */
+  const publish = (ids: string[]) =>
+    mode === 'economy'
+      ? economyPortalApi.update(project.id, ids, paymentsTicked)
+      : portalApi.update(project.id, ids);
 
   const onCopy = async () => {
     setBusy('copy');
@@ -164,7 +185,7 @@ export function SharePortalSheet({
       // Safari focus rules) while the portal itself published fine — never
       // show "скопійовано" unless it actually landed in the clipboard.
       const { copied, value } = await copyWhenReady(async () => {
-        const state = await portalApi.update(project.id, [...ticked], paymentsTicked);
+        const state = await publish([...ticked]);
         return state.url ?? '';
       });
       invalidateAfterShare();
@@ -184,8 +205,8 @@ export function SharePortalSheet({
   const onEmail = async () => {
     setBusy('email');
     try {
-      await portalApi.update(project.id, [...ticked], paymentsTicked);
-      await portalApi.sendEmail(project.id);
+      await publish([...ticked]);
+      await (mode === 'economy' ? economyPortalApi.sendEmail(project.id) : portalApi.sendEmail(project.id));
       invalidateAfterShare();
       toast.success(t('estimate.emailSent'));
       onClose();
@@ -200,7 +221,7 @@ export function SharePortalSheet({
   const onHideAll = async () => {
     setBusy('hide');
     try {
-      await portalApi.update(project.id, [], false);
+      await publish([]);
       invalidateAfterShare();
       toast.success(t('portal.hiddenAll'));
       onClose();
@@ -268,15 +289,15 @@ export function SharePortalSheet({
     <Modal open={open} onClose={onClose} title={t('portal.sheetTitle')}>
       <div className="space-y-3">
         {filteredEmpty ? (
-          // Nothing this tab can publish — the plain fact, no picker/payments/publish chrome
+          // Nothing this context can publish — the plain fact, no picker/payments/publish chrome
           // dangling under it (there is nothing here for those to act on).
           <p className="py-4 text-center text-sm text-muted">
-            {t(estimatesFilter === 'signed' ? 'portal.noSignedEstimates' : 'portal.noUnsignedEstimates')}
+            {t(mode === 'economy' ? 'portal.noSignedEstimates' : 'portal.noUnsignedEstimates')}
           </p>
         ) : (
           <>
             <p className="text-sm text-muted">
-              {t(estimatesFilter === 'signed' ? 'portal.pickHintSigned' : 'portal.pickHint')}
+              {t(mode === 'economy' ? 'portal.pickHintSigned' : 'portal.pickHint')}
             </p>
 
             {portal.isPending ? (
@@ -297,19 +318,14 @@ export function SharePortalSheet({
                     <span className="min-w-0 flex-1 truncate text-sm text-primary">
                       {estimateName(e.name, e.createdAt)}
                     </span>
-                    {estimatesFilter !== 'signed' && e.status === 'SIGNED' && (
-                      <span className="whitespace-nowrap text-[11px] font-semibold text-success">
-                        ✓ {t('status.estimate.SIGNED')}
-                      </span>
-                    )}
                   </label>
                 ))}
               </div>
             )}
 
-            {/* Payments visibility is a contract concern — only offered alongside signed estimates
-                (Економіка), not here where the picker only shows DRAFT/SENT ones. */}
-            {estimatesFilter !== 'unsigned' && !portal.isPending && !portal.isError && (
+            {/* Payments visibility is a contract concern — only offered alongside signed acts
+                (Економіка); the SIGNATURE picker (mode 'portal') has no payments card at all. */}
+            {mode === 'economy' && !portal.isPending && !portal.isError && (
               <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
                 <input
                   type="checkbox"

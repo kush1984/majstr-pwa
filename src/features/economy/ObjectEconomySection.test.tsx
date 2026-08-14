@@ -55,15 +55,19 @@ function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEsti
   };
 }
 
+// PARTIAL (not RECEIVED) so the compact payments list shows "Аванс" directly as an upcoming row
+// — a fully-RECEIVED-only fixture would collapse to the "Усе сплачено ✓" terminal state instead,
+// which is what these tests are NOT exercising (they're checking FREE/PRO gating around the
+// block, not its own collapse/expand behavior — that's covered in PaymentsBlock.test.tsx).
 const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
   contractedTotal: 15000,
-  received: 3000,
-  remaining: 12000,
+  received: 1500,
+  remaining: 13500,
   payments: [
     {
       id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс',
-      received: 3000, remaining: 0, status: 'RECEIVED', sortOrder: 0,
-      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 3000, receivedAt: '2026-07-01' }],
+      received: 1500, remaining: 1500, status: 'PARTIAL', sortOrder: 0,
+      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 1500, receivedAt: '2026-07-01' }],
     },
   ],
   unplannedReceipts: [],
@@ -184,16 +188,15 @@ describe('ObjectEconomySection', () => {
   });
 
   it('the act card shows a discount/markup recap with a derived percent', async () => {
-    // works 8000 + materials 2000 - markup 0 - discount(-1500) = base 11500; 1500/11500 ≈ 13.04%.
+    // works/materials are gross (pre-adjustment) — base = works 8000 + materials 2000 = 10000;
+    // 1500/10000 = 15%. total = works + materials + markup + discount = 8000+2000+0-1500 = 8500.
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [panel({ works: 8000, materials: 2000, markup: 0, discount: -1500, total: 8500 })],
     }));
 
     renderSection('FREE');
 
-    // formatNumber(_, 2) still renders up to 3 fraction digits (same quirk TypeBreakdown's own
-    // percent already has — `number3` ignores the requested precision past the >0 gate).
-    expect(await screen.findByText(/Знижка\s+13[.,]043%\s+-1\s500/)).toBeTruthy();
+    expect(await screen.findByText(/Знижка\s+15%\s+-1\s500/)).toBeTruthy();
   });
 
   it('the act ⋮ menu toggles counted-in-economy via the existing PATCH', async () => {

@@ -176,20 +176,51 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
     expect(req).toMatchObject({ planPaymentId: 'pay1', amount: 7000, resolution: 'RESERVE' });
   });
 
-  it('a stage with receipt history shows its partial payments in the timeline', () => {
+  it('a fully-received stage collapses into "✓ Отримано · 1", expandable to its own row', () => {
+    const upcoming = plannedRow({ id: 'pay2', purpose: 'Фінал', amount: 3000 });
     const row = plannedRow({
-      received: 200, remaining: 4800, status: 'PARTIAL',
-      receipts: [receipt({ id: 'r1', amount: 200, receivedAt: '2026-08-01' })],
+      id: 'pay1', purpose: 'Аванс', received: 5000, remaining: 0, status: 'RECEIVED',
+      receipts: [receipt({ id: 'r1', amount: 5000, receivedAt: '2026-08-01' })],
     });
-    renderBlock(summary([row]));
+    renderBlock(summary([row, upcoming]));
 
-    expect(screen.getByText('＋200 ₴')).toBeTruthy();
+    expect(screen.queryByText('Аванс')).toBeNull(); // collapsed, not shown individually yet
+    fireEvent.click(screen.getByText(/Отримано · 1/));
+    expect(screen.getByText('Аванс')).toBeTruthy();
   });
 
-  it('unplanned receipts render as their own timeline nodes', () => {
-    renderBlock(summary([], [receipt({ id: 'u1', planPaymentId: null, label: 'Продаж інструменту', displayLabel: 'Продаж інструменту', amount: 1500 })]));
+  it('unplanned receipts collapse into the received group too, expandable', () => {
+    const upcoming = plannedRow({ purpose: 'Фінал' });
+    renderBlock(summary([upcoming], [receipt({ id: 'u1', planPaymentId: null, label: 'Продаж інструменту', displayLabel: 'Продаж інструменту', amount: 1500 })]));
 
+    expect(screen.queryByText('Продаж інструменту')).toBeNull();
+    fireEvent.click(screen.getByText(/Отримано · 1/));
     expect(screen.getByText('Продаж інструменту')).toBeTruthy();
+  });
+
+  it('when everything is received, shows "Усе сплачено" but keeps the breakdown reachable, never just a bare headline', () => {
+    const row = plannedRow({ purpose: 'Аванс', received: 5000, remaining: 0, status: 'RECEIVED', receipts: [receipt({ amount: 5000 })] });
+    renderBlock(summary([row]));
+
+    expect(screen.getByText('Усе сплачено ✓')).toBeTruthy();
+    // The headline is never a substitute for the itemized list — a master must be able to see
+    // what actually makes up the received total (reported confusing when contractedTotal reads 0).
+    expect(screen.queryByText('Аванс')).toBeNull(); // collapsed by default
+    fireEvent.click(screen.getByText(/Отримано · 1/));
+    expect(screen.getByText('Аванс')).toBeTruthy();
+  });
+
+  it('more than 5 payments collapses to a "Наступний платіж" card plus an expand toggle', () => {
+    const rows = Array.from({ length: 6 }, (_, i) =>
+      plannedRow({ id: `pay${i}`, purpose: `Етап ${i}`, dueDate: `2026-08-${10 + i}`, sortOrder: i }));
+    renderBlock(summary(rows));
+
+    expect(screen.getByText('Наступний платіж')).toBeTruthy();
+    expect(screen.getByText(/Усі платежі \(6\)/)).toBeTruthy();
+    expect(screen.queryByText('Етап 5')).toBeNull();
+
+    fireEvent.click(screen.getByText(/Усі платежі \(6\)/));
+    expect(screen.getByText('Етап 5')).toBeTruthy();
   });
 
   it('creating a new plan while another stage is over-received offers to transfer the surplus', async () => {

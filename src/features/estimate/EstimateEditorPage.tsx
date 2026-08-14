@@ -591,6 +591,7 @@ export function EstimateEditorPage() {
           project={project.data}
           preselectEstimateId={id}
           onNeedEmailVerify={() => setEmailGateOpen(true)}
+          mode={signed ? 'economy' : 'portal'}
         />
       )}
 

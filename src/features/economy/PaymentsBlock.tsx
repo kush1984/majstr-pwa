@@ -5,7 +5,7 @@ import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
-import { formatMoney } from '@/lib/format.ts';
+import { formatMoney, formatAmount } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -45,9 +45,11 @@ const PRESETS: { value: PaymentSplitPreset; label: string }[] = [
   { value: 'CUSTOM', label: 'своя' },
 ];
 
-function fmtDate(iso: string | null): string | null {
+/** Compact row date — day + abbreviated month, no year ("11 серп"). A payment row has far less
+ *  horizontal room than a form label, so the full month name would force wrapping/truncation. */
+function fmtDateShort(iso: string | null): string | null {
   if (!iso) return null;
-  return new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA', { day: '2-digit', month: 'long' });
+  return new Date(iso + 'T00:00:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
 }
 
 function today(): string {
@@ -55,11 +57,11 @@ function today(): string {
 }
 
 /** Not a debt reminder — the condition for starting the NEXT stage of work. Never "ви винні". */
-function conditionText(row: { dueDate: string | null; nextStage: string | null }): string | null {
-  const date = fmtDate(row.dueDate);
-  if (date && row.nextStage) return `Оплатити до ${date}, щоб почати «${row.nextStage}»`;
-  if (date) return `Оплатити до ${date}`;
-  if (row.nextStage) return `Щоб почати «${row.nextStage}»`;
+function upcomingCondition(row: { dueDate: string | null; nextStage: string | null }): string | null {
+  const date = fmtDateShort(row.dueDate);
+  if (date && row.nextStage) return `до ${date} — почати ${row.nextStage}`;
+  if (date) return `до ${date}`;
+  if (row.nextStage) return `щоб почати «${row.nextStage}»`;
   return null;
 }
 
@@ -80,153 +82,280 @@ function dueDateWarning(iso: string, isCreate: boolean, t: (k: string) => string
   return iso < today() ? t('economy.dateWarningPastDue') : null;
 }
 
-/** Horizontal progress bar — filled = received, empty = remaining. Mobile-first: one bar, a
- *  caption spelling out the split, no legend, no charting library. */
+/** Header line ("Отримано X з Y ₴ · Z%" + one (i)) plus a thin progress bar underneath — no
+ *  separate За договором/Отримано/Залишок tiles, this single line says the same thing in less
+ *  space. Same design + wording as the client portal's compact payments card. */
 function PaymentStrip({ received, total }: { received: number; total: number }) {
   const { t } = useTranslation();
   const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
   return (
-    <div className="mt-3">
-      <div className="h-2.5 overflow-hidden rounded-full bg-surface-sunken">
+    <div className="mt-2">
+      <p className="flex flex-wrap items-center gap-1 text-xs text-muted">
+        <span className="font-mono tabular-nums">
+          {t('economy.received')} {formatMoney(received)} {t('economy.paymentsOf')} {formatMoney(total)} · {pct}%
+        </span>
+        <InfoPopover text={t('economy.receivedInfo')} label={t('economy.paymentsTitle')} />
+      </p>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-sunken">
         <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />
       </div>
-      <p className="mt-1.5 text-xs text-muted">
-        {formatMoney(received)} {t('economy.paymentsOf')} {formatMoney(total)} · {pct}%
-      </p>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// One shared vertical timeline — plan stages (with their own receipt history
-// nested underneath) and unplanned receipts, merged and sorted by date.
+// Compact "2+1" list — fully-RECEIVED stages + unplanned receipts (money that
+// already landed) collapse into one tappable history row; open stages
+// (PARTIAL/PLANNED/OVERDUE) render one line each, sorted by due date. Past 5
+// items total, a single highlighted "next payment" card replaces the list,
+// with a toggle that reveals the same "2+1" view (state kept in
+// localStorage, same as the client portal — one shared design).
 // ---------------------------------------------------------------------------
 
-type TimelineNode =
-  | { kind: 'stage'; key: string; date: string | null; stage: ProjectPaymentResponse }
-  | { kind: 'unplanned'; key: string; date: string | null; receipt: PaymentReceiptResponse };
+type ReceivedNode =
+  | { kind: 'stage'; key: string; label: string; amount: number; date: string | null; stage: ProjectPaymentResponse }
+  | { kind: 'unplanned'; key: string; label: string; amount: number; date: string | null; receipt: PaymentReceiptResponse };
 
-function buildTimeline(summary: PaymentsSummaryResponse): TimelineNode[] {
-  const stageNodes: TimelineNode[] = summary.payments.map((stage) => ({
-    kind: 'stage',
-    key: stage.id,
-    date: stage.dueDate ?? stage.receipts?.[0]?.receivedAt ?? null,
-    stage,
-  }));
-  const unplannedNodes: TimelineNode[] = (summary.unplannedReceipts ?? []).map((receipt) => ({
-    kind: 'unplanned',
-    key: receipt.id,
-    date: receipt.receivedAt,
-    receipt,
-  }));
-  return [...stageNodes, ...unplannedNodes].sort((a, b) => {
-    if (a.date === b.date) return 0;
-    if (a.date === null) return 1; // undated stages sink to the bottom
-    if (b.date === null) return -1;
-    return a.date < b.date ? -1 : 1;
-  });
+function lastReceiptDate(stage: ProjectPaymentResponse): string | null {
+  if (!stage.receipts.length) return null;
+  return stage.receipts.reduce((max, r) => (r.receivedAt > max ? r.receivedAt : max), stage.receipts[0].receivedAt);
 }
 
-function ReceiptHistoryRow({ receipt, onEdit }: { receipt: PaymentReceiptResponse; onEdit: () => void }) {
+function groupPayments(summary: PaymentsSummaryResponse): { received: ReceivedNode[]; upcoming: ProjectPaymentResponse[] } {
+  const received: ReceivedNode[] = [];
+  const upcoming: ProjectPaymentResponse[] = [];
+  summary.payments.forEach((stage) => {
+    if (stage.status === 'RECEIVED') {
+      received.push({ kind: 'stage', key: stage.id, label: stage.purpose, amount: stage.amount, date: lastReceiptDate(stage), stage });
+    } else {
+      upcoming.push(stage);
+    }
+  });
+  (summary.unplannedReceipts ?? []).forEach((r) => {
+    received.push({ kind: 'unplanned', key: r.id, label: r.displayLabel, amount: r.amount, date: r.receivedAt, receipt: r });
+  });
+  received.sort((a, b) => {
+    if (a.date === b.date) return 0;
+    if (a.date === null) return 1;
+    if (b.date === null) return -1;
+    return a.date < b.date ? 1 : -1; // most recent first
+  });
+  upcoming.sort((a, b) => {
+    if (a.dueDate === b.dueDate) return 0;
+    if (a.dueDate === null) return 1;
+    if (b.dueDate === null) return -1;
+    return a.dueDate < b.dueDate ? -1 : 1;
+  });
+  return { received, upcoming };
+}
+
+function ReceivedItemRow({
+  node,
+  onEditStage,
+  onEditReceipt,
+}: {
+  node: ReceivedNode;
+  onEditStage: (stage: ProjectPaymentResponse) => void;
+  onEditReceipt: (receipt: PaymentReceiptResponse) => void;
+}) {
   return (
     <button
       type="button"
-      onClick={onEdit}
-      className="flex w-full items-center justify-between py-1 pl-6 text-left text-xs text-muted"
+      onClick={() => (node.kind === 'stage' ? onEditStage(node.stage) : onEditReceipt(node.receipt))}
+      className="flex min-h-11 w-full items-center gap-2 border-b border-border py-1.5 text-left last:border-b-0"
     >
-      <span>＋{formatMoney(receipt.amount)}</span>
-      <span>{fmtDate(receipt.receivedAt)}</span>
+      <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-success" aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-[13px] text-primary">
+        {node.label}
+        {node.date && <span className="text-muted"> · {fmtDateShort(node.date)}</span>}
+      </span>
+      <span className="flex-shrink-0 font-mono text-[13px] font-bold tabular-nums text-primary">{formatAmount(node.amount)}</span>
     </button>
   );
 }
 
-function PaymentTimelineNode({
-  node,
+function ReceivedGroupRow({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex min-h-11 w-full items-center gap-2 border-b border-border py-2 text-left text-[13px] font-semibold text-success last:border-b-0"
+    >
+      <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-success" aria-hidden />
+      <span className="flex-1">{t('economy.paymentsReceivedCount', { count })}</span>
+      <span className="flex-shrink-0 font-normal text-muted" aria-hidden>{expanded ? '︿' : '⌄'}</span>
+    </button>
+  );
+}
+
+function ReceivedSection({
+  received,
+  expanded,
+  onToggle,
   onEditStage,
-  onQuickPay,
   onEditReceipt,
 }: {
-  node: TimelineNode;
+  received: ReceivedNode[];
+  expanded: boolean;
+  onToggle: () => void;
   onEditStage: (stage: ProjectPaymentResponse) => void;
-  onQuickPay: (stage: ProjectPaymentResponse) => void;
+  onEditReceipt: (receipt: PaymentReceiptResponse) => void;
+}) {
+  if (received.length === 0) return null;
+  return (
+    <>
+      <ReceivedGroupRow count={received.length} expanded={expanded} onToggle={onToggle} />
+      {expanded && received.map((node) => (
+        <ReceivedItemRow key={node.key} node={node} onEditStage={onEditStage} onEditReceipt={onEditReceipt} />
+      ))}
+    </>
+  );
+}
+
+function upcomingAmountText(stage: ProjectPaymentResponse): string {
+  return stage.received > 0 ? `${formatAmount(stage.received)}/${formatAmount(stage.amount)}` : formatMoney(stage.amount);
+}
+
+function UpcomingRow({ stage, onEditStage }: { stage: ProjectPaymentResponse; onEditStage: (stage: ProjectPaymentResponse) => void }) {
+  const condition = upcomingCondition(stage);
+  return (
+    <button
+      type="button"
+      onClick={() => onEditStage(stage)}
+      className="flex min-h-11 w-full items-center gap-2 border-b border-border py-1.5 text-left last:border-b-0"
+    >
+      <span className={cn('h-2.5 w-2.5 flex-shrink-0 rounded-full', STATUS_DOT[stage.status])} aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-[13px] text-primary">
+        {stage.purpose}
+        {condition && <span className="text-muted"> · {condition}</span>}
+      </span>
+      <span className="flex-shrink-0 font-mono text-[13px] font-bold tabular-nums text-primary">{upcomingAmountText(stage)}</span>
+    </button>
+  );
+}
+
+function NextPaymentCard({ stage, onEditStage }: { stage: ProjectPaymentResponse; onEditStage: (stage: ProjectPaymentResponse) => void }) {
+  const { t } = useTranslation();
+  const condition = upcomingCondition(stage);
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">{t('economy.paymentsNextLabel')}</p>
+      <button
+        type="button"
+        onClick={() => onEditStage(stage)}
+        className="flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-border p-2.5 text-left"
+      >
+        <span className={cn('h-2.5 w-2.5 flex-shrink-0 rounded-full', STATUS_DOT[stage.status])} aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-sm text-primary">
+          {stage.purpose}
+          {condition && <span className="text-muted"> · {condition}</span>}
+        </span>
+        <span className="flex-shrink-0 font-mono text-sm font-bold tabular-nums text-primary">{upcomingAmountText(stage)}</span>
+      </button>
+    </div>
+  );
+}
+
+function PaymentsList({
+  summary,
+  objectId,
+  onEditStage,
+  onEditReceipt,
+}: {
+  summary: PaymentsSummaryResponse;
+  objectId: string;
+  onEditStage: (stage: ProjectPaymentResponse) => void;
   onEditReceipt: (receipt: PaymentReceiptResponse) => void;
 }) {
   const { t } = useTranslation();
-  if (node.kind === 'unplanned') {
-    const r = node.receipt;
+  const { received, upcoming } = useMemo(() => groupPayments(summary), [summary]);
+  const [receivedExpanded, setReceivedExpanded] = useState(false);
+  const expandKey = `majstr.payments-expanded.${objectId}`;
+  const [showAll, setShowAll] = useState(() => {
+    try {
+      return localStorage.getItem(expandKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setShowAllPersisted = (value: boolean) => {
+    setShowAll(value);
+    try {
+      localStorage.setItem(expandKey, value ? '1' : '0');
+    } catch {
+      /* private mode / storage disabled — the toggle just won't be remembered */
+    }
+  };
+
+  const count = received.length + upcoming.length;
+  if (count === 0) return null;
+
+  // "Усе сплачено" is a headline, never a replacement for the itemized list — a master must
+  // always be able to see what actually makes up the received total, even a receipt whose plan
+  // stage was since deleted (a receipt survives that, by design — see PaymentReceipt.planPaymentId
+  // ON DELETE SET NULL) or one logged before any estimate had a contracted total to compare
+  // against. Hiding the breakdown here read as "where did this money even come from?" (reported
+  // 2026-08-14) the moment contractedTotal didn't obviously explain it.
+  if (upcoming.length === 0) {
     return (
-      <div className="border-b border-border py-2.5 last:border-b-0">
-        <button type="button" onClick={() => onEditReceipt(r)} className="flex w-full items-start gap-3 text-left">
-          <span className="mt-1.5 h-3 w-3 flex-shrink-0 rounded-full bg-success" aria-hidden />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-primary">{r.displayLabel}</span>
-            <span className="mt-0.5 block text-xs text-muted">{fmtDate(r.receivedAt)}</span>
-          </span>
-          <span className="flex-shrink-0 text-right text-sm font-semibold text-primary">{formatMoney(r.amount)}</span>
+      <div className="mt-3 border-t border-border pt-1">
+        <p className="py-2 text-center text-sm font-semibold text-success">{t('economy.paymentsAllDone')}</p>
+        <ReceivedSection
+          received={received}
+          expanded={receivedExpanded}
+          onToggle={() => setReceivedExpanded((v) => !v)}
+          onEditStage={onEditStage}
+          onEditReceipt={onEditReceipt}
+        />
+      </div>
+    );
+  }
+
+  const list = (
+    <div className="mt-1">
+      <ReceivedSection
+        received={received}
+        expanded={receivedExpanded}
+        onToggle={() => setReceivedExpanded((v) => !v)}
+        onEditStage={onEditStage}
+        onEditReceipt={onEditReceipt}
+      />
+      {upcoming.map((stage) => (
+        <UpcomingRow key={stage.id} stage={stage} onEditStage={onEditStage} />
+      ))}
+    </div>
+  );
+
+  if (count <= 5) {
+    return <div className="mt-3 border-t border-border pt-1">{list}</div>;
+  }
+
+  if (!showAll) {
+    return (
+      <div className="mt-3 border-t border-border pt-1">
+        <NextPaymentCard stage={upcoming[0]} onEditStage={onEditStage} />
+        <button
+          type="button"
+          onClick={() => setShowAllPersisted(true)}
+          className="mt-1.5 min-h-11 w-full text-center text-xs font-semibold text-brand"
+        >
+          {t('economy.paymentsExpandAll', { count })} ⌄
         </button>
       </div>
     );
   }
 
-  const stage = node.stage;
-  const condition = conditionText(stage);
-  const notFullyReceived = stage.remaining > 0;
-  return (
-    <div className="border-b border-border py-2.5 last:border-b-0">
-      <button type="button" onClick={() => onEditStage(stage)} className="flex w-full items-start gap-3 text-left">
-        <span className={cn('mt-1.5 h-3 w-3 flex-shrink-0 rounded-full', STATUS_DOT[stage.status])} aria-hidden />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-primary">{stage.purpose}</span>
-          {condition && <span className="mt-0.5 block text-xs text-muted">{condition}</span>}
-        </span>
-        <span className="flex-shrink-0 text-right text-sm font-semibold text-primary">
-          {stage.received > 0 ? `${formatMoney(stage.received)} / ${formatMoney(stage.amount)}` : formatMoney(stage.amount)}
-        </span>
-      </button>
-      {notFullyReceived && (
-        <button
-          type="button"
-          onClick={() => onQuickPay(stage)}
-          className="ml-6 mt-1 text-xs font-semibold text-brand"
-        >
-          + {t('economy.receivePayment')}
-        </button>
-      )}
-      {stage.receipts && stage.receipts.length > 0 && (
-        <div className="mt-1">
-          {stage.receipts.map((r) => (
-            <ReceiptHistoryRow key={r.id} receipt={r} onEdit={() => onEditReceipt(r)} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PaymentTimeline({
-  summary,
-  onEditStage,
-  onQuickPay,
-  onEditReceipt,
-}: {
-  summary: PaymentsSummaryResponse;
-  onEditStage: (stage: ProjectPaymentResponse) => void;
-  onQuickPay: (stage: ProjectPaymentResponse) => void;
-  onEditReceipt: (receipt: PaymentReceiptResponse) => void;
-}) {
-  const nodes = useMemo(() => buildTimeline(summary), [summary]);
-  if (nodes.length === 0) return null;
   return (
     <div className="mt-3 border-t border-border pt-1">
-      {nodes.map((n) => (
-        <PaymentTimelineNode
-          key={n.key}
-          node={n}
-          onEditStage={onEditStage}
-          onQuickPay={onQuickPay}
-          onEditReceipt={onEditReceipt}
-        />
-      ))}
+      {list}
+      <button
+        type="button"
+        onClick={() => setShowAllPersisted(false)}
+        className="mt-1.5 min-h-11 w-full text-center text-xs font-semibold text-brand"
+      >
+        {t('economy.paymentsCollapseAll')} ︿
+      </button>
     </div>
   );
 }
@@ -943,36 +1072,12 @@ export function PaymentsBlock({
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-sm font-bold text-primary">{formatMoney(summary.contractedTotal)}</div>
-          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
-            {t('economy.contracted')}
-            <InfoPopover text={t('economy.contractedInfo')} label={t('economy.contracted')} />
-          </div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-primary">{formatMoney(summary.received)}</div>
-          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
-            {t('economy.received')}
-            <InfoPopover text={t('economy.receivedInfo')} label={t('economy.received')} />
-          </div>
-        </div>
-        <div>
-          <div className="text-sm font-bold text-primary">{formatMoney(summary.remaining)}</div>
-          <div className="mt-0.5 flex items-center justify-center gap-1 text-[11px] text-muted">
-            {t('economy.remaining')}
-            <InfoPopover text={t('economy.remainingInfo')} label={t('economy.remaining')} />
-          </div>
-        </div>
-      </div>
-
       <PaymentStrip received={summary.received} total={summary.contractedTotal} />
 
-      <PaymentTimeline
+      <PaymentsList
         summary={summary}
+        objectId={objectId}
         onEditStage={openEdit}
-        onQuickPay={(stage) => openReceive(stage.id)}
         onEditReceipt={setEditingReceipt}
       />
 
