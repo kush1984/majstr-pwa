@@ -48,6 +48,17 @@ export function aUser(overrides: Partial<UserResponse> = {}): UserResponse {
     cardMask: null,
     trialStartedAt: null,
     referralCode: 'abc123',
+    legalName: null,
+    taxId: null,
+    legalAddress: null,
+    iban: null,
+    bankName: null,
+    vatPayer: false,
+    vatId: null,
+    taxGroup: null,
+    taxRate: null,
+    docCity: null,
+    actNumberFormat: 'PLAIN',
     ...overrides,
   };
 }

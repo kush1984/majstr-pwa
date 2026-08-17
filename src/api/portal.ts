@@ -1,5 +1,5 @@
 import { api } from './client.ts';
-import type { PortalStateResponse } from './types.ts';
+import type { ActShareStateResponse, PortalStateResponse } from './types.ts';
 
 /**
  * Owner-side control of the object's SIGNATURE portal (Кошторис tab) — any-status estimates,
@@ -53,5 +53,25 @@ export const economyPortalApi = {
     return api
       .post<PortalStateResponse>(`/api/projects/${projectId}/portal/economy/send-email`)
       .then((r) => r.data);
+  },
+};
+
+/**
+ * Owner-side control of ONE act's client share link (acts iteration, prompt 5). Unlike the
+ * set-based portal/economy links, an act link points at a single document: `publish` flips a DRAFT
+ * act to SENT and mints/reuses its link (the client can then sign it), `sendEmail` mails that link.
+ */
+export const actPortalApi = {
+  state(actId: string): Promise<ActShareStateResponse> {
+    return api.get<ActShareStateResponse>(`/api/acts/${actId}/share`).then((r) => r.data);
+  },
+
+  publish(actId: string): Promise<ActShareStateResponse> {
+    return api.put<ActShareStateResponse>(`/api/acts/${actId}/share`).then((r) => r.data);
+  },
+
+  /** 400 CLIENT_EMAIL_MISSING when the object's client has no email on file. */
+  sendEmail(actId: string): Promise<ActShareStateResponse> {
+    return api.post<ActShareStateResponse>(`/api/acts/${actId}/share/send-email`).then((r) => r.data);
   },
 };

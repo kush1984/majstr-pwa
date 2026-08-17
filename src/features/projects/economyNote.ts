@@ -27,3 +27,19 @@ export function economyPairHint(
   if (isCrewSource) return 'estimate.crewPricesHint';
   return null;
 }
+
+/**
+ * Whether the «клієнт підписав похідний …» supersede banner should render on an estimate row.
+ *
+ * As of the acts iteration a superseded parent is NO LONGER auto-reopened — it keeps its
+ * signature and just stops counting in the economy (surfaced on its Економіка panel). The only
+ * rows still carrying a supersede flag in the Кошториси list are LEGACY drafts reopened by the
+ * old behavior, and the banner's «Повернуто в чернетки» wording reads wrong on a plain draft — so
+ * it's suppressed for DRAFT. A non-draft row with a name still shows it.
+ */
+export function shouldShowSupersedeBanner(
+  status: EstimateSummary['status'],
+  supersededByName: string | null,
+): boolean {
+  return supersededByName != null && status !== 'DRAFT';
+}

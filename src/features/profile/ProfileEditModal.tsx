@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
+import { Select } from '@/components/Select.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
@@ -10,10 +11,11 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
+import { rnokppWarning, vatIdWarning } from '@/lib/requisites.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useAddCatalogTemplates } from '@/features/catalog/useCatalog.ts';
 import { useAddCustomTrade, useDeleteCustomTrade, useRenameCustomTrade, useUpdateProfile } from './useProfile.ts';
-import type { Trade } from '@/api/types.ts';
+import type { ActNumberFormat, Trade } from '@/api/types.ts';
 
 interface FormState {
   fullName: string;
@@ -21,6 +23,27 @@ interface FormState {
   companyName: string;
   email: string;
 }
+
+/** Document-requisite fields (acts iteration). Kept as strings for the inputs; taxGroup/taxRate
+ *  are parsed to numbers on save. All optional — the whole block is «потрібні для актів і PDF». */
+interface RequisitesState {
+  legalName: string;
+  taxId: string;
+  legalAddress: string;
+  iban: string;
+  bankName: string;
+  docCity: string;
+  vatPayer: boolean;
+  vatId: string;
+  taxGroup: string;
+  taxRate: string;
+  actNumberFormat: ActNumberFormat;
+}
+
+const EMPTY_REQUISITES: RequisitesState = {
+  legalName: '', taxId: '', legalAddress: '', iban: '', bankName: '', docCity: '',
+  vatPayer: false, vatId: '', taxGroup: '', taxRate: '', actNumberFormat: 'PLAIN',
+};
 
 /**
  * Edit the contractor's own profile (#16). Name / phone / company / trades are
@@ -40,6 +63,10 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
 
   const [form, setForm] = useState<FormState>({ fullName: '', phone: '', companyName: '', email: '' });
   const [trades, setTrades] = useState<Trade[]>([]);
+  // Document requisites — collapsed by default (secondary to name/phone/trades), expanded once
+  // the master already has some filled in so they don't have to hunt for them.
+  const [req, setReq] = useState<RequisitesState>(EMPTY_REQUISITES);
+  const [reqOpen, setReqOpen] = useState(false);
   // After saving, if the user ADDED a trade we offer (with consent) to merge its
   // starter set into the catalog. Never auto-add, never delete on trade removal.
   const [addPrompt, setAddPrompt] = useState<Trade[] | null>(null);
@@ -71,6 +98,22 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     if (me && !seededRef.current) {
       setForm({ fullName: me.fullName, phone: me.phone, companyName: me.companyName, email: me.email });
       setTrades(me.trades);
+      const seededReq: RequisitesState = {
+        legalName: me.legalName ?? '',
+        taxId: me.taxId ?? '',
+        legalAddress: me.legalAddress ?? '',
+        iban: me.iban ?? '',
+        bankName: me.bankName ?? '',
+        docCity: me.docCity ?? '',
+        vatPayer: me.vatPayer,
+        vatId: me.vatId ?? '',
+        taxGroup: me.taxGroup == null ? '' : String(me.taxGroup),
+        taxRate: me.taxRate == null ? '' : String(me.taxRate),
+        actNumberFormat: me.actNumberFormat,
+      };
+      setReq(seededReq);
+      // Auto-expand if anything is already filled — otherwise keep it out of the way.
+      setReqOpen(Object.values(seededReq).some((v) => v !== '' && v !== false && v !== 'PLAIN'));
       setErrors({});
       setAddPrompt(null);
       seededRef.current = true;
@@ -80,6 +123,10 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   const set =
     (key: keyof FormState) => (e: ChangeEvent<HTMLInputElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const setReqField =
+    (key: keyof RequisitesState) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setReq((r) => ({ ...r, [key]: e.target.value }));
 
   const toggleTrade = (v: Trade) =>
     setTrades((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
@@ -105,6 +152,19 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
         companyName: form.companyName.trim(),
         trades,
         ...(emailEditable ? { email: form.email.trim() } : {}),
+        // Requisites — empty strings clear the field server-side (trimToNull); numeric fields go
+        // as null when blank. Warnings never blocked us getting here.
+        legalName: req.legalName.trim(),
+        taxId: req.taxId.trim(),
+        legalAddress: req.legalAddress.trim(),
+        iban: req.iban.trim(),
+        bankName: req.bankName.trim(),
+        docCity: req.docCity.trim(),
+        vatPayer: req.vatPayer,
+        vatId: req.vatId.trim(),
+        taxGroup: req.taxGroup.trim() === '' ? null : Number(req.taxGroup),
+        taxRate: req.taxRate.trim() === '' ? null : Number(req.taxRate),
+        actNumberFormat: req.actNumberFormat,
       });
       toast.success(t('profile.saved'));
       if (emailChanged) toast.info(t('profile.emailChangedSent'));
@@ -371,6 +431,79 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
             </div>
           </FormField>
         )}
+
+        {/* Document requisites — collapsed by default, needed only for acts/PDF. */}
+        <div className="rounded-lg border border-gray-200">
+          <button
+            type="button"
+            onClick={() => setReqOpen((o) => !o)}
+            aria-expanded={reqOpen}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+          >
+            <span>
+              <span className="block text-sm font-medium text-gray-700">{t('profile.requisites.title')}</span>
+              <span className="block text-xs text-muted">{t('profile.requisites.subtitle')}</span>
+            </span>
+            <span className={'text-muted transition-transform ' + (reqOpen ? 'rotate-180' : '')} aria-hidden>▾</span>
+          </button>
+
+          {reqOpen && (
+            <div className="space-y-3 border-t border-gray-200 px-3 py-3">
+              <FormField label={t('profile.requisites.legalName')} hint={t('profile.requisites.legalNameHint')}>
+                <Input value={req.legalName} onChange={setReqField('legalName')} />
+              </FormField>
+              <FormField
+                label={t('profile.requisites.rnokpp')}
+                hint={rnokppWarning(req.taxId) ? undefined : t('profile.requisites.rnokppHint')}
+                error={rnokppWarning(req.taxId) ? t(rnokppWarning(req.taxId) as string) : undefined}
+              >
+                <Input inputMode="numeric" value={req.taxId} onChange={setReqField('taxId')} />
+              </FormField>
+              <FormField label={t('profile.requisites.legalAddress')}>
+                <Input value={req.legalAddress} onChange={setReqField('legalAddress')} />
+              </FormField>
+              <FormField label={t('profile.requisites.iban')}>
+                <Input value={req.iban} onChange={setReqField('iban')} placeholder="UA…" />
+              </FormField>
+              <FormField label={t('profile.requisites.bankName')}>
+                <Input value={req.bankName} onChange={setReqField('bankName')} />
+              </FormField>
+              <FormField label={t('profile.requisites.docCity')} hint={t('profile.requisites.docCityHint')}>
+                <Input value={req.docCity} onChange={setReqField('docCity')} />
+              </FormField>
+              <FormField label={t('profile.requisites.actNumberFormat')}>
+                <Select value={req.actNumberFormat} onChange={setReqField('actNumberFormat')}>
+                  <option value="PLAIN">{t('profile.requisites.actFormatPlain')}</option>
+                  <option value="WITH_YEAR">{t('profile.requisites.actFormatWithYear')}</option>
+                </Select>
+              </FormField>
+
+              <Checkbox
+                label={t('profile.requisites.vatPayer')}
+                checked={req.vatPayer}
+                onChange={() => setReq((r) => ({ ...r, vatPayer: !r.vatPayer }))}
+              />
+              {req.vatPayer ? (
+                <FormField
+                  label={t('profile.requisites.vatId')}
+                  hint={vatIdWarning(req.vatId) ? undefined : t('profile.requisites.vatIdHint')}
+                  error={vatIdWarning(req.vatId) ? t(vatIdWarning(req.vatId) as string) : undefined}
+                >
+                  <Input inputMode="numeric" value={req.vatId} onChange={setReqField('vatId')} />
+                </FormField>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField label={t('profile.requisites.taxGroup')}>
+                    <Input inputMode="numeric" value={req.taxGroup} onChange={setReqField('taxGroup')} placeholder="2 / 3" />
+                  </FormField>
+                  <FormField label={t('profile.requisites.taxRate')}>
+                    <Input inputMode="decimal" value={req.taxRate} onChange={setReqField('taxRate')} placeholder="5" />
+                  </FormField>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-2 pt-1">
           <Button variant="secondary" fullWidth onClick={onClose}>

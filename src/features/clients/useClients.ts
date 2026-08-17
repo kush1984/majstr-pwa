@@ -41,6 +41,12 @@ export function useCreateClient() {
       const optimistic: ClientResponse = {
         id, fullName: req.fullName, phone: req.phone,
         address: req.address ?? null, email: req.email ?? null,
+        clientType: req.clientType ?? 'PERSON',
+        taxId: req.taxId ?? null,
+        legalName: req.legalName ?? null,
+        legalAddress: req.legalAddress ?? null,
+        signatoryTitle: req.signatoryTitle ?? null,
+        signatoryName: req.signatoryName ?? null,
         createdAt: new Date().toISOString(),
       };
       return offlineMutate<ClientResponse>({

@@ -27,7 +27,7 @@ function seedEstimate(qc: QueryClient) {
     createdAt: '', updatedAt: '',
     items: [{
       id: 'i1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
-      quantity: 2, unitPrice: 100, lineTotal: 200, sortOrder: 0, measurementRefs: [], quantityManual: false, percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
+      quantity: 2, unitPrice: 100, lineTotal: 200, sortOrder: 0, measurementRefs: [], quantityManual: false, percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
     }],
     worksSubtotal: 200, materialsSubtotal: 0, total: 200, depositAmount: null, balance: 200,
   };

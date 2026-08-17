@@ -11,11 +11,23 @@ import { useSyncExternalStore } from 'react';
 
 export type ToastKind = 'success' | 'error' | 'info';
 
+/** An optional single action rendered as a button inside the toast (e.g. «Відкрити» after a
+ *  duplicate lands in another tab). Tapping it dismisses the toast, then runs `onClick`. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
+  action?: ToastAction;
 }
+
+/** Second argument to the toast helpers: a plain number keeps the old `toast.x(msg, 5000)`
+ *  positional-ttl form working; the object form adds an optional action. */
+type ToastOpts = number | { ttlMs?: number; action?: ToastAction };
 
 type Listener = () => void;
 
@@ -27,9 +39,11 @@ function emit(): void {
   for (const l of listeners) l();
 }
 
-function push(kind: ToastKind, message: string, ttlMs = 4000): number {
+function push(kind: ToastKind, message: string, opts: ToastOpts | undefined, defaultTtl: number): number {
+  const ttlMs = typeof opts === 'number' ? opts : opts?.ttlMs ?? defaultTtl;
+  const action = typeof opts === 'number' ? undefined : opts?.action;
   const id = nextId++;
-  toasts = [...toasts, { id, kind, message }];
+  toasts = [...toasts, { id, kind, message, action }];
   emit();
   if (ttlMs > 0) {
     setTimeout(() => dismiss(id), ttlMs);
@@ -44,9 +58,10 @@ function dismiss(id: number): void {
 }
 
 export const toast = {
-  success: (m: string, ttl?: number) => push('success', m, ttl),
-  error: (m: string, ttl?: number) => push('error', m, ttl ?? 6000),
-  info: (m: string, ttl?: number) => push('info', m, ttl),
+  // An action toast leans on a longer default so the master has time to reach the button.
+  success: (m: string, opts?: ToastOpts) => push('success', m, opts, 4000),
+  error: (m: string, opts?: ToastOpts) => push('error', m, opts, 6000),
+  info: (m: string, opts?: ToastOpts) => push('info', m, opts, 4000),
   dismiss,
 };
 

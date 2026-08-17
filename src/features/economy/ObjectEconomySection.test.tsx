@@ -8,8 +8,9 @@ import { ObjectEconomySection } from './ObjectEconomySection.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { economyApi } from '@/api/economy.ts';
 import { estimatesApi } from '@/api/estimates.ts';
+import { actsApi } from '@/api/acts.ts';
 import { formatMoney } from '@/lib/format.ts';
-import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse } from '@/api/types.ts';
+import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse, WorkActResponse } from '@/api/types.ts';
 
 // Intl.NumberFormat('uk-UA') groups digits with U+00A0 (NBSP). RTL's default text normalizer
 // collapses whitespace in the RENDERED node text before comparing, but does NOT touch a plain
@@ -30,6 +31,7 @@ vi.mock('@/api/economy.ts', () => ({
 }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn() } }));
+vi.mock('@/api/acts.ts', () => ({ actsApi: { list: vi.fn(() => Promise.resolve([])), create: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
 const mockNavigate = vi.fn();
@@ -44,6 +46,8 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
     companyName: 'C', logoUrl: null, plan, role: 'USER', emailVerified: true,
     createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
     planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'refcode1',
+    legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+    vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
   };
 }
 
@@ -79,12 +83,25 @@ function economyFixture(opts: {
   estimates?: SignedEstimatePanelResponse[];
   pro?: { expenses: number; profit: number } | null;
   payments?: NonNullable<ObjectEconomyResponse['payments']>;
+  acts?: ObjectEconomyResponse['acts'];
 } = {}): ObjectEconomyResponse {
   const pro = opts.pro ?? null;
   return {
     estimates: opts.estimates ?? [panel()],
+    acts: opts.acts ?? { contracted: 15000, acceptedByActs: 0, received: 1500 },
     payments: pro ? (opts.payments ?? SAMPLE_PAYMENTS) : null,
     internals: pro,
+  };
+}
+
+function openAct(): WorkActResponse {
+  return {
+    id: 'a1', projectId: 'p1', number: '1', kind: 'INTERIM', status: 'DRAFT',
+    issuedAt: '2026-08-10', periodFrom: '2026-08-01', periodTo: '2026-08-10',
+    place: null, contractRef: null, note: null, showMaterials: true, showCumulative: true,
+    advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
+    signerName: null, signedOffline: false, addendumEstimateId: null, items: [],
+    total: 0, payable: 0, createdAt: '2026-08-10', updatedAt: '2026-08-10',
   };
 }
 
@@ -209,9 +226,59 @@ describe('ObjectEconomySection', () => {
 
     await screen.findByText('Кухня');
     fireEvent.click(screen.getByLabelText('Дії'));
-    fireEvent.click(await screen.findByText('Не враховувати цей акт'));
+    fireEvent.click(await screen.findByText('Не враховувати цей кошторис'));
 
     await waitFor(() => expect(estimatesApi.setCountInEconomy).toHaveBeenCalledWith('e1', false));
+  });
+
+  it('the works axis shows «Прийнято актами» and flips the balance wording by sign', async () => {
+    // accepted 6000 < received 9000 → the master owes work → «Невідпрацьований аванс» = 3000.
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      acts: { contracted: 15000, acceptedByActs: 6000, received: 9000 },
+    }));
+
+    renderSection('FREE');
+
+    // Balance label is a clean standalone node; the strip label is mixed with money in one span.
+    expect(await screen.findByText('Невідпрацьований аванс')).toBeTruthy();
+    expect(document.body.textContent).toContain('Прийнято актами');
+  });
+
+  it('the works axis names the client debt when acts outrun receipts', async () => {
+    // accepted 9000 > received 3000 → the client owes for accepted work → «Заборгованість замовника».
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      acts: { contracted: 15000, acceptedByActs: 9000, received: 3000 },
+    }));
+
+    renderSection('FREE');
+
+    expect(await screen.findByText('Заборгованість замовника')).toBeTruthy();
+  });
+
+  it('the act ⋮ menu offers «Згенерувати акт» when no act is open (acts iteration)', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture());
+    vi.mocked(actsApi.list).mockResolvedValue([]);
+
+    renderSection('FREE');
+
+    await screen.findByText('Кухня');
+    fireEvent.click(screen.getByLabelText('Дії'));
+    expect(await screen.findByText('Згенерувати акт')).toBeTruthy();
+  });
+
+  it('«Згенерувати акт» is hidden while an act is still open', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture());
+    vi.mocked(actsApi.list).mockResolvedValue([openAct()]);
+
+    renderSection('FREE');
+
+    await screen.findByText('Кухня');
+    // Wait for the acts query to land so the block is computed, then open the menu.
+    await waitFor(() => expect(actsApi.list).toHaveBeenCalledWith('p1'));
+    fireEvent.click(screen.getByLabelText('Дії'));
+    // The toggle item still renders — only «Згенерувати акт» is suppressed.
+    await screen.findByText('Не враховувати цей кошторис');
+    expect(screen.queryByText('Згенерувати акт')).toBeNull();
   });
 
   it('the summary panel sums only COUNTED signed estimates, with a markup/discount recap', async () => {

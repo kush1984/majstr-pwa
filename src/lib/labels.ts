@@ -9,6 +9,7 @@ import type {
   ObjectStage,
   ProjectStatus,
   Trade,
+  WorkActStatus,
 } from '@/api/types.ts';
 
 /** Visual variants the Badge component understands. */
@@ -63,6 +64,15 @@ export const OBJECT_STAGE_VARIANT: Record<ObjectStage, BadgeVariant> = {
 };
 
 export const ESTIMATE_STATUS_VARIANT: Record<EstimateStatus, BadgeVariant> = {
+  DRAFT: 'draft',
+  SENT: 'pending',
+  SIGNED: 'active',
+  REJECTED: 'danger',
+};
+
+/** Work-act status → badge colour. Same mapping as estimates, on purpose (acts iteration): a
+ *  master reads one colour language across both documents. */
+export const ACT_STATUS_VARIANT: Record<WorkActStatus, BadgeVariant> = {
   DRAFT: 'draft',
   SENT: 'pending',
   SIGNED: 'active',

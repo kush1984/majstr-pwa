@@ -50,6 +50,8 @@ const baseMe: UserResponse = {
   companyName: 'C', logoUrl: null, plan: 'PRO', role: 'USER', emailVerified: true,
   createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
   planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'r1',
+  legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+  vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
 };
 
 function renderSection(trades: Trade[], plan: UserResponse['plan'] = 'PRO') {

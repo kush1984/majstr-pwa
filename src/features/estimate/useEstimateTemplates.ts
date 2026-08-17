@@ -327,7 +327,7 @@ async function applyTemplateOffline(
     unit: request.unit, quantity: 0, unitPrice: request.unitPrice,
     lineTotal: 0, sortOrder: request.sortOrder ?? 0, measurementRefs: [], quantityManual: false,
         // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
-        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
+        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
   }));
   const optimistic: EstimateResponse = {
     id: estimateId, projectId, name: req.name ?? null, status: 'DRAFT',

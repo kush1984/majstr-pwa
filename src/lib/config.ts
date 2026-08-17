@@ -47,6 +47,7 @@ export const routes = {
   billingReturn: '/billing/return',
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
+  act: (id: string) => `/acts/${id}`,
   // Import a ready estimate onto an existing object (Excel/photo → LLM).
   importEstimate: (projectId: string) => `/estimates/import?projectId=${projectId}`,
 } as const;

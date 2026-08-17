@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
-import { NotesSection } from './NotesSection.tsx';
+import { NotesSheet } from './NotesSheet.tsx';
 import { notesApi } from '@/api/notes.ts';
 import type { NoteResponse } from '@/api/types.ts';
 import { asButton } from '@/test/dom.ts';
@@ -22,20 +22,20 @@ const note = (over: Partial<NoteResponse> = {}): NoteResponse => ({
   ...over,
 });
 
-function renderSection() {
+function renderSheet(readOnly = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  render(<NotesSection objectId="p1" />, { wrapper });
+  render(<NotesSheet open onClose={() => {}} objectId="p1" readOnly={readOnly} />, { wrapper });
 }
 
 beforeEach(() => vi.clearAllMocks());
 
-describe('NotesSection', () => {
+describe('NotesSheet', () => {
   it('renders a note with a title and a tel: call chip (spaces stripped from the href)', async () => {
     vi.mocked(notesApi.list).mockResolvedValue([note()]);
-    renderSection();
+    renderSheet();
 
     await waitFor(() => expect(screen.getByText('Архітектор Олег')).toBeTruthy());
     // Body keeps its line breaks (pre-wrap) — the text node holds the newline.
@@ -46,14 +46,14 @@ describe('NotesSection', () => {
 
   it('teaches with an example in the empty state', async () => {
     vi.mocked(notesApi.list).mockResolvedValue([]);
-    renderSection();
+    renderSheet();
     await waitFor(() => expect(screen.getByText(/ключі в консьєржа/)).toBeTruthy());
   });
 
   it('adds a note with only body (title & phone optional)', async () => {
     vi.mocked(notesApi.list).mockResolvedValue([]);
     vi.mocked(notesApi.add).mockResolvedValue(note({ id: 'n2', title: null, phone: null, body: 'просто текст' }));
-    renderSection();
+    renderSheet();
 
     await waitFor(() => expect(screen.getByRole('button', { name: '+ Нотатка' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '+ Нотатка' }));
@@ -71,5 +71,17 @@ describe('NotesSection', () => {
     // add carries an idempotency key and a replay returns the existing note instead of a copy.
     expect(notesApi.add).toHaveBeenCalledWith(
       'p1', { title: null, phone: null, body: 'ключі в консьєржа' }, expect.any(String));
+  });
+
+  it('read-only (terminal object stage): notes are viewable but nothing can be added or edited', async () => {
+    vi.mocked(notesApi.list).mockResolvedValue([note()]);
+    renderSheet(true);
+
+    // The note itself still renders — access to what already exists is never taken away.
+    await waitFor(() => expect(screen.getByText('Архітектор Олег')).toBeTruthy());
+    // …but the create + per-note edit/delete controls are gone.
+    expect(screen.queryByRole('button', { name: '+ Нотатка' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Редагувати' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Видалити' })).toBeNull();
   });
 });

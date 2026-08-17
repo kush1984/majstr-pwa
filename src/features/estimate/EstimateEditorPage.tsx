@@ -67,10 +67,10 @@ export function resolveBackUrl(projectId: string, fromTab: string | null): strin
 export function EstimateEditorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  // Which object tab to return to (economy-nav-and-discount iteration) — `?from=act` when opened
-  // from the Економіка tab's act card, absent (→ default Кошторис tab) everywhere else, including
-  // direct entry. Read once at mount: navigating away and back re-mounts this page with a fresh
-  // `id`/URL anyway, so there's no case where it needs to change mid-visit.
+  // Which object tab to return to (economy-nav-and-discount iteration) — `?from=economy` when opened
+  // from the Економіка tab's signed-estimate panel, absent (→ default Кошторис tab) everywhere else,
+  // including direct entry. (Legacy `?from=act` still resolves via resolveTab's alias.) Read once at
+  // mount: navigating away and back re-mounts this page with a fresh `id`/URL anyway.
   const [searchParams] = useSearchParams();
   const fromTab = searchParams.get('from');
   const { t } = useTranslation();
@@ -780,8 +780,16 @@ export function EstimateEditorPage() {
             {
               onSuccess: (created) => {
                 setMarkupOpen(false);
-                toast.success(t('estimate.duplicated'));
-                void navigate(routes.estimate(created.id));
+                // The copy lands in the Кошториси tab, a screen the master isn't looking at (they
+                // duplicated while viewing the source). Don't yank them there — tell them where it
+                // went and offer a one-tap jump. Leaving them put is the golden rule: the decision
+                // to switch context is the master's, not ours.
+                toast.success(
+                  t('estimate.duplicatedToEstimatesTab', {
+                    name: estimateName(created.name, created.createdAt),
+                  }),
+                  { action: { label: t('common.open'), onClick: () => void navigate(routes.estimate(created.id)) } },
+                );
               },
               onError: (err) => toast.error(toAppError(err).message),
             },

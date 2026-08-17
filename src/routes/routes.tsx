@@ -14,6 +14,7 @@ import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
+import { ActEditorPage } from '@/features/acts/ActEditorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage.tsx';
@@ -109,6 +110,7 @@ export const router = createBrowserRouter([
       // Static '/estimates/import' ranks above the dynamic '/estimates/:id'.
       { path: routes.estimateImport, element: <EstimateImportPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
+      { path: '/acts/:id', element: <ActEditorPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },
     ],

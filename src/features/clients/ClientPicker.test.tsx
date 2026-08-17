@@ -23,6 +23,8 @@ function meWith(ackAt: string | null): UserResponse {
     companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
     createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: ackAt,
     planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'refcode1',
+    legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+    vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
   };
 }
 

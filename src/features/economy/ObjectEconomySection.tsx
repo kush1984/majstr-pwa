@@ -16,9 +16,11 @@ import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useEconomy, useExpenses, useDeleteExpense, useToggleEstimateCounted } from './useEconomy.ts';
+import { useActs } from '@/features/acts/useActs.ts';
+import { actCreateBlock, useNewAct } from '@/features/acts/useNewAct.ts';
 import { ExpenseSheet } from './ExpenseSheet.tsx';
 import { PaymentsBlock } from './PaymentsBlock.tsx';
-import type { ExpenseCategory, ExpenseResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
+import type { ExpenseCategory, ExpenseResponse, ObjectEconomyActsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
 
 // Прибуток/Витрати (+ the expense journal) is deliberately hidden from the UI for now
 // (economy-hide-internals iteration, after a live trial): today's formula — `profit = contracted
@@ -70,18 +72,21 @@ function AdjustLine({ markup, discount, base }: { markup: number; discount: numb
   return <p className="mt-1 text-[11px] text-muted">{parts.join(' · ')}</p>;
 }
 
-/** One panel per SIGNED estimate — the "act": lock icon, signed date, works/materials/total.
- *  Shows for every SIGNED estimate regardless of `countedInEconomy` (the master sees every deal
- *  he actually signed); a panel excluded from the totals below says so honestly instead of the
- *  numbers silently disagreeing. Clickable (economy-rework iteration): opens the same read-only
- *  estimate view the (now-removed-from-here) Кошторис tab used to — no new summary component,
- *  `EstimateEditorPage` already renders a SIGNED estimate read-only with the full breakdown.
+/** One SIGNED-estimate panel: lock icon, signed date, works/materials/total. (Acts iteration
+ *  renamed the old "act" framing here — a real «Акт виконаних робіт» is now a separate document in
+ *  the Акти tab; these panels are signed ESTIMATES.) Shows for every SIGNED estimate regardless of
+ *  `countedInEconomy` (the master sees every deal he actually signed); a panel excluded from the
+ *  totals below says so honestly instead of the numbers silently disagreeing. Clickable
+ *  (economy-rework iteration): opens the same read-only estimate view the (now-removed-from-here)
+ *  Кошторис tab used to — `EstimateEditorPage` already renders a SIGNED estimate read-only.
  *
  *  <p>The ⋮ menu (economy-polish iteration) is the ONLY place "враховувати в економіці" is still
- *  editable — the Кошторис-tab checkbox moved here, since a signed act is the one point where the
- *  toggle has something to act on. Two sibling elements (main button + menu trigger), not one
+ *  editable — the Кошторис-tab checkbox moved here, since a signed estimate is the one point where
+ *  the toggle has something to act on. Two sibling elements (main button + menu trigger), not one
  *  button containing another — {@link ActionMenu}'s trigger is itself a `<button>`.</p> */
-function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse; objectId: string }) {
+function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
+  panel: SignedEstimatePanelResponse; objectId: string; canGenerate: boolean; onGenerate: () => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toggle = useToggleEstimateCounted(objectId);
@@ -98,7 +103,7 @@ function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse
       <div className="flex items-stretch">
         <button
           type="button"
-          onClick={() => navigate(`${routes.estimate(panel.id)}?from=act`)}
+          onClick={() => navigate(`${routes.estimate(panel.id)}?from=economy`)}
           className="min-w-0 flex-1 p-3 text-left transition-transform active:scale-[0.99]"
         >
           <div className="flex items-center gap-2">
@@ -121,11 +126,24 @@ function EstimatePanel({ panel, objectId }: { panel: SignedEstimatePanelResponse
         </button>
         <ActionMenu ariaLabel={t('estimate.actions')}>
           {(close) => (
-            <ActionMenuItem
-              icon={panel.countedInEconomy ? '🚫' : '✓'}
-              label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
-              onClick={() => { close(); onToggle(); }}
-            />
+            <>
+              {/* Context entry to act creation — the main one the master asked for. Hidden when
+                  another act is open or a FINAL already closed the object (same block as the Acts
+                  tab button). Generated from here the editor is SCOPED to this one estimate's
+                  positions; the Acts-tab button spans every signed estimate instead. */}
+              {canGenerate && (
+                <ActionMenuItem
+                  icon="📑"
+                  label={t('acts.generate')}
+                  onClick={() => { close(); onGenerate(); }}
+                />
+              )}
+              <ActionMenuItem
+                icon={panel.countedInEconomy ? '🚫' : '✓'}
+                label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
+                onClick={() => { close(); onToggle(); }}
+              />
+            </>
           )}
         </ActionMenu>
       </div>
@@ -164,6 +182,62 @@ function EstimatesSummaryPanel({ panels }: { panels: SignedEstimatePanelResponse
   );
 }
 
+/** The works axis (acts iteration) — FREE-visible: how much of the contract the client has accepted
+ *  via SIGNED acts, next to how much money landed. Two PaymentStrip-twin lines against «За договором»
+ *  + a balance line whose wording flips by sign. Absent when there's nothing at all to show. */
+function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
+  const { t } = useTranslation();
+  const { contracted, acceptedByActs, received } = acts;
+  if (contracted === 0 && acceptedByActs === 0 && received === 0) return null;
+  const pct = (v: number) => (contracted > 0 ? Math.min(100, Math.round((v / contracted) * 100)) : 0);
+  const diff = acceptedByActs - received;
+  // Work still under contract but not yet closed by acts — the figure the master keeps re-deriving
+  // in his head; name it inside the «Прийнято актами» hint (acts-fix, Chunk C).
+  const notYetAccepted = Math.max(0, contracted - acceptedByActs);
+  const balanceLabel = diff < 0 ? t('economy.unearnedAdvance')
+    : diff > 0 ? t('economy.clientDebt') : t('economy.balanced');
+  // The balance line is one of two DIFFERENT debts; explain which via the same InfoPopover pattern.
+  const balanceInfo = diff < 0 ? t('economy.unearnedAdvanceInfo')
+    : diff > 0 ? t('economy.clientDebtInfo') : undefined;
+  return (
+    <div className="rounded-card border border-border bg-surface p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted">{t('economy.contracted')}</span>
+        <span className="font-mono text-sm font-semibold tabular-nums text-primary">{formatMoney(contracted)}</span>
+      </div>
+      <AxisStrip label={t('economy.acceptedByActs')} value={acceptedByActs} pct={pct(acceptedByActs)}
+        info={t('economy.acceptedInfo', { amount: formatMoney(notYetAccepted) })} />
+      <AxisStrip label={t('economy.received')} value={received} pct={pct(received)} />
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2">
+        <span className="flex items-center gap-1 text-xs font-medium text-secondary">
+          {balanceLabel}
+          {balanceInfo && <InfoPopover text={balanceInfo} label={balanceLabel} />}
+        </span>
+        <span className="font-mono text-sm font-bold tabular-nums text-primary">{formatMoney(Math.abs(diff))}</span>
+      </div>
+    </div>
+  );
+}
+
+function AxisStrip({ label, value, pct, info }: {
+  label: string; value: number; pct: number; info?: string;
+}) {
+  return (
+    <div className="mt-2">
+      <p className="flex flex-wrap items-center gap-1 text-xs text-muted">
+        <span className="font-mono tabular-nums">
+          {label} {formatMoney(value)} {/* twin of PaymentStrip */}
+          <span className="text-faint"> · {pct}%</span>
+        </span>
+        {info && <InfoPopover text={info} label={label} />}
+      </p>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-sunken">
+        <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Object economy tab. Two tiers (economy-polish iteration tightened the split):
  * <ul>
@@ -191,6 +265,13 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
   // No point fetching the expense journal while it's not rendered (INTERNALS_ENABLED).
   const expenses = useExpenses(objectId, isPro && INTERNALS_ENABLED);
   const del = useDeleteExpense(objectId);
+
+  // Act creation reachable from a signed-estimate panel (acts iteration). One shared block reason
+  // and one shared create-then-open flow with the Acts tab.
+  const acts = useActs(objectId);
+  const actList = acts.data ?? [];
+  const canGenerateAct = actCreateBlock(actList) === null;
+  const newAct = useNewAct(objectId, objectCreatedAt);
 
   const openTeaser = () => {
     void upgradeApi.click('OBJECT_PROFIT');
@@ -225,10 +306,19 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
       {panels.length > 0 && (
         <div className="space-y-2">
           {panels.map((p) => (
-            <EstimatePanel key={p.id} panel={p} objectId={objectId} />
+            <EstimatePanel
+              key={p.id}
+              panel={p}
+              objectId={objectId}
+              canGenerate={canGenerateAct}
+              onGenerate={() => newAct.start(actList, p.id)}
+            />
           ))}
         </div>
       )}
+
+      {/* Works axis (acts iteration) — FREE-visible, computed unconditionally by the backend. */}
+      {eco?.acts && <ActsAxis acts={eco.acts} />}
 
       {/* economy-polish: FREE stops at the acts list above now — the summary/payments/internals
           trio is ONE PRO-locked block, not three separate gates. Backend nulls payments AND

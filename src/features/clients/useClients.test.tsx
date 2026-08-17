@@ -45,7 +45,9 @@ describe('useClients — offline authoring (queued)', () => {
   it('update: patches the cache optimistically and queues an update op', async () => {
     const { qc, wrapper } = setup();
     qc.setQueryData<ClientResponse[]>(listKey, [
-      { id: 'c1', fullName: 'Старе', phone: '+1', address: null, email: null, createdAt: '2026-01-01' },
+      { id: 'c1', fullName: 'Старе', phone: '+1', address: null, email: null, clientType: 'PERSON',
+        taxId: null, legalName: null, legalAddress: null, signatoryTitle: null, signatoryName: null,
+        createdAt: '2026-01-01' },
     ]);
     const { result } = renderHook(() => useUpdateClient(), { wrapper });
 

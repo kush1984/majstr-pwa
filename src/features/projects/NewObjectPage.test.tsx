@@ -63,7 +63,8 @@ describe('NewObjectPage', () => {
 
   it('creates a NEW client inline when chosen, then the object', async () => {
     vi.mocked(clientsApi.create).mockResolvedValue({
-      id: 'c5', fullName: 'Олег', phone: '0991112233', email: null, address: null, createdAt: '',
+      id: 'c5', fullName: 'Олег', phone: '0991112233', email: null, address: null, clientType: 'PERSON',
+      taxId: null, legalName: null, legalAddress: null, signatoryTitle: null, signatoryName: null, createdAt: '',
     });
     vi.mocked(projectsApi.create).mockResolvedValue(proj);
 

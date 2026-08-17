@@ -14,7 +14,7 @@ const line = (over: Partial<EstimateItemResponse>): EstimateItemResponse => ({
   id: 'x', type: 'WORK', name: 'Позиція', category: null, unit: 'M2',
   quantity: 1, unitPrice: 100, lineTotal: 100, sortOrder: 0,
   measurementRefs: [], quantityManual: false,
-  percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
+  percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
   ...over,
 });
 
@@ -100,5 +100,50 @@ describe('EstimateItemsBoard — session edit highlight', () => {
     expect(rowButton('Позиція A').className).not.toContain('border-success/50');
     expect(rowButton('Позиція B').className).toContain('border-success/50');
     expect(rowButton('Позиція B').className).not.toContain('border-brand/30');
+  });
+});
+
+describe('EstimateItemsBoard — closed by SIGNED acts', () => {
+  const rowButton = (name: string) => screen.getByText(name).closest('button')!;
+
+  it('a fully closed line shows the «закрито» chip and the success background', () => {
+    render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: 'Позиція A', quantity: 10, closedByActs: 10 })]}
+        signed
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('✓ закрито')).toBeTruthy();
+    expect(rowButton('Позиція A').className).toContain('bg-success-soft');
+  });
+
+  it('a partially closed line shows a «done / total» chip, not the «закрито» one', () => {
+    render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: 'Позиція A', quantity: 10, closedByActs: 4 })]}
+        signed
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    // Number nodes split, so assert against the row's full text rather than an exact node.
+    // formatNumber trims trailing zeros, so the chip reads «4 / 10».
+    expect(rowButton('Позиція A').textContent).toContain('4 / 10');
+    expect(screen.queryByText('✓ закрито')).toBeNull();
+  });
+
+  it('closedByActs=null (only a DRAFT act, or nothing) colours and chips nothing', () => {
+    render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: 'Позиція A', quantity: 10, closedByActs: null })]}
+        signed
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText('✓ закрито')).toBeNull();
+    expect(rowButton('Позиція A').className).not.toContain('bg-success-soft');
   });
 });

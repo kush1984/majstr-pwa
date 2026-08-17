@@ -3,6 +3,10 @@ import { resolveBackUrl } from './EstimateEditorPage.tsx';
 
 describe('resolveBackUrl — «← назад» returns to the tab the master actually came from', () => {
   it('appends ?tab= for a known origin tab (economy)', () => {
+    expect(resolveBackUrl('p1', 'economy')).toBe('/projects/p1?tab=economy');
+  });
+
+  it('passes a legacy `act` origin straight through — resolveTab maps ?tab=act → economy on arrival', () => {
     expect(resolveBackUrl('p1', 'act')).toBe('/projects/p1?tab=act');
   });
 
@@ -11,6 +15,6 @@ describe('resolveBackUrl — «← назад» returns to the tab the master ac
   });
 
   it('falls back to the projects list when the object id is not known yet', () => {
-    expect(resolveBackUrl('', 'act')).toBe('/projects');
+    expect(resolveBackUrl('', 'economy')).toBe('/projects');
   });
 });

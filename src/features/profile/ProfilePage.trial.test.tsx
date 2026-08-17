@@ -22,6 +22,8 @@ vi.mock('@/api/billing.ts', () => ({
         createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
         planExpiresAt: '2026-07-18T00:00:00Z', autoRenew: false, cardMask: null,
         trialStartedAt: '2026-07-13T00:00:00Z', referralCode: 'refcode1',
+        legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+        vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
       } as UserResponse),
     ),
     referralStats: vi.fn(() => Promise.resolve({ invited: 0, paid: 0, earnedDays: 0 })),
@@ -52,6 +54,8 @@ const baseMe: UserResponse = {
   companyName: 'C', logoUrl: null, plan: 'FREE', role: 'USER', emailVerified: true,
   createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
   planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'refcode1',
+  legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+  vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
 };
 
 function renderPage(me: UserResponse) {

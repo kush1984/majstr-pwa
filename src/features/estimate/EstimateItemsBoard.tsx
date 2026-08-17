@@ -359,6 +359,13 @@ function ItemRow({
   // fainter brand one; neither applies while the selection state owns the row's look.
   const isLastTouched = !picked && (lastTouched?.has(item.id) ?? false);
   const isTouched = !picked && !isLastTouched && (touched?.has(item.id) ?? false);
+  // Closed by SIGNED acts (acts iteration). The MEANING is always carried by the chip, never by
+  // colour alone — that keeps it distinct from the transient (chip-less) last-touched highlight,
+  // which also uses success, and keeps it accessible. A DRAFT act contributes nothing (the backend
+  // only counts SIGNED into closedByActs), so this never shows work the client hasn't accepted.
+  const closed = item.closedByActs ?? 0;
+  const fullyClosed = closed > 0 && closed >= item.quantity;
+  const partlyClosed = closed > 0 && !fullyClosed;
 
   return (
     <div
@@ -397,7 +404,9 @@ function ItemRow({
           picked ? 'border-brand bg-brand-soft/40'
             : isLastTouched ? 'border-success/50 bg-success-soft'
               : isTouched ? 'border-brand/30 bg-brand-soft/20'
-                : 'border-border bg-surface',
+                : fullyClosed ? 'border-success/60 bg-success-soft'
+                  : partlyClosed ? 'border-success/40 bg-success-soft/40'
+                    : 'border-border bg-surface',
         )}
       >
         {/* The number is a GUTTER for the whole card, not a word inside the name.
@@ -438,6 +447,16 @@ function ItemRow({
             <span className={cn(item.baseDetached && 'text-amber')}>
               {percentLabel(item, byId) ?? `${formatMoney(item.unitPrice)}/${t('units.' + item.unit)}`}
             </span>
+            {fullyClosed && (
+              <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                {t('acts.closedFull')}
+              </span>
+            )}
+            {partlyClosed && (
+              <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+                {formatNumber(closed, 3)} / {formatNumber(item.quantity, 3)}
+              </span>
+            )}
           </span>
         </span>
       </button>

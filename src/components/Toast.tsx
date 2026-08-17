@@ -30,6 +30,18 @@ export function ToastViewport() {
         >
           <div className="flex items-start gap-3">
             <p className="flex-1">{item.message}</p>
+            {item.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  dismiss(item.id);
+                  item.action?.onClick();
+                }}
+                className="flex-shrink-0 font-semibold text-current underline underline-offset-2"
+              >
+                {item.action.label}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => dismiss(item.id)}

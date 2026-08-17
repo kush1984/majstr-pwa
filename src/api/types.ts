@@ -57,7 +57,25 @@ export interface UserResponse {
   /** This master's personal referral code — the invite link is
    *  majstr.pro/?ref=m-<referralCode>. */
   referralCode: string;
+  // Document requisites (acts iteration) — all optional; feed the profile form + act PDF.
+  legalName: string | null;
+  taxId: string | null;
+  legalAddress: string | null;
+  iban: string | null;
+  bankName: string | null;
+  vatPayer: boolean;
+  vatId: string | null;
+  taxGroup: number | null;
+  taxRate: number | null;
+  docCity: string | null;
+  actNumberFormat: ActNumberFormat;
 }
+
+/** How a work act's number is displayed — «7» vs «7/2026». */
+export type ActNumberFormat = 'PLAIN' | 'WITH_YEAR';
+
+/** The legal nature of a customer — decides which requisites a PDF prints. */
+export type ClientType = 'PERSON' | 'FOP' | 'COMPANY';
 
 /** PRO subscription period — the client sends this; the server owns the price. */
 export type BillingPeriod = 'MONTH' | 'HALF_YEAR' | 'YEAR';
@@ -119,6 +137,18 @@ export interface ProfileUpdateRequest {
   companyName: string;
   trades: Trade[];
   email?: string;
+  // Document requisites (acts iteration) — all optional.
+  legalName?: string;
+  taxId?: string;
+  legalAddress?: string;
+  iban?: string;
+  bankName?: string;
+  vatPayer?: boolean;
+  vatId?: string;
+  taxGroup?: number | null;
+  taxRate?: number | null;
+  docCity?: string;
+  actNumberFormat?: ActNumberFormat;
 }
 
 export interface LoginRequest {
@@ -208,6 +238,13 @@ export interface ClientResponse {
   phone: string;
   address: string | null;
   email: string | null;
+  // Document requisites (acts iteration).
+  clientType: ClientType;
+  taxId: string | null;
+  legalName: string | null;
+  legalAddress: string | null;
+  signatoryTitle: string | null;
+  signatoryName: string | null;
   createdAt: string;
 }
 
@@ -217,6 +254,13 @@ export interface ClientRequest {
   address?: string;
   /** Optional — lets the contractor email the estimate to the client. */
   email?: string;
+  // Document requisites (acts iteration) — all optional; only meaningful for FOP/COMPANY.
+  clientType?: ClientType;
+  taxId?: string;
+  legalName?: string;
+  legalAddress?: string;
+  signatoryTitle?: string;
+  signatoryName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +435,13 @@ export interface EstimateItemResponse {
    * frozen line (a deleted POSITION base) — `baseDetached` alone covers that case.
    */
   baseOriginLabel: string | null;
+  /**
+   * How much of this line has already been closed by SIGNED work acts (acts iteration). Drives the
+   * estimate board's «✓ закрито» / «40 / 136,5» chip + green background. `null` when nothing is
+   * closed or the estimate isn't SIGNED — a DRAFT act never contributes (same rule as the running
+   * total).
+   */
+  closedByActs: number | null;
 }
 
 /**
@@ -678,9 +729,21 @@ export interface PaymentSplitPreviewResponse {
   rows: PaymentSplitRow[];
 }
 
+/** The works axis (acts iteration) — FREE-visible, like `estimates`. How much of the contract the
+ *  client has accepted via SIGNED acts, next to how much money has come in. The balance line
+ *  (`acceptedByActs − received`) is derived in the PWA: < 0 → «Невідпрацьований аванс», > 0 →
+ *  «Заборгованість замовника», 0 → «Розрахунки збігаються». */
+export interface ObjectEconomyActsResponse {
+  contracted: number;
+  acceptedByActs: number;
+  received: number;
+}
+
 export interface ObjectEconomyResponse {
   /** Every SIGNED estimate of the object — FREE + PRO, always present. */
   estimates: SignedEstimatePanelResponse[];
+  /** Contracted / accepted-by-acts / received — FREE + PRO, always present (acts iteration). */
+  acts: ObjectEconomyActsResponse;
   /** Contracted/received/remaining + the payment schedule. PRO only as of the economy-polish
    *  iteration — null for FREE, gated together with `internals` behind one lock teaser. */
   payments: PaymentsSummaryResponse | null;
@@ -1239,4 +1302,116 @@ export interface TemplateTradeRequest {
   trade: Trade | null;
   /** Only takes effect on the caller's OWN template — ignored when re-filing a system default. */
   customTradeId?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Work acts (Акти виконаних робіт) — mirror WorkAct* backend DTOs (acts iteration)
+// ---------------------------------------------------------------------------
+
+export type WorkActKind = 'INTERIM' | 'FINAL';
+export type WorkActStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
+
+export interface WorkActItemResponse {
+  id: string;
+  estimateItemId: string | null;
+  estimateId: string | null;
+  type: ItemType;
+  name: string;
+  category: string | null;
+  unit: Unit;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  cumulativeBefore: number;
+  /** cumulativeBefore + quantity > the estimate line's current quantity — the master decides. */
+  exceedsEstimate: boolean;
+  sortOrder: number;
+}
+
+export interface WorkActResponse {
+  id: string;
+  projectId: string;
+  number: string;
+  kind: WorkActKind;
+  status: WorkActStatus;
+  issuedAt: string;
+  periodFrom: string;
+  periodTo: string;
+  place: string | null;
+  contractRef: string | null;
+  note: string | null;
+  showMaterials: boolean;
+  showCumulative: boolean;
+  advanceOffset: number | null;
+  retentionPercent: number | null;
+  sentAt: string | null;
+  signedAt: string | null;
+  signerName: string | null;
+  signedOffline: boolean;
+  addendumEstimateId: string | null;
+  items: WorkActItemResponse[];
+  total: number;
+  payable: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkActCreateRequest {
+  kind: WorkActKind;
+  issuedAt: string;
+  periodFrom: string;
+  periodTo: string;
+  place?: string | null;
+  contractRef?: string | null;
+  note?: string | null;
+  showMaterials?: boolean;
+  showCumulative?: boolean;
+  advanceOffset?: number | null;
+}
+
+export type WorkActUpdateRequest = WorkActCreateRequest;
+
+export interface WorkActItemLine {
+  estimateItemId: string | null;
+  estimateId: string | null;
+  type: ItemType;
+  name: string;
+  category?: string | null;
+  unit: Unit;
+  unitPrice: number;
+  quantity: number;
+}
+
+export interface WorkActItemsRequest {
+  items: WorkActItemLine[];
+}
+
+export interface WorkActSignOfflineRequest {
+  signerName: string;
+}
+
+export interface ActProgressLine {
+  estimateId: string;
+  estimateName: string | null;
+  estimateCreatedAt: string;
+  estimateItemId: string;
+  type: ItemType;
+  name: string;
+  category: string | null;
+  unit: Unit;
+  unitPrice: number;
+  estimateQuantity: number;
+  done: number;
+  remaining: number;
+}
+
+export interface ActProgressResponse {
+  lines: ActProgressLine[];
+}
+
+/** Owner-side state of one act's client share link (acts iteration, prompt 5). One link = one act,
+ *  so this is a single URL (null until first publish) + whether the act is currently shared. */
+export interface ActShareStateResponse {
+  url: string | null;
+  shared: boolean;
 }

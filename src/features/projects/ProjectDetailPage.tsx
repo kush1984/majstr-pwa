@@ -19,7 +19,7 @@ import { toAppError } from '@/api/errors.ts';
 import { formatMoney, initials } from '@/lib/format.ts';
 import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
-import { economyPairHint } from './economyNote.ts';
+import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
@@ -37,7 +37,9 @@ import { ChatLinkSheet } from '@/features/messages/ChatLinkSheet.tsx';
 import { Fab, FabAction } from '@/components/Fab.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
-import { NotesSection } from '@/features/notes/NotesSection.tsx';
+import { ActsSection } from '@/features/acts/ActsSection.tsx';
+import { NotesSheet } from '@/features/notes/NotesSheet.tsx';
+import { useNotes } from '@/features/notes/useNotes.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 // Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
@@ -45,13 +47,13 @@ import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 // and this component's own handler/dialog stay fully wired so re-enabling is a one-line flip.
 const REOPEN_ENABLED: boolean = false;
 
-export type Tab = 'estimate' | 'measurements' | 'photos' | 'notes' | 'act';
-const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
-  { key: 'estimate', labelKey: 'projects.tabEstimate' },
+export type Tab = 'estimate' | 'measurements' | 'photos' | 'economy' | 'acts';
+const TABS: { key: Tab; labelKey: string }[] = [
+  { key: 'estimate', labelKey: 'projects.tabEstimates' }, // «Кошториси»
   { key: 'measurements', labelKey: 'projects.tabMeasurements' },
   { key: 'photos', labelKey: 'projects.tabPhotos' },
-  { key: 'notes', labelKey: 'projects.tabNotes' },
-  { key: 'act', labelKey: 'projects.tabAct', shortLabelKey: 'projects.tabActShort' },
+  { key: 'economy', labelKey: 'projects.tabEconomy' }, // «Економіка» (was 'act')
+  { key: 'acts', labelKey: 'projects.tabActs' }, // «Акти» — the real work-acts tab (Prompt 1)
 ];
 
 /** The `?tab=` URL param → an active {@link Tab}, defaulting to «Кошторис» for anything
@@ -59,6 +61,10 @@ const TABS: { key: Tab; labelKey: string; shortLabelKey?: string }[] = [
  *  fallback direct entry always had. Pulled out of the component so the URL↔tab mapping has a
  *  test that doesn't need to mount the whole page (economy-nav-and-discount iteration). */
 export function resolveTab(tabParam: string | null): Tab {
+  // `?tab=act` was «Економіка об'єкту» before the real acts tab took that name over (acts
+  // iteration). Old links and bookmarks are in the wild, and the unknown-value fallback would
+  // silently drop them on «Кошториси» — map them to the renamed tab instead.
+  if (tabParam === 'act') return 'economy';
   return TABS.some((def) => def.key === tabParam) ? (tabParam as Tab) : 'estimate';
 }
 
@@ -81,6 +87,11 @@ export function ProjectDetailPage() {
   };
   const [shareOpen, setShareOpen] = useState(false);
   const [chatLinkOpen, setChatLinkOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  // Notes moved from a tab into the FAB (acts iteration) — the count drives its dynamic label
+  // («📝 Створити нотатку» vs «📝 Нотатки · N»). Cheap, cached query; notes are small.
+  const notes = useNotes(id);
+  const noteCount = notes.data?.length ?? 0;
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [editClientOpen, setEditClientOpen] = useState(false);
   // The action a row asked for, waiting on its confirm dialog.
@@ -228,7 +239,7 @@ export function ProjectDetailPage() {
         onClose={() => setShareOpen(false)}
         project={p}
         onNeedEmailVerify={() => setEmailGateOpen(true)}
-        mode={tab === 'act' ? 'economy' : 'portal'}
+        mode={tab === 'economy' ? 'economy' : 'portal'}
       />
       {p.clientId && (
         <ClientEditModal
@@ -370,15 +381,7 @@ export function ProjectDetailPage() {
                 : 'border-transparent text-muted')
             }
           >
-            {tabItem.shortLabelKey ? (
-              <>
-                {/* «Економіка об'єкту» doesn't fit five 375px tabs — phones get the short form. */}
-                <span className="sm:hidden">{t(tabItem.shortLabelKey)}</span>
-                <span className="hidden sm:inline">{t(tabItem.labelKey)}</span>
-              </>
-            ) : (
-              t(tabItem.labelKey)
-            )}
+            {t(tabItem.labelKey)}
           </button>
         ))}
       </div>
@@ -387,10 +390,10 @@ export function ProjectDetailPage() {
         <MeasurementsSection objectId={id} />
       ) : tab === 'photos' ? (
         <PhotosSection projectId={id} />
-      ) : tab === 'notes' ? (
-        <NotesSection objectId={id} />
-      ) : tab === 'act' ? (
+      ) : tab === 'economy' ? (
         <ObjectEconomySection objectId={id} objectCreatedAt={p.createdAt} />
+      ) : tab === 'acts' ? (
+        <ActsSection objectId={id} objectCreatedAt={p.createdAt} />
       ) : (
         <>
           {/* The two share links used to be full-width cards here. On a phone they pushed the
@@ -487,11 +490,22 @@ export function ProjectDetailPage() {
         allowRevoke
       />
 
+      {/* Notes moved off a tab into the FAB (acts iteration). Read-only in a terminal stage: our
+          golden rule is «limit creating new, NEVER take away access to what already exists», so the
+          master can still open and read notes on a closed object — the sheet hides «+ Нова нотатка»
+          and the ⋮ actions via `readOnly`. */}
+      <NotesSheet
+        open={notesOpen}
+        onClose={() => setNotesOpen(false)}
+        objectId={id}
+        readOnly={isTerminalStage(p.stage)}
+      />
+
       {/* The object's two share links (both reach the server to mint or publish, so both go
           through `guard` — offline they say so rather than failing silently; hidden once the
-          object is COMPLETED/CANCELLED — nothing to share about a closed object), plus the
-          stage-transition actions that used to live in a separate ⋮ menu on the hero — one
-          action surface instead of two competing ones on the same screen. */}
+          object is COMPLETED/CANCELLED — nothing to share about a closed object), the Notes action
+          (visible even when terminal — read-only inside), plus the stage-transition actions that
+          used to live in a separate ⋮ menu on the hero — one action surface, not two. */}
       <Fab ariaLabel={t('projects.actionsMenu')}>
         {(close) => (
           <>
@@ -509,6 +523,13 @@ export function ProjectDetailPage() {
                 />
               </>
             )}
+            <FabAction
+              icon="📝"
+              label={noteCount > 0
+                ? t('projects.notesWithCount', { count: noteCount })
+                : t('projects.notesCreate')}
+              onClick={() => close(() => setNotesOpen(true))}
+            />
             <ObjectStatusFabActions stage={p.stage} onChoose={(a) => close(() => setObjectAction(a))} />
           </>
         )}
@@ -545,9 +566,12 @@ function EstimateRow({
   const pairHint = economyPairHint(summary, isCrewSource);
   return (
     <div className="rounded-card border border-border bg-surface">
-      {/* Economy-rework: a discounted duplicate got signed while this one was still SIGNED, so
-          the server auto-reopened it to DRAFT — say why, and let the master decide its fate. */}
-      {supersededByName && (
+      {/* A duplicate got signed while this one was still SIGNED. As of the acts iteration the
+          parent is NO LONGER auto-reopened — it keeps its signature and just stops counting in the
+          economy (shown on its Економіка panel instead). The only rows that still carry a
+          supersede flag here are legacy DRAFTs reopened by the old behavior; the «Повернуто в
+          чернетки» wording reads wrong on a plain draft, so it's suppressed for DRAFT. */}
+      {shouldShowSupersedeBanner(summary.status, supersededByName) && (
         <div className="flex items-start gap-2 rounded-t-card border-b border-amber/30 bg-amber-soft px-3.5 py-2.5">
           <span className="text-sm leading-none" aria-hidden>⚠️</span>
           <p className="min-w-0 flex-1 text-[11px] leading-snug text-primary">

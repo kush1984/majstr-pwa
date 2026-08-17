@@ -200,6 +200,7 @@ export function useAddItem(estimateId: string) {
             percentBaseItemId: req.percentBaseItemId ?? null,
             baseDetached: false,
             baseOriginLabel: null,
+            closedByActs: null,
           };
           patchEstimate(qc, estimateId, (items) => [...items, item]);
           return item;
@@ -300,7 +301,7 @@ function patchEstimateWithCatalogLines(
         measurementRefs: [],
         quantityManual: false,
         // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
-        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null,
+        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
       }];
     });
     return [...items, ...lines];

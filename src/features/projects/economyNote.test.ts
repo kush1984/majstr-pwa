@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { economyPairHint } from './economyNote.ts';
+import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 
 describe('economy hint on an estimate row', () => {
   it('explains the markup on a marked-up copy', () => {
@@ -23,5 +23,21 @@ describe('economy hint on an estimate row', () => {
   it('prefers the copy hint when an estimate is both a copy and a source', () => {
     // A copy of a copy: what THIS row contributes is its own markup, so that reading wins.
     expect(economyPairHint({ markupPercent: 10 }, true)).toBe('estimate.duplicateMarkupHint');
+  });
+});
+
+describe('supersede banner visibility', () => {
+  it('shows on a non-draft row that was superseded', () => {
+    // A SENT/SIGNED estimate carrying a supersede name still explains itself.
+    expect(shouldShowSupersedeBanner('SIGNED', 'Кошторис −15%')).toBe(true);
+  });
+
+  it('is suppressed on a DRAFT — legacy rows reopened by the old behavior, where the '
+    + '«Повернуто в чернетки» wording reads wrong', () => {
+    expect(shouldShowSupersedeBanner('DRAFT', 'Кошторис −15%')).toBe(false);
+  });
+
+  it('shows nothing when there is no superseding estimate', () => {
+    expect(shouldShowSupersedeBanner('SENT', null)).toBe(false);
   });
 });
