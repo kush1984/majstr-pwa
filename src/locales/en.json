@@ -315,7 +315,7 @@
     "createFirstTitle": "Create your first estimate",
     "createFirstText": "Add an object, a client and items — in a few minutes you'll have a ready estimate for the client.",
     "createFirstAction": "Create first estimate",
-    "recentProjects": "Recent objects",
+    "recentProjects": "Recent active objects",
     "quickActions": "Quick actions",
     "quickNewEstimate": "Object & estimate",
     "quickNewEstimateSub": "For a new client",
@@ -372,7 +372,11 @@
       "reopen": "Move this object back to active work?",
       "cancel": "Cancel this object? You can undo this later.",
       "restore": "Restore this object?"
-    }
+    },
+    "filterCancelled": "Cancelled",
+    "showArchived": "Show completed/cancelled",
+    "hideArchived": "Hide completed/cancelled",
+    "viewSettings": "List settings"
   },
   "estimate": {
     "newTitle": "Object & estimate",

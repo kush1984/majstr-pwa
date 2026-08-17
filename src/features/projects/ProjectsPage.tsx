@@ -1,40 +1,52 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Fab, FabAction } from '@/components/Fab.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { routes } from '@/lib/config.ts';
 import type { ObjectStage, ProjectResponse } from '@/api/types.ts';
-import { useProjects } from './useProjects.ts';
+import { useProjects, isTerminalStage } from './useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
  * Filter is URL-driven (`?stage=`) so the dashboard metric cards can deep-link straight into a
  * filtered list — one vocabulary, the derived {@link ObjectStage} (object-status-unification), not
- * a mix of the project's own status and the latest estimate's. CANCELLED has no dedicated chip
- * (a master rarely wants to filter TO it), but "Усі" still counts/shows cancelled objects — hiding
- * them from the list entirely would make a mis-click unrecoverable from the UI.
+ * a mix of the project's own status and the latest estimate's.
+ *
+ * <p>Terminal objects (COMPLETED/CANCELLED — {@link isTerminalStage}) are HIDDEN by default: a
+ * finished or cancelled object is clutter on the day-to-day list. The FAB toggles them back in
+ * (`showArchived`), which also surfaces their two dedicated chips. When hidden, "Усі" counts and
+ * shows only live objects.</p>
  */
-type Filter = 'ALL' | Exclude<ObjectStage, 'CANCELLED'>;
+type Filter = 'ALL' | ObjectStage;
 
-const FILTERS: { value: Filter; labelKey: string }[] = [
+const SHOW_ARCHIVED_KEY = 'majstr-projects-show-archived';
+
+const BASE_FILTERS: { value: Filter; labelKey: string }[] = [
   { value: 'ALL', labelKey: 'projects.filterAll' },
   { value: 'ASSESSMENT', labelKey: 'projects.filterAssessment' },
   { value: 'PENDING_SIGNATURE', labelKey: 'projects.filterPending' },
   { value: 'IN_PROGRESS', labelKey: 'projects.filterInProgress' },
+];
+
+/** The archived chips appear only once the master opts to show archived objects. */
+const ARCHIVED_FILTERS: { value: Filter; labelKey: string }[] = [
   { value: 'COMPLETED', labelKey: 'projects.filterCompleted' },
+  { value: 'CANCELLED', labelKey: 'projects.filterCancelled' },
 ];
 
 /** Exported for a standalone test (object-status-unification) — this one function is the whole
- *  fix for the "1 vs 0" bug report: everything now reads the SAME derived `stage`, never a mix of
- *  the object's own status and the latest estimate's. */
-export function matches(p: ProjectResponse, f: Filter): boolean {
-  return f === 'ALL' || p.stage === f;
+ *  fix for the "1 vs 0" bug report: everything reads the SAME derived `stage`. `showArchived` gates
+ *  terminal objects out of the "Усі" list until the master reveals them via the FAB. */
+export function matches(p: ProjectResponse, f: Filter, showArchived: boolean): boolean {
+  if (f === 'ALL') return showArchived || !isTerminalStage(p.stage);
+  return p.stage === f;
 }
 
 export function ProjectsPage() {
@@ -43,12 +55,31 @@ export function ProjectsPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('stage');
   const filter: Filter =
-    raw === 'ASSESSMENT' || raw === 'PENDING_SIGNATURE' || raw === 'IN_PROGRESS' || raw === 'COMPLETED'
+    raw === 'ASSESSMENT' || raw === 'PENDING_SIGNATURE' || raw === 'IN_PROGRESS'
+    || raw === 'COMPLETED' || raw === 'CANCELLED'
       ? raw : 'ALL';
+
+  // Terminal (completed/cancelled) objects are hidden by default; the FAB reveals them. Persisted so
+  // the choice survives navigation. A deep-link straight to a terminal chip (?stage=COMPLETED, e.g.
+  // from the dashboard's «Завершено» card) implies wanting to see them, so it forces the reveal on.
+  const [showArchived, setShowArchived] = useState<boolean>(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(SHOW_ARCHIVED_KEY) === '1') return true;
+    return raw === 'COMPLETED' || raw === 'CANCELLED';
+  });
+  const toggleArchived = () => {
+    setShowArchived((prev) => {
+      const next = !prev;
+      if (typeof localStorage !== 'undefined') localStorage.setItem(SHOW_ARCHIVED_KEY, next ? '1' : '0');
+      // Leaving archived hidden while parked on a terminal chip would show an empty list — bounce to «Усі».
+      if (!next && (filter === 'COMPLETED' || filter === 'CANCELLED')) setParams({}, { replace: true });
+      return next;
+    });
+  };
 
   // Fetch all once and filter client-side so the chips can show live counts.
   const { data, isPending, isError, refetch } = useProjects();
   const all = useMemo(() => data ?? [], [data]);
+  const filters = showArchived ? [...BASE_FILTERS, ...ARCHIVED_FILTERS] : BASE_FILTERS;
 
   // FREE caps the number of objects. Block "new object" preemptively (the
   // backend still enforces it) once the count reaches the cap.
@@ -57,15 +88,18 @@ export function ProjectsPage() {
 
   const counts = useMemo<Record<Filter, number>>(
     () => ({
-      ALL: all.length,
+      // «Усі» counts what «Усі» shows: live-only unless archived is revealed.
+      ALL: showArchived ? all.length : all.filter((p) => !isTerminalStage(p.stage)).length,
       ASSESSMENT: all.filter((p) => p.stage === 'ASSESSMENT').length,
       PENDING_SIGNATURE: all.filter((p) => p.stage === 'PENDING_SIGNATURE').length,
       IN_PROGRESS: all.filter((p) => p.stage === 'IN_PROGRESS').length,
       COMPLETED: all.filter((p) => p.stage === 'COMPLETED').length,
+      CANCELLED: all.filter((p) => p.stage === 'CANCELLED').length,
     }),
-    [all],
+    [all, showArchived],
   );
-  const shown = useMemo(() => all.filter((p) => matches(p, filter)), [all, filter]);
+  const shown = useMemo(() => all.filter((p) => matches(p, filter, showArchived)), [all, filter, showArchived]);
+  const hasArchived = useMemo(() => all.some((p) => isTerminalStage(p.stage)), [all]);
 
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { stage: f }, { replace: true });
@@ -108,7 +142,7 @@ export function ProjectsPage() {
 
       <div className="mb-4 flex items-center gap-2">
         <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
-          {FILTERS.map((f) => (
+          {filters.map((f) => (
             <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
               {t(f.labelKey)} · {counts[f.value]}
             </Chip>
@@ -181,6 +215,21 @@ export function ProjectsPage() {
             </Button>
           </div>
         </>
+      )}
+
+      {/* View settings live behind the FAB so the toolbar stays clean. Shown only when there is
+          something to reveal (archived objects exist) or they are currently revealed (so the master
+          can hide them again). */}
+      {(hasArchived || showArchived) && (
+        <Fab ariaLabel={t('projects.viewSettings')}>
+          {(close) => (
+            <FabAction
+              icon={showArchived ? '🙈' : '🗄'}
+              label={showArchived ? t('projects.hideArchived') : t('projects.showArchived')}
+              onClick={() => close(toggleArchived)}
+            />
+          )}
+        </Fab>
       )}
     </>
   );

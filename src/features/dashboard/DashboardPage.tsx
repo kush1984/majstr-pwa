@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useProjects } from '@/features/projects/useProjects.ts';
+import { useProjects, isTerminalStage } from '@/features/projects/useProjects.ts';
 import { useDashboardMetrics } from './useDashboardMetrics.ts';
 import { MetricCard } from '@/components/MetricCard.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
@@ -36,7 +36,9 @@ export function DashboardPage() {
 
   const firstName = me?.fullName?.trim().split(/\s+/)[0] ?? '';
   const trades = me?.trades ?? [];
-  const recent = (projects.data ?? []).slice(0, 4);
+  // «Останні активні об'єкти» — completed/cancelled objects are clutter on the home screen; the full
+  // list (Об'єкти) is where a master reveals them via its FAB.
+  const recent = (projects.data ?? []).filter((p) => !isTerminalStage(p.stage)).slice(0, 4);
   const m = metrics.data;
 
   const newEstimate = () => {
