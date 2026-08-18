@@ -67,6 +67,7 @@ export function aPlanLimits(overrides: Partial<PlanLimits> = {}): PlanLimits {
   return {
     plan: 'FREE',
     maxProjects: 3,
+    projectsUsed: 0,
     maxEstimatesPerProject: 2,
     maxPhotosPerObject: 10,
     maxReceiptPhotosPerObject: 10,

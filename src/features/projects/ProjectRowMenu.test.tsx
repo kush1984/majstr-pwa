@@ -19,7 +19,7 @@ vi.mock('@/api/messageLink.ts', () => ({
   messageLinkApi: { state: vi.fn(), revoke: vi.fn() },
 }));
 vi.mock('@/api/projects.ts', () => ({
-  projectsApi: { setStatus: vi.fn() },
+  projectsApi: { setStatus: vi.fn(), remove: vi.fn() },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -170,5 +170,29 @@ describe('ProjectRowMenu — object status actions', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Скасувати об.єкт/ }));
 
     await waitFor(() => expect(projectsApi.setStatus).toHaveBeenCalledWith('p1', 'CANCELLED'));
+  });
+});
+
+describe('ProjectRowMenu — permanent delete', () => {
+  it('a live IN_PROGRESS object offers NO delete (must be closed out first)', async () => {
+    renderMenu(project({ stage: 'IN_PROGRESS' }));
+    fireEvent.click(screen.getByRole('button', { name: /Квартира/ }));
+
+    await screen.findByRole('menuitem', { name: /Завершити об.єкт/ });
+    expect(screen.queryByRole('menuitem', { name: /Видалити об.єкт/ })).toBeNull();
+  });
+
+  it('a CANCELLED object offers Видалити, and confirming removes it with all resources', async () => {
+    vi.mocked(projectsApi.remove).mockResolvedValue(undefined);
+    renderMenu(project({ stage: 'CANCELLED' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Квартира/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Видалити об.єкт/ }));
+    const dialog = await screen.findByRole('dialog');
+    // The re-confirmation dialog spells out that everything goes and it can't be undone.
+    expect(within(dialog).getByText(/не можна скасувати/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /Видалити об.єкт/ }));
+
+    await waitFor(() => expect(projectsApi.remove).toHaveBeenCalledWith('p1'));
   });
 });

@@ -93,6 +93,9 @@ export interface ReferralStatsResponse {
 export interface PlanLimits {
   plan: Plan;
   maxProjects: number | null;
+  /** Objects the master has EVER created (lifetime, never decremented on delete) — the basis of the
+   *  FREE object cap, so deleting can't slip past it. Compare this, not the live object count. */
+  projectsUsed: number;
   maxEstimatesPerProject: number | null;
   /** Progress photos per object (null = unlimited). */
   maxPhotosPerObject: number | null;

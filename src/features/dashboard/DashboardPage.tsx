@@ -32,7 +32,7 @@ export function DashboardPage() {
   // The global CTA creates a NEW object, so the FREE object cap gates it — same
   // as the Об'єкти list. Without this the button led to /new and a dead-end
   // (form fills, "Створити" disabled).
-  const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
+  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
 
   const firstName = me?.fullName?.trim().split(/\s+/)[0] ?? '';
   const trades = me?.trades ?? [];
@@ -98,7 +98,7 @@ export function DashboardPage() {
 
       {atProjectLimit && (
         <div className="mb-5">
-          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
         </div>
       )}
 

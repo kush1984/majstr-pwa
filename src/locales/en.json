@@ -34,7 +34,7 @@
     "planShort": "Plan {{plan}}"
   },
   "limits": {
-    "objectsHint": "FREE — up to {{max}} projects. Unlimited on PRO.",
+    "objectsHint": "Free plan — {{max}} objects total ever (you've created {{used}}). Deleting doesn't free a slot — unlimited on PRO.",
     "estimatesHint": "FREE — up to {{max}} estimates per project. Unlimited on PRO.",
     "atLimitTooltip": "You've reached the free-plan limit. Upgrade to PRO to create more.",
     "upgradeCta": "Learn about PRO"
@@ -376,7 +376,11 @@
     "filterCancelled": "Cancelled",
     "showArchived": "Show completed/cancelled",
     "hideArchived": "Hide completed/cancelled",
-    "viewSettings": "List settings"
+    "viewSettings": "List settings",
+    "deleteObject": "Delete object",
+    "deleteObjectTitle": "Delete object forever?",
+    "deleteObjectConfirm": "The object and ALL its data — estimates, measurements, acts, photos, payments — will be deleted forever. This cannot be undone.",
+    "deleteObjectDone": "Object deleted"
   },
   "estimate": {
     "newTitle": "Object & estimate",

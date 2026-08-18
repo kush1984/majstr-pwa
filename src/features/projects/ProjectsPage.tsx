@@ -81,10 +81,10 @@ export function ProjectsPage() {
   const all = useMemo(() => data ?? [], [data]);
   const filters = showArchived ? [...BASE_FILTERS, ...ARCHIVED_FILTERS] : BASE_FILTERS;
 
-  // FREE caps the number of objects. Block "new object" preemptively (the
-  // backend still enforces it) once the count reaches the cap.
+  // FREE caps the number of objects EVER created (lifetime `projectsUsed`, not the live count) so a
+  // delete can't slip past it — the backend enforces the same. Block "new object" preemptively.
   const limits = usePlanLimits();
-  const atProjectLimit = isAtLimit(all.length, limits.data?.maxProjects);
+  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
 
   const counts = useMemo<Record<Filter, number>>(
     () => ({
@@ -137,7 +137,7 @@ export function ProjectsPage() {
       </div>
 
       {atProjectLimit && (
-        <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
+        <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
       )}
 
       <div className="mb-4 flex items-center gap-2">

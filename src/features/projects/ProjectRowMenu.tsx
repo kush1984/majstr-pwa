@@ -1,7 +1,11 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { toast } from '@/hooks/useToast.ts';
+import { toAppError } from '@/api/errors.ts';
 import { useMessageLink } from '@/features/messages/useMessageLink.ts';
-import { useObjectStatusAction, isTerminalStage } from './useProjects.ts';
+import { useObjectStatusAction, isTerminalStage, useDeleteProject } from './useProjects.ts';
 import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import type { ProjectResponse } from '@/api/types.ts';
 
@@ -24,6 +28,11 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
   const { t } = useTranslation();
   const { copy } = useMessageLink(project.id);
   const { objectAction, chooseAction, confirm, isPending } = useObjectStatusAction(project.id);
+  const deleteProject = useDeleteProject();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Permanent delete is offered only on a closed-out object (COMPLETED/CANCELLED) — a live object is
+  // deleted by cancelling first, so a mis-tap can't wipe active work.
+  const terminal = isTerminalStage(project.stage);
 
   return (
     <>
@@ -32,7 +41,7 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
           <>
             {/* Hidden once COMPLETED/CANCELLED — nothing to share a chat link about on a closed
                 object. */}
-            {!isTerminalStage(project.stage) && (
+            {!terminal && (
               <>
                 <ActionMenuItem
                   icon="🔗"
@@ -44,9 +53,19 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
                 </p>
               </>
             )}
-            <div className={isTerminalStage(project.stage) ? undefined : 'border-t border-border'}>
+            <div className={terminal ? undefined : 'border-t border-border'}>
               <ObjectStatusMenuItems stage={project.stage} onChoose={(a) => { close(); chooseAction(a); }} />
             </div>
+            {terminal && (
+              <div className="border-t border-border">
+                <ActionMenuItem
+                  icon="🗑"
+                  danger
+                  label={t('projects.deleteObject')}
+                  onClick={() => { close(); setConfirmDelete(true); }}
+                />
+              </div>
+            )}
           </>
         )}
       </ActionMenu>
@@ -56,6 +75,19 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
         loading={isPending}
         onConfirm={confirm}
         onClose={() => chooseAction(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={t('projects.deleteObjectTitle')}
+        message={t('projects.deleteObjectConfirm')}
+        confirmLabel={t('projects.deleteObject')}
+        loading={deleteProject.isPending}
+        onConfirm={() => deleteProject.mutate(project.id, {
+          onSuccess: () => { setConfirmDelete(false); toast.success(t('projects.deleteObjectDone')); },
+          onError: (err) => toast.error(toAppError(err).message),
+        })}
+        onClose={() => setConfirmDelete(false)}
       />
     </>
   );
