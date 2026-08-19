@@ -96,7 +96,7 @@ function economyFixture(opts: {
 
 function openAct(): WorkActResponse {
   return {
-    id: 'a1', projectId: 'p1', number: '1', kind: 'INTERIM', status: 'DRAFT',
+    id: 'a1', projectId: 'p1', number: '1', title: null, kind: 'INTERIM', status: 'DRAFT',
     issuedAt: '2026-08-10', periodFrom: '2026-08-01', periodTo: '2026-08-10',
     place: null, contractRef: null, note: null, showMaterials: true, showCumulative: true,
     advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
