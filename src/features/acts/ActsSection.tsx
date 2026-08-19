@@ -10,13 +10,14 @@ import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
+import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatDate } from '@/lib/format.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
-import { useActs, useDeleteAct } from './useActs.ts';
+import { useActs, useChangeActStatus, useDeleteAct } from './useActs.ts';
 import { actCreateBlock, useNewAct } from './useNewAct.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
-import type { WorkActResponse } from '@/api/types.ts';
+import type { WorkActResponse, WorkActStatus } from '@/api/types.ts';
 
 /**
  * The «Акти» tab — real «Акти виконаних робіт» (work-completion certificates). Lists the object's
@@ -28,7 +29,14 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
   const acts = useActs(objectId);
   const newAct = useNewAct(objectId, objectCreatedAt);
   const del = useDeleteAct(objectId);
+  const changeStatus = useChangeActStatus(objectId);
   const [confirmDelete, setConfirmDelete] = useState<WorkActResponse | null>(null);
+
+  const moveStatus = (id: string, status: WorkActStatus) => {
+    changeStatus.mutate({ id, status }, {
+      onError: (err) => toast.error(toAppError(err).message),
+    });
+  };
 
   if (acts.isPending) {
     return <div className="py-8 text-center"><Spinner /></div>;
@@ -66,7 +74,8 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
       ) : (
         <div className="space-y-2">
           {list.map((a) => (
-            <ActRow key={a.id} act={a} onDelete={() => setConfirmDelete(a)} />
+            <ActRow key={a.id} act={a} onDelete={() => setConfirmDelete(a)}
+              onMoveStatus={(status) => moveStatus(a.id, status)} />
           ))}
         </div>
       )}
@@ -90,16 +99,19 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
   );
 }
 
-function ActRow({ act, onDelete }: { act: WorkActResponse; onDelete: () => void }) {
+function ActRow({ act, onDelete, onMoveStatus }: {
+  act: WorkActResponse;
+  onDelete: () => void;
+  onMoveStatus: (status: WorkActStatus) => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [shareOpen, setShareOpen] = useState(false);
 
   const onPdf = async () => {
     try {
-      const { url, revoke } = await actsApi.fetchPdf(act.id);
-      window.open(url, '_blank');
-      setTimeout(revoke, 60_000);
+      // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
+      await openPdfTab(() => actsApi.fetchPdf(act.id));
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -113,8 +125,11 @@ function ActRow({ act, onDelete }: { act: WorkActResponse; onDelete: () => void 
         className="min-w-0 flex-1 p-3 text-left transition-transform active:scale-[0.99]"
       >
         <div className="flex items-center gap-2">
+          {/* With a custom stage name the «Проміжний» word is noise (master feedback); FINAL
+              always shows — it is chosen deliberately and closes the object. */}
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-            {t('acts.title', { number: act.number })} · {t('acts.kind.' + act.kind)}
+            {t('acts.title', { number: act.number })}{act.title ? ` — ${act.title}` : ''}
+            {(act.kind === 'FINAL' || !act.title) ? ` · ${t('acts.kind.' + act.kind)}` : ''}
           </span>
           <Badge variant={ACT_STATUS_VARIANT[act.status]}>{t('acts.status.' + act.status)}</Badge>
         </div>
@@ -131,6 +146,20 @@ function ActRow({ act, onDelete }: { act: WorkActResponse; onDelete: () => void 
               <ActionMenuItem icon="📤" label={t('acts.share')} onClick={() => { close(); setShareOpen(true); }} />
             )}
             <ActionMenuItem icon="📄" label={t('acts.pdf')} onClick={() => { close(); void onPdf(); }} />
+            {/* The client did NOT sign — the owner records the outcome (review fix: REJECTED was
+                unreachable, and a declined SENT act wedged the object forever). */}
+            {act.status === 'SENT' && (
+              <>
+                <ActionMenuItem icon="↩️" label={t('acts.recall')}
+                  onClick={() => { close(); onMoveStatus('DRAFT'); }} />
+                <ActionMenuItem icon="✖️" label={t('acts.markRejected')}
+                  onClick={() => { close(); onMoveStatus('REJECTED'); }} />
+              </>
+            )}
+            {act.status === 'REJECTED' && (
+              <ActionMenuItem icon="↩️" label={t('acts.recall')}
+                onClick={() => { close(); onMoveStatus('DRAFT'); }} />
+            )}
             {(act.status === 'DRAFT' || act.status === 'REJECTED') && (
               <ActionMenuItem icon="🗑" label={t('common.delete')} danger onClick={() => { close(); onDelete(); }} />
             )}

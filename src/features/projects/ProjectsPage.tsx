@@ -67,13 +67,13 @@ export function ProjectsPage() {
     return raw === 'COMPLETED' || raw === 'CANCELLED';
   });
   const toggleArchived = () => {
-    setShowArchived((prev) => {
-      const next = !prev;
-      if (typeof localStorage !== 'undefined') localStorage.setItem(SHOW_ARCHIVED_KEY, next ? '1' : '0');
-      // Leaving archived hidden while parked on a terminal chip would show an empty list — bounce to «Усі».
-      if (!next && (filter === 'COMPLETED' || filter === 'CANCELLED')) setParams({}, { replace: true });
-      return next;
-    });
+    // Side effects OUTSIDE the state updater — React may invoke an updater twice (StrictMode), and
+    // localStorage/setParams must run exactly once per tap.
+    const next = !showArchived;
+    if (typeof localStorage !== 'undefined') localStorage.setItem(SHOW_ARCHIVED_KEY, next ? '1' : '0');
+    // Leaving archived hidden while parked on a terminal chip would show an empty list — bounce to «Усі».
+    if (!next && (filter === 'COMPLETED' || filter === 'CANCELLED')) setParams({}, { replace: true });
+    setShowArchived(next);
   };
 
   // Fetch all once and filter client-side so the chips can show live counts.

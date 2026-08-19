@@ -111,6 +111,13 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
               {estimateName(panel.name, panel.signedAt)}
             </span>
+            {/* Auto-created rollup («Додаткові роботи до акта № N») — badge it so it doesn't read
+                as an estimate the master forgot creating (economy-review). */}
+            {panel.kind === 'ADDENDUM' && (
+              <span className="flex-shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-muted">
+                {t('economy.addendumBadge')}
+              </span>
+            )}
             <span className="flex-shrink-0 text-xs text-muted">{fmtSignedDate(panel.signedAt)}</span>
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2 text-center">

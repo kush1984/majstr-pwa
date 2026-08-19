@@ -613,6 +613,10 @@ export interface ExpenseRequest {
   source?: ExpenseSource;
 }
 
+/** REGULAR — the master authored it; ADDENDUM — the auto-created «Додаткові роботи до акта № N»
+ *  rollup a signed act with off-estimate positions leaves behind. */
+export type EstimateKind = 'REGULAR' | 'ADDENDUM';
+
 /** One panel in the economy tab's per-estimate list — every SIGNED estimate, regardless of
  *  `countedInEconomy` (the "act" framing). Flag a panel whose amount is NOT in the summary
  *  below it when `countedInEconomy` is false — never silently. */
@@ -628,6 +632,9 @@ export interface SignedEstimatePanelResponse {
   total: number;
   countedInEconomy: boolean;
   signedAt: string;
+  /** REGULAR vs ADDENDUM — an auto-created «Додаткові роботи до акта № N» rollup gets a badge so
+   *  it doesn't read as an estimate the master forgot creating. */
+  kind: EstimateKind;
 }
 
 /** PRO-only internals — null on `ObjectEconomyResponse` for FREE. Deliberately two numbers
@@ -1335,6 +1342,8 @@ export interface WorkActResponse {
   id: string;
   projectId: string;
   number: string;
+  /** Optional stage name («Штукатурні роботи») — shown after the number everywhere. */
+  title: string | null;
   kind: WorkActKind;
   status: WorkActStatus;
   issuedAt: string;
@@ -1361,6 +1370,7 @@ export interface WorkActResponse {
 
 export interface WorkActCreateRequest {
   kind: WorkActKind;
+  title?: string | null;
   issuedAt: string;
   periodFrom: string;
   periodTo: string;

@@ -54,7 +54,7 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
 function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEstimatePanelResponse {
   return {
     id: 'e1', name: 'Кухня', works: 10000, materials: 5000, markup: 0, discount: 0,
-    total: 15000, countedInEconomy: true, signedAt: '2026-07-01T00:00:00Z',
+    total: 15000, countedInEconomy: true, signedAt: '2026-07-01T00:00:00Z', kind: 'REGULAR' as const,
     ...overrides,
   };
 }
@@ -182,6 +182,17 @@ describe('ObjectEconomySection', () => {
     // The master already logged a payment by hand — show it as-is, not the empty state.
     expect(await screen.findByText('Аванс')).toBeTruthy();
     expect(screen.queryByText('Ще немає підписаних кошторисів')).toBeNull();
+  });
+
+  it('an ADDENDUM rollup panel wears its badge — not an estimate the master forgot creating', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({ estimates: [panel({ name: 'Додаткові роботи до акта № 7', kind: 'ADDENDUM' })] }),
+    );
+
+    renderSection('FREE');
+
+    expect(await screen.findByText('Додаткові роботи до акта № 7')).toBeTruthy();
+    expect(screen.getByText('дод. роботи з акта')).toBeTruthy();
   });
 
   it('a panel excluded from the counted total says so honestly', async () => {

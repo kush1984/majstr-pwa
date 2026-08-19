@@ -568,6 +568,7 @@
     "percentFrozenHint": "Frozen when estimates were consolidated — there is no live base any more. The percent and amount are editable directly."
   },
   "economy": {
+    "addendumBadge": "extra works from an act",
     "title": "Object economy",
     "teaser": "Payment schedule and object summary — in PRO",
     "openPro": "Open PRO →",
@@ -703,6 +704,14 @@
   },
   "acts": {
     "emptyTitle": "No acts yet",
+    "emptyHint": "Add at least one position to the act before signing.",
+    "leaveTitle": "Unsaved changes",
+    "leaveText": "The act has changes that are not saved yet. Leave without saving?",
+    "leaveConfirm": "Leave without saving",
+    "titleLabel": "Act name (work stage, optional)",
+    "noCategory": "No category",
+    "recall": "Return to draft",
+    "markRejected": "Client declined",
     "emptyText": "An act is built from completed estimate positions — work-completion acts for this object will appear here.",
     "title": "Act No. {{number}}",
     "status": {

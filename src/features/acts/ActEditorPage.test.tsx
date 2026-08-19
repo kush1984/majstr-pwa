@@ -1,7 +1,6 @@
-import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActEditorPage } from './ActEditorPage.tsx';
@@ -28,7 +27,7 @@ function money(n: number): string {
 
 function draftAct(): WorkActResponse {
   return {
-    id: 'a1', projectId: 'p1', number: '7', kind: 'INTERIM', status: 'DRAFT',
+    id: 'a1', projectId: 'p1', number: '7', title: null, kind: 'INTERIM', status: 'DRAFT',
     issuedAt: '2026-08-14', periodFrom: '2026-08-01', periodTo: '2026-08-14',
     place: null, contractRef: null, note: null, showMaterials: true, showCumulative: true,
     advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
@@ -46,6 +45,11 @@ function progress(): ActProgressResponse {
         estimateQuantity: 136.5, done: 70, remaining: 66.5,
       },
       {
+        estimateId: 'e1', estimateName: 'Чорнові', estimateCreatedAt: '2026-08-01', estimateItemId: 'i4', type: 'WORK',
+        name: 'Ґрунтування стін', category: 'Стіни', unit: 'M2', unitPrice: 50,
+        estimateQuantity: 30, done: 0, remaining: 30,
+      },
+      {
         estimateId: 'e1', estimateName: 'Чорнові', estimateCreatedAt: '2026-08-01', estimateItemId: 'i2', type: 'MATERIAL',
         name: 'Шпаклівка', category: 'Матеріали', unit: 'KG', unitPrice: 20,
         estimateQuantity: 100, done: 0, remaining: 100,
@@ -61,16 +65,21 @@ function progress(): ActProgressResponse {
 
 function renderEditor(search = '') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[`/acts/a1${search}`]}>
-        <Routes>
-          <Route path="/acts/:id" element={children} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
+  // A DATA router (createMemoryRouter), not <MemoryRouter> — the editor's leave guard uses
+  // useBlocker, which only exists there. The wildcard route is where a permitted exit lands.
+  const router = createMemoryRouter(
+    [
+      { path: '/acts/:id', element: <ActEditorPage /> },
+      { path: '*', element: <div>відкрито інший екран</div> },
+    ],
+    { initialEntries: [`/acts/a1${search}`] },
   );
-  return render(<ActEditorPage />, { wrapper });
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return { ...view, router };
 }
 
 beforeEach(() => {
@@ -131,6 +140,119 @@ describe('ActEditorPage', () => {
     expect(screen.getByText('Чорнові')).toBeTruthy();
     expect(screen.queryByText('Фарбування стель')).toBeNull(); // e2 hidden
     expect(screen.queryByText('Чистові')).toBeNull();
+  });
+
+  it('hidden MATERIAL lines are excluded from the total and from the saved items (WYSIWYG)', async () => {
+    renderEditor();
+
+    // Tick both the work line (66.5 × 145 = 9642.50) and the material line (100 × 20 = 2000).
+    const workRow = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(workRow).getByRole('checkbox'));
+    const materialRow = screen.getByText('Шпаклівка').closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(materialRow).getByRole('checkbox'));
+    // «Разом» and «До сплати» both show the figure — hence getAllBy.
+    expect(screen.getAllByText(money(11642.5)).length).toBeGreaterThan(0); // both lines counted while visible
+
+    // Untick «Показувати матеріали» — the hidden material must leave the total…
+    fireEvent.click(screen.getByLabelText('Показувати матеріали'));
+    expect(screen.queryAllByText(money(11642.5))).toHaveLength(0);
+    expect(screen.getAllByText(money(9642.5)).length).toBeGreaterThan(0);
+
+    // …and must NOT be saved: an invisible position can't be billed.
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Зберегти'));
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
+    const sent = vi.mocked(actsApi.replaceItems).mock.calls[0][1];
+    expect(sent.items.map((i) => i.estimateItemId)).toEqual(['i1']);
+  });
+
+  it('signing an act with no lines is blocked with a hint instead of the modal', async () => {
+    renderEditor();
+    await screen.findByText('Шпаклювання стін'); // nothing ticked — the act is empty
+
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Підписати'));
+
+    expect(screen.queryByText('Підписання акта офлайн')).toBeNull();
+    const { toast } = await import('@/hooks/useToast.ts');
+    expect(vi.mocked(toast.info)).toHaveBeenCalled();
+  });
+
+  it('a fully closed line is not offered again — finished work leaves the picker', async () => {
+    const done = progress();
+    done.lines[0] = { ...done.lines[0], done: 136.5, remaining: 0 };
+    vi.mocked(actsApi.progress).mockResolvedValue(done);
+    renderEditor();
+
+    await screen.findByText('Ґрунтування стін'); // its still-open neighbour renders…
+    expect(screen.queryByText('Шпаклювання стін')).toBeNull(); // …the closed line does not
+  });
+
+  it('an estimate whose every line is closed disappears whole', async () => {
+    const done = progress();
+    done.lines = done.lines.map((l) => (l.estimateId === 'e2' ? { ...l, done: 40, remaining: 0 } : l));
+    vi.mocked(actsApi.progress).mockResolvedValue(done);
+    renderEditor();
+
+    await screen.findByText('Шпаклювання стін');
+    expect(screen.queryByText('Чистові')).toBeNull(); // e2's group header is gone with its lines
+    expect(screen.queryByText('Фарбування стель')).toBeNull();
+  });
+
+  it('the category checkbox selects the whole work stage in one tap, and clears it on the second', async () => {
+    renderEditor('?scope=e1'); // «Стіни» has two lines (i1 + i4), «Матеріали» one
+    await screen.findByText('Шпаклювання стін');
+
+    // «Стіни» is also a title-suggestion chip (inside the name Field's label) — the group header
+    // is the label that actually carries the group checkbox.
+    const header = screen.getAllByText('Стіни')
+      .map((el) => el.closest('label'))
+      .find((el): el is HTMLLabelElement =>
+        el !== null && el.querySelector('input[type="checkbox"]') !== null)!;
+    fireEvent.click(within(header).getByRole('checkbox'));
+    // 66.5 × 145 + 30 × 50 = 11 142.50 — the whole stage in one tap.
+    expect(screen.getAllByText(money(11142.5)).length).toBeGreaterThan(0);
+
+    fireEvent.click(within(header).getByRole('checkbox'));
+    expect(screen.queryAllByText(money(11142.5))).toHaveLength(0);
+  });
+
+  it('auto-title: when every selected line shares one category, the act is named after it', async () => {
+    renderEditor('?scope=e1');
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox')); // only «Стіни» lines selected
+
+    expect(screen.getByDisplayValue('Стіни')).toBeTruthy(); // the name field mirrors the stage
+
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Зберегти'));
+    await waitFor(() => expect(actsApi.updateHeader).toHaveBeenCalled());
+    expect(vi.mocked(actsApi.updateHeader).mock.calls[0][1].title).toBe('Стіни');
+  });
+
+  it('leaving with unsaved edits asks first; «Вийти без збереження» then leaves', async () => {
+    renderEditor();
+
+    // Make the form dirty: tick a line.
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox'));
+
+    fireEvent.click(screen.getByLabelText('Назад'));
+    expect(await screen.findByText('Незбережені зміни')).toBeTruthy(); // blocked, dialog shown
+    expect(screen.getByText('Шпаклювання стін')).toBeTruthy(); // still on the editor
+
+    fireEvent.click(screen.getByText('Вийти без збереження'));
+    expect(await screen.findByText('відкрито інший екран')).toBeTruthy(); // proceed() let it through
+  });
+
+  it('a pristine editor leaves without any dialog', async () => {
+    renderEditor();
+    await screen.findByText('Шпаклювання стін'); // seeded, nothing touched
+
+    fireEvent.click(screen.getByLabelText('Назад'));
+
+    expect(await screen.findByText('відкрито інший екран')).toBeTruthy();
+    expect(screen.queryByText('Незбережені зміни')).toBeNull();
   });
 
   it('warns when an additional line duplicates a position from another signed estimate', async () => {

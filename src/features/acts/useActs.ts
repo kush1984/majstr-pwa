@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
-import { newUuid } from '@/lib/uuid.ts';
 import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
+  WorkActStatus,
   WorkActUpdateRequest,
 } from '@/api/types.ts';
 
@@ -35,11 +35,14 @@ export function useActProgress(projectId: string, enabled = true) {
   });
 }
 
-/** Create a draft act. A client UUID rides along so a retried create is idempotent. */
+/** Create a draft act. A client UUID rides along so a retried create is idempotent — generated
+ *  ONCE per logical create (in mutate), never per attempt: a per-attempt UUID would defeat the
+ *  X-Entity-Uuid replay the header exists for (review fix). */
 export function useCreateAct(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (req: WorkActCreateRequest) => actsApi.create(projectId, req, newUuid()),
+    mutationFn: ({ req, id }: { req: WorkActCreateRequest; id: string }) =>
+      actsApi.create(projectId, req, id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: actsKey(projectId) });
     },
@@ -68,6 +71,20 @@ export function useReplaceActItems(id: string, projectId: string) {
   return useMutation({
     mutationFn: (req: WorkActItemsRequest) => actsApi.replaceItems(id, req),
     onSuccess: invalidate,
+  });
+}
+
+/** Owner-side status move (recall / mark rejected / resurrect) — see actsApi.changeStatus. */
+export function useChangeActStatus(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: WorkActStatus }) =>
+      actsApi.changeStatus(id, status),
+    onSuccess: (_act, { id }) => {
+      void qc.invalidateQueries({ queryKey: actKey(id) });
+      void qc.invalidateQueries({ queryKey: actsKey(projectId) });
+      void qc.invalidateQueries({ queryKey: progressKey(projectId) });
+    },
   });
 }
 

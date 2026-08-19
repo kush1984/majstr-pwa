@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
+import { newUuid } from '@/lib/uuid.ts';
 import { useCreateAct } from './useActs.ts';
 import type { WorkActResponse } from '@/api/types.ts';
 
@@ -9,7 +10,10 @@ import type { WorkActResponse } from '@/api/types.ts';
  *  already closed the object. Both mirror the backend guards in {@code WorkActCreator}. */
 export type ActBlock = 'open' | 'final' | null;
 
-const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+// LOCAL calendar day, not toISOString() (which is UTC): issuedAt is the legal date on the document,
+// and before ~03:00 Kyiv time the UTC date is still yesterday (review fix).
+const isoDay = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function actCreateBlock(acts: WorkActResponse[]): ActBlock {
   if (acts.some((a) => a.status === 'DRAFT' || a.status === 'SENT')) return 'open';
@@ -30,7 +34,8 @@ function defaultPeriodFrom(acts: WorkActResponse[], objectCreatedAt?: string): s
     next.setDate(next.getDate() + 1);
     return isoDay(next);
   }
-  return (objectCreatedAt ?? new Date().toISOString()).slice(0, 10);
+  // createdAt is a UTC instant — take the LOCAL day it falls on, same rule as isoDay.
+  return isoDay(objectCreatedAt ? new Date(objectCreatedAt) : new Date());
 }
 
 /** Shared create-then-open flow for both entry points. `scopeEstimateId` (the economy panel
@@ -44,14 +49,18 @@ export function useNewAct(objectId: string, objectCreatedAt?: string) {
     const today = isoDay(new Date());
     create.mutate(
       {
-        kind: 'INTERIM',
-        issuedAt: today,
-        periodFrom: defaultPeriodFrom(acts, objectCreatedAt),
-        periodTo: today,
-        showMaterials: true,
-        // The «ДОВІДКОВО» reference only makes sense from the second act on — off by default,
-        // the master opts in per act (acts-fix; mirrors the backend WorkActCreator default).
-        showCumulative: false,
+        req: {
+          kind: 'INTERIM',
+          issuedAt: today,
+          periodFrom: defaultPeriodFrom(acts, objectCreatedAt),
+          periodTo: today,
+          showMaterials: true,
+          // The «ДОВІДКОВО» reference only makes sense from the second act on — off by default,
+          // the master opts in per act (acts-fix; mirrors the backend WorkActCreator default).
+          showCumulative: false,
+        },
+        // One UUID per logical create — a retry replays THIS create instead of minting a twin.
+        id: newUuid(),
       },
       {
         onSuccess: (act) => {

@@ -414,11 +414,13 @@ export function useDeleteItems(estimateId: string) {
 /**
  * Copy this estimate with a markup on the chosen lines — the foreman's crew price vs client price.
  *
- * <b>Online only, and that is a money decision rather than a shortcut.</b> Composing it on the
- * device would have to create the copy through the ordinary "new estimate + N lines" path, and
- * that path carries no `sourceUnitPrice`. The estimate would look perfectly right while the object
- * economy silently counted the whole client total as earnings instead of just the markup. A clear
- * "потрібен інтернет" beats quietly wrong money.
+ * <b>Online only, and that is a money decision rather than a shortcut.</b> The server-side copy
+ * atomically flips the SOURCE out of the economy (`countInEconomy=false`) and stamps the copy's
+ * provenance (`duplicatedFromId`, per-line `sourceUnitPrice`). Composing it on the device through
+ * the ordinary "new estimate + N lines" path would do neither: both estimates would count in «За
+ * договором» until the master noticed, and the supersede-on-sign banner would never fire. A clear
+ * "потрібен інтернет" beats quietly wrong money. (Note: `sourceUnitPrice` is provenance data —
+ * the economy itself is the V95 simplified model: profit = contracted − expense journal.)
  */
 export function useDuplicateEstimate(estimateId: string) {
   const qc = useQueryClient();

@@ -6,6 +6,7 @@ import type {
   WorkActItemsRequest,
   WorkActResponse,
   WorkActSignOfflineRequest,
+  WorkActStatus,
   WorkActUpdateRequest,
 } from './types.ts';
 
@@ -49,6 +50,11 @@ export const actsApi = {
 
   signOffline(id: string, req: WorkActSignOfflineRequest): Promise<WorkActResponse> {
     return api.post<WorkActResponse>(`/api/acts/${id}/sign-offline`, req).then((r) => r.data);
+  },
+
+  /** Owner-side status move: SENT→DRAFT (recall), SENT→REJECTED (client declined), REJECTED→DRAFT. */
+  changeStatus(id: string, status: WorkActStatus): Promise<WorkActResponse> {
+    return api.patch<WorkActResponse>(`/api/acts/${id}/status`, { status }).then((r) => r.data);
   },
 
   /** Same blob pattern as the estimate PDF — a bearer fetch, not a plain <a href>. */
