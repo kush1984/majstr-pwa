@@ -69,3 +69,38 @@ configure({ asyncUtilTimeout: 10_000 });
  * This setting stays regardless: it is right for the general case and costs nothing on a passing
  * run, since `waitFor` polls and returns the moment the condition holds.
  */
+
+/**
+ * jsdom and Node's built-in `fetch` disagree about `AbortSignal`, and a **data router** navigation
+ * is what walks into it: react-router's `createClientSideRequest` does `new Request(path, {signal})`
+ * with a signal from `new AbortController()` — jsdom's controller — while `Request` comes from
+ * Node's undici, which brand-checks it against its OWN class and throws
+ * `RequestInit: Expected signal ("AbortSignal {}") to be an instance of AbortSignal`.
+ * The rejection is unhandled, the navigation never resolves, and the test dies on its timeout with
+ * no hint that routing was the culprit (two `ActEditorPage` leave-guard tests, 2026-08-20).
+ *
+ * There is no "just use the native controller" fix available here: in this environment
+ * `globalThis.AbortSignal` is already native, but `globalThis.AbortController` is jsdom's and Node
+ * exposes no other way to build a controller. So the incompatible `signal` is dropped instead —
+ * nothing under test aborts a request, and the app itself never passes a signal to `fetch`.
+ *
+ * Only patched when the mismatch is real (it reproduces on Node 24, not on CI's Node 22), so on a
+ * matching runtime the global `Request` stays untouched.
+ */
+const BaseRequest = globalThis.Request;
+const signalIsAccepted = (() => {
+  try {
+    new BaseRequest('http://localhost/probe', { signal: new AbortController().signal });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+if (!signalIsAccepted) {
+  globalThis.Request = class extends BaseRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      const { signal: _signal, ...rest } = init ?? {};
+      super(input, rest);
+    }
+  };
+}

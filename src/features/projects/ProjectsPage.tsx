@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
@@ -79,7 +79,14 @@ export function ProjectsPage() {
   // Fetch all once and filter client-side so the chips can show live counts.
   const { data, isPending, isError, refetch } = useProjects();
   const all = useMemo(() => data ?? [], [data]);
-  const filters = showArchived ? [...BASE_FILTERS, ...ARCHIVED_FILTERS] : BASE_FILTERS;
+  const hasArchived = useMemo(() => all.some((p) => isTerminalStage(p.stage)), [all]);
+  // The reveal is a sticky PREFERENCE, but it describes DATA that can vanish underneath it: delete
+  // the last COMPLETED/CANCELLED object and there is nothing left to reveal or hide. Everything the
+  // reveal drives reads this derived value instead, so the FAB and the two archived chips can't
+  // outlive the objects they belong to. `showArchived` itself is left alone — the preference still
+  // applies the moment a new object is closed out.
+  const archivedVisible = showArchived && hasArchived;
+  const filters = archivedVisible ? [...BASE_FILTERS, ...ARCHIVED_FILTERS] : BASE_FILTERS;
 
   // FREE caps the number of objects EVER created (lifetime `projectsUsed`, not the live count) so a
   // delete can't slip past it — the backend enforces the same. Block "new object" preemptively.
@@ -89,17 +96,29 @@ export function ProjectsPage() {
   const counts = useMemo<Record<Filter, number>>(
     () => ({
       // «Усі» counts what «Усі» shows: live-only unless archived is revealed.
-      ALL: showArchived ? all.length : all.filter((p) => !isTerminalStage(p.stage)).length,
+      ALL: archivedVisible ? all.length : all.filter((p) => !isTerminalStage(p.stage)).length,
       ASSESSMENT: all.filter((p) => p.stage === 'ASSESSMENT').length,
       PENDING_SIGNATURE: all.filter((p) => p.stage === 'PENDING_SIGNATURE').length,
       IN_PROGRESS: all.filter((p) => p.stage === 'IN_PROGRESS').length,
       COMPLETED: all.filter((p) => p.stage === 'COMPLETED').length,
       CANCELLED: all.filter((p) => p.stage === 'CANCELLED').length,
     }),
-    [all, showArchived],
+    [all, archivedVisible],
   );
-  const shown = useMemo(() => all.filter((p) => matches(p, filter, showArchived)), [all, filter, showArchived]);
-  const hasArchived = useMemo(() => all.some((p) => isTerminalStage(p.stage)), [all]);
+  const shown = useMemo(
+    () => all.filter((p) => matches(p, filter, archivedVisible)),
+    [all, filter, archivedVisible],
+  );
+
+  // The same bounce `toggleArchived` does on a tap, triggered by the DATA instead: deleting the last
+  // archived object while parked on its chip would strand the master on a list that can never fill
+  // again (the chip is gone with it). Guarded on `data` — before the first load `all` is empty and
+  // every deep-link into ?stage=COMPLETED would bounce itself before its objects ever arrived.
+  useEffect(() => {
+    if (data && !hasArchived && (filter === 'COMPLETED' || filter === 'CANCELLED')) {
+      setParams({}, { replace: true });
+    }
+  }, [data, hasArchived, filter, setParams]);
 
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { stage: f }, { replace: true });
@@ -217,10 +236,12 @@ export function ProjectsPage() {
         </>
       )}
 
-      {/* View settings live behind the FAB so the toolbar stays clean. Shown only when there is
-          something to reveal (archived objects exist) or they are currently revealed (so the master
-          can hide them again). */}
-      {(hasArchived || showArchived) && (
+      {/* View settings live behind the FAB so the toolbar stays clean. Shown only when archived
+          objects actually exist — `hasArchived` counts the FULL list, so it is already true while
+          they are revealed. (It used to be `hasArchived || showArchived`, and that second branch was
+          reachable ONLY with zero archived objects: after deleting the last one the FAB stayed on
+          screen offering to hide what was no longer there.) */}
+      {hasArchived && (
         <Fab ariaLabel={t('projects.viewSettings')}>
           {(close) => (
             <FabAction
