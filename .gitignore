@@ -22,6 +22,9 @@ dev-dist
 .vscode
 *.iml
 
+# Serena MCP tool artifacts (local only)
+.serena/
+
 # OS
 .DS_Store
 Thumbs.db
