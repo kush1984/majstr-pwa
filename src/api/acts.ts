@@ -4,6 +4,8 @@ import type {
   ActProgressResponse,
   WorkActCreateRequest,
   WorkActItemsRequest,
+  WorkActReceiptRequest,
+  WorkActReceiptResponse,
   WorkActResponse,
   WorkActSignOfflineRequest,
   WorkActStatus,
@@ -50,6 +52,41 @@ export const actsApi = {
 
   signOffline(id: string, req: WorkActSignOfflineRequest): Promise<WorkActResponse> {
     return api.post<WorkActResponse>(`/api/acts/${id}/sign-offline`, req).then((r) => r.data);
+  },
+
+  /**
+   * Attach a receipt: an amount the master types plus an optional photo of the paper. Multipart,
+   * so the JSON Content-Type is unset for the browser to write its own boundary (same as photosApi).
+   */
+  addReceipt(
+    actId: string,
+    req: { label: string; amount: number; issuedAt?: string | null; file?: File | null },
+  ): Promise<WorkActReceiptResponse> {
+    const form = new FormData();
+    if (req.file) form.append('file', req.file);
+    form.append('label', req.label);
+    form.append('amount', String(req.amount));
+    if (req.issuedAt) form.append('issuedAt', req.issuedAt);
+    return api
+      .post<WorkActReceiptResponse>(`/api/acts/${actId}/receipts`, form, {
+        headers: { 'Content-Type': undefined } as unknown as Record<string, string>,
+      })
+      .then((r) => r.data);
+  },
+
+  updateReceipt(actId: string, receiptId: string, req: WorkActReceiptRequest): Promise<WorkActReceiptResponse> {
+    return api
+      .patch<WorkActReceiptResponse>(`/api/acts/${actId}/receipts/${receiptId}`, req)
+      .then((r) => r.data);
+  },
+
+  removeReceipt(actId: string, receiptId: string): Promise<void> {
+    return api.delete(`/api/acts/${actId}/receipts/${receiptId}`).then(() => undefined);
+  },
+
+  /** Path of a receipt photo — fed to photosApi.fetchBlobUrl, which carries the bearer token. */
+  receiptFileUrl(actId: string, receiptId: string): string {
+    return `/api/acts/${actId}/receipts/${receiptId}/file`;
   },
 
   /** Owner-side status move: SENT→DRAFT (recall), SENT→REJECTED (client declined), REJECTED→DRAFT. */

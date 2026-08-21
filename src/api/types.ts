@@ -1338,6 +1338,16 @@ export interface WorkActItemResponse {
   sortOrder: number;
 }
 
+export interface WorkActReceiptResponse {
+  id: string;
+  label: string;
+  amount: number;
+  issuedAt: string | null;
+  /** A photo of the paper was uploaded — fetch it from the act's receipt file endpoint. */
+  hasPhoto: boolean;
+  sortOrder: number;
+}
+
 export interface WorkActResponse {
   id: string;
   projectId: string;
@@ -1354,6 +1364,8 @@ export interface WorkActResponse {
   note: string | null;
   showMaterials: boolean;
   showCumulative: boolean;
+  /** Post each receipt as a MATERIALS expense when the act is signed (default on). */
+  receiptsToExpenses: boolean;
   advanceOffset: number | null;
   retentionPercent: number | null;
   sentAt: string | null;
@@ -1362,7 +1374,9 @@ export interface WorkActResponse {
   signedOffline: boolean;
   addendumEstimateId: string | null;
   items: WorkActItemResponse[];
+  receipts: WorkActReceiptResponse[];
   total: number;
+  receiptsTotal: number;
   payable: number;
   createdAt: string;
   updatedAt: string;
@@ -1382,7 +1396,16 @@ export interface WorkActCreateRequest {
   advanceOffset?: number | null;
 }
 
-export type WorkActUpdateRequest = WorkActCreateRequest;
+export interface WorkActUpdateRequest extends WorkActCreateRequest {
+  receiptsToExpenses?: boolean;
+}
+
+/** Edit an attached receipt (the photo is set once, at upload). */
+export interface WorkActReceiptRequest {
+  label: string;
+  amount: number;
+  issuedAt?: string | null;
+}
 
 export interface WorkActItemLine {
   estimateItemId: string | null;

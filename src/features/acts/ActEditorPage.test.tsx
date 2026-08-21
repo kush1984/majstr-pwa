@@ -17,9 +17,17 @@ vi.mock('@/api/acts.ts', () => ({
     signOffline: vi.fn(() => Promise.resolve({} as WorkActResponse)),
     remove: vi.fn(() => Promise.resolve()),
     fetchPdf: vi.fn(),
+    addReceipt: vi.fn(() => Promise.resolve({})),
+    updateReceipt: vi.fn(() => Promise.resolve({})),
+    removeReceipt: vi.fn(() => Promise.resolve()),
+    receiptFileUrl: (actId: string, receiptId: string) => `/api/acts/${actId}/receipts/${receiptId}/file`,
   },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@/api/portal.ts', () => ({
+  actPortalApi: { publish: vi.fn(() => Promise.resolve({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true })), sendEmail: vi.fn(), state: vi.fn() },
+}));
+vi.mock('@/api/photos.ts', () => ({ photosApi: { fetchBlobUrl: vi.fn(() => Promise.resolve('blob:receipt')) } }));
 
 function money(n: number): string {
   return formatMoney(n).replace(/\s+/g, ' ');
@@ -30,9 +38,9 @@ function draftAct(): WorkActResponse {
     id: 'a1', projectId: 'p1', number: '7', title: null, kind: 'INTERIM', status: 'DRAFT',
     issuedAt: '2026-08-14', periodFrom: '2026-08-01', periodTo: '2026-08-14',
     place: null, contractRef: null, note: null, showMaterials: true, showCumulative: true,
-    advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
-    signerName: null, signedOffline: false, addendumEstimateId: null, items: [],
-    total: 0, payable: 0, createdAt: '2026-08-14', updatedAt: '2026-08-14',
+    receiptsToExpenses: true, advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
+    signerName: null, signedOffline: false, addendumEstimateId: null, items: [], receipts: [],
+    total: 0, receiptsTotal: 0, payable: 0, createdAt: '2026-08-14', updatedAt: '2026-08-14',
   };
 }
 
@@ -264,5 +272,46 @@ describe('ActEditorPage', () => {
     fireEvent.change(nameField, { target: { value: 'Фарбування стель' } });
 
     expect(await screen.findByText(/вже є в кошторисі «Чистові»/)).toBeTruthy();
+  });
+
+  it('lists the act receipts, their subtotal, and bills them on top of the works', async () => {
+    // The master's ask: «чек1 — сума, чек2 — сума, разом», added to what the act is worth.
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(),
+      receipts: [
+        { id: 'r1', label: 'Епіцентр — клей', amount: 2400, issuedAt: '2026-08-03', hasPhoto: true, sortOrder: 0 },
+        { id: 'r2', label: 'Нова Пошта', amount: 600, issuedAt: null, hasPhoto: false, sortOrder: 1 },
+      ],
+      receiptsTotal: 3000,
+    });
+    renderEditor();
+
+    expect(await screen.findByText('Епіцентр — клей')).toBeTruthy();
+    expect(screen.getByText('Нова Пошта')).toBeTruthy();
+    // Works 0 + receipts 3 000 → «До сплати» carries them; the subtotal row spells them out.
+    expect(screen.getAllByText(money(3000)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('saves from the button on the screen itself, not only from the FAB', async () => {
+    // Master feedback: leaving the editor to hunt for «Зберегти» in the FAB was the loudest
+    // complaint about this screen — the top bar keeps it one tap away while scrolling.
+    renderEditor();
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Зберегти/ }));
+
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
+    expect(actsApi.updateHeader).toHaveBeenCalled();
+  });
+
+  it('shares an open act from its own screen', async () => {
+    // «Поділитися з клієнтом» used to exist only on the object's Акти tab (master feedback).
+    renderEditor();
+    await screen.findByText('Шпаклювання стін');
+
+    fireEvent.click(screen.getByLabelText('Поділитися з клієнтом'));
+
+    expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
   });
 });

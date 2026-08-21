@@ -23,6 +23,8 @@ import { routes } from '@/lib/config.ts';
 import {
   useAct, useActProgress, useUpdateActHeader, useReplaceActItems, useSignActOffline, useDeleteAct,
 } from './useActs.ts';
+import { ActReceiptsSection } from './ActReceiptsSection.tsx';
+import { ActShareSheet } from './ActShareSheet.tsx';
 import { UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
 import type { ActProgressLine, ItemType, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
@@ -49,6 +51,7 @@ function categorize(lines: ActProgressLine[]): [string, ActProgressLine[]][] {
 function formSnapshot(s: {
   kind: WorkActKind; title: string; issuedAt: string; periodFrom: string; periodTo: string;
   contractRef: string; advance: string; showMaterials: boolean; showCumulative: boolean;
+  receiptsToExpenses: boolean;
   qty: Record<string, string>; additional: Additional[];
 }): string {
   return JSON.stringify(s);
@@ -91,12 +94,16 @@ export function ActEditorPage() {
   // false, matching the server-side default — seeding overwrites it, but the pre-seed flash
   // shouldn't advertise a block the act won't render.
   const [showCumulative, setShowCumulative] = useState(false);
+  // Receipts are pass-through money: booking them as MATERIALS expenses on sign keeps profit
+  // honest. Off for the master who already logs his receipts in the expense journal.
+  const [receiptsToExpenses, setReceiptsToExpenses] = useState(true);
   const [qty, setQty] = useState<Record<string, string>>({}); // estimateItemId → quantity
   const [additional, setAdditional] = useState<Additional[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // The form as it was seeded or last saved — the reference the dirty check compares against.
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
 
@@ -113,6 +120,7 @@ export function ActEditorPage() {
     setAdvance(a.advanceOffset == null ? '' : String(a.advanceOffset));
     setShowMaterials(a.showMaterials);
     setShowCumulative(a.showCumulative);
+    setReceiptsToExpenses(a.receiptsToExpenses);
     const seededQty: Record<string, string> = {};
     const seededAdditional: Additional[] = [];
     for (const it of a.items) {
@@ -126,6 +134,7 @@ export function ActEditorPage() {
       periodTo: a.periodTo, contractRef: a.contractRef ?? '',
       advance: a.advanceOffset == null ? '' : String(a.advanceOffset),
       showMaterials: a.showMaterials, showCumulative: a.showCumulative,
+      receiptsToExpenses: a.receiptsToExpenses,
       qty: seededQty, additional: seededAdditional,
     }));
     setSeeded(true);
@@ -179,7 +188,11 @@ export function ActEditorPage() {
     for (const a of additional) sum += num(a.quantity) * num(a.unitPrice);
     return sum;
   }, [qty, additional, progress.data, showMaterials]);
-  const payable = Math.max(0, total - num(advance));
+  // Receipts are saved the moment they are added, so they come straight off the loaded act — they
+  // are money the client owes on this act, hence inside «До сплати», not a decorative appendix.
+  const receipts = act.data?.receipts ?? [];
+  const receiptsTotal = receipts.reduce((sum, r) => sum + r.amount, 0);
+  const payable = Math.max(0, total + receiptsTotal - num(advance));
 
   // Auto-title (master feedback): when every selected estimate line shares ONE category, that
   // category IS the act's stage name — offer it live until the master types his own.
@@ -211,7 +224,7 @@ export function ActEditorPage() {
   // auto-title counts as a pending change exactly when it would be saved.
   const currentSnapshot = formSnapshot({
     kind, title: effectiveTitle, issuedAt, periodFrom, periodTo, contractRef, advance,
-    showMaterials, showCumulative, qty, additional,
+    showMaterials, showCumulative, receiptsToExpenses, qty, additional,
   });
   const dirty = seeded && !signed && savedSnapshot !== null && currentSnapshot !== savedSnapshot;
   // In-app back/swipe with unsaved edits → a ConfirmDialog instead of silent loss (review fix).
@@ -296,7 +309,7 @@ export function ActEditorPage() {
         title: effectiveTitle.trim() || null,
         contractRef: contractRef.trim() || null,
         advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative,
+        showMaterials, showCumulative, receiptsToExpenses,
       });
       await replaceItems.mutateAsync({ items: buildItems() });
       setSavedSnapshot(currentSnapshot); // the form as sent is now the saved reference
@@ -315,7 +328,7 @@ export function ActEditorPage() {
         title: effectiveTitle.trim() || null,
         contractRef: contractRef.trim() || null,
         advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative,
+        showMaterials, showCumulative, receiptsToExpenses,
       });
       await replaceItems.mutateAsync({ items: buildItems() });
       await signOffline.mutateAsync(signerName.trim());
@@ -359,14 +372,30 @@ export function ActEditorPage() {
 
   return (
     <div className="mx-auto max-w-2xl pb-28">
-      <div className="mb-3 flex items-center gap-3">
+      {/* Sticky top bar (master feedback): «Зберегти» and «Поділитися» are on the screen itself, not
+          only behind the FAB — the editor is a long scroll and hunting for Save in a menu after every
+          edit was the loudest complaint about it. Sticky so both stay one tap away while ticking
+          lines far down the page. */}
+      <div className="sticky top-0 z-30 -mx-4 mb-3 flex items-center gap-2 border-b border-border bg-app px-4 py-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
         <button type="button" onClick={() => navigate(routes.project(projectId) + '?tab=acts')}
           aria-label={t('common.back')}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary">←</button>
-        <span className="text-sm font-semibold text-primary">
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary">←</button>
+        <span className="truncate text-sm font-semibold text-primary">
           {t('acts.title', { number: act.data.number })}
         </span>
-        <Badge variant={ACT_STATUS_VARIANT[act.data.status]}>{t('acts.status.' + act.data.status)}</Badge>
+        <span className="shrink-0">
+          <Badge variant={ACT_STATUS_VARIANT[act.data.status]}>{t('acts.status.' + act.data.status)}</Badge>
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => setShareOpen(true)} aria-label={t('acts.share')}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
+          {!signed && (
+            <Button className="px-3 py-2" loading={updateHeader.isPending || replaceItems.isPending}
+              onClick={() => void onSave()}>
+              {dirty ? t('common.save') + ' •' : t('common.save')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Header */}
@@ -545,6 +574,9 @@ export function ActEditorPage() {
         )}
       </div>
 
+      <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+        toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses} />
+
       {/* Advance + totals */}
       {!signed && (
         <Field label={t('acts.advance')}>
@@ -553,6 +585,7 @@ export function ActEditorPage() {
       )}
       <div className="mt-3 space-y-1 rounded-card border border-border bg-surface-sunken p-3.5 text-sm">
         <Row label={t('acts.total')} value={formatMoney(total)} />
+        {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoney(receiptsTotal)} />}
         {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoney(num(advance))} />}
         <Row label={t('acts.payable')} value={formatMoney(payable)} bold />
       </div>
@@ -609,6 +642,8 @@ export function ActEditorPage() {
           onError: (err) => toast.error(toAppError(err).message),
         })}
         onClose={() => setConfirmDelete(false)} />
+
+      <ActShareSheet actId={id} open={shareOpen} onClose={() => setShareOpen(false)} />
 
       {/* Unsaved edits + an in-app back/swipe → an explicit choice instead of silent loss. */}
       <ConfirmDialog

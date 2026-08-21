@@ -3,6 +3,7 @@ import { actsApi } from '@/api/acts.ts';
 import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
+  WorkActReceiptRequest,
   WorkActStatus,
   WorkActUpdateRequest,
 } from '@/api/types.ts';
@@ -106,5 +107,33 @@ export function useSignActOffline(id: string, projectId: string) {
     onSuccess: () => {
       invalidate();
     },
+  });
+}
+
+/** Receipts are saved the moment they are added — a file upload can't ride the header's
+ *  «Зберегти», and a photo the master already picked must not be lost by leaving the screen. */
+export function useAddActReceipt(id: string, projectId: string) {
+  const invalidate = useActWriter(id, projectId);
+  return useMutation({
+    mutationFn: (req: { label: string; amount: number; issuedAt?: string | null; file?: File | null }) =>
+      actsApi.addReceipt(id, req),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateActReceipt(id: string, projectId: string) {
+  const invalidate = useActWriter(id, projectId);
+  return useMutation({
+    mutationFn: ({ receiptId, req }: { receiptId: string; req: WorkActReceiptRequest }) =>
+      actsApi.updateReceipt(id, receiptId, req),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteActReceipt(id: string, projectId: string) {
+  const invalidate = useActWriter(id, projectId);
+  return useMutation({
+    mutationFn: (receiptId: string) => actsApi.removeReceipt(id, receiptId),
+    onSuccess: invalidate,
   });
 }

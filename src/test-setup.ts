@@ -104,3 +104,16 @@ if (!signalIsAccepted) {
     }
   };
 }
+
+/**
+ * jsdom implements neither `URL.createObjectURL` nor `URL.revokeObjectURL`. Every screen that
+ * streams an authenticated image (object photos, act receipts) turns a fetched blob into an object
+ * URL and revokes it on unmount, so without these the component throws during cleanup — a failure
+ * that surfaces far away from the code under test.
+ */
+if (typeof URL.createObjectURL !== 'function') {
+  URL.createObjectURL = () => 'blob:test';
+}
+if (typeof URL.revokeObjectURL !== 'function') {
+  URL.revokeObjectURL = () => {};
+}
