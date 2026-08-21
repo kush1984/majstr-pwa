@@ -1428,3 +1428,14 @@ export interface ActShareStateResponse {
   url: string | null;
   shared: boolean;
 }
+
+/** One estimate's own share link (`?t=`) — one link, one estimate, independent of the object's
+ *  portal links. Minted/reused by `POST /api/estimates/{id}/share`. */
+export interface ShareLinkResponse {
+  id: string;
+  token: string;
+  url: string;
+  createdAt: string;
+  expiresAt: string | null;
+  revoked: boolean;
+}

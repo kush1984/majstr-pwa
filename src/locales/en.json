@@ -1519,6 +1519,7 @@
     "sheetTitle": "Client portal",
     "pickHint": "Pick the estimates the client will see. They all share one page — each is signed separately.",
     "pickHintSigned": "Pick the signed estimates the client will see. They all share one page.",
+    "singleHint": "A separate link to this estimate — the client sees only it. The object's portal is left untouched.",
     "noSignedEstimates": "No signed estimates yet — they'll appear here as soon as one is signed.",
     "noUnsignedEstimates": "No estimates awaiting a signature — signed ones are shown in the Economy tab.",
     "loadError": "Could not load the estimates",

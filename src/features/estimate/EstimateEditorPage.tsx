@@ -578,9 +578,8 @@ export function EstimateEditorPage() {
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           project={project.data}
-          preselectEstimateId={id}
+          singleEstimateId={id}
           onNeedEmailVerify={() => setEmailGateOpen(true)}
-          mode={signed ? 'economy' : 'portal'}
         />
       )}
 

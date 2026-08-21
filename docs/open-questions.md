@@ -136,7 +136,9 @@ one-line summary — keep the item in the file as a record.
   `/refresh` — old token → 401 — and TTL is 30 days via `REFRESH_TOKEN_TTL_DAYS`.)
 
 ### Password reset UI
-- **Status:** OPEN
+- **Status:** RESOLVED (2026-08-20) — both screens shipped, each with its own spec:
+  `ForgotPasswordPage` and `ResetPasswordPage`, reachable at `routes.resetPassword`
+  (`/reset-password`).
 - **Since:** initial scaffold
 - **Context:** `LoginPage` already has a TODO comment for "Забули
   пароль?". Blocked on backend endpoints + email transport.
@@ -232,7 +234,10 @@ one-line summary — keep the item in the file as a record.
   let the user pick an icon on create. Low priority — cosmetic.
 
 ### Plan project-limit is a client-side constant
-- **Status:** OPEN
+- **Status:** RESOLVED (2026-08-20) — `usePlanLimits` reads `planApi.limits` from the server and
+  `isAtLimit` treats a null max as unlimited; no FREE constant is left in the UI. Note the server's
+  `projectsUsed` is a LIFETIME count (V107), so the bar deliberately does not shrink when an object
+  is deleted.
 - **Since:** step 6
 - **Context:** Profile's limit bar reads `FREE = 3` from a constant in
   `ProfilePage.tsx` (used count is real, from `GET /api/projects`). The real
@@ -289,7 +294,9 @@ one-line summary — keep the item in the file as a record.
 ## Quality & tooling
 
 ### ESLint config missing
-- **Status:** OPEN
+- **Status:** RESOLVED (2026-08-20) — `eslint.config.js` is committed, the script is
+  `eslint . --max-warnings 0`, and CI's `verify` job runs it as the FIRST gate step, so a single
+  stray warning reddens the build.
 - **Since:** initial scaffold
 - **Context:** `npm run lint` runs `eslint majstr-pwa` (wrong target —
   the project root *is* `majstr-pwa`, should be `eslint .`) and there

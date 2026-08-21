@@ -1,5 +1,5 @@
 import { api } from './client.ts';
-import type { ActShareStateResponse, PortalStateResponse } from './types.ts';
+import type { ActShareStateResponse, PortalStateResponse, ShareLinkResponse } from './types.ts';
 
 /**
  * Owner-side control of the object's SIGNATURE portal (Кошторис tab) — any-status estimates,
@@ -52,6 +52,26 @@ export const economyPortalApi = {
   sendEmail(projectId: string): Promise<PortalStateResponse> {
     return api
       .post<PortalStateResponse>(`/api/projects/${projectId}/portal/economy/send-email`)
+      .then((r) => r.data);
+  },
+};
+
+/**
+ * ONE estimate's own share link (`?t=`) — what "поділитися" from the estimate editor mints. Unlike
+ * {@link portalApi}/{@link economyPortalApi}, which publish a SET onto the object's single link,
+ * this link points at exactly one estimate and is independent of them: minting it neither shows
+ * nor hides anything on the object's portal. `create` is idempotent — the same estimate hands
+ * back the same URL until that link is revoked or expires.
+ */
+export const estimateShareApi = {
+  create(estimateId: string): Promise<ShareLinkResponse> {
+    return api.post<ShareLinkResponse>(`/api/estimates/${estimateId}/share`).then((r) => r.data);
+  },
+
+  /** 400 CLIENT_EMAIL_MISSING when the object's client has no email on file. */
+  sendEmail(estimateId: string): Promise<ShareLinkResponse> {
+    return api
+      .post<ShareLinkResponse>(`/api/estimates/${estimateId}/share/send-email`)
       .then((r) => r.data);
   },
 };

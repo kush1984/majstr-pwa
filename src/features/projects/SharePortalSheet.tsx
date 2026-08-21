@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal.tsx';
@@ -8,7 +8,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
-import { portalApi, economyPortalApi } from '@/api/portal.ts';
+import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
@@ -21,33 +21,39 @@ import {
 } from '@/features/clients/ClientPicker.tsx';
 
 /**
- * "Поділитися з клієнтом" — the object's portal. The master ticks which
- * estimates the client will see (one link shows them all as sections), then
- * copies the link or emails it. Copy/email always PUBLISH first (PUT the
- * ticked set), so the URL matches what was just chosen — nothing is shared
- * implicitly.
+ * "Поділитися з клієнтом" — two entry points that mint two genuinely different links, which is why
+ * the scope difference is not just a display filter:
  *
- * Gate handling mirrors the old per-estimate sheet: an unverified contractor
- * (403 EMAIL_NOT_VERIFIED) bounces to the parent's verify modal; a missing
- * client email (400 CLIENT_EMAIL_MISSING) reveals the inline add-email field.
+ * - **From the object** (root / Економіка) — the master ticks which estimates the client will see
+ *   and they all publish onto the OBJECT's one portal link, as sections of one page. Copy/email
+ *   always PUBLISH first (PUT the ticked set), so the URL matches what was just chosen.
+ * - **From one estimate's editor** (`singleEstimateId`) — mints that ESTIMATE's own `?t=` link
+ *   instead (`estimateShareApi`). One link, one document: no picker, and the object's portal is
+ *   neither read nor touched, so sharing one estimate can never add to — or quietly drop things
+ *   from — what an already-sent object link shows.
+ *
+ * Gate handling is shared: an unverified contractor (403 EMAIL_NOT_VERIFIED) bounces to the
+ * parent's verify modal; a missing client email (400 CLIENT_EMAIL_MISSING) reveals the inline
+ * add-email field.
  */
 export function SharePortalSheet({
   open,
   onClose,
   project,
-  preselectEstimateId,
+  singleEstimateId,
   onNeedEmailVerify,
   mode,
 }: {
   open: boolean;
   onClose: () => void;
   project: ProjectResponse;
-  /** Ticked in addition to the already-visible set (the editor's own estimate). */
-  preselectEstimateId?: string;
   onNeedEmailVerify: () => void;
+} & (
+  /** Sharing ONE estimate on its own `?t=` link — no picker, no set, the object's portal untouched. */
+  | { singleEstimateId: string; mode?: never }
   /**
-   * Which of the two genuinely separate portal contexts this sheet publishes to — they are
-   * different links/tokens on the server, so this isn't just a display filter:
+   * Sharing the OBJECT's portal link, in one of its two genuinely separate contexts (different
+   * links/tokens on the server):
    * - 'portal' (SIGNATURE, Кошторис tab) — any non-SIGNED estimate, for the client to sign; never
    *   has a payments toggle. A SIGNED estimate lives only in Економіка (economy-rework iteration),
    *   so the picker excludes it here even though the server would technically accept it.
@@ -57,14 +63,15 @@ export function SharePortalSheet({
    * Either way, when the filtered list is empty the sheet collapses to just the neutral "nothing
    * yet" message — no picker/payments/publish chrome left dangling over an empty list.
    */
-  mode: 'portal' | 'economy';
-}) {
+  | { singleEstimateId?: never; mode: 'portal' | 'economy' }
+)) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  // Object-level share only — a single-estimate share has no set to seed from, so it never asks.
   const portal = useQuery({
     queryKey: ['portal', project.id, mode],
     queryFn: () => (mode === 'economy' ? economyPortalApi.state(project.id) : portalApi.state(project.id)),
-    enabled: open,
+    enabled: open && !singleEstimateId,
   });
 
   // null = "not initialised yet" — seeded from the server state once loaded.
@@ -79,7 +86,6 @@ export function SharePortalSheet({
     }
     if (portal.data && selected === null) {
       const initial = new Set(portal.data.estimates.filter((e) => e.visible).map((e) => e.id));
-      if (preselectEstimateId) initial.add(preselectEstimateId);
       // First-ever publish (nothing already shown, no editor-context preselect): default to the
       // obvious choice rather than an empty picker — the one pickable estimate if there's only
       // one, otherwise the most recently created one (the rest stay optional, one tap away).
@@ -98,7 +104,7 @@ export function SharePortalSheet({
       setSelected(initial);
       setPaymentsOn(portal.data.paymentsVisible);
     }
-  }, [open, portal.data, selected, preselectEstimateId, mode]);
+  }, [open, portal.data, selected, mode]);
 
   // A client just attached in this sheet (project prop is from the parent and
   // won't update until it refetches) — fold it in so email becomes available.
@@ -117,6 +123,26 @@ export function SharePortalSheet({
     selectedId: null,
     newClient: { fullName: '', phone: '', email: '' },
   });
+
+  // `handleError` is declared further down (it needs the client-email state); a ref lets the mint
+  // effect below use it without re-running whenever its identity changes.
+  const handleErrorRef = useRef<(err: unknown) => void>(() => {});
+  // The estimate's own link, minted on open. Kept out of react-query on purpose: this is a POST
+  // that mints/reuses server state, not a cacheable read.
+  const [singleUrl, setSingleUrl] = useState<string | null>(null);
+  const [minting, setMinting] = useState(false);
+  useEffect(() => {
+    if (!open || !singleEstimateId) { setSingleUrl(null); return; }
+    let alive = true;
+    setMinting(true);
+    estimateShareApi.create(singleEstimateId)
+      .then((link) => { if (alive) setSingleUrl(link.url); })
+      // Minting is what trips the plan / verify gates, so a failure here must land in the same
+      // place a failed publish does rather than leaving an empty sheet open.
+      .catch((err) => { if (alive) handleErrorRef.current(err); })
+      .finally(() => { if (alive) setMinting(false); });
+    return () => { alive = false; };
+  }, [open, singleEstimateId]);
 
   const email = client.data?.email ?? null;
   const allEstimates = portal.data?.estimates ?? [];
@@ -140,7 +166,7 @@ export function SharePortalSheet({
 
   const invalidateAfterShare = () => {
     void qc.invalidateQueries({ queryKey: ['portal', project.id] });
-    // Publishing flips newly-visible DRAFTs to SENT — refresh everything that
+    // Publishing (or minting an estimate link) flips a DRAFT to SENT — refresh everything that
     // shows an estimate status.
     void qc.invalidateQueries({ queryKey: ['projects'] });
     void qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -166,10 +192,16 @@ export function SharePortalSheet({
     }
   };
 
+  handleErrorRef.current = handleError;
+
+  // What "there is something to share" means differs per scope: a ticked set for the object's
+  // link, a successfully minted URL for the estimate's own one.
+  const nothingToShare = singleEstimateId ? !singleUrl : ticked.size === 0;
+
   const paymentsTicked = paymentsOn ?? false;
   // Nothing to publish from this context's angle — just say so. Any pick/publish/payments chrome
-  // below would dangle over an empty list.
-  const filteredEmpty = !portal.isPending && !portal.isError && list.length === 0;
+  // below would dangle over an empty list. A single-estimate share always has its one document.
+  const filteredEmpty = !singleEstimateId && !portal.isPending && !portal.isError && list.length === 0;
 
   /** Publishes the ticked set on the link that matches `mode` — the SIGNATURE endpoint has no
    *  payments concept at all, the ECONOMY one always carries the toggle's current value. */
@@ -185,6 +217,7 @@ export function SharePortalSheet({
       // Safari focus rules) while the portal itself published fine — never
       // show "скопійовано" unless it actually landed in the clipboard.
       const { copied, value } = await copyWhenReady(async () => {
+        if (singleEstimateId) return singleUrl ?? '';
         const state = await publish([...ticked]);
         return state.url ?? '';
       });
@@ -205,8 +238,13 @@ export function SharePortalSheet({
   const onEmail = async () => {
     setBusy('email');
     try {
-      await publish([...ticked]);
-      await (mode === 'economy' ? economyPortalApi.sendEmail(project.id) : portalApi.sendEmail(project.id));
+      if (singleEstimateId) {
+        // The estimate's link is already minted — nothing to publish, just mail it.
+        await estimateShareApi.sendEmail(singleEstimateId);
+      } else {
+        await publish([...ticked]);
+        await (mode === 'economy' ? economyPortalApi.sendEmail(project.id) : portalApi.sendEmail(project.id));
+      }
       invalidateAfterShare();
       toast.success(t('estimate.emailSent'));
       onClose();
@@ -297,10 +335,21 @@ export function SharePortalSheet({
         ) : (
           <>
             <p className="text-sm text-muted">
-              {t(mode === 'economy' ? 'portal.pickHintSigned' : 'portal.pickHint')}
+              {t(singleEstimateId
+                ? 'portal.singleHint'
+                : mode === 'economy' ? 'portal.pickHintSigned' : 'portal.pickHint')}
             </p>
 
-            {portal.isPending ? (
+            {singleEstimateId ? (
+              // One link, one estimate — no picker, because there is nothing to choose. The URL
+              // itself is shown: on a phone the master usually pastes it into a messenger, and
+              // seeing it is what makes "this opens only that кошторис" believable.
+              minting || !singleUrl ? (
+                <div className="py-6 text-center text-brand"><Spinner /></div>
+              ) : (
+                <Input readOnly value={singleUrl} onFocus={(e) => e.currentTarget.select()} />
+              )
+            ) : portal.isPending ? (
               <div className="py-6 text-center"><Spinner /></div>
             ) : portal.isError ? (
               <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
@@ -325,7 +374,7 @@ export function SharePortalSheet({
 
             {/* Payments visibility is a contract concern — only offered alongside signed acts
                 (Економіка); the SIGNATURE picker (mode 'portal') has no payments card at all. */}
-            {mode === 'economy' && !portal.isPending && !portal.isError && (
+            {mode === 'economy' && !singleEstimateId && !portal.isPending && !portal.isError && (
               <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
                 <input
                   type="checkbox"
@@ -341,7 +390,7 @@ export function SharePortalSheet({
             )}
 
             {email && (
-              <Button fullWidth disabled={ticked.size === 0} loading={busy === 'email'} onClick={onEmail}>
+              <Button fullWidth disabled={nothingToShare} loading={busy === 'email'} onClick={onEmail}>
                 {t('estimate.sendToEmail', { email })}
               </Button>
             )}
@@ -349,14 +398,14 @@ export function SharePortalSheet({
             <Button
               variant={email ? 'secondary' : 'primary'}
               fullWidth
-              disabled={ticked.size === 0}
+              disabled={nothingToShare}
               loading={busy === 'copy'}
               onClick={onCopy}
             >
               {t('estimate.copyLink')}
             </Button>
 
-            {ticked.size === 0 && serverVisibleCount > 0 && (
+            {!singleEstimateId && ticked.size === 0 && serverVisibleCount > 0 && (
               <Button variant="secondary" fullWidth loading={busy === 'hide'} onClick={onHideAll}>
                 {t('portal.hideAll')}
               </Button>

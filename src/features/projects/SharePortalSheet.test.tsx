@@ -4,13 +4,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
-import { portalApi, economyPortalApi } from '@/api/portal.ts';
+import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
 import { asInput } from '@/test/dom.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
   economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
+  estimateShareApi: { create: vi.fn(), sendEmail: vi.fn() },
 }));
 vi.mock('@/features/clients/useClients.ts', () => ({
   useClient: () => ({ data: { id: 'c1', fullName: 'Клієнт', phone: '+380', email: 'client@x.ua' } }),
@@ -42,17 +43,35 @@ const state: PortalStateResponse = {
   paymentsVisible: false,
 };
 
-function renderSheet(preselect?: string, mode: 'portal' | 'economy' = 'portal') {
+function wrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrapper = ({ children }: { children: ReactNode }) => (
+  return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
+}
+
+/** Object-level share — the master picks a set onto the OBJECT's portal link. */
+function renderSheet(mode: 'portal' | 'economy' = 'portal') {
   render(
     <SharePortalSheet open onClose={() => {}} project={project}
-      preselectEstimateId={preselect} onNeedEmailVerify={() => {}} mode={mode} />,
-    { wrapper },
+      onNeedEmailVerify={() => {}} mode={mode} />,
+    { wrapper: wrapper() },
   );
 }
+
+/** Single-estimate share — mints that ESTIMATE's own link, object portal untouched. */
+function renderSingle(estimateId: string, onNeedEmailVerify: () => void = () => {}) {
+  render(
+    <SharePortalSheet open onClose={() => {}} project={project}
+      singleEstimateId={estimateId} onNeedEmailVerify={onNeedEmailVerify} />,
+    { wrapper: wrapper() },
+  );
+}
+
+const shareLink = {
+  id: 'l1', token: 'tok-e2', url: 'https://majstr.pro/portal/index.html?t=tok-e2',
+  createdAt: '2026-07-02T00:00:00Z', expiresAt: null, revoked: false,
+};
 
 describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
   it('seeds the checkboxes from the server visibility state, with no payments toggle', async () => {
@@ -84,13 +103,57 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(state.url);
   });
 
-  it('pre-ticks the editor estimate on top of the server state', async () => {
-    vi.mocked(portalApi.state).mockResolvedValue(state);
-    renderSheet('e2');
+  it("shared from one estimate: mints that estimate's own link, object portal never even read", async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    renderSingle('e2');
 
-    await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
-    const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, true]);
+    expect(await screen.findByDisplayValue(shareLink.url)).toBeTruthy();
+    expect(estimateShareApi.create).toHaveBeenCalledWith('e2');
+    // No picker — and no set to seed one from, so the object's portal state isn't fetched at all.
+    expect(screen.queryAllByRole('checkbox')).toEqual([]);
+    expect(portalApi.state).not.toHaveBeenCalled();
+    expect(economyPortalApi.state).not.toHaveBeenCalled();
+    expect(screen.getByText(/клієнт побачить лише його/)).toBeTruthy();
+    expect(screen.queryByText(/Оберіть кошториси/)).toBeNull();
+  });
+
+  it('shared from one estimate: copying publishes nothing onto the object link', async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSingle('e2');
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(shareLink.url));
+    // The whole point of the separate link: what the object's portal shows is left alone.
+    expect(portalApi.update).not.toHaveBeenCalled();
+    expect(economyPortalApi.update).not.toHaveBeenCalled();
+  });
+
+  it("shared from one estimate: email goes out on the estimate's link, not the object's", async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    vi.mocked(estimateShareApi.sendEmail).mockResolvedValue(shareLink);
+    renderSingle('e2');
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Надіслати на/ }));
+
+    await waitFor(() => expect(estimateShareApi.sendEmail).toHaveBeenCalledWith('e2'));
+    expect(portalApi.sendEmail).not.toHaveBeenCalled();
+    expect(portalApi.update).not.toHaveBeenCalled();
+  });
+
+  it('shared from one estimate: an unverified contractor bounces to the verify modal', async () => {
+    // Minting is what trips the gate here, so a failed mint must land where a failed publish does.
+    vi.mocked(estimateShareApi.create).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 403, data: { status: 403, code: 'EMAIL_NOT_VERIFIED', message: 'x' } },
+    });
+    const onNeedEmailVerify = vi.fn();
+    renderSingle('e2', onNeedEmailVerify);
+
+    await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
   });
 
   it('unticking everything offers "hide all" instead of copy', async () => {
@@ -199,7 +262,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
 
   it('shows only SIGNED estimates plus the payments toggle, seeded off by default', async () => {
     vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
-    renderSheet(undefined, 'economy');
+    renderSheet('economy');
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
     expect(screen.queryByText('Преміум')).toBeNull(); // not signed — not shown here
@@ -215,7 +278,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
     vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-    renderSheet(undefined, 'economy');
+    renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
@@ -229,7 +292,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
     vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-    renderSheet(undefined, 'economy');
+    renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
     fireEvent.click(screen.getAllByRole('checkbox')[1]); // the payments toggle
@@ -250,7 +313,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     });
     vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-    renderSheet(undefined, 'economy');
+    renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
@@ -260,9 +323,21 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     expect([...ids].sort()).toEqual(['e1', 'e2']);
   });
 
+  it('a SIGNED estimate shared from its editor gets the same per-estimate link, with no payments toggle', async () => {
+    // The payments card belongs to the OBJECT's economy link; a per-estimate link has none, so
+    // the toggle must not be offered here — it would have nothing to act on.
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    renderSingle('e1');
+
+    await screen.findByDisplayValue(shareLink.url);
+    expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+    expect(economyPortalApi.state).not.toHaveBeenCalled();
+    expect(economyPortalApi.update).not.toHaveBeenCalled();
+  });
+
   it('collapses to just the neutral message when nothing is signed yet — no picker/payments/publish chrome', async () => {
     vi.mocked(economyPortalApi.state).mockResolvedValue({ ...economyState, estimates: [] });
-    renderSheet(undefined, 'economy');
+    renderSheet('economy');
 
     expect(await screen.findByText(/Ще немає підписаних кошторисів/)).toBeTruthy();
     expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
