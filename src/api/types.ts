@@ -1224,13 +1224,23 @@ export interface ReceiptItemsCommitItem {
 export type PhotoSource = 'RECEIPT' | 'MANUAL';
 export type PhotoVisibility = 'PRIVATE' | 'SHARED';
 
+/** One CUSTOM photo folder (persisted so empty ones survive); «Чеки»/«Інше» are virtual. */
+export interface ProjectPhotoFolderResponse {
+  id: string;
+  name: string;
+}
+
 export interface ProjectPhotoResponse {
   id: string;
   source: PhotoSource;
   visibility: PhotoVisibility;
-  caption: string | null;
-  estimateId: string | null;
-  estimateName: string | null;
+  // Optional, not `| null`: the backend serializes with `non_null`, so these keys are ABSENT
+  // when empty. Compare with `== null` / `!= null` — a strict `=== null` check is a bug.
+  caption?: string | null;
+  estimateId?: string | null;
+  estimateName?: string | null;
+  /** «Чеки» = the reserved 'RECEIPTS' value, «Інше» = null, anything else = a custom folder. */
+  folder?: string | null;
   /** Path of the authenticated stream (relative). The client prefixes apiBaseUrl
    *  and sends the bearer token — the storage key is never exposed. */
   fileUrl: string;
@@ -1345,7 +1355,31 @@ export interface WorkActReceiptResponse {
   issuedAt: string | null;
   /** A photo of the paper was uploaded — fetch it from the act's receipt file endpoint. */
   hasPhoto: boolean;
+  /** The receipt's positions were carried into the act as its own lines (round 2) — the amount is
+   *  shown as reference but excluded from «Разом за чеками»/payable. */
+  itemized: boolean;
   sortOrder: number;
+}
+
+/** One recognized position off a receipt photo — the same review shape the estimate's receipt
+ *  import uses: nullable fields plus `issues` naming what the model could not read. */
+export interface RecognizedReceiptItem {
+  name: string;
+  unit: Unit | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  type: ItemType;
+  category: string | null;
+  issues: string[];
+}
+
+/** What the model read off a receipt photo. recognized=false = soft fallback to manual entry. */
+export interface ActReceiptRecognizeResponse {
+  recognized: boolean;
+  label: string | null;
+  amount: number | null;
+  issuedAt: string | null;
+  items: RecognizedReceiptItem[];
 }
 
 export interface WorkActResponse {
@@ -1366,6 +1400,8 @@ export interface WorkActResponse {
   showCumulative: boolean;
   /** Post each receipt as a MATERIALS expense when the act is signed (default on). */
   receiptsToExpenses: boolean;
+  /** PDF-appendix-only: whether «ДОДАТОК: ФОТО ЧЕКІВ» renders (portal always shows the photos). */
+  showReceiptPhotos: boolean;
   advanceOffset: number | null;
   retentionPercent: number | null;
   sentAt: string | null;
@@ -1398,6 +1434,8 @@ export interface WorkActCreateRequest {
 
 export interface WorkActUpdateRequest extends WorkActCreateRequest {
   receiptsToExpenses?: boolean;
+  /** PDF-appendix-only toggle for the receipt-photo pages (default true). */
+  showReceiptPhotos?: boolean;
 }
 
 /** Edit an attached receipt (the photo is set once, at upload). */

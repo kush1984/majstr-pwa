@@ -218,8 +218,14 @@ api.interceptors.request.use(async (req) => {
   // client had already given up at 12s, and the master saw «Сервер недоступний» with nothing in
   // the server log to explain it, because from the server's side nothing had gone wrong. Keyed on
   // the path rather than set per call for the same reason as the FormData rule above — there are
-  // seven of these endpoints, and the next one must not have to remember.
-  if (req.url?.endsWith('/parse')) {
+  // eight of these endpoints, and the next one must not have to remember.
+  //
+  // `/recognize` is here because the rule was written when every LLM endpoint happened to end in
+  // `/parse`, and the act's receipt read (`…/receipts/recognize`) then hit the 12s default and died
+  // exactly as described above — the small footer pass usually squeaked in, the full item read
+  // never did, so «розпізнати позиції» looked like it did nothing at all. A NEW verb must be added
+  // here, or it inherits the same silent failure.
+  if (req.url?.endsWith('/parse') || req.url?.endsWith('/recognize')) {
     req.timeout = LLM_TIMEOUT_MS;
   }
 

@@ -187,7 +187,7 @@ export function EstimateEditorPage() {
   // The object's progress photos are offered too (default-off) for a receipt saved as a plain photo.
   const receiptEstimateIds = new Set([id, ...(est.sourceEstimateIds ?? [])]);
   const receipts = (photos.data ?? []).filter(
-    (p) => p.source === 'RECEIPT' && p.estimateId !== null && receiptEstimateIds.has(p.estimateId),
+    (p) => p.source === 'RECEIPT' && p.estimateId != null && receiptEstimateIds.has(p.estimateId),
   );
   const otherPhotos = (photos.data ?? []).filter((p) => p.source === 'MANUAL');
 

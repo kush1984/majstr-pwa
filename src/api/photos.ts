@@ -1,6 +1,6 @@
 import { api, ensureAccessToken } from './client.ts';
 import { config } from '@/lib/config.ts';
-import type { PhotoSource, PhotoVisibility, ProjectPhotoResponse } from './types.ts';
+import type { PhotoSource, PhotoVisibility, ProjectPhotoFolderResponse, ProjectPhotoResponse } from './types.ts';
 
 /**
  * Object photos («Фото» tab). Files are served by an authenticated stream (never
@@ -18,17 +18,45 @@ export const photosApi = {
   upload(
     projectId: string,
     file: File,
-    opts: { source: PhotoSource; caption?: string; estimateId?: string },
+    opts: { source: PhotoSource; caption?: string; estimateId?: string; folder?: string | null },
   ): Promise<ProjectPhotoResponse> {
     const form = new FormData();
     form.append('file', file);
     form.append('source', opts.source);
     if (opts.caption) form.append('caption', opts.caption);
     if (opts.estimateId) form.append('estimateId', opts.estimateId);
+    // Sent whenever the caller knows the target folder — '' is «Інше», not "unset". Omitting it
+    // entirely leaves the server's per-source default (RECEIPT → «Чеки», else «Інше»).
+    if (opts.folder !== undefined) form.append('folder', opts.folder ?? '');
     return api
       .post<ProjectPhotoResponse>(`/api/projects/${projectId}/photos`, form, {
         headers: { 'Content-Type': undefined } as unknown as Record<string, string>,
       })
+      .then((r) => r.data);
+  },
+
+  listFolders(projectId: string): Promise<ProjectPhotoFolderResponse[]> {
+    return api
+      .get<ProjectPhotoFolderResponse[]>(`/api/projects/${projectId}/photos/folders`)
+      .then((r) => r.data);
+  },
+
+  /** Create an EMPTY custom folder ahead of its photos. Idempotent on the name. */
+  createFolder(projectId: string, name: string): Promise<ProjectPhotoFolderResponse> {
+    return api
+      .post<ProjectPhotoFolderResponse>(`/api/projects/${projectId}/photos/folders`, { folder: name })
+      .then((r) => r.data);
+  },
+
+  /** Delete a custom folder — the server refuses while any photo carries its name. */
+  removeFolder(projectId: string, folderId: string): Promise<void> {
+    return api.delete(`/api/projects/${projectId}/photos/folders/${folderId}`).then(() => undefined);
+  },
+
+  /** Move a photo between folders: 'RECEIPTS' = «Чеки», null = «Інше», else a custom name. */
+  setFolder(projectId: string, photoId: string, folder: string | null): Promise<ProjectPhotoResponse> {
+    return api
+      .patch<ProjectPhotoResponse>(`/api/projects/${projectId}/photos/${photoId}/folder`, { folder })
       .then((r) => r.data);
   },
 

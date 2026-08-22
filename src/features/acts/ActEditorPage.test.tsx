@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActEditorPage } from './ActEditorPage.tsx';
 import { actsApi } from '@/api/acts.ts';
-import { formatMoney } from '@/lib/format.ts';
+import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
 import type { ActProgressResponse, WorkActResponse } from '@/api/types.ts';
 
 vi.mock('@/api/acts.ts', () => ({
@@ -33,12 +33,17 @@ function money(n: number): string {
   return formatMoney(n).replace(/\s+/g, ' ');
 }
 
+/** The totals block prints kopecks (receipts round 2) — match it exactly. */
+function moneyExact(n: number): string {
+  return formatMoneyExact(n).replace(/\s+/g, ' ');
+}
+
 function draftAct(): WorkActResponse {
   return {
     id: 'a1', projectId: 'p1', number: '7', title: null, kind: 'INTERIM', status: 'DRAFT',
     issuedAt: '2026-08-14', periodFrom: '2026-08-01', periodTo: '2026-08-14',
     place: null, contractRef: null, note: null, showMaterials: true, showCumulative: true,
-    receiptsToExpenses: true, advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
+    receiptsToExpenses: true, showReceiptPhotos: true, advanceOffset: null, retentionPercent: null, sentAt: null, signedAt: null,
     signerName: null, signedOffline: false, addendumEstimateId: null, items: [], receipts: [],
     total: 0, receiptsTotal: 0, payable: 0, createdAt: '2026-08-14', updatedAt: '2026-08-14',
   };
@@ -159,12 +164,12 @@ describe('ActEditorPage', () => {
     const materialRow = screen.getByText('Шпаклівка').closest('.rounded-card') as HTMLElement;
     fireEvent.click(within(materialRow).getByRole('checkbox'));
     // «Разом» and «До сплати» both show the figure — hence getAllBy.
-    expect(screen.getAllByText(money(11642.5)).length).toBeGreaterThan(0); // both lines counted while visible
+    expect(screen.getAllByText(moneyExact(11642.5)).length).toBeGreaterThan(0); // both lines counted while visible
 
     // Untick «Показувати матеріали» — the hidden material must leave the total…
     fireEvent.click(screen.getByLabelText('Показувати матеріали'));
-    expect(screen.queryAllByText(money(11642.5))).toHaveLength(0);
-    expect(screen.getAllByText(money(9642.5)).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(moneyExact(11642.5))).toHaveLength(0);
+    expect(screen.getAllByText(moneyExact(9642.5)).length).toBeGreaterThan(0);
 
     // …and must NOT be saved: an invisible position can't be billed.
     fireEvent.click(screen.getByLabelText('Дії з актом'));
@@ -219,10 +224,10 @@ describe('ActEditorPage', () => {
         el !== null && el.querySelector('input[type="checkbox"]') !== null)!;
     fireEvent.click(within(header).getByRole('checkbox'));
     // 66.5 × 145 + 30 × 50 = 11 142.50 — the whole stage in one tap.
-    expect(screen.getAllByText(money(11142.5)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(moneyExact(11142.5)).length).toBeGreaterThan(0);
 
     fireEvent.click(within(header).getByRole('checkbox'));
-    expect(screen.queryAllByText(money(11142.5))).toHaveLength(0);
+    expect(screen.queryAllByText(moneyExact(11142.5))).toHaveLength(0);
   });
 
   it('auto-title: when every selected line shares one category, the act is named after it', async () => {
@@ -279,8 +284,8 @@ describe('ActEditorPage', () => {
     vi.mocked(actsApi.get).mockResolvedValue({
       ...draftAct(),
       receipts: [
-        { id: 'r1', label: 'Епіцентр — клей', amount: 2400, issuedAt: '2026-08-03', hasPhoto: true, sortOrder: 0 },
-        { id: 'r2', label: 'Нова Пошта', amount: 600, issuedAt: null, hasPhoto: false, sortOrder: 1 },
+        { id: 'r1', label: 'Епіцентр — клей', amount: 2400, issuedAt: '2026-08-03', hasPhoto: true, itemized: false, sortOrder: 0 },
+        { id: 'r2', label: 'Нова Пошта', amount: 600, issuedAt: null, hasPhoto: false, itemized: false, sortOrder: 1 },
       ],
       receiptsTotal: 3000,
     });
@@ -289,7 +294,7 @@ describe('ActEditorPage', () => {
     expect(await screen.findByText('Епіцентр — клей')).toBeTruthy();
     expect(screen.getByText('Нова Пошта')).toBeTruthy();
     // Works 0 + receipts 3 000 → «До сплати» carries them; the subtotal row spells them out.
-    expect(screen.getAllByText(money(3000)).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(moneyExact(3000)).length).toBeGreaterThanOrEqual(2);
   });
 
   it('saves from the button on the screen itself, not only from the FAB', async () => {
@@ -311,6 +316,20 @@ describe('ActEditorPage', () => {
     await screen.findByText('Шпаклювання стін');
 
     fireEvent.click(screen.getByLabelText('Поділитися з клієнтом'));
+    expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
+  });
+
+  it('shares an open act from the FAB too, deep in a long editor', async () => {
+    // The top bar scrolls away on a long act, and that is exactly where the master wanted to
+    // share from (screenshot feedback: the actions sheet listed PDF/Підписати/Зберегти only).
+    renderEditor();
+    await screen.findByText('Шпаклювання стін');
+
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    // Two buttons carry the name now — the top bar's icon-only 🔗 and the sheet's row; the sheet's
+    // is the one rendered last.
+    const share = screen.getAllByRole('button', { name: /Поділитися з клієнтом/ });
+    fireEvent.click(share[share.length - 1]);
 
     expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
   });

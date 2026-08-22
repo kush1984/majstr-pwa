@@ -227,6 +227,23 @@ describe('api 401-retry interceptor', () => {
     expect(LLM_TIMEOUT_MS).toBeGreaterThan(120_000);
   });
 
+  // Same rule, other verb: the act's receipt read is `…/receipts/recognize`, and it inherited the
+  // 12s default until this was widened — the footer pass sometimes made it, the full item read
+  // never did, so «розпізнати позиції» looked like it silently did nothing.
+  it('gives an act receipt /recognize call the LLM timeout too', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    const form = new FormData();
+    form.append('file', new File(['x'], 'check.jpg', { type: 'image/jpeg' }));
+    await api.post('/api/acts/a1/receipts/recognize', form);
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(LLM_TIMEOUT_MS);
+  });
+
   it('keeps the short fail-fast timeout on an ordinary write', async () => {
     // The 12s default earns its keep on writes: a phone on one bar reports "online", and a write
     // that hangs on a dead socket never reaches the outbox. Raising it globally would lose that.

@@ -115,7 +115,7 @@ export function useSignActOffline(id: string, projectId: string) {
 export function useAddActReceipt(id: string, projectId: string) {
   const invalidate = useActWriter(id, projectId);
   return useMutation({
-    mutationFn: (req: { label: string; amount: number; issuedAt?: string | null; file?: File | null }) =>
+    mutationFn: (req: { label: string; amount: number; issuedAt?: string | null; file: File; itemized?: boolean; saveToPhotos?: boolean }) =>
       actsApi.addReceipt(id, req),
     onSuccess: invalidate,
   });

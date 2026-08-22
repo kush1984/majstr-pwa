@@ -18,6 +18,7 @@ function photo(id: string, source: ProjectPhotoResponse['source'] = 'RECEIPT'): 
     caption: null,
     estimateId: source === 'RECEIPT' ? 'e1' : null,
     estimateName: null,
+    folder: null,
     fileUrl: `/api/projects/p1/photos/${id}/file`,
     createdAt: '2026-01-01T00:00:00Z',
   };

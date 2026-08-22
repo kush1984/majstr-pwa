@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
@@ -9,10 +9,10 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
-import { formatMoney } from '@/lib/format.ts';
+import { formatMoneyExact } from '@/lib/format.ts';
 import { usePhotoBlobUrl } from '@/features/photos/PhotoView.tsx';
 import { useAddActReceipt, useDeleteActReceipt, useUpdateActReceipt } from './useActs.ts';
-import type { WorkActReceiptResponse } from '@/api/types.ts';
+import type { ActReceiptRecognizeResponse, RecognizedReceiptItem, WorkActReceiptResponse } from '@/api/types.ts';
 
 /**
  * «Чеки та рахунки» on one act — the materials the master paid for out of pocket and re-bills to
@@ -30,6 +30,9 @@ export function ActReceiptsSection({
   signed,
   toExpenses,
   onToExpensesChange,
+  showPhotosInPdf,
+  onShowPhotosInPdfChange,
+  onTransferItems,
 }: {
   actId: string;
   projectId: string;
@@ -37,6 +40,11 @@ export function ActReceiptsSection({
   signed: boolean;
   toExpenses: boolean;
   onToExpensesChange: (v: boolean) => void;
+  /** PDF-appendix-only toggle: the portal always shows the photos. */
+  showPhotosInPdf: boolean;
+  onShowPhotosInPdfChange: (v: boolean) => void;
+  /** Recognized positions to carry into the act's additional works (round 2). */
+  onTransferItems: (items: RecognizedReceiptItem[]) => void;
 }) {
   const { t } = useTranslation();
   const add = useAddActReceipt(actId, projectId);
@@ -48,12 +56,14 @@ export function ActReceiptsSection({
   const [confirmDelete, setConfirmDelete] = useState<WorkActReceiptResponse | null>(null);
   const [viewing, setViewing] = useState<WorkActReceiptResponse | null>(null);
 
-  const total = receipts.reduce((sum, r) => sum + r.amount, 0);
+  // Itemized receipts are reference-only: their positions already bill the money as act lines.
+  const total = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + r.amount, 0);
 
   const openAdd = () => { setEditing(null); setFormOpen(true); };
   const openEdit = (r: WorkActReceiptResponse) => { setEditing(r); setFormOpen(true); };
 
-  const onSubmit = async (v: { label: string; amount: number; issuedAt: string | null; file: File | null }) => {
+  const onSubmit = async (v: { label: string; amount: number; issuedAt: string | null; file: File | null;
+                               items: RecognizedReceiptItem[] | null; saveToPhotos: boolean }) => {
     try {
       if (editing) {
         await update.mutateAsync({
@@ -61,7 +71,17 @@ export function ActReceiptsSection({
           req: { label: v.label, amount: v.amount, issuedAt: v.issuedAt },
         });
       } else {
-        await add.mutateAsync({ label: v.label, amount: v.amount, issuedAt: v.issuedAt, file: v.file });
+        if (!v.file) return; // the form disables submit without a photo; belt-and-braces
+        await add.mutateAsync({
+          label: v.label, amount: v.amount, issuedAt: v.issuedAt, file: v.file,
+          itemized: v.items != null,
+          saveToPhotos: v.saveToPhotos,
+        });
+        if (v.items != null) {
+          // Into the editor's «Додаткові роботи» rows — where the master reviews and fixes what
+          // the model could not read (the same «перепитування» the estimate import does).
+          onTransferItems(v.items);
+        }
       }
       setFormOpen(false);
       setEditing(null);
@@ -96,8 +116,14 @@ export function ActReceiptsSection({
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium text-primary">{r.label}</span>
-                  <span className="whitespace-nowrap text-sm font-semibold text-primary">{formatMoney(r.amount)}</span>
+                  {/* Kopecks as typed (master feedback) — money display must not round. An itemized
+                      receipt's amount is muted reference: its positions bill it in the act. */}
+                  <span className={'whitespace-nowrap text-sm font-semibold '
+                    + (r.itemized ? 'text-muted' : 'text-primary')}>{formatMoneyExact(r.amount)}</span>
                 </div>
+                {r.itemized && (
+                  <p className="mt-0.5 text-xs text-muted">{t('acts.receiptItemizedBadge')}</p>
+                )}
                 {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{r.issuedAt}</p>}
                 {!signed && (
                   <div className="mt-2 flex gap-3">
@@ -117,7 +143,7 @@ export function ActReceiptsSection({
 
       {receipts.length > 0 && (
         <div className="mt-2 flex justify-between rounded-card bg-surface-sunken px-3.5 py-2.5 text-sm font-semibold text-primary">
-          <span>{t('acts.receiptsTotal')}</span><span>{formatMoney(total)}</span>
+          <span>{t('acts.receiptsTotal')}</span><span>{formatMoneyExact(total)}</span>
         </div>
       )}
 
@@ -127,14 +153,24 @@ export function ActReceiptsSection({
             {t('acts.addReceipt')}
           </button>
           {receipts.length > 0 && (
-            <label className="mt-3 flex items-start gap-2">
-              <input type="checkbox" checked={toExpenses} onChange={() => onToExpensesChange(!toExpenses)}
-                className="mt-0.5 h-4 w-4 accent-brand" />
-              <span className="flex items-center gap-1 text-sm text-secondary">
-                {t('acts.receiptsToExpenses')}
-                <InfoPopover text={t('acts.receiptsToExpensesInfo')} />
-              </span>
-            </label>
+            <>
+              <label className="mt-3 flex items-start gap-2">
+                <input type="checkbox" checked={toExpenses} onChange={() => onToExpensesChange(!toExpenses)}
+                  className="mt-0.5 h-4 w-4 accent-brand" />
+                <span className="flex items-center gap-1 text-sm text-secondary">
+                  {t('acts.receiptsToExpenses')}
+                  <InfoPopover text={t('acts.receiptsToExpensesInfo')} />
+                </span>
+              </label>
+              <label className="mt-2 flex items-start gap-2">
+                <input type="checkbox" checked={showPhotosInPdf} onChange={() => onShowPhotosInPdfChange(!showPhotosInPdf)}
+                  className="mt-0.5 h-4 w-4 accent-brand" />
+                <span className="flex items-center gap-1 text-sm text-secondary">
+                  {t('acts.receiptPhotosInPdf')}
+                  <InfoPopover text={t('acts.receiptPhotosInPdfInfo')} />
+                </span>
+              </label>
+            </>
           )}
         </>
       )}
@@ -145,6 +181,7 @@ export function ActReceiptsSection({
         busy={add.isPending || update.isPending}
         onSubmit={onSubmit}
         onClose={() => { setFormOpen(false); setEditing(null); }}
+        recognize={(file, withItems) => actsApi.recognizeReceipt(actId, file, withItems)}
       />
 
       <Modal open={viewing !== null} onClose={() => setViewing(null)} title={viewing?.label ?? ''}>
@@ -165,22 +202,41 @@ export function ActReceiptsSection({
   );
 }
 
-/** Add / edit one receipt. The photo is set once, at upload — editing touches only the text. */
+/**
+ * Add / edit one receipt. The photo is MANDATORY on add (round 2 — it is the receipt's proof) and
+ * set once; editing touches only the text. Two pick paths on a phone: the camera straight at the
+ * paper, or the gallery — a receipt often already lives there as a photo.
+ *
+ * <p>Picking a photo triggers recognition: date + total prefill from the model (a small one), and
+ * with «перенести позиції» ticked — the full item read. recognized=false just leaves the fields
+ * manual; nothing blocks on the model.</p>
+ */
 function ReceiptForm({
-  open, editing, busy, onSubmit, onClose,
+  open, editing, busy, onSubmit, onClose, recognize,
 }: {
   open: boolean;
   editing: WorkActReceiptResponse | null;
   busy: boolean;
-  onSubmit: (v: { label: string; amount: number; issuedAt: string | null; file: File | null }) => void;
+  onSubmit: (v: { label: string; amount: number; issuedAt: string | null; file: File | null;
+                  items: RecognizedReceiptItem[] | null; saveToPhotos: boolean }) => void;
   onClose: () => void;
+  recognize: (file: File, withItems: boolean) => Promise<ActReceiptRecognizeResponse>;
 }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [issuedAt, setIssuedAt] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [withItems, setWithItems] = useState(false);
+  // Also file the photo into the object's Фото tab («Чеки» folder) — default OFF (master decision).
+  const [saveToPhotos, setSaveToPhotos] = useState(false);
+  const [items, setItems] = useState<RecognizedReceiptItem[] | null>(null);
+  // Which read is in flight, not just "a read is": the footer pass answers in seconds, the full
+  // item table takes tens of them, and a silent spinner that long reads as a hung screen.
+  const [recognizing, setRecognizing] = useState<null | 'meta' | 'items'>(null);
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   // Seed once per opening: an «edit» carries the receipt's values, an «add» starts blank. Keyed on
   // the receipt id (or '' for a new one) so reopening the same dialog reseeds.
@@ -191,17 +247,87 @@ function ReceiptForm({
     setAmount(editing == null ? '' : String(editing.amount));
     setIssuedAt(editing?.issuedAt ?? '');
     setFile(null);
+    setWithItems(false);
+    setSaveToPhotos(false);
+    setItems(null);
+    setRecognizing(null);
   }
 
   const num = (s: string): number => {
     const n = Number(s.replace(',', '.'));
     return Number.isFinite(n) ? n : 0;
   };
-  const valid = label.trim() !== '' && num(amount) > 0;
+  // The photo is mandatory on add; an edit never changes it.
+  const valid = label.trim() !== '' && num(amount) > 0 && (editing != null || file != null);
+
+  /** One recognition per picked file (re-run when «перенести позиції» flips ON with a file already
+   *  picked, to fetch the items). Prefills what the model read; failure = stay manual. */
+  const runRecognition = async (picked: File, wantItems: boolean) => {
+    setRecognizing(wantItems ? 'items' : 'meta');
+    try {
+      const read = await recognize(picked, wantItems);
+      if (!read.recognized) {
+        setItems(null);
+        toast.info(t('acts.receiptRecognizeFailed'));
+        return;
+      }
+      if (read.amount != null) setAmount(String(read.amount));
+      if (read.issuedAt != null) setIssuedAt(read.issuedAt);
+      setLabel((current) => current.trim() === '' && read.label ? read.label : current);
+      setItems(wantItems ? read.items : null);
+      if ((read.amount == null || (wantItems && read.items.length === 0))) {
+        toast.info(t('acts.receiptRecognizePartial'));
+      }
+    } catch (err) {
+      setItems(null);
+      toast.error(toAppError(err).message);
+    } finally {
+      setRecognizing(null);
+    }
+  };
+
+  const onPick = (picked: File | null) => {
+    setFile(picked);
+    setItems(null);
+    if (picked) void runRecognition(picked, withItems);
+  };
+
+  const onWithItemsToggle = () => {
+    const next = !withItems;
+    setWithItems(next);
+    if (next && file) void runRecognition(file, true);
+    if (!next) setItems(null);
+  };
 
   return (
     <Modal open={open} onClose={onClose} title={t(editing ? 'acts.receiptEditTitle' : 'acts.receiptAddTitle')}>
       <div className="space-y-3">
+        {!editing && (
+          <Field label={t('acts.receiptPhoto')}>
+            {/* Two pick paths (master feedback): the camera AND the gallery — capture="environment"
+                alone locked phones out of receipts already photographed. */}
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+            <input ref={galleryRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => cameraRef.current?.click()}>
+                📷 {t('acts.receiptTakePhoto')}
+              </Button>
+              <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
+                🖼 {t('acts.receiptPickFile')}
+              </Button>
+            </div>
+            <p className="mt-1.5 text-xs text-muted">
+              {file ? file.name : t('acts.receiptPhotoRequired')}
+            </p>
+          </Field>
+        )}
+        {recognizing != null && (
+          <p className="flex items-center gap-2 text-sm text-muted">
+            <Spinner size="sm" /> {t(recognizing === 'items' ? 'acts.receiptRecognizingItems' : 'acts.receiptRecognizing')}
+          </p>
+        )}
         <Field label={t('acts.receiptLabel')}>
           <Input value={label} placeholder={t('acts.receiptLabelHint')} onChange={(e) => setLabel(e.target.value)} />
         </Field>
@@ -214,18 +340,37 @@ function ReceiptForm({
           </Field>
         </div>
         {!editing && (
-          <Field label={t('acts.receiptPhoto')}>
-            {/* capture="environment" so a phone opens the camera straight at the paper. */}
-            <input type="file" accept="image/*" capture="environment"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-surface-sunken file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand" />
-          </Field>
+          <>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={withItems} onChange={onWithItemsToggle}
+                className="mt-0.5 h-4 w-4 accent-brand" />
+              <span className="flex items-center gap-1 text-sm text-secondary">
+                {t('acts.receiptRecognizeItems')}
+                <InfoPopover text={t('acts.receiptRecognizeItemsInfo')} />
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={saveToPhotos} onChange={() => setSaveToPhotos((v) => !v)}
+                className="mt-0.5 h-4 w-4 accent-brand" />
+              <span className="flex items-center gap-1 text-sm text-secondary">
+                {t('acts.receiptSaveToPhotos')}
+                <InfoPopover text={t('acts.receiptSaveToPhotosInfo')} />
+              </span>
+            </label>
+          </>
         )}
-        <Button fullWidth loading={busy} disabled={!valid}
+        {withItems && items != null && items.length > 0 && (
+          <p className="rounded-lg bg-surface-sunken p-2 text-xs text-secondary">
+            {t('acts.receiptItemsFound', { count: items.length })}
+          </p>
+        )}
+        <Button fullWidth loading={busy} disabled={!valid || recognizing != null}
           onClick={() => onSubmit({
             label: label.trim(), amount: num(amount),
             issuedAt: issuedAt.trim() === '' ? null : issuedAt,
             file,
+            items: withItems && items != null && items.length > 0 ? items : null,
+            saveToPhotos,
           })}>
           {t(editing ? 'common.save' : 'acts.receiptAdd')}
         </Button>

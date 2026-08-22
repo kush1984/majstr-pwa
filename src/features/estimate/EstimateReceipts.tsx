@@ -38,7 +38,7 @@ export function EstimateReceipts({
 
   const estimateIds = new Set([estimateId, ...sourceEstimateIds]);
   const receipts = (photos.data ?? []).filter(
-    (p) => p.source === 'RECEIPT' && p.estimateId !== null && estimateIds.has(p.estimateId),
+    (p) => p.source === 'RECEIPT' && p.estimateId != null && estimateIds.has(p.estimateId),
   );
   if (receipts.length === 0) return null;
 

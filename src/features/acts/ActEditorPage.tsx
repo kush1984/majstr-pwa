@@ -16,7 +16,7 @@ import { useLeaveGuard } from '@/hooks/useLeaveGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
-import { formatMoney, formatAmount } from '@/lib/format.ts';
+import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { CatalogAutocomplete } from '@/features/estimate/CatalogAutocomplete.tsx';
 import { routes } from '@/lib/config.ts';
@@ -27,7 +27,7 @@ import { ActReceiptsSection } from './ActReceiptsSection.tsx';
 import { ActShareSheet } from './ActShareSheet.tsx';
 import { UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
-import type { ActProgressLine, ItemType, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
+import type { ActProgressLine, ItemType, RecognizedReceiptItem, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
 
 const ADDITIONAL_WARNED_KEY = 'majstr-acts-additional-warned';
 
@@ -51,7 +51,7 @@ function categorize(lines: ActProgressLine[]): [string, ActProgressLine[]][] {
 function formSnapshot(s: {
   kind: WorkActKind; title: string; issuedAt: string; periodFrom: string; periodTo: string;
   contractRef: string; advance: string; showMaterials: boolean; showCumulative: boolean;
-  receiptsToExpenses: boolean;
+  receiptsToExpenses: boolean; showReceiptPhotos: boolean;
   qty: Record<string, string>; additional: Additional[];
 }): string {
   return JSON.stringify(s);
@@ -97,6 +97,8 @@ export function ActEditorPage() {
   // Receipts are pass-through money: booking them as MATERIALS expenses on sign keeps profit
   // honest. Off for the master who already logs his receipts in the expense journal.
   const [receiptsToExpenses, setReceiptsToExpenses] = useState(true);
+  // PDF-appendix-only (master feedback): the portal always shows the photos.
+  const [showReceiptPhotos, setShowReceiptPhotos] = useState(true);
   const [qty, setQty] = useState<Record<string, string>>({}); // estimateItemId → quantity
   const [additional, setAdditional] = useState<Additional[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -121,6 +123,7 @@ export function ActEditorPage() {
     setShowMaterials(a.showMaterials);
     setShowCumulative(a.showCumulative);
     setReceiptsToExpenses(a.receiptsToExpenses);
+    setShowReceiptPhotos(a.showReceiptPhotos);
     const seededQty: Record<string, string> = {};
     const seededAdditional: Additional[] = [];
     for (const it of a.items) {
@@ -134,7 +137,7 @@ export function ActEditorPage() {
       periodTo: a.periodTo, contractRef: a.contractRef ?? '',
       advance: a.advanceOffset == null ? '' : String(a.advanceOffset),
       showMaterials: a.showMaterials, showCumulative: a.showCumulative,
-      receiptsToExpenses: a.receiptsToExpenses,
+      receiptsToExpenses: a.receiptsToExpenses, showReceiptPhotos: a.showReceiptPhotos,
       qty: seededQty, additional: seededAdditional,
     }));
     setSeeded(true);
@@ -191,7 +194,8 @@ export function ActEditorPage() {
   // Receipts are saved the moment they are added, so they come straight off the loaded act — they
   // are money the client owes on this act, hence inside «До сплати», not a decorative appendix.
   const receipts = act.data?.receipts ?? [];
-  const receiptsTotal = receipts.reduce((sum, r) => sum + r.amount, 0);
+  // Itemized receipts are reference-only — their positions already bill the money as act lines.
+  const receiptsTotal = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + r.amount, 0);
   const payable = Math.max(0, total + receiptsTotal - num(advance));
 
   // Auto-title (master feedback): when every selected estimate line shares ONE category, that
@@ -224,7 +228,7 @@ export function ActEditorPage() {
   // auto-title counts as a pending change exactly when it would be saved.
   const currentSnapshot = formSnapshot({
     kind, title: effectiveTitle, issuedAt, periodFrom, periodTo, contractRef, advance,
-    showMaterials, showCumulative, receiptsToExpenses, qty, additional,
+    showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos, qty, additional,
   });
   const dirty = seeded && !signed && savedSnapshot !== null && currentSnapshot !== savedSnapshot;
   // In-app back/swipe with unsaved edits → a ConfirmDialog instead of silent loss (review fix).
@@ -302,6 +306,22 @@ export function ActEditorPage() {
     return lines;
   };
 
+  /** Recognized receipt positions → «Додаткові роботи» rows the master reviews in place: blanks
+   *  where the model flagged an issue (the same «перепитування» the estimate import gives). */
+  const transferReceiptItems = (items: RecognizedReceiptItem[]) => {
+    setAdditional((list) => [
+      ...list,
+      ...items.map((it) => ({
+        name: it.name,
+        type: it.type,
+        unit: it.unit ?? 'PIECE',
+        unitPrice: it.unitPrice == null ? '' : String(it.unitPrice),
+        quantity: it.quantity == null ? '' : String(it.quantity),
+      })),
+    ]);
+    toast.success(t('acts.receiptItemsTransferred', { count: items.length }));
+  };
+
   const onSave = async () => {
     try {
       await updateHeader.mutateAsync({
@@ -309,7 +329,7 @@ export function ActEditorPage() {
         title: effectiveTitle.trim() || null,
         contractRef: contractRef.trim() || null,
         advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative, receiptsToExpenses,
+        showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos,
       });
       await replaceItems.mutateAsync({ items: buildItems() });
       setSavedSnapshot(currentSnapshot); // the form as sent is now the saved reference
@@ -328,7 +348,7 @@ export function ActEditorPage() {
         title: effectiveTitle.trim() || null,
         contractRef: contractRef.trim() || null,
         advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative, receiptsToExpenses,
+        showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos,
       });
       await replaceItems.mutateAsync({ items: buildItems() });
       await signOffline.mutateAsync(signerName.trim());
@@ -371,12 +391,13 @@ export function ActEditorPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl pb-28">
-      {/* Sticky top bar (master feedback): «Зберегти» and «Поділитися» are on the screen itself, not
-          only behind the FAB — the editor is a long scroll and hunting for Save in a menu after every
-          edit was the loudest complaint about it. Sticky so both stay one tap away while ticking
-          lines far down the page. */}
-      <div className="sticky top-0 z-30 -mx-4 mb-3 flex items-center gap-2 border-b border-border bg-app px-4 py-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+    <div className="mx-auto max-w-2xl px-4 pb-28 pt-2 sm:px-6">
+      {/* Top bar: «Зберегти» and «Поділитися» on the screen itself (master feedback — hunting for
+          Save in the FAB after every edit was the loudest complaint). STATIC, not sticky (round 2):
+          no other screen pins its header, and the sticky variant shipped with a non-existent
+          `bg-app` class — a transparent strip that scrolled-past lines showed through. Deep in the
+          scroll the FAB still carries Save. */}
+      <div className="mb-3 flex items-center gap-2">
         <button type="button" onClick={() => navigate(routes.project(projectId) + '?tab=acts')}
           aria-label={t('common.back')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary">←</button>
@@ -575,7 +596,9 @@ export function ActEditorPage() {
       </div>
 
       <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
-        toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses} />
+        toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
+        showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos}
+        onTransferItems={transferReceiptItems} />
 
       {/* Advance + totals */}
       {!signed && (
@@ -584,10 +607,10 @@ export function ActEditorPage() {
         </Field>
       )}
       <div className="mt-3 space-y-1 rounded-card border border-border bg-surface-sunken p-3.5 text-sm">
-        <Row label={t('acts.total')} value={formatMoney(total)} />
-        {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoney(receiptsTotal)} />}
-        {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoney(num(advance))} />}
-        <Row label={t('acts.payable')} value={formatMoney(payable)} bold />
+        <Row label={t('acts.total')} value={formatMoneyExact(total)} />
+        {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoneyExact(receiptsTotal)} />}
+        {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoneyExact(num(advance))} />}
+        <Row label={t('acts.payable')} value={formatMoneyExact(payable)} bold />
       </div>
       {!signed && (
         <div className="mt-2">
@@ -595,16 +618,19 @@ export function ActEditorPage() {
         </div>
       )}
 
-      {/* Actions — a speed-dial FAB so the master reaches Save/Sign/PDF/Delete from anywhere on a
+      {/* Actions — a speed-dial FAB so the master reaches Save/Sign/Share/PDF/Delete from anywhere on a
           long editor without scrolling to the bottom. Ordered so the primary Save sits nearest the
           thumb and the destructive Delete sits farthest from it. */}
-      <Fab ariaLabel={t('acts.actionsMenu')}>
+      <Fab ariaLabel={t('acts.actionsMenu')} position="bottom-6 right-4 lg:bottom-8 lg:right-8">
         {(close) => (
           <>
             {(act.data.status === 'DRAFT' || act.data.status === 'REJECTED') && (
               <FabAction icon="🗑" label={t('common.delete')} onClick={() => close(() => setConfirmDelete(true))} />
             )}
             <FabAction icon="📄" label={t('acts.pdf')} onClick={() => close(() => void onPdf())} />
+            {/* Same sheet as the top bar's 🔗. Duplicated on purpose: deep in a long editor the top
+                bar is scrolled away, and «поділитися» is exactly what the master reaches for there. */}
+            <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => setShareOpen(true))} />
             {!signed && (
               <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => {
                 if (!hasLines) {

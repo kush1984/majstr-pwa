@@ -1,6 +1,7 @@
 import { api, ensureAccessToken } from './client.ts';
 import { config } from '@/lib/config.ts';
 import type {
+  ActReceiptRecognizeResponse,
   ActProgressResponse,
   WorkActCreateRequest,
   WorkActItemsRequest,
@@ -60,17 +61,31 @@ export const actsApi = {
    */
   addReceipt(
     actId: string,
-    req: { label: string; amount: number; issuedAt?: string | null; file?: File | null },
+    req: { label: string; amount: number; issuedAt?: string | null; file: File; itemized?: boolean; saveToPhotos?: boolean },
   ): Promise<WorkActReceiptResponse> {
     const form = new FormData();
-    if (req.file) form.append('file', req.file);
+    form.append('file', req.file); // mandatory (round 2): the photo is the receipt's proof
     form.append('label', req.label);
     form.append('amount', String(req.amount));
+    if (req.itemized) form.append('itemized', 'true');
+    if (req.saveToPhotos) form.append('saveToPhotos', 'true');
     if (req.issuedAt) form.append('issuedAt', req.issuedAt);
     return api
       .post<WorkActReceiptResponse>(`/api/acts/${actId}/receipts`, form, {
         headers: { 'Content-Type': undefined } as unknown as Record<string, string>,
       })
+      .then((r) => r.data);
+  },
+
+  /** Read the photo before adding: date+total (small model), with items — the full table read.
+   *  recognized=false is the soft «введіть вручну» outcome, not an error. */
+  recognizeReceipt(actId: string, file: File, withItems: boolean): Promise<ActReceiptRecognizeResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    if (withItems) form.append('withItems', 'true');
+    return api
+      .post<ActReceiptRecognizeResponse>(`/api/acts/${actId}/receipts/recognize`, form,
+        { headers: { 'Content-Type': undefined } })
       .then((r) => r.data);
   },
 

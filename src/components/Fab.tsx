@@ -15,9 +15,13 @@ import { cn } from '@/lib/cn.ts';
 export function Fab({
   ariaLabel,
   children,
+  // bottom-20 (80 px) clears the mobile bottom nav; a FULL-SCREEN route without that nav (the act
+  // editor) passes a lower offset so the button doesn't float mid-air (master feedback, round 2).
+  position = 'bottom-20 right-4 lg:bottom-8 lg:right-8',
 }: {
   ariaLabel: string;
   children: (close: (fn?: () => void) => void) => ReactNode;
+  position?: string;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -50,7 +54,7 @@ export function Fab({
         messages card. Just above the bottom nav is where a floating action belongs, and the
         content's own bottom padding (AppLayout) is what keeps it from covering anything.
       */}
-      <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
+      <div className={cn('fixed z-50 flex flex-col items-end gap-2', position)}>
         {open && children(close)}
         <button
           type="button"
