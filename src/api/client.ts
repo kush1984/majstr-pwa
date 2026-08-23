@@ -225,7 +225,12 @@ api.interceptors.request.use(async (req) => {
   // exactly as described above — the small footer pass usually squeaked in, the full item read
   // never did, so «розпізнати позиції» looked like it did nothing at all. A NEW verb must be added
   // here, or it inherits the same silent failure.
-  if (req.url?.endsWith('/parse') || req.url?.endsWith('/recognize')) {
+  //
+  // `/qr` is the third: no model runs, but the request waits on the tax service's public lookup
+  // (the server allows 10s for it), which is already past the 12s write default once the round trip
+  // is counted.
+  if (req.url?.endsWith('/parse') || req.url?.endsWith('/recognize')
+      || req.url?.endsWith('/qr') || req.url?.includes('/qr?')) {
     req.timeout = LLM_TIMEOUT_MS;
   }
 

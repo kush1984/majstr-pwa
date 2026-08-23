@@ -13,6 +13,7 @@ vi.mock('@/api/acts.ts', () => ({
   actsApi: {
     addReceipt: vi.fn(() => Promise.resolve({})),
     recognizeReceipt: vi.fn(() => Promise.resolve({ recognized: false, label: null, amount: null, issuedAt: null, items: [] })),
+    readReceiptQr: vi.fn(() => Promise.resolve({ recognized: false, label: null, amount: null, issuedAt: null, items: [] })),
     updateReceipt: vi.fn(() => Promise.resolve({})),
     removeReceipt: vi.fn(() => Promise.resolve()),
     receiptFileUrl: (actId: string, receiptId: string) => `/api/acts/${actId}/receipts/${receiptId}/file`,
@@ -21,6 +22,16 @@ vi.mock('@/api/acts.ts', () => ({
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { fetchBlobUrl: vi.fn(() => Promise.resolve('blob:receipt')) } }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()), interest: vi.fn(() => Promise.resolve()) } }));
+// The camera and the decoders are QrScanSheet's business (and its own test's) — here the sheet is
+// reduced to the one thing this section cares about: a payload arriving.
+vi.mock('@/components/QrScanSheet.tsx', () => ({
+  QrScanSheet: ({ open, onScanned }: { open: boolean; onScanned: (p: string) => void }) =>
+    open ? (
+      <button type="button" onClick={() => onScanned('fn=4000123456&id=17&date=20260815&sm=690.00')}>
+        scan-qr
+      </button>
+    ) : null,
+}));
 
 const baseMe: UserResponse = {
   id: 'u1', email: 'm@e.com', fullName: 'M', trades: [], customTrades: [], phone: '1',
@@ -127,9 +138,11 @@ describe('ActReceiptsSection', () => {
     expect(subtotal).not.toContain('2 883,50');
   });
 
-  it('FREE reads the footer but the item table is PRO: ticking it opens the upsell', async () => {
+  it('FREE reads the footer, but reading the item table off a PHOTO opens the upsell', async () => {
     // The gate is per MODE (master decision, 2026-08-23) — the cheap footer pass is what turns a
-    // photographed slip into a receipt row, so it must keep working on FREE.
+    // photographed slip into a receipt row, so it must keep working on FREE. Since the fiscal-QR
+    // iteration it is per SOURCE too, so the gate fires on the PHOTO read, not on the tick: the
+    // tick has to stay reachable on FREE or the free QR positions could never be asked for.
     vi.mocked(actsApi.recognizeReceipt).mockResolvedValue({
       recognized: true, label: 'Епіцентр', amount: 483.5, issuedAt: '2026-08-18', items: [],
     });
@@ -137,20 +150,76 @@ describe('ActReceiptsSection', () => {
     renderSection({ receipts: [], onTransferItems }, 'FREE');
 
     fireEvent.click(screen.getByText('+ Додати чек'));
+    fireEvent.click(screen.getByText('Розпізнати і перенести позиції з чека в акт'));
+    // Ticking costs nothing and is not refused.
+    expect((document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement).checked).toBe(true);
+    expect(upgradeApi.click).not.toHaveBeenCalled();
+
     const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
     const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(picker, { target: { files: [file] } });
 
-    // The FREE half ran, unprompted, on the picked photo.
-    await waitFor(() => expect(actsApi.recognizeReceipt).toHaveBeenCalledWith('a1', file, false));
-
-    fireEvent.click(screen.getByText('Розпізнати і перенести позиції з чека в акт'));
-
     await waitFor(() => expect(upgradeApi.click).toHaveBeenCalledWith('RECEIPT_IMPORT'));
-    // The expensive pass must not be spent, and the box must not look ticked.
+    // The expensive pass must not be spent — the footer still is, so the row is still usable.
     expect(vi.mocked(actsApi.recognizeReceipt).mock.calls.every((c) => c[2] === false)).toBe(true);
-    expect((document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement).checked).toBe(false);
     expect(onTransferItems).not.toHaveBeenCalled();
+  });
+
+  it('the QR route fills the receipt and, with the tick on, carries its positions on FREE too', async () => {
+    // «Безкоштовно все, що дав QR» (master decision, 2026-08-23): no model runs on this path, so
+    // there is nothing for a plan to gate — positions included.
+    vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
+      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15',
+      items: [{ name: 'Шпаклівка', unit: 'PIECE', quantity: 2, unitPrice: 345, type: 'MATERIAL', category: null, issues: [] }],
+    });
+    renderSection({ receipts: [] }, 'FREE');
+
+    fireEvent.click(screen.getByText('+ Додати чек'));
+    fireEvent.click(screen.getByText('Розпізнати і перенести позиції з чека в акт'));
+    fireEvent.click(screen.getByText('🔳 Зчитати QR'));
+    fireEvent.click(screen.getByText('scan-qr'));
+
+    await waitFor(() =>
+      expect(actsApi.readReceiptQr).toHaveBeenCalledWith('a1', 'fn=4000123456&id=17&date=20260815&sm=690.00', true));
+    await screen.findByText(/Розпізнано позицій: 1/);
+    expect(upgradeApi.click).not.toHaveBeenCalled();
+    const amount = screen.getByText('Сума, ₴').parentElement!.querySelector('input')!;
+    expect(amount.value).toBe('690');
+    expect(screen.getByDisplayValue('2026-08-15')).toBeTruthy();
+  });
+
+  it('without the tick a scanned QR fills the money and the date only («так як було»)', async () => {
+    // The master's rule for acts: positions are added ONLY when the checkbox is ticked. The QR
+    // makes the data free, it does not change who decides what lands in the act.
+    vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
+      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15', items: [],
+    });
+    renderSection({ receipts: [] });
+
+    fireEvent.click(screen.getByText('+ Додати чек'));
+    fireEvent.click(screen.getByText('🔳 Зчитати QR'));
+    fireEvent.click(screen.getByText('scan-qr'));
+
+    await waitFor(() =>
+      expect(actsApi.readReceiptQr).toHaveBeenCalledWith('a1', 'fn=4000123456&id=17&date=20260815&sm=690.00', false));
+    expect(screen.queryByText(/Розпізнано позицій/)).toBeNull();
+  });
+
+  it('a scanned QR never counts as the receipt photo — that still has to be attached', async () => {
+    vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
+      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15', items: [],
+    });
+    renderSection({ receipts: [] });
+
+    fireEvent.click(screen.getByText('+ Додати чек'));
+    fireEvent.click(screen.getByText('🔳 Зчитати QR'));
+    fireEvent.click(screen.getByText('scan-qr'));
+    await waitFor(() => expect(actsApi.readReceiptQr).toHaveBeenCalled());
+
+    // Label and amount are filled by the QR, and «Додати чек» is STILL disabled: the paper is the
+    // proof, and a fiscal code is not a photograph of it.
+    expect((screen.getByText('Додати чек').closest('button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/обов'язкові/)).toBeTruthy();
   });
 
   it('with «перенести позиції» the receipt lands itemized and the items go to the act', async () => {

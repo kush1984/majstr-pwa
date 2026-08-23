@@ -89,6 +89,18 @@ export const actsApi = {
       .then((r) => r.data);
   },
 
+  /**
+   * Read the receipt from its printed fiscal QR code instead of its photo — same response shape as
+   * recognizeReceipt, no model call, and free in both modes: withItems here is the master's
+   * «перенести позиції» tick, not a plan check.
+   */
+  readReceiptQr(actId: string, payload: string, withItems: boolean): Promise<ActReceiptRecognizeResponse> {
+    return api
+      .post<ActReceiptRecognizeResponse>(
+        `/api/acts/${actId}/receipts/qr${withItems ? '?withItems=true' : ''}`, { payload })
+      .then((r) => r.data);
+  },
+
   updateReceipt(actId: string, receiptId: string, req: WorkActReceiptRequest): Promise<WorkActReceiptResponse> {
     return api
       .patch<WorkActReceiptResponse>(`/api/acts/${actId}/receipts/${receiptId}`, req)

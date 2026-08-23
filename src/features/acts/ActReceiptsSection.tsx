@@ -6,6 +6,7 @@ import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { QrScanSheet } from '@/components/QrScanSheet.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
@@ -61,7 +62,9 @@ export function ActReceiptsSection({
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // The gate is per MODE, not per screen (master decision, 2026-08-23): reading the footer —
-  // label/date/total — is FREE, carrying the item table into the act is PRO.
+  // label/date/total — is FREE, carrying the item table into the act is PRO. It is also per
+  // SOURCE: everything a fiscal QR hands over is free, positions included, because no model runs
+  // on that path — so the tick itself is not what's gated, the photo item-read is.
   const { data: me } = useMe();
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
 
@@ -191,6 +194,7 @@ export function ActReceiptsSection({
         onSubmit={onSubmit}
         onClose={() => { setFormOpen(false); setEditing(null); }}
         recognize={(file, withItems) => actsApi.recognizeReceipt(actId, file, withItems)}
+        readQr={(payload, withItems) => actsApi.readReceiptQr(actId, payload, withItems)}
         itemsAllowed={isPro}
         onItemsBlocked={() => { void upgradeApi.click('RECEIPT_IMPORT'); setUpgradeOpen(true); }}
       />
@@ -223,9 +227,14 @@ export function ActReceiptsSection({
  * <p>Picking a photo triggers recognition: date + total prefill from the model (a small one), and
  * with «перенести позиції» ticked — the full item read. recognized=false just leaves the fields
  * manual; nothing blocks on the model.</p>
+ *
+ * <p>«Зчитати QR» is a third path to the same fields, not a replacement: the fiscal code printed on
+ * the receipt carries the total and the date outright, and the tax service can hand back the
+ * positions — no model, no cost, so no gate. It fills data, never paper: the photo stays mandatory,
+ * because the receipt's proof is the photograph of it.</p>
  */
 function ReceiptForm({
-  open, editing, busy, onSubmit, onClose, recognize, itemsAllowed, onItemsBlocked,
+  open, editing, busy, onSubmit, onClose, recognize, readQr, itemsAllowed, onItemsBlocked,
 }: {
   open: boolean;
   editing: WorkActReceiptResponse | null;
@@ -234,7 +243,9 @@ function ReceiptForm({
                   items: RecognizedReceiptItem[] | null; saveToPhotos: boolean }) => void;
   onClose: () => void;
   recognize: (file: File, withItems: boolean) => Promise<ActReceiptRecognizeResponse>;
-  /** The item-table read is PRO; the footer read is not. */
+  /** Same answer shape as recognize, taken from the fiscal QR instead of the paper. */
+  readQr: (payload: string, withItems: boolean) => Promise<ActReceiptRecognizeResponse>;
+  /** The item-table read off a PHOTO is PRO; the footer read and the whole QR path are not. */
   itemsAllowed: boolean;
   onItemsBlocked: () => void;
 }) {
@@ -249,7 +260,8 @@ function ReceiptForm({
   const [items, setItems] = useState<RecognizedReceiptItem[] | null>(null);
   // Which read is in flight, not just "a read is": the footer pass answers in seconds, the full
   // item table takes tens of them, and a silent spinner that long reads as a hung screen.
-  const [recognizing, setRecognizing] = useState<null | 'meta' | 'items'>(null);
+  const [recognizing, setRecognizing] = useState<null | 'meta' | 'items' | 'qr'>(null);
+  const [qrOpen, setQrOpen] = useState(false);
   const [seededFor, setSeededFor] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -267,6 +279,7 @@ function ReceiptForm({
     setSaveToPhotos(false);
     setItems(null);
     setRecognizing(null);
+    setQrOpen(false);
   }
 
   const num = (s: string): number => {
@@ -276,24 +289,59 @@ function ReceiptForm({
   // The photo is mandatory on add; an edit never changes it.
   const valid = label.trim() !== '' && num(amount) > 0 && (editing != null || file != null);
 
+  /** Both readers answer the same shape, so they fill the form the same way. A label the master
+   *  already typed is never overwritten — he named the shop, the reader only guessed it. */
+  const prefill = (read: ActReceiptRecognizeResponse, gotItems: boolean) => {
+    if (read.amount != null) setAmount(String(read.amount));
+    if (read.issuedAt != null) setIssuedAt(read.issuedAt);
+    setLabel((current) => current.trim() === '' && read.label ? read.label : current);
+    setItems(gotItems ? read.items : null);
+  };
+
   /** One recognition per picked file (re-run when «перенести позиції» flips ON with a file already
    *  picked, to fetch the items). Prefills what the model read; failure = stay manual. */
   const runRecognition = async (picked: File, wantItems: boolean) => {
-    setRecognizing(wantItems ? 'items' : 'meta');
+    // The gate sits HERE, on the paid action, and not on the tick: reading an item table off a
+    // PHOTO is the model call PRO pays for, while the same positions off a fiscal QR cost nothing.
+    // Gating the tick — as this did before the QR path existed — would have left FREE unable to
+    // ask for the free positions at all.
+    const wanted = wantItems && itemsAllowed;
+    if (wantItems && !itemsAllowed) onItemsBlocked();
+    setRecognizing(wanted ? 'items' : 'meta');
     try {
-      const read = await recognize(picked, wantItems);
+      const read = await recognize(picked, wanted);
       if (!read.recognized) {
         setItems(null);
         toast.info(t('acts.receiptRecognizeFailed'));
         return;
       }
-      if (read.amount != null) setAmount(String(read.amount));
-      if (read.issuedAt != null) setIssuedAt(read.issuedAt);
-      setLabel((current) => current.trim() === '' && read.label ? read.label : current);
-      setItems(wantItems ? read.items : null);
-      if ((read.amount == null || (wantItems && read.items.length === 0))) {
+      prefill(read, wanted);
+      if ((read.amount == null || (wanted && read.items.length === 0))) {
         toast.info(t('acts.receiptRecognizePartial'));
       }
+    } catch (err) {
+      setItems(null);
+      toast.error(toAppError(err).message);
+    } finally {
+      setRecognizing(null);
+    }
+  };
+
+  /** The QR the master just aimed at → the same prefill, straight from the fiscal record. */
+  const onQrScanned = async (payload: string) => {
+    setQrOpen(false);
+    setRecognizing('qr');
+    try {
+      const read = await readQr(payload, withItems);
+      if (!read.recognized) {
+        setItems(null);
+        toast.info(t('acts.receiptRecognizeFailed'));
+        return;
+      }
+      prefill(read, withItems);
+      // A QR always carries the money, so an empty item list is the only partial worth naming —
+      // and it is a fact about that receipt, not a failure to retry.
+      if (withItems && read.items.length === 0) toast.info(t('acts.receiptQrNoItems'));
     } catch (err) {
       setItems(null);
       toast.error(toAppError(err).message);
@@ -309,7 +357,6 @@ function ReceiptForm({
   };
 
   const onWithItemsToggle = () => {
-    if (!withItems && !itemsAllowed) { onItemsBlocked(); return; }
     const next = !withItems;
     setWithItems(next);
     if (next && file) void runRecognition(file, true);
@@ -340,9 +387,22 @@ function ReceiptForm({
             </p>
           </Field>
         )}
+        {!editing && (
+          // Its own full-width row rather than a third chip beside the two above: at 375px three
+          // buttons in a line shrink past a comfortable tap target, and this one is not a way to
+          // attach paper — it fills the fields, the photo is still required.
+          <div className="flex items-center gap-1.5">
+            <Button fullWidth variant="secondary" disabled={recognizing != null}
+              onClick={() => setQrOpen(true)}>
+              🔳 {t('acts.receiptScanQr')}
+            </Button>
+            <InfoPopover text={t('acts.receiptQrInfo')} />
+          </div>
+        )}
         {recognizing != null && (
           <p className="flex items-center gap-2 text-sm text-muted">
-            <Spinner size="sm" /> {t(recognizing === 'items' ? 'acts.receiptRecognizingItems' : 'acts.receiptRecognizing')}
+            <Spinner size="sm" /> {t(recognizing === 'qr' ? 'acts.receiptQrReading'
+              : recognizing === 'items' ? 'acts.receiptRecognizingItems' : 'acts.receiptRecognizing')}
           </p>
         )}
         <Field label={t('acts.receiptLabel')}>
@@ -397,6 +457,8 @@ function ReceiptForm({
           {t(editing ? 'common.save' : 'acts.receiptAdd')}
         </Button>
       </div>
+
+      <QrScanSheet open={qrOpen} onClose={() => setQrOpen(false)} onScanned={(p) => void onQrScanned(p)} />
     </Modal>
   );
 }

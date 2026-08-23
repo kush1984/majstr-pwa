@@ -803,7 +803,7 @@
     "receiptRecognizeFailed": "Could not read the receipt — enter the amount and date manually.",
     "receiptRecognizePartial": "Not everything was read — check and fill in the rest.",
     "receiptRecognizeItems": "Recognize and carry the receipt's items into the act",
-    "receiptRecognizeItemsInfo": "The receipt's items become the act's additional works/materials; the receipt itself stays as photo proof and is not billed a second time. Anything unreadable is left blank for you to fill.",
+    "receiptRecognizeItemsInfo": "The receipt's items become the act's additional works/materials; the receipt itself stays as photo proof and is not billed a second time. Anything unreadable is left blank for you to fill. Items from a QR code are free; reading them off a photo is PRO.",
     "receiptItemsFound": "Items recognized: {{count}}. They will appear in the act after adding the receipt — check quantities and prices.",
     "receiptItemizedBadge": "this receipt's items are included in the act",
     "receiptItemsTransferred": "Added {{count}} items from the receipt. Check quantities and prices below.",
@@ -811,7 +811,11 @@
     "receiptPhotosInPdfInfo": "PDF-only: the photo pages can be dropped from a formal printout. The portal always shows the photos, and the receipt amounts stay in the PDF either way.",
     "additionalDuplicate": "This position already exists in estimate «{{names}}» — you can mark it done there. Or keep it here as additional.",
     "receiptSaveToPhotos": "Also save the receipt photo to the Photos tab",
-    "receiptSaveToPhotosInfo": "A separate copy appears in the object's Photos under «Чеки». The act keeps its own copy, so the gallery one can be freely deleted or re-filed."
+    "receiptSaveToPhotosInfo": "A separate copy appears in the object's Photos under «Чеки». The act keeps its own copy, so the gallery one can be freely deleted or re-filed.",
+    "receiptScanQr": "Scan QR",
+    "receiptQrInfo": "The QR at the bottom of a fiscal receipt carries the total and the date. Positions follow when «carry positions over» is ticked. Free.",
+    "receiptQrReading": "Reading the receipt from its QR code…",
+    "receiptQrNoItems": "The QR was read, but it carries no positions. The total and the date are filled in."
   },
   "notes": {
     "title": "Notes",
@@ -830,7 +834,7 @@
   "receipt": {
     "fabLabel": "Add from receipt",
     "title": "Add from receipt",
-    "sourceHint": "Photograph a receipt (store, terminal, or hand-written) — its items are added to this estimate.",
+    "sourceHint": "Scan the QR at the bottom of the receipt, or photograph the receipt (a shop slip, a terminal print-out, or one written by hand) — its items are added to this estimate.",
     "takePhoto": "Take a photo",
     "upload": "Upload a photo",
     "parsing": "Reading the receipt…",
@@ -847,7 +851,10 @@
     "expenseMessage": "Add {{amount}} to the object's expenses (materials)? It will count in the object economy.",
     "expenseYes": "Log",
     "expenseNote": "Receipt",
-    "expenseSaved": "Added to expenses"
+    "expenseSaved": "Added to expenses",
+    "qrOption": "Scan the receipt QR",
+    "qrHint": "The fastest way: the data comes from the receipt itself, no recognition. Free.",
+    "qrReading": "Reading the receipt from its QR code…"
   },
   "import": {
     "title": "Import price list",
@@ -1702,5 +1709,14 @@
     "needConnection": "A connection is needed to get the link.",
     "title": "Chat link",
     "rowAria": "Chat link: {{name}}"
+  },
+  "qr": {
+    "title": "Scan the receipt QR",
+    "hint": "Point the camera at the QR code at the bottom of the receipt — the fields fill themselves.",
+    "cameraBlocked": "The camera is unavailable. Pick a photo of the receipt and the QR is read from it.",
+    "pickPhoto": "Pick a receipt photo",
+    "notFiscal": "That is not a fiscal receipt QR code. Try again, or photograph the receipt.",
+    "noCodeInPhoto": "No QR code visible in the photo. Try a closer shot.",
+    "reading": "Reading the receipt…"
   }
 }

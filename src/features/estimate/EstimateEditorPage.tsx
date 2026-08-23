@@ -29,11 +29,9 @@ import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
-import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
-import { useMe } from '@/features/auth/useMe.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
+import { useMe } from '@/features/auth/useMe.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
-import { upgradeApi } from '@/api/upgrade.ts';
 import { estimateName } from './estimateName.ts';
 import {
   useEstimate,
@@ -134,9 +132,7 @@ export function EstimateEditorPage() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [pdfSheetOpen, setPdfSheetOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  const { data: me } = useMe(); // for the custom trades on «зберегти як шаблон»
   // Actions that genuinely need the server (PDF, sharing, LLM recognition) say so when offline.
   const { guard } = useOnlineGuard();
 
@@ -563,16 +559,10 @@ export function EstimateEditorPage() {
               <FabAction
                 icon="🧾"
                 label={t('receipt.fabLabel')}
-                onClick={() =>
-                  close(guard(() => { // LLM recognition — server-side, no offline path
-                    if (isPro) {
-                      setReceiptOpen(true);
-                    } else {
-                      void upgradeApi.click('RECEIPT_IMPORT');
-                      setUpgradeOpen(true);
-                    }
-                  }))
-                }
+                // Open for everyone since the fiscal-QR iteration: the sheet's QR route is free,
+                // and the PRO gate moved inside onto the photo routes. Sending FREE to the upsell
+                // from here would hide a free capability behind a paywall.
+                onClick={() => close(guard(() => setReceiptOpen(true)))} // server-side either way
               />
             )}
             {/* Online-only: both reach the server (a rendered PDF / a link sent to a client). */}
@@ -625,7 +615,6 @@ export function EstimateEditorPage() {
           projectId={projectId}
         />
       )}
-      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
 
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={t('estimate.editItem')}>
         {editing && (

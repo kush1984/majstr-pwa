@@ -27,6 +27,16 @@ export const receiptImportApi = {
       .then((r) => r.data);
   },
 
+  /**
+   * Read a receipt from its printed fiscal QR code → the same review proposal as `parse`, taken
+   * from the tax service's own record. Free: there is no model call on this path, so no PRO gate.
+   */
+  parseQr(estimateId: string, payload: string): Promise<EstimateImportParseResponse> {
+    return api
+      .post<EstimateImportParseResponse>(`/api/estimates/${estimateId}/receipt-items/qr`, { payload })
+      .then((r) => r.data);
+  },
+
   /** Append the confirmed receipt lines to the estimate → updated estimate. */
   commit(estimateId: string, items: ReceiptItemsCommitItem[]): Promise<EstimateResponse> {
     return api

@@ -7,6 +7,10 @@ import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { QrScanSheet } from '@/components/QrScanSheet.tsx';
+import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { useMe } from '@/features/auth/useMe.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
 import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
 import { economyApi } from '@/api/economy.ts';
@@ -42,11 +46,16 @@ interface Draft {
 type Step = 'source' | 'parsing' | 'review';
 
 /**
- * Add items to the open estimate from a receipt photo (PRO). Camera / upload →
- * Claude vision → editable review → append to the estimate. Prices are NOT added
- * to the catalog. After commit the master is offered to keep the receipt photo
- * (private, attached to this object) — the same File is re-uploaded, so the parse
- * step never persists anything.
+ * Add items to the open estimate from a receipt — two ways into the same review.
+ *
+ * <p>«Зчитати QR» reads the fiscal code printed on the slip and asks the tax service for what was
+ * bought: no model, no cost, so it is FREE. The photo route (camera / upload → Claude vision) is
+ * the PRO one, and the only one that works on paper with no fiscal code — a hand-written slip, a
+ * faded print. Both land in the same editable review before anything is appended.</p>
+ *
+ * <p>Prices are NOT added to the catalog. After commit the master is offered to keep the receipt
+ * photo (private, attached to this object) — the same File is re-uploaded, so the parse step never
+ * persists anything, and the QR route skips that offer outright: it never held a photo.</p>
  */
 export function ReceiptImportSheet({
   open,
@@ -64,6 +73,11 @@ export function ReceiptImportSheet({
   const invalidateEstimate = useInvalidateEstimate(estimateId);
   const { online } = useOnlineGuard(); // LLM recognition is server-side — no offline path
   const [step, setStep] = useState<Step>('source');
+  // Which route is in flight: «Розпізнаємо чек…» is a lie while the tax service is being queried,
+  // and the two waits feel different enough (seconds vs tens of them) to be worth naming.
+  const [via, setVia] = useState<'photo' | 'qr'>('photo');
+  const [qrOpen, setQrOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
   const heldFile = useRef<File | null>(null);
@@ -73,8 +87,14 @@ export function ReceiptImportSheet({
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
 
+  // Reading a receipt PHOTO is the paid capability; everything the QR hands back is free.
+  const { data: me } = useMe();
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+
   const reset = () => {
     setStep('source');
+    setVia('photo');
+    setQrOpen(false);
     setDrafts([]);
     heldFile.current = null;
     receiptTotal.current = 0;
@@ -86,6 +106,49 @@ export function ReceiptImportSheet({
   const close = () => {
     reset();
     onClose();
+  };
+
+  /** Both routes answer the same proposal shape, so both become the same editable rows. */
+  const toDrafts = (items: { name: string; quantity: number | null; unitPrice: number | null;
+                             unit: Unit | null; type: ItemType }[]): Draft[] =>
+    items.map((it, i) => ({
+      key: i,
+      name: it.name,
+      quantity: it.quantity != null && it.quantity > 0 ? String(it.quantity) : '',
+      price: it.unitPrice != null && it.unitPrice > 0 ? String(it.unitPrice) : '',
+      unit: it.unit ?? '',
+      type: it.type,
+      include: true,
+    }));
+
+  const onQrScanned = async (payload: string) => {
+    setQrOpen(false);
+    // The lookup runs server-side against the tax service — impossible offline, same as the model.
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
+    }
+    setVia('qr');
+    setStep('parsing');
+    try {
+      const res = await receiptImportApi.parseQr(estimateId, payload);
+      setDrafts(toDrafts(res.items));
+      setStep('review');
+    } catch (err) {
+      // Unreadable code / no positions in it — a named message, and back to the source step so the
+      // photo route is one tap away. The QR is the fast path, never the only one.
+      toast.error(toAppError(err).message);
+      reset();
+    }
+  };
+
+  const pickPhoto = (ref: React.RefObject<HTMLInputElement | null>) => {
+    if (!isPro) {
+      void upgradeApi.click('RECEIPT_IMPORT');
+      setUpgradeOpen(true);
+      return;
+    }
+    ref.current?.click();
   };
 
   const onPick = async (file: File | undefined) => {
@@ -107,20 +170,11 @@ export function ReceiptImportSheet({
     // so downscaling before OCR loses items. Downscaling happens only if the photo is
     // later kept (saveReceiptPhoto), not for extraction.
     heldFile.current = file;
+    setVia('photo');
     setStep('parsing');
     try {
       const res = await receiptImportApi.parse(estimateId, file);
-      setDrafts(
-        res.items.map((it, i) => ({
-          key: i,
-          name: it.name,
-          quantity: it.quantity != null && it.quantity > 0 ? String(it.quantity) : '',
-          price: it.unitPrice != null && it.unitPrice > 0 ? String(it.unitPrice) : '',
-          unit: it.unit ?? '',
-          type: it.type,
-          include: true,
-        })),
-      );
+      setDrafts(toDrafts(res.items));
       setStep('review');
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -157,7 +211,7 @@ export function ReceiptImportSheet({
       // (closes the cash-flow loop). Then offer to keep the receipt photo.
       receiptTotal.current = included.reduce((s, d) => s + num(d.quantity) * num(d.price), 0);
       if (receiptTotal.current > 0) setExpenseOpen(true);
-      else setSavePhotoOpen(true);
+      else offerToKeepPhoto();
     } catch (err) {
       toast.error(toAppError(err).message);
       setCommitting(false);
@@ -181,7 +235,13 @@ export function ReceiptImportSheet({
         toast.error(toAppError(err).message); // fail-soft — the estimate lines already committed
       }
     }
-    setSavePhotoOpen(true);
+    offerToKeepPhoto();
+  };
+
+  /** The QR route never held a file, so there is nothing to keep — asking would be a dead dialog. */
+  const offerToKeepPhoto = () => {
+    if (heldFile.current) setSavePhotoOpen(true);
+    else close();
   };
 
   const saveReceiptPhoto = async (save: boolean) => {
@@ -206,11 +266,18 @@ export function ReceiptImportSheet({
         {step === 'source' && (
           <div className="space-y-3">
             <p className="text-sm text-muted">{t('receipt.sourceHint')}</p>
-            <Button fullWidth onClick={() => cameraRef.current?.click()}>
-              📷 {t('receipt.takePhoto')}
+            {/* The QR sits first and as the primary button: it is free, exact, and takes one aim
+                at the paper — the photo routes below it are the fallback for a slip that has no
+                fiscal code (hand-written, faded) and the reason they are PRO. */}
+            <Button fullWidth onClick={() => setQrOpen(true)}>
+              🔳 {t('receipt.qrOption')}
             </Button>
-            <Button fullWidth variant="secondary" onClick={() => uploadRef.current?.click()}>
-              🖼 {t('receipt.upload')}
+            <p className="-mt-1 text-xs text-muted">{t('receipt.qrHint')}</p>
+            <Button fullWidth variant="secondary" onClick={() => pickPhoto(cameraRef)}>
+              📷 {t('receipt.takePhoto')} {!isPro && <ProChip />}
+            </Button>
+            <Button fullWidth variant="secondary" onClick={() => pickPhoto(uploadRef)}>
+              🖼 {t('receipt.upload')} {!isPro && <ProChip />}
             </Button>
             <input
               ref={cameraRef}
@@ -239,7 +306,7 @@ export function ReceiptImportSheet({
         {step === 'parsing' && (
           <div className="py-10 text-center">
             <Spinner size="lg" />
-            <p className="mt-3 text-sm text-muted">{t('receipt.parsing')}</p>
+            <p className="mt-3 text-sm text-muted">{t(via === 'qr' ? 'receipt.qrReading' : 'receipt.parsing')}</p>
           </div>
         )}
 
@@ -332,6 +399,10 @@ export function ReceiptImportSheet({
         )}
       </Modal>
 
+      <QrScanSheet open={qrOpen} onClose={() => setQrOpen(false)} onScanned={(p) => void onQrScanned(p)} />
+
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+
       <ConfirmDialog
         open={expenseOpen}
         title={t('receipt.expenseTitle')}
@@ -350,6 +421,15 @@ export function ReceiptImportSheet({
         onClose={() => void saveReceiptPhoto(false)}
       />
     </>
+  );
+}
+
+function ProChip() {
+  const { t } = useTranslation();
+  return (
+    <span className="ml-1 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+      {t('landing.proBadge')}
+    </span>
   );
 }
 
