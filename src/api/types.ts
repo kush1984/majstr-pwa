@@ -1291,11 +1291,20 @@ export interface EstimateTemplateItemView {
   sortOrder: number;
 }
 
-/** Add a position to my own template (no quantity/price). */
+/** Add a position to my own template (no quantity/price). Also used to edit one in place. */
 export interface TemplateItemRequest {
   name: string;
   type: ItemType;
   unit: Unit;
+}
+
+/**
+ * The FULL order of a template's positions after a drag — declarative, not a move, so an
+ * offline replay lands in the same place however many times it runs. A bundle is a SEQUENCE
+ * (what is done after what), so this is real content, not decoration.
+ */
+export interface TemplateItemsOrderRequest {
+  itemIds: string[];
 }
 
 export interface EstimateTemplateDetail {

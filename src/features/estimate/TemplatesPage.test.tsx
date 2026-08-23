@@ -25,6 +25,9 @@ vi.mock('@/api/estimateTemplates.ts', () => ({
     remove: vi.fn(),
     addItem: vi.fn(),
     removeItem: vi.fn(),
+    updateItem: vi.fn(),
+    reorderItems: vi.fn(),
+    restoreDefaults: vi.fn(),
   },
 }));
 vi.mock('@/api/catalog.ts', () => ({
@@ -85,9 +88,15 @@ describe('TemplatesPage — edit own template', () => {
     expect(asButton(presentRow).disabled).toBe(true);
     expect(asButton(freshRow).disabled).toBe(false);
 
-    // Select the fresh one → add → addItem called with its name/type/unit.
+    // Select the fresh one → add. It lands in the DRAFT and nothing is written yet: the whole
+    // point of the explicit save is that the master can try positions on before committing.
     fireEvent.click(freshRow);
     fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
+    await waitFor(() => expect(screen.getAllByText('Кабель ВВГ').length).toBe(2));
+    expect(estimateTemplatesApi.addItem).not.toHaveBeenCalled();
+
+    // «Зберегти» is what writes — and it only became enabled because the draft changed.
+    fireEvent.click(screen.getByTestId('template-save'));
     await waitFor(() =>
       // Third arg = the client-generated UUID that makes the add idempotent on replay.
       expect(estimateTemplatesApi.addItem).toHaveBeenCalledWith('own1', {
@@ -114,13 +123,10 @@ describe('TemplatesPage — edit own template', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Додати позицію' }));
 
-    // Position added to the template, then the save-to-catalog prompt appears.
-    await waitFor(() =>
-      expect(estimateTemplatesApi.addItem).toHaveBeenCalledWith('own1', {
-        name: 'Нова робота', type: 'WORK', unit: 'M2',
-      }, expect.any(String)),
-    );
+    // The position is in the draft and the save-to-catalog prompt appears. The CATALOG entry is
+    // a separate thing the master owns, so it is offered right away; the TEMPLATE is not written.
     expect(await screen.findByText(/у ваш каталог/)).toBeTruthy();
+    expect(estimateTemplatesApi.addItem).not.toHaveBeenCalled();
 
     // Confirm → catalog entry created with name/type/unit + empty price (0).
     fireEvent.click(screen.getByRole('button', { name: 'Додати в каталог' }));
@@ -206,5 +212,180 @@ describe('TemplatesPage — trade filter chips', () => {
     fireEvent.click(screen.getByRole('button', { name: /Сантехніка/ }));
     await waitFor(() => expect(screen.queryByText('Електрика квартири')).toBeNull());
     expect(screen.getByText('Санвузол сантехніка')).toBeTruthy();
+  });
+});
+
+describe('TemplatesPage — ready-made templates are editable too', () => {
+  const sys: EstimateTemplateSummary = {
+    id: 'd1', name: 'МАЛЯРНІ РОБОТИ', trade: 'PAINTER', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 2,
+  };
+  const sysDetail: EstimateTemplateDetail = {
+    id: 'd1', name: 'МАЛЯРНІ РОБОТИ', trade: 'PAINTER', customTradeId: null, customTradeName: null, isDefault: true,
+    items: [
+      { id: 'i1', name: 'Грунтування стін', type: 'WORK', unit: 'M2', sortOrder: 0 },
+      { id: 'i2', name: 'Фарбування стін', type: 'WORK', unit: 'M2', sortOrder: 1 },
+    ],
+  };
+
+  it('deleting a system default asks to HIDE it, not to delete it for everyone', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.remove).mockResolvedValue(undefined);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Видалити' }));
+    // The wording is the whole point: the row is shared by every master, so it only leaves MY list.
+    expect(await screen.findByText('Прибрати шаблон зі списку?')).toBeTruthy();
+    expect(screen.getByText(/зникне лише у вас/)).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Видалити' })
+      .find((b) => !asButton(b).disabled && b.textContent === 'Видалити')!);
+    await waitFor(() => expect(estimateTemplatesApi.remove).toHaveBeenCalledWith('d1'));
+  });
+
+  it('the first edit of a ready-made template follows the fork the server answers with', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(sysDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    // The server copied the shared bundle into the master's own — a DIFFERENT id comes back.
+    vi.mocked(estimateTemplatesApi.addItem).mockResolvedValue({ ...sysDetail, id: 'fork1', isDefault: false });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Вручну' }));
+    fireEvent.change(screen.getByPlaceholderText('Назва позиції'), {
+      target: { value: 'Шліфування стін' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Додати позицію' }));
+    fireEvent.click(await screen.findByTestId('template-save'));
+
+    await waitFor(() => expect(estimateTemplatesApi.addItem).toHaveBeenCalledWith('d1', {
+      name: 'Шліфування стін', type: 'WORK', unit: 'M2',
+    }, expect.any(String)));
+    // ...and the editor re-points at the copy, or the next refetch would hand back the pristine
+    // default and the edits would look like they vanished.
+    await waitFor(() => expect(estimateTemplatesApi.get).toHaveBeenCalledWith('fork1'));
+  });
+
+  it('a save EDITS the template — the ready-made one is copied once, never on every save', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.rename).mockResolvedValue({
+      ...sys, id: 'fork1', name: 'Малярка моя', isDefault: false,
+    });
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(sysDetail);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+
+    // First save: rename → the server forks the shared bundle and answers with the copy.
+    expect(await screen.findByText(/Грунтування стін/)).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue('МАЛЯРНІ РОБОТИ'), { target: { value: 'Малярка моя' } });
+    fireEvent.click(screen.getByTestId('template-save'));
+    await waitFor(() =>
+      expect(estimateTemplatesApi.rename).toHaveBeenCalledWith('d1', { name: 'Малярка моя' }));
+
+    // Second save, still in the same editor: it addresses fork1 and creates nothing new.
+    // Renaming is the only write that could plausibly mint a row, so it is the one worth pinning.
+    fireEvent.change(await screen.findByDisplayValue('Малярка моя'),
+      { target: { value: 'Малярка моя 2' } });
+    fireEvent.click(screen.getByTestId('template-save'));
+
+    await waitFor(() =>
+      expect(estimateTemplatesApi.rename).toHaveBeenCalledWith('fork1', { name: 'Малярка моя 2' }));
+    expect(vi.mocked(estimateTemplatesApi.rename).mock.calls).toHaveLength(2);
+  });
+
+  it('an added position is marked unsaved and scrolled to, and goes plain again once saved', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(sysDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.addItem).mockResolvedValue(sysDetail);
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    expect(await screen.findByText(/Грунтування стін/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
+    fireEvent.change(screen.getByPlaceholderText('Назва позиції'), {
+      target: { value: 'Шліфування стін' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Додати позицію' }));
+
+    // Scoped to the composition — the name also shows up in the «зберегти в каталог» prompt the
+    // manual form leaves open behind it.
+    const card = (name: string) =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-template-item-id] button'))
+        .find((el) => el.textContent?.includes(name));
+
+    // A bundle is longer than the list shows and a new position lands at the BOTTOM, so it is
+    // brought into view — otherwise the highlight is on a row nobody can see.
+    await waitFor(() => expect(card('Шліфування стін')).toBeTruthy());
+    expect(scrolled).toHaveBeenCalled();
+
+    // Highlighted because it is not on the server yet — the untouched rows are not.
+    expect(card('Шліфування стін')!.className).toContain('bg-success-soft');
+    expect(card('Грунтування стін')!.className).not.toContain('bg-success-soft');
+
+    // «Зберегти» writes it, so the "not saved yet" mark goes out on its own.
+    fireEvent.click(screen.getByTestId('template-save'));
+    await waitFor(() => expect(estimateTemplatesApi.addItem).toHaveBeenCalled());
+    await waitFor(() => expect(card('Шліфування стін')!.className).not.toContain('bg-success-soft'));
+  });
+
+  it('closing with unsaved changes asks, and «Не зберігати» writes nothing', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(sysDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+
+    // Remove a position — a draft change like any other.
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Прибрати позицію' }))[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Видалити' })
+      .find((b) => b.textContent === 'Видалити')!);
+    await waitFor(() => expect(screen.queryByText(/Грунтування стін/)).toBeNull());
+
+    // ✕ must not drop the rework on the floor.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[0]);
+    expect(await screen.findByText('Зберегти зміни?')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Не зберігати' }));
+    await waitFor(() => expect(screen.queryByText('Редагувати шаблон')).toBeNull());
+    expect(estimateTemplatesApi.removeItem).not.toHaveBeenCalled();
+    expect(estimateTemplatesApi.rename).not.toHaveBeenCalled();
+  });
+
+  it('tapping a position opens the editor for it and saves name/type/unit in place', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([sys]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(sysDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.updateItem).mockResolvedValue(sysDetail);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+
+    // The composition is numbered — the order is the sequence of works, not decoration.
+    expect(await screen.findByText(/Грунтування стін/)).toBeTruthy();
+    fireEvent.click(screen.getByText(/Фарбування стін/));
+
+    expect(await screen.findByText('Редагувати позицію')).toBeTruthy();
+    // Opens prefilled with what is already there — an edit starts from the current wording.
+    const nameInput = screen.getByPlaceholderText<HTMLInputElement>('Назва позиції');
+    expect(nameInput.value).toBe('Фарбування стін');
+    fireEvent.change(nameInput, { target: { value: 'Фарбування стін у 2 шари' } });
+
+    // The sheet's «Зберегти» only closes it onto the draft — the template is still untouched.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Зберегти' })
+      .find((b) => !b.getAttribute('data-testid'))!);
+    await waitFor(() => expect(screen.queryByText('Редагувати позицію')).toBeNull());
+    expect(estimateTemplatesApi.updateItem).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('template-save'));
+    await waitFor(() => expect(estimateTemplatesApi.updateItem).toHaveBeenCalledWith('d1', 'i2', {
+      name: 'Фарбування стін у 2 шари', type: 'WORK', unit: 'M2',
+    }));
   });
 });

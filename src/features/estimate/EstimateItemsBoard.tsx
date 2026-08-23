@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { DragGrip } from '@/components/DragGrip.tsx';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { percentLabel } from './percentLine.ts';
@@ -305,7 +306,7 @@ function SectionBlock({
             <Tick on={allPicked} />
           </button>
         ) : (
-          !signed && <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />
+          !signed && <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />
         )}
         <span className="h-1.5 w-1.5 rounded-full bg-brand" />
         <span className="min-w-0 flex-1 truncate">{label(section.category, t)}</span>
@@ -367,9 +368,12 @@ function ItemRow({
   const fullyClosed = closed > 0 && closed >= item.quantity;
   const partlyClosed = closed > 0 && !fullyClosed;
 
+  // `data-item-id` is the anchor the editor scrolls a just-added/edited line to. Rows are nested
+  // inside category sections, so the page cannot hold a ref per line — it finds this by id instead.
   return (
     <div
       ref={setNodeRef}
+      data-item-id={item.id}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={`flex items-stretch gap-1 ${isDragging ? 'z-10 opacity-90' : ''}`}
     >
@@ -388,7 +392,7 @@ function ItemRow({
         </button>
       ) : (
         !signed && (
-          <Grip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
+          <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
         )
       )}
       <button
@@ -461,41 +465,5 @@ function ItemRow({
         </span>
       </button>
     </div>
-  );
-}
-
-/**
- * The drag handle. `touch-action: none` is what stops the browser from scrolling the page instead of
- * starting the drag — without it, dragging on a phone simply does not work.
- */
-function Grip({
-  listeners, attributes, label: ariaLabel, stretch,
-}: {
-  listeners: ReturnType<typeof useSortable>['listeners'];
-  attributes: ReturnType<typeof useSortable>['attributes'];
-  label: string;
-  stretch?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      style={{ touchAction: 'none' }}
-      {...attributes}
-      {...listeners}
-      // A line's grip is the full height of its card; a section's was 20 px tall, so the two were
-      // nothing like the same target on a phone — which is most of why categories "practically
-      // could not be dragged" there. 44 px is the floor for a thumb, and it matches the height the
-      // category checkbox already uses in selection mode, so the header no longer changes height
-      // between modes either.
-      className={`flex w-7 flex-shrink-0 cursor-grab items-center justify-center rounded-lg text-faint
-        active:cursor-grabbing ${stretch ? 'self-stretch' : 'h-11'}`}
-    >
-      <svg viewBox="0 0 10 16" className="h-4 w-2.5 fill-current" aria-hidden="true">
-        <circle cx="2" cy="3" r="1.4" /><circle cx="8" cy="3" r="1.4" />
-        <circle cx="2" cy="8" r="1.4" /><circle cx="8" cy="8" r="1.4" />
-        <circle cx="2" cy="13" r="1.4" /><circle cx="8" cy="13" r="1.4" />
-      </svg>
-    </button>
   );
 }

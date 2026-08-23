@@ -11,6 +11,9 @@ import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
 import { formatMoneyExact } from '@/lib/format.ts';
 import { usePhotoBlobUrl } from '@/features/photos/PhotoView.tsx';
+import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { useMe } from '@/features/auth/useMe.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
 import { useAddActReceipt, useDeleteActReceipt, useUpdateActReceipt } from './useActs.ts';
 import type { ActReceiptRecognizeResponse, RecognizedReceiptItem, WorkActReceiptResponse } from '@/api/types.ts';
 
@@ -55,6 +58,12 @@ export function ActReceiptsSection({
   const [editing, setEditing] = useState<WorkActReceiptResponse | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<WorkActReceiptResponse | null>(null);
   const [viewing, setViewing] = useState<WorkActReceiptResponse | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  // The gate is per MODE, not per screen (master decision, 2026-08-23): reading the footer —
+  // label/date/total — is FREE, carrying the item table into the act is PRO.
+  const { data: me } = useMe();
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
 
   // Itemized receipts are reference-only: their positions already bill the money as act lines.
   const total = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + r.amount, 0);
@@ -182,7 +191,11 @@ export function ActReceiptsSection({
         onSubmit={onSubmit}
         onClose={() => { setFormOpen(false); setEditing(null); }}
         recognize={(file, withItems) => actsApi.recognizeReceipt(actId, file, withItems)}
+        itemsAllowed={isPro}
+        onItemsBlocked={() => { void upgradeApi.click('RECEIPT_IMPORT'); setUpgradeOpen(true); }}
       />
+
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
 
       <Modal open={viewing !== null} onClose={() => setViewing(null)} title={viewing?.label ?? ''}>
         {viewing && <ReceiptFullPhoto actId={actId} receiptId={viewing.id} alt={viewing.label} />}
@@ -212,7 +225,7 @@ export function ActReceiptsSection({
  * manual; nothing blocks on the model.</p>
  */
 function ReceiptForm({
-  open, editing, busy, onSubmit, onClose, recognize,
+  open, editing, busy, onSubmit, onClose, recognize, itemsAllowed, onItemsBlocked,
 }: {
   open: boolean;
   editing: WorkActReceiptResponse | null;
@@ -221,6 +234,9 @@ function ReceiptForm({
                   items: RecognizedReceiptItem[] | null; saveToPhotos: boolean }) => void;
   onClose: () => void;
   recognize: (file: File, withItems: boolean) => Promise<ActReceiptRecognizeResponse>;
+  /** The item-table read is PRO; the footer read is not. */
+  itemsAllowed: boolean;
+  onItemsBlocked: () => void;
 }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState('');
@@ -293,6 +309,7 @@ function ReceiptForm({
   };
 
   const onWithItemsToggle = () => {
+    if (!withItems && !itemsAllowed) { onItemsBlocked(); return; }
     const next = !withItems;
     setWithItems(next);
     if (next && file) void runRecognition(file, true);
@@ -344,8 +361,13 @@ function ReceiptForm({
             <label className="flex items-start gap-2">
               <input type="checkbox" checked={withItems} onChange={onWithItemsToggle}
                 className="mt-0.5 h-4 w-4 accent-brand" />
-              <span className="flex items-center gap-1 text-sm text-secondary">
+              <span className="flex flex-wrap items-center gap-1 text-sm text-secondary">
                 {t('acts.receiptRecognizeItems')}
+                {!itemsAllowed && (
+                  <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
+                    {t('landing.proBadge')}
+                  </span>
+                )}
                 <InfoPopover text={t('acts.receiptRecognizeItemsInfo')} />
               </span>
             </label>

@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActReceiptsSection } from './ActReceiptsSection.tsx';
 import { actsApi } from '@/api/acts.ts';
-import type { WorkActReceiptResponse } from '@/api/types.ts';
+import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
+import type { UserResponse, WorkActReceiptResponse } from '@/api/types.ts';
 
 vi.mock('@/api/acts.ts', () => ({
   actsApi: {
@@ -18,13 +20,27 @@ vi.mock('@/api/acts.ts', () => ({
 }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { fetchBlobUrl: vi.fn(() => Promise.resolve('blob:receipt')) } }));
+vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()), interest: vi.fn(() => Promise.resolve()) } }));
+
+const baseMe: UserResponse = {
+  id: 'u1', email: 'm@e.com', fullName: 'M', trades: [], customTrades: [], phone: '1',
+  companyName: 'C', logoUrl: null, plan: 'PRO', role: 'USER', emailVerified: true,
+  createdAt: '2026-01-01', consentedToPrivacyAt: '2026-01-01', acknowledgedClientDataAt: '2026-01-01',
+  planExpiresAt: null, autoRenew: false, cardMask: null, trialStartedAt: null, referralCode: 'r1',
+  legalName: null, taxId: null, legalAddress: null, iban: null, bankName: null, vatPayer: false,
+  vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
+};
 
 function receipt(over: Partial<WorkActReceiptResponse> = {}): WorkActReceiptResponse {
   return { id: 'r1', label: 'Епіцентр', amount: 2400, issuedAt: '2026-08-03', hasPhoto: true, itemized: false, sortOrder: 0, ...over };
 }
 
-function renderSection(over: Partial<Parameters<typeof ActReceiptsSection>[0]> = {}) {
+function renderSection(
+  over: Partial<Parameters<typeof ActReceiptsSection>[0]> = {},
+  plan: UserResponse['plan'] = 'PRO',
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc.setQueryData(ME_QUERY_KEY, { ...baseMe, plan });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
@@ -109,6 +125,32 @@ describe('ActReceiptsSection', () => {
       .replace(/\s+/g, ' '); // Intl groups digits with NBSP
     expect(subtotal).toContain('2 400,00');
     expect(subtotal).not.toContain('2 883,50');
+  });
+
+  it('FREE reads the footer but the item table is PRO: ticking it opens the upsell', async () => {
+    // The gate is per MODE (master decision, 2026-08-23) — the cheap footer pass is what turns a
+    // photographed slip into a receipt row, so it must keep working on FREE.
+    vi.mocked(actsApi.recognizeReceipt).mockResolvedValue({
+      recognized: true, label: 'Епіцентр', amount: 483.5, issuedAt: '2026-08-18', items: [],
+    });
+    const onTransferItems = vi.fn();
+    renderSection({ receipts: [], onTransferItems }, 'FREE');
+
+    fireEvent.click(screen.getByText('+ Додати чек'));
+    const file = new File(['x'], 'receipt.jpg', { type: 'image/jpeg' });
+    const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(picker, { target: { files: [file] } });
+
+    // The FREE half ran, unprompted, on the picked photo.
+    await waitFor(() => expect(actsApi.recognizeReceipt).toHaveBeenCalledWith('a1', file, false));
+
+    fireEvent.click(screen.getByText('Розпізнати і перенести позиції з чека в акт'));
+
+    await waitFor(() => expect(upgradeApi.click).toHaveBeenCalledWith('RECEIPT_IMPORT'));
+    // The expensive pass must not be spent, and the box must not look ticked.
+    expect(vi.mocked(actsApi.recognizeReceipt).mock.calls.every((c) => c[2] === false)).toBe(true);
+    expect((document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement).checked).toBe(false);
+    expect(onTransferItems).not.toHaveBeenCalled();
   });
 
   it('with «перенести позиції» the receipt lands itemized and the items go to the act', async () => {

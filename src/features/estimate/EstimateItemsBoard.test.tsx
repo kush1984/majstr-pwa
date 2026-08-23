@@ -147,3 +147,23 @@ describe('EstimateItemsBoard — closed by SIGNED acts', () => {
     expect(rowButton('Позиція A').className).not.toContain('bg-success-soft');
   });
 });
+
+describe('EstimateItemsBoard — scroll anchor', () => {
+  it('every row carries data-item-id, the anchor the editor scrolls a just-added line to', () => {
+    // The editor finds the row by this attribute (rows are nested inside category sections, so it
+    // cannot hold a ref per line). Drop it and the auto-scroll dies silently — nothing throws.
+    const { container } = render(
+      <EstimateItemsBoard
+        items={[
+          line({ id: 'a', name: 'Позиція A', sortOrder: 0 }),
+          line({ id: 'b', name: 'Позиція B', sortOrder: 1 }),
+        ]}
+        signed={false}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[data-item-id="a"]')).toBeTruthy();
+    expect(container.querySelector('[data-item-id="b"]')).toBeTruthy();
+  });
+});

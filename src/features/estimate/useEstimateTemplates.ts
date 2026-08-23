@@ -10,8 +10,10 @@ import type {
   EstimateResponse,
   EstimateSummary,
   EstimateTemplateDetail,
+  EstimateTemplateItemView,
   EstimateTemplateSummary,
   TemplateItemRequest,
+  TemplateItemsOrderRequest,
   Trade,
 } from '@/api/types.ts';
 import { isNetworkError, offlineMutate } from '@/lib/outbox/offlineMutation.ts';
@@ -79,6 +81,30 @@ function patchDetail(
 }
 
 /**
+ * Land a write's answer in the cache, FOLLOWING A FORK.
+ *
+ * A write on a system default answers with the master's own copy, whose id differs from the one we
+ * asked for. Keying that answer under the id we sent would park the edits on a template that is no
+ * longer in the list, and the next refetch of it would return the pristine default — the edits
+ * would look like they vanished. So the detail is stored under the id the SERVER named, and the
+ * one we asked for is dropped.
+ *
+ * Offline there is no fork yet (the copy is minted on replay) and `detail` is the optimistic one,
+ * still keyed by the id we sent — which is exactly right until the queue drains.
+ */
+function adoptDetail(
+  qc: QueryClient,
+  requestedId: string,
+  detail: EstimateTemplateDetail | undefined,
+): void {
+  if (!detail) return;
+  qc.setQueryData([...ESTIMATE_TEMPLATE_KEY, detail.id], detail);
+  if (detail.id !== requestedId) {
+    qc.removeQueries({ queryKey: [...ESTIMATE_TEMPLATE_KEY, requestedId] });
+  }
+}
+
+/**
  * Template editing is offline-first: the master reworks their own templates between objects,
  * often with no signal. `saveAsTemplate` / `applyTemplate` stay online — they read or write
  * server-side state (an estimate's items, a new estimate) we can't reproduce locally.
@@ -115,24 +141,29 @@ export function useSetTemplateTrade() {
   });
 }
 
+/** Rename a template. Returns the server's row so the caller can follow a FORK — renaming a
+ *  system default answers with the master's own copy, under a different id. */
 export function useRenameTemplate() {
   const qc = useQueryClient();
   const invalidate = useInvalidateTemplates();
   return useMutation({
     networkMode: 'always',
-    mutationFn: ({ id, name }: { id: string; name: string }): Promise<void> =>
-      offlineMutate<void>({
+    mutationFn: ({ id, name }: { id: string; name: string }): Promise<EstimateTemplateSummary | undefined> =>
+      offlineMutate<EstimateTemplateSummary | undefined>({
         entity: 'estimateTemplate', entityId: id, type: 'update', payload: { op: 'rename', name }, deps: [],
-        online: async () => { await estimateTemplatesApi.rename(id, { name }); },
+        online: () => estimateTemplatesApi.rename(id, { name }),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           patchSummary(qc, id, (t) => ({ ...t, name }));
           patchDetail(qc, id, (d) => ({ ...d, name }));
+          return undefined;
         },
       }),
   });
 }
 
+/** Delete a template. My own really goes; a SYSTEM DEFAULT is shared by every master, so the
+ *  server hides it for me alone — either way it leaves MY list, which is what the row does here. */
 export function useDeleteTemplate() {
   const qc = useQueryClient();
   const invalidate = useInvalidateTemplates();
@@ -177,9 +208,7 @@ export function useAddTemplateItem(templateId: string) {
         },
       });
     },
-    onSuccess: (detail) => {
-      if (detail) qc.setQueryData([...ESTIMATE_TEMPLATE_KEY, templateId], detail);
-    },
+    onSuccess: (detail) => adoptDetail(qc, templateId, detail),
   });
 }
 
@@ -201,8 +230,76 @@ export function useRemoveTemplateItem(templateId: string) {
           }));
         },
       }),
-    onSuccess: (detail) => {
-      if (detail) qc.setQueryData([...ESTIMATE_TEMPLATE_KEY, templateId], detail);
+    onSuccess: (detail) => adoptDetail(qc, templateId, detail),
+  });
+}
+
+
+/**
+ * Edit a position in place — name / type / unit. The same write whether the master retyped it by
+ * hand or picked a replacement out of the catalog; the catalog is only where the three values came
+ * from (a template position carries no price, so nothing else crosses over).
+ */
+export function useUpdateTemplateItem(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: ({ itemId, req }: { itemId: string; req: TemplateItemRequest }):
+    Promise<EstimateTemplateDetail | undefined> =>
+      offlineMutate<EstimateTemplateDetail | undefined>({
+        entity: 'templateItem', entityId: itemId, type: 'update',
+        payload: { templateId, req }, deps: [templateId],
+        online: () => estimateTemplatesApi.updateItem(templateId, itemId, req),
+        onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
+        optimistic: () => patchDetail(qc, templateId, (d) => ({
+          ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, ...req } : i)),
+        })),
+      }),
+    onSuccess: (detail) => adoptDetail(qc, templateId, detail),
+  });
+}
+
+/**
+ * Persist the arrangement a drag produced. A bundle is a SEQUENCE — what is done after what — so
+ * this is real content, not decoration, which is why it is saved the moment the drag ends.
+ *
+ * `coalesce` because dragging four times offline means the master wants the fourth arrangement:
+ * the request states the whole order anyway, so replaying the abandoned three would only cost
+ * round trips to reach where the last one already points.
+ */
+export function useReorderTemplateItems(templateId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (arranged: EstimateTemplateItemView[]): Promise<EstimateTemplateDetail | undefined> => {
+      const req: TemplateItemsOrderRequest = { itemIds: arranged.map((i) => i.id) };
+      return offlineMutate<EstimateTemplateDetail | undefined>({
+        entity: 'templateItemOrder', entityId: templateId, type: 'update',
+        payload: { req }, deps: [templateId], coalesce: true,
+        online: () => estimateTemplatesApi.reorderItems(templateId, req),
+        onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
+        optimistic: () => patchDetail(qc, templateId, (d) => ({
+          ...d, items: arranged.map((i, idx) => ({ ...i, sortOrder: idx })),
+        })),
+      });
+    },
+    onSuccess: (detail) => adoptDetail(qc, templateId, detail),
+  });
+}
+
+/**
+ * Bring back every system default this master hid. Online-only on purpose: which defaults are
+ * hidden is not something the device knows (the list simply omits them), so there is no honest
+ * optimistic state to show — and it is a rare escape hatch, not a daily flow.
+ */
+export function useRestoreDefaults() {
+  const qc = useQueryClient();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: () => estimateTemplatesApi.restoreDefaults(),
+    onSuccess: (list) => {
+      qc.setQueryData(ESTIMATE_TEMPLATE_KEY, list);
+      void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY });
     },
   });
 }

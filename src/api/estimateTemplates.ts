@@ -6,6 +6,7 @@ import type {
   EstimateTemplateSummary,
   SaveAsTemplateRequest,
   TemplateItemRequest,
+  TemplateItemsOrderRequest,
   TemplateTradeRequest,
 } from './types.ts';
 
@@ -14,6 +15,13 @@ import type {
  * carries system defaults relevant to my trades plus my own saved templates;
  * applying one creates a normal, fully editable estimate (quantities empty,
  * prices substituted from my catalog by name).
+ *
+ * **A system default is FORKED ON WRITE.** The defaults are rows shared by every master, so the
+ * first edit (rename, add/edit/remove/reorder a position) copies the bundle into my own editable
+ * one and hides the original for me alone. Every write therefore answers with the template it
+ * actually wrote — whose `id` may differ from the one asked for. **Follow the id you get back**;
+ * a later write may keep addressing the default (the server resolves it to the same copy), but the
+ * cache must re-key or the edits look like they vanished.
  */
 export const estimateTemplatesApi = {
   /** Defaults relevant to my trades (+ general) plus my own templates. */
@@ -26,7 +34,7 @@ export const estimateTemplatesApi = {
     return api.get<EstimateTemplateDetail>(`/api/estimate-templates/${id}`).then((r) => r.data);
   },
 
-  /** Rename my own template (defaults are read-only). */
+  /** Rename a template — a system default is forked on write (the answer carries the copy). */
   rename(id: string, req: SaveAsTemplateRequest): Promise<EstimateTemplateSummary> {
     return api.patch<EstimateTemplateSummary>(`/api/estimate-templates/${id}`, req).then((r) => r.data);
   },
@@ -38,12 +46,22 @@ export const estimateTemplatesApi = {
       .then((r) => r.data);
   },
 
-  /** Delete my own template. */
+  /**
+   * Delete a template. My own is really deleted; a SYSTEM DEFAULT is a row shared by every
+   * master, so it is hidden for me alone and comes back with {@link restoreDefaults}.
+   */
   remove(id: string): Promise<void> {
     return api.delete(`/api/estimate-templates/${id}`).then(() => undefined);
   },
 
-  /** Add a position to my own template → updated detail. */
+  /** Bring back every system default I hid (my own templates are left alone). */
+  restoreDefaults(): Promise<EstimateTemplateSummary[]> {
+    return api
+      .post<EstimateTemplateSummary[]>('/api/estimate-templates/restore-defaults')
+      .then((r) => r.data);
+  },
+
+  /** Add a position → updated detail (a system default is forked on write). */
   /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
   addItem(templateId: string, req: TemplateItemRequest, id?: string): Promise<EstimateTemplateDetail> {
     return api
@@ -52,10 +70,24 @@ export const estimateTemplatesApi = {
       .then((r) => r.data);
   },
 
-  /** Remove a position from my own template → updated detail. */
+  /** Remove a position → updated detail (a system default is forked on write). */
   removeItem(templateId: string, itemId: string): Promise<EstimateTemplateDetail> {
     return api
       .delete<EstimateTemplateDetail>(`/api/estimate-templates/${templateId}/items/${itemId}`)
+      .then((r) => r.data);
+  },
+
+  /** Edit a position in place — name / type / unit. */
+  updateItem(templateId: string, itemId: string, req: TemplateItemRequest): Promise<EstimateTemplateDetail> {
+    return api
+      .patch<EstimateTemplateDetail>(`/api/estimate-templates/${templateId}/items/${itemId}`, req)
+      .then((r) => r.data);
+  },
+
+  /** Rearrange a template's positions — the whole order, so a replay is idempotent. */
+  reorderItems(templateId: string, req: TemplateItemsOrderRequest): Promise<EstimateTemplateDetail> {
+    return api
+      .put<EstimateTemplateDetail>(`/api/estimate-templates/${templateId}/items/order`, req)
       .then((r) => r.data);
   },
 

@@ -15,7 +15,7 @@ import type {
   EstimateItemFromCatalogRequest, EstimateItemRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
   NoteRequest, ProjectRequest,
-  ProjectStatus, TemplateItemRequest, Trade,
+  ProjectStatus, TemplateItemRequest, TemplateItemsOrderRequest, Trade,
 } from '@/api/types.ts';
 
 /**
@@ -206,11 +206,26 @@ export function initOutbox(qc: QueryClient): () => void {
     const p = op.payload as { templateId: string; req?: TemplateItemRequest };
     if (op.type === 'create') {
       await estimateTemplatesApi.addItem(p.templateId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await estimateTemplatesApi.updateItem(p.templateId, op.entityId, p.req!);
     } else if (op.type === 'delete') {
       await estimateTemplatesApi.removeItem(p.templateId, op.entityId);
     } else {
       throw new Error(`templateItem: unsupported op type "${op.type}"`); // see note above
     }
+  });
+
+  // The arrangement of a template's positions after a drag. entityId is the TEMPLATE, and it is
+  // queued with `enqueueLatest` — several drags made offline collapse into the one the master
+  // ended on. Its own entity rather than an `estimateTemplate` update: coalescing keys on
+  // entity+entityId+type, so sharing that entity would let a reorder swallow a queued rename.
+  //
+  // Positions added in the same offline session are NOT deps: the server keeps any position an
+  // arrangement does not mention (appending it after the rest), so an order that lands first is
+  // harmless.
+  registerOutboxHandler('templateItemOrder', async (op) => {
+    const p = op.payload as { req: TemplateItemsOrderRequest };
+    await estimateTemplatesApi.reorderItems(op.entityId, p.req);
   });
 
   // Classify replay failures: a NETWORK blip / 5xx / 429 retries; a permanent 4xx blocks the op for

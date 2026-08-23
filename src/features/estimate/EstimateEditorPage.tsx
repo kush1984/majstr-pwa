@@ -14,6 +14,7 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { toast } from '@/hooks/useToast.ts';
+import { bodyScrollLocked, scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
@@ -97,6 +98,10 @@ export function EstimateEditorPage() {
   // going down a long list, the master can see at a glance which line he last worked on, distinct
   // from everything he already touched earlier in the same pass.
   const [lastTouched, setLastTouched] = useState<ReadonlySet<string>>(() => new Set());
+  // A new position lands where its category sorts it, not at the bottom — on a long estimate that is
+  // off-screen, and the master had to scroll hunting for the green row (his words: «треба прокручувати
+  // і шукати де та позиція додалась»). The highlight is only useful if you can see it.
+  const scrollTo = useRef<string | null>(null);
   const markTouched = (ids: string[]) => {
     setTouched((prev) => {
       const next = new Set(prev);
@@ -104,6 +109,7 @@ export function EstimateEditorPage() {
       return next;
     });
     setLastTouched(new Set(ids));
+    scrollTo.current = ids[0] ?? null;
   };
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -136,7 +142,23 @@ export function EstimateEditorPage() {
 
   // The route component is reused across estimates, so drop the highlight set when the id changes —
   // yesterday's edits must not glow on a different sheet.
-  useEffect(() => { setTouched(new Set()); setLastTouched(new Set()); }, [id]);
+  useEffect(() => { setTouched(new Set()); setLastTouched(new Set()); scrollTo.current = null; }, [id]);
+
+  // Runs on BOTH the mark and the refetch, because their order is not fixed: an offline add is in the
+  // cache before `markTouched`, an online one lands after it. Whichever renders the row last finds it
+  // here; the target is cleared only once it actually exists, so the scroll is never silently dropped.
+  // It also re-runs when the add sheet / edit modal closes: while one is open the page is frozen
+  // (`bodyScrollLocked`) and nothing can scroll — and the manual add deliberately keeps the sheet open
+  // to offer «зберегти в каталог», which is exactly the case the master reported as working from the
+  // catalog but not by hand. Burning the target there would drop the scroll for good.
+  useEffect(() => {
+    const target = scrollTo.current;
+    if (!target || bodyScrollLocked()) return;
+    const row = document.querySelector(`[data-item-id="${target}"]`);
+    if (!row) return;
+    scrollTo.current = null;
+    scrollRowIntoView(row);
+  }, [lastTouched, estimate.data, addOpen, editing]);
 
   if (estimate.isPending) {
     return (

@@ -77,10 +77,11 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   const atReceiptLimit = isAtLimit(receiptCount, limits.data?.maxReceiptPhotosPerObject);
 
   const inFolder = (key: FolderKey) => all.filter((p) => (p.folder ?? null) === key);
-  const folderList: { key: FolderKey; icon: string; label: string; folderId?: string }[] = [
-    { key: RECEIPTS, icon: '🧾', label: t('photos.receiptsFolderTitle') },
-    { key: null, icon: '📁', label: t('photos.folderOther') },
-    ...(folders.data ?? []).map((f) => ({ key: f.name, icon: '📁', label: f.name, folderId: f.id })),
+  // Every folder wears the same plain folder icon — «Чеки» is a folder, not a special widget.
+  const folderList: { key: FolderKey; label: string; folderId?: string }[] = [
+    { key: RECEIPTS, label: t('photos.receiptsFolderTitle') },
+    { key: null, label: t('photos.folderOther') },
+    ...(folders.data ?? []).map((f) => ({ key: f.name, label: f.name, folderId: f.id })),
   ];
 
   const current = open ? folderList.find((f) => f.key === open.key) ?? null : null;
@@ -153,7 +154,7 @@ export function PhotosSection({ projectId }: { projectId: string }) {
                   onClick={() => setOpen({ key: f.key })}
                   className="flex min-h-[56px] w-full items-center gap-3 rounded-card border border-border bg-surface px-3 py-2.5 text-left"
                 >
-                  <span className="text-xl leading-none">{f.icon}</span>
+                  <span className="text-xl leading-none">📁</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-primary">{f.label}</span>
                     <span className="block text-[12px] text-muted">
@@ -186,7 +187,7 @@ export function PhotosSection({ projectId }: { projectId: string }) {
               ‹
             </button>
             <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
-              {current?.icon} {current?.label}
+              📁 {current?.label}
             </h3>
             {/* Deletable only while empty — the server enforces the same, because photos
                 reference folders by NAME and a delete must never silently re-file them. */}

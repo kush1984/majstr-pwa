@@ -117,3 +117,12 @@ if (typeof URL.createObjectURL !== 'function') {
 if (typeof URL.revokeObjectURL !== 'function') {
   URL.revokeObjectURL = () => {};
 }
+
+/**
+ * jsdom does no layout, so it ships no `scrollIntoView` at all — calling it is a TypeError, not a
+ * harmless no-op. Any screen that brings a just-added row into view (the estimate board, the
+ * template editor) would then blow up in a test for a reason unrelated to what is under test.
+ */
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {};
+}
