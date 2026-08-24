@@ -1712,11 +1712,12 @@
   },
   "qr": {
     "title": "Scan the receipt QR",
-    "hint": "Point the camera at the QR code at the bottom of the receipt — the fields fill themselves.",
+    "hint": "Point the camera at the QR code at the bottom of the receipt, next to the receipt number. A receipt often prints several codes; the fiscal one is the one you want.",
     "cameraBlocked": "The camera is unavailable. Pick a photo of the receipt and the QR is read from it.",
     "pickPhoto": "Pick a receipt photo",
-    "notFiscal": "That is not a fiscal receipt QR code. Try again, or photograph the receipt.",
-    "noCodeInPhoto": "No QR code visible in the photo. Try a closer shot.",
-    "reading": "Reading the receipt…"
+    "notFiscal": "That is not a fiscal receipt QR code. A receipt usually prints several — aim at the one next to the receipt number.",
+    "noCodeInPhoto": "No QR code visible in the photo. Shoot closer so the code fills more of the frame.",
+    "reading": "Reading the receipt…",
+    "readInstead": "Read instead: {{code}}"
   }
 }

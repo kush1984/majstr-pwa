@@ -8,6 +8,28 @@ import { decodeQr, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 /** How often a frame is decoded. Fast enough to feel instant, slow enough to leave the phone warm. */
 const SCAN_INTERVAL_MS = 220;
 
+/** Enough of the payload to recognise WHICH code was read, without wrapping the notice to five lines. */
+const NOTICE_CODE_CHARS = 60;
+
+interface FocusableVideoConstraints extends MediaTrackConstraints {
+  /** Non-standard, honoured on Android: keep refocusing instead of locking on the first frame. */
+  focusMode?: ConstrainDOMString;
+}
+
+/**
+ * A fiscal QR is DENSE — around forty modules across, printed a couple of centimetres wide on
+ * thermal paper. At the 640x480 a phone hands back when nothing is asked of it, its modules are
+ * under two pixels and no decoder can read it, while the sparse vendor/marketing code beside it
+ * reads fine — which is precisely the failure the master saw. So the resolution is asked for.
+ * `ideal` throughout: a laptop webcam that cannot do this still opens instead of failing.
+ */
+const VIDEO: FocusableVideoConstraints = {
+  facingMode: { ideal: 'environment' },
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+  focusMode: { ideal: 'continuous' },
+};
+
 type Camera = 'starting' | 'live' | 'unavailable';
 
 /**
@@ -19,10 +41,13 @@ type Camera = 'starting' | 'live' | 'unavailable';
  * lives in the gallery. So the fallback shows on every failure AND stays offered while the camera
  * runs.</p>
  *
- * <p>A code that is not a fiscal receipt is named as such on the spot and scanning continues: the
- * master is standing there with the phone up, and a round trip to be told «це не чек» would be
- * both slower and less clear. What actually parses is still the backend's call — this only decides
- * whether asking is worth the wait.</p>
+ * <p>A code that is not a fiscal receipt is named as such on the spot — <b>with the payload it
+ * actually read</b> — and scanning continues: the master is standing there with the phone up, and
+ * a round trip to be told «це не чек» would be both slower and less clear. Showing what was read
+ * matters because a receipt prints SEVERAL codes; «прочитано https://shorturl.at/…» tells him he
+ * caught the shop's marketing code, where a bare «це не чек» reads as the feature being broken.
+ * What actually parses is still the backend's call — this only decides whether asking is worth the
+ * wait.</p>
  */
 export function QrScanSheet({
   open,
@@ -41,6 +66,8 @@ export function QrScanSheet({
   const fileRef = useRef<HTMLInputElement>(null);
   const [camera, setCamera] = useState<Camera>('starting');
   const [notice, setNotice] = useState<string | null>(null);
+  /** The non-fiscal payload behind the notice, so the master can see which code he caught. */
+  const [readInstead, setReadInstead] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
 
   // Held in a ref so a caller that re-creates the callback each render (the normal case for an
@@ -52,6 +79,7 @@ export function QrScanSheet({
     if (!open) return;
     setCamera('starting');
     setNotice(null);
+    setReadInstead(null);
 
     let stopped = false;
     let stream: MediaStream | null = null;
@@ -76,8 +104,10 @@ export function QrScanSheet({
             onScannedRef.current(found);
             return;
           }
-          // Keep scanning — he is still holding the phone up at the paper.
+          // Keep scanning — he is still holding the phone up at the paper, and the fiscal code is
+          // usually a few centimetres from whatever this was.
           setNotice(t('qr.notFiscal'));
+          setReadInstead(found.slice(0, NOTICE_CODE_CHARS));
         }
       }
       timer = window.setTimeout(() => void tick(), SCAN_INTERVAL_MS);
@@ -90,9 +120,7 @@ export function QrScanSheet({
         return;
       }
       try {
-        // `ideal`, not `exact`: a laptop or a phone whose back camera is busy still gets a camera
-        // instead of a hard failure, and the master can simply turn the device around.
-        stream = await media.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+        stream = await media.getUserMedia({ video: VIDEO });
         if (stopped) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -118,7 +146,10 @@ export function QrScanSheet({
     if (!file) return;
     setReading(true);
     setNotice(null);
+    setReadInstead(null);
     try {
+      // The decoder has already walked its whole preprocessing ladder looking for a fiscal code
+      // here, so a non-fiscal answer is final: there is nothing left to try on this photo.
       const found = await decodeQrFromFile(file);
       if (!found) {
         setNotice(t('qr.noCodeInPhoto'));
@@ -126,6 +157,7 @@ export function QrScanSheet({
       }
       if (!looksFiscal(found)) {
         setNotice(t('qr.notFiscal'));
+        setReadInstead(found.slice(0, NOTICE_CODE_CHARS));
         return;
       }
       onScannedRef.current(found);
@@ -166,9 +198,16 @@ export function QrScanSheet({
         </p>
 
         {notice && (
-          <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900" role="status">
-            {notice}
-          </p>
+          <div className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900" role="status">
+            <p>{notice}</p>
+            {readInstead && (
+              // `break-all` because a payload is one unbroken token: without it a 375px screen
+              // scrolls sideways, which is the one thing a sheet must never do.
+              <p className="mt-1 break-all font-mono text-xs opacity-80">
+                {t('qr.readInstead', { code: readInstead })}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Offered in BOTH states: the camera running does not mean it is the easier path here. */}

@@ -51,6 +51,17 @@ describe('QrScanSheet', () => {
     expect(onScanned).not.toHaveBeenCalled();
   });
 
+  // A receipt prints several codes. «Це не чек» about the shop's marketing link reads as the
+  // feature being broken; showing the payload tells the master he aimed at the wrong one.
+  it('shows WHICH code it read, not just that it was the wrong one', async () => {
+    vi.mocked(decodeQrFromFile).mockResolvedValue('https://shorturl.at/Qosce');
+    render(<QrScanSheet open onClose={() => {}} onScanned={() => {}} />);
+
+    pickPhoto();
+
+    await screen.findByText(/shorturl\.at\/Qosce/);
+  });
+
   it('tells the master when the photo simply holds no code', async () => {
     vi.mocked(decodeQrFromFile).mockResolvedValue(null);
     const onScanned = vi.fn();
