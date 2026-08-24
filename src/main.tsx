@@ -9,7 +9,7 @@ import { initOutbox } from '@/lib/outbox/init.ts';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
-import { captureRefFromUrl } from './lib/referral.ts';
+import { captureRefFromUrl, captureUtmFromUrl } from './lib/referral.ts';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import { installOnlineTracking } from './lib/onlineStatus.ts';
 import './lib/i18n.ts';
@@ -25,8 +25,10 @@ initSentry();
 // connection is needed. See onlineStatus.ts for why this is not the default.
 installOnlineTracking();
 
-// First-touch referral capture from ?ref= on the entry URL (stored once).
+// First-touch attribution from the entry URL, both dimensions, each stored once: ?ref= is the
+// partner, utm_* is the channel — a master can arrive on a partner link from TikTok.
 captureRefFromUrl(window.location.search);
+captureUtmFromUrl(window.location.search);
 
 // One shared QueryClient. Sensible defaults for this app:
 //   - staleTime 30s: avoid hammering /me on every navigation

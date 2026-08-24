@@ -128,6 +128,11 @@ export interface RegisterRequest {
   /** First-touch attribution: stored ?ref= value + optional typed promo code.
    *  Both optional; absent → the backend attributes DIRECT. */
   ref?: string;
+  /** First-touch UTM tags — the CHANNEL, a separate dimension from the partner `ref` above.
+   *  Absent stays NULL server-side, which reads as "arrived with no tags". */
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
   promoCode?: string;
 }
 

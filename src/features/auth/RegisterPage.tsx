@@ -18,7 +18,7 @@ import { AuthShell } from './LoginPage.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
-import { getStoredRef } from '@/lib/referral.ts';
+import { getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -90,6 +90,8 @@ export function RegisterPage() {
         // a fallback. Absent → the backend attributes DIRECT.
         ref: getStoredRef(),
         promoCode: values.promoCode?.trim() || undefined,
+        // The channel dimension, stamped once server-side alongside the source above.
+        ...getStoredUtm(),
       });
     } catch (err) {
       const e = toAppError(err);
