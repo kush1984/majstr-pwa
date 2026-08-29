@@ -48,6 +48,18 @@ const MAX_PHOTO_SIDE = 2400;
  */
 const SWEEP_BUDGET_MS = 6000;
 
+/**
+ * The budget for one photo of a BATCH (receipts-batch).
+ *
+ * <p>The QR read is no longer a deliberate act with its own spinner — it is the first, local rung
+ * of «додати чек з фото», run once per picked photo, and the master may pick ten. jsqr is
+ * synchronous, so ten full 6s ladders is a minute of frozen phone for an enrichment that is
+ * optional by construction: the receipt is already saved with its photo, and everything the QR
+ * would have filled in stays one «✨ Розпізнати» tap away. So a batch buys only the passes that
+ * usually pay and drops the tail.</p>
+ */
+export const BATCH_QR_BUDGET_MS = 1500;
+
 function nativeCtor(): BarcodeDetectorCtor | null {
   const ctor = (globalThis as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
   return typeof ctor === 'function' ? ctor : null;
@@ -154,7 +166,10 @@ function pixels(source: CanvasImageSource, width: number, height: number): Image
  * given. It stops at the first fiscal payload, and returns a non-fiscal one only when nothing
  * fiscal was found anywhere.</p>
  */
-export async function decodeQrFromFile(file: File): Promise<string | null> {
+export async function decodeQrFromFile(
+  file: File,
+  opts?: { budgetMs?: number },
+): Promise<string | null> {
   const url = URL.createObjectURL(file);
   try {
     const img = await load(url);
@@ -168,7 +183,7 @@ export async function decodeQrFromFile(file: File): Promise<string | null> {
       Math.round(img.naturalHeight * scale),
     );
     if (!data) return fromNative;
-    return sweep(data) ?? fromNative;
+    return (await sweep(data, opts?.budgetMs ?? SWEEP_BUDGET_MS)) ?? fromNative;
   } catch {
     return null;
   } finally {
@@ -180,7 +195,7 @@ export async function decodeQrFromFile(file: File): Promise<string | null> {
  * The preprocessing ladder over one still image: plain, then adaptive full-frame, then adaptive
  * tiles. Returns a fiscal payload as soon as one appears, else whatever else it found.
  */
-function sweep(data: ImageData): string | null {
+async function sweep(data: ImageData, budgetMs: number): Promise<string | null> {
   let other = scan(data);
   if (other && looksFiscal(other)) return other;
 
@@ -193,7 +208,7 @@ function sweep(data: ImageData): string | null {
     [radius * 2, 1.05],
     [radius * 2, 1],
   ];
-  const until = Date.now() + SWEEP_BUDGET_MS;
+  const until = Date.now() + budgetMs;
   for (const [window, bias] of passes) {
     const binary = adaptive(data, window, bias);
     for (const candidate of candidates(binary)) {
@@ -203,6 +218,9 @@ function sweep(data: ImageData): string | null {
         other ??= found;
       }
       if (Date.now() > until) return other;
+      // jsqr is synchronous and a pass is hundreds of milliseconds — without handing the loop back
+      // between candidates a batch's progress line never repaints and the phone reads as hung.
+      await Promise.resolve();
     }
   }
   return other;

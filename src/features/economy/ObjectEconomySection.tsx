@@ -91,6 +91,8 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
   const navigate = useNavigate();
   const toggle = useToggleEstimateCounted(objectId);
 
+  const isAddendum = panel.kind === 'ADDENDUM';
+
   const onToggle = () => {
     toggle.mutate(
       { estimateId: panel.id, value: !panel.countedInEconomy },
@@ -113,7 +115,7 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
             </span>
             {/* Auto-created rollup («Додаткові роботи до акта № N») — badge it so it doesn't read
                 as an estimate the master forgot creating (economy-review). */}
-            {panel.kind === 'ADDENDUM' && (
+            {isAddendum && (
               <span className="flex-shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-muted">
                 {t('economy.addendumBadge')}
               </span>
@@ -131,28 +133,37 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
             base={panel.works + panel.materials}
           />
         </button>
-        <ActionMenu ariaLabel={t('estimate.actions')}>
-          {(close) => (
-            <>
-              {/* Context entry to act creation — the main one the master asked for. Hidden when
-                  another act is open or a FINAL already closed the object (same block as the Acts
-                  tab button). Generated from here the editor is SCOPED to this one estimate's
-                  positions; the Acts-tab button spans every signed estimate instead. */}
-              {canGenerate && (
+        {/* An ADDENDUM rollup («Додаткові роботи до акта № N») offers NEITHER action, so it gets no
+            ⋮ at all — both were dead ends on it. «Згенерувати акт»: WorkActService.progress skips
+            ADDENDUM estimates, so a scoped editor would open with no positions — and rightly, this
+            money IS an act already; billing it again would double it. «Не враховувати»: the server
+            answers 409 ESTIMATE_ADDENDUM_LOCKED, because the act's off-estimate lines and re-billed
+            receipts count in «Прийнято актами» regardless of the flag — unticking the rollup would
+            push the ratio past 100 %. */}
+        {!isAddendum && (
+          <ActionMenu ariaLabel={t('estimate.actions')}>
+            {(close) => (
+              <>
+                {/* Context entry to act creation — the main one the master asked for. Hidden when
+                    another act is open or a FINAL already closed the object (same block as the Acts
+                    tab button). Generated from here the editor is SCOPED to this one estimate's
+                    positions; the Acts-tab button spans every signed estimate instead. */}
+                {canGenerate && (
+                  <ActionMenuItem
+                    icon="📑"
+                    label={t('acts.generate')}
+                    onClick={() => { close(); onGenerate(); }}
+                  />
+                )}
                 <ActionMenuItem
-                  icon="📑"
-                  label={t('acts.generate')}
-                  onClick={() => { close(); onGenerate(); }}
+                  icon={panel.countedInEconomy ? '🚫' : '✓'}
+                  label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
+                  onClick={() => { close(); onToggle(); }}
                 />
-              )}
-              <ActionMenuItem
-                icon={panel.countedInEconomy ? '🚫' : '✓'}
-                label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
-                onClick={() => { close(); onToggle(); }}
-              />
-            </>
-          )}
-        </ActionMenu>
+              </>
+            )}
+          </ActionMenu>
+        )}
       </div>
       {/* A SIBLING of the navigate button, not nested inside it — InfoPopover is itself a button,
           and a button inside a button swallows taps (same class of bug the ⋮ menu already avoids

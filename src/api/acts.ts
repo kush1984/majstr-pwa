@@ -56,33 +56,46 @@ export const actsApi = {
   },
 
   /**
-   * Attach a receipt: an amount the master types plus an optional photo of the paper. Multipart,
-   * so the JSON Content-Type is unset for the browser to write its own boundary (same as photosApi).
+   * Attach a receipt: a MANDATORY photo of the paper, plus an amount and a label that may still be
+   * unknown. Multipart, so the JSON Content-Type is unset for the browser to write its own boundary
+   * (same as photosApi).
+   *
+   * <p>The photo is saved FIRST and priced afterwards (receipts-batch — «з недостатньою швидкістю
+   * інтернету довго думає і додавати чек не хоче»): amount 0 is a legal, saved state that blocks
+   * only sharing and signing. A blank label is named «Чек №N» by the SERVER, which is the only side
+   * that knows how many receipts this act already holds.</p>
+   *
+   * <p>`id` is a client-generated UUID riding X-Entity-Uuid: a batch upload over a weak connection
+   * is exactly where a retry happens, and a duplicated receipt is duplicated money — in the act and
+   * in the ADDENDUM estimate its receipts roll into on signing.</p>
    */
   addReceipt(
     actId: string,
-    req: { label: string; amount: number; issuedAt?: string | null; file: File; itemized?: boolean; saveToPhotos?: boolean },
+    req: { id?: string; label?: string; amount: number; issuedAt?: string | null; file: File;
+           saveToPhotos?: boolean },
   ): Promise<WorkActReceiptResponse> {
     const form = new FormData();
     form.append('file', req.file); // mandatory (round 2): the photo is the receipt's proof
-    form.append('label', req.label);
+    if (req.label != null && req.label.trim() !== '') form.append('label', req.label);
     form.append('amount', String(req.amount));
-    if (req.itemized) form.append('itemized', 'true');
     if (req.saveToPhotos) form.append('saveToPhotos', 'true');
     if (req.issuedAt) form.append('issuedAt', req.issuedAt);
     return api
       .post<WorkActReceiptResponse>(`/api/acts/${actId}/receipts`, form, {
-        headers: { 'Content-Type': undefined } as unknown as Record<string, string>,
+        headers: {
+          'Content-Type': undefined,
+          ...(req.id ? { 'X-Entity-Uuid': req.id } : {}),
+        } as unknown as Record<string, string>,
       })
       .then((r) => r.data);
   },
 
-  /** Read the photo before adding: date+total (small model), with items — the full table read.
-   *  recognized=false is the soft «введіть вручну» outcome, not an error. */
-  recognizeReceipt(actId: string, file: File, withItems: boolean): Promise<ActReceiptRecognizeResponse> {
+  /** Read the photo before adding: label + date + total off the footer (small model). A receipt is
+   *  re-billed as a whole, so its item table is never read here. recognized=false is the soft
+   *  «введіть вручну» outcome, not an error. */
+  recognizeReceipt(actId: string, file: File): Promise<ActReceiptRecognizeResponse> {
     const form = new FormData();
     form.append('file', file);
-    if (withItems) form.append('withItems', 'true');
     return api
       .post<ActReceiptRecognizeResponse>(`/api/acts/${actId}/receipts/recognize`, form,
         { headers: { 'Content-Type': undefined } })
@@ -90,14 +103,26 @@ export const actsApi = {
   },
 
   /**
-   * Read the receipt from its printed fiscal QR code instead of its photo — same response shape as
-   * recognizeReceipt, no model call, and free in both modes: withItems here is the master's
-   * «перенести позиції» tick, not a plan check.
+   * Recognize a receipt that is ALREADY stored — the «✨ Розпізнати» button on a receipt card.
+   * Reads the photo the upload already sent, so a slow link is paid once, and the read survives a
+   * page reload. Persists nothing: the answer prefills the edit dialog, the master confirms.
    */
-  readReceiptQr(actId: string, payload: string, withItems: boolean): Promise<ActReceiptRecognizeResponse> {
+  recognizeStoredReceipt(actId: string, receiptId: string): Promise<ActReceiptRecognizeResponse> {
     return api
       .post<ActReceiptRecognizeResponse>(
-        `/api/acts/${actId}/receipts/qr${withItems ? '?withItems=true' : ''}`, { payload })
+        `/api/acts/${actId}/receipts/${receiptId}/recognize`, null)
+      .then((r) => r.data);
+  },
+
+  /**
+   * Read the receipt from its printed fiscal QR code instead of its photo — same response shape as
+   * recognizeReceipt, free, no model call and no tax-service lookup: label + date + total, read
+   * locally, which is what makes it safe to fire on every photo of a batch.
+   */
+  readReceiptQr(actId: string, payload: string): Promise<ActReceiptRecognizeResponse> {
+    return api
+      .post<ActReceiptRecognizeResponse>(
+        `/api/acts/${actId}/receipts/qr`, { payload })
       .then((r) => r.data);
   },
 

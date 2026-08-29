@@ -51,7 +51,7 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
       <div>
         <button
           type="button"
-          disabled={block !== null || newAct.creating}
+          disabled={block !== null}
           onClick={() => newAct.start(list)}
           className="w-full rounded-card border border-dashed border-brand/50 py-2.5 text-sm font-semibold text-brand disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
         >

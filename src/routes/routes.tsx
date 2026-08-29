@@ -110,6 +110,9 @@ export const router = createBrowserRouter([
       // Static '/estimates/import' ranks above the dynamic '/estimates/:id'.
       { path: routes.estimateImport, element: <EstimateImportPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
+      // Static '/acts/new' ranks above the dynamic '/acts/:id' — the editor on an act that has no
+      // server row yet and gets one only on «Зберегти».
+      { path: '/acts/new', element: <ActEditorPage /> },
       { path: '/acts/:id', element: <ActEditorPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },

@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Fab, FabAction } from '@/components/Fab.tsx';
+import { Section } from '@/components/Section.tsx';
 import { Badge } from '@/components/Badge.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { useLeaveGuard } from '@/hooks/useLeaveGuard.ts';
@@ -20,14 +21,18 @@ import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { CatalogAutocomplete } from '@/features/estimate/CatalogAutocomplete.tsx';
 import { routes } from '@/lib/config.ts';
+import { newUuid } from '@/lib/uuid.ts';
 import {
-  useAct, useActProgress, useUpdateActHeader, useReplaceActItems, useSignActOffline, useDeleteAct,
+  useAct, useActProgress, useCreateAct, useUpdateActHeader, useReplaceActItems, useSignActOffline,
+  useDeleteAct, useActsInvalidator,
 } from './useActs.ts';
-import { ActReceiptsSection } from './ActReceiptsSection.tsx';
+import { isoDay } from './useNewAct.ts';
+import { useEconomy } from '@/features/economy/useEconomy.ts';
+import { ActReceiptsSection, billedOf } from './ActReceiptsSection.tsx';
 import { ActShareSheet } from './ActShareSheet.tsx';
 import { UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
-import type { ActProgressLine, ItemType, RecognizedReceiptItem, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
+import type { ActProgressLine, ItemType, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
 
 const ADDITIONAL_WARNED_KEY = 'majstr-acts-additional-warned';
 
@@ -69,13 +74,23 @@ export function ActEditorPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  // «/acts/new»: the act has no server row yet — «Зберегти» is what creates it (master feedback:
+  // «кожен раз коли ми натиснули Новий акт і повернулись назад, то акт вже створюється»). Its
+  // defaults come from the query string, since there is nothing to load them from.
+  const isNew = id === '';
   const act = useAct(id);
-  const projectId = act.data?.projectId ?? '';
+  const create = useCreateAct(searchParams.get('project') ?? '');
+  const projectId = isNew ? (searchParams.get('project') ?? '') : (act.data?.projectId ?? '');
   const progress = useActProgress(projectId, Boolean(projectId));
   const updateHeader = useUpdateActHeader(id, projectId);
   const replaceItems = useReplaceActItems(id, projectId);
   const signOffline = useSignActOffline(id, projectId);
   const deleteAct = useDeleteAct(projectId);
+  // The new act's id exists only after create() answers, so its refresh can't ride an id-bound hook.
+  const invalidateAct = useActsInvalidator(projectId);
+  // Stable across re-renders: a double tap on «Зберегти» must replay the SAME create, not mint a
+  // second numbered act on the object.
+  const newActUuid = useRef<string | null>(null);
 
   const signed = act.data?.status === 'SIGNED';
 
@@ -108,6 +123,18 @@ export function ActEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   // The form as it was seeded or last saved — the reference the dirty check compares against.
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (seeded || !isNew) return;
+    // A brand-new act: today's date, the period start the caller computed off the object's acts,
+    // everything else at its server-side default. No snapshot reference is set — an unsaved act is
+    // «dirty» by definition, so leaving always asks.
+    const today = isoDay(new Date());
+    setIssuedAt(today);
+    setPeriodFrom(searchParams.get('from') ?? today);
+    setPeriodTo(today);
+    setSeeded(true);
+  }, [isNew, seeded, searchParams]);
 
   useEffect(() => {
     if (seeded || !act.data) return;
@@ -191,12 +218,34 @@ export function ActEditorPage() {
     for (const a of additional) sum += num(a.quantity) * num(a.unitPrice);
     return sum;
   }, [qty, additional, progress.data, showMaterials]);
+  // Shown in the «Додаткові роботи» panel header — the one figure that says whether the block is
+  // worth opening on a phone.
+  const additionalTotal = useMemo(
+    () => additional.reduce((sum, a) => sum + num(a.quantity) * num(a.unitPrice), 0), [additional]);
   // Receipts are saved the moment they are added, so they come straight off the loaded act — they
   // are money the client owes on this act, hence inside «До сплати», not a decorative appendix.
   const receipts = act.data?.receipts ?? [];
   // Itemized receipts are reference-only — their positions already bill the money as act lines.
-  const receiptsTotal = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + r.amount, 0);
+  // `billedOf` (not `amount`) — a partial return must reach «До сплати» here exactly as it reaches
+  // the receipts panel's own subtotal and the server's `payable`.
+  const receiptsTotal = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + billedOf(r), 0);
   const payable = Math.max(0, total + receiptsTotal - num(advance));
+
+  // What «Зараховано авансу» is FOR, said in the object's own numbers instead of left to the
+  // master's memory: money the client has already paid that no SIGNED act has accepted yet
+  // (`received − acceptedByActs` — the same figure the economy tab shows as «Невідпрацьований
+  // аванс»). It nets itself across acts: an advance credited on an earlier act is accepted work
+  // there, so the remainder shrinks on its own — which is the one guard against crediting the
+  // same advance twice. `null` while the economy is unknown (loading/offline) — then the field
+  // simply says nothing rather than guessing.
+  const economy = useEconomy(projectId);
+  const unearnedAdvance = useMemo(() => {
+    const a = economy.data?.acts;
+    return a ? Math.max(0, a.received - a.acceptedByActs) : null;
+  }, [economy.data]);
+  // Never more than this act is worth — `payable` floors at 0 anyway, and offering to credit more
+  // than the act bills would read as «the rest carries over», which nothing implements.
+  const advanceSuggestion = Math.round(Math.min(unearnedAdvance ?? 0, total + receiptsTotal) * 100) / 100;
 
   // Auto-title (master feedback): when every selected estimate line shares ONE category, that
   // category IS the act's stage name — offer it live until the master types his own.
@@ -230,7 +279,10 @@ export function ActEditorPage() {
     kind, title: effectiveTitle, issuedAt, periodFrom, periodTo, contractRef, advance,
     showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos, qty, additional,
   });
-  const dirty = seeded && !signed && savedSnapshot !== null && currentSnapshot !== savedSnapshot;
+  // An unsaved new act is dirty by definition: there is no server row behind it, so leaving always
+  // asks (master feedback — a mistaken tap used to leave a real numbered act on the object).
+  const dirty = seeded && !signed
+    && (isNew || (savedSnapshot !== null && currentSnapshot !== savedSnapshot));
   // In-app back/swipe with unsaved edits → a ConfirmDialog instead of silent loss (review fix).
   // The ref lets the post-delete navigation pass through: the entity is gone, there is nothing
   // left to save, and the guard would otherwise fire before React re-renders with dirty=false.
@@ -247,10 +299,10 @@ export function ActEditorPage() {
     return additional.some((a) => num(a.quantity) > 0 && a.name.trim() !== '');
   }, [qty, additional, progress.data, showMaterials]);
 
-  if (act.isPending || (Boolean(projectId) && progress.isPending)) {
+  if ((!isNew && act.isPending) || (Boolean(projectId) && progress.isPending)) {
     return <div className="py-16 text-center text-brand"><Spinner /></div>;
   }
-  if (!act.data) {
+  if (!isNew && !act.data) {
     return <p className="py-10 text-center text-sm text-muted">{t('acts.loadError')}</p>;
   }
 
@@ -306,34 +358,44 @@ export function ActEditorPage() {
     return lines;
   };
 
-  /** Recognized receipt positions → «Додаткові роботи» rows the master reviews in place: blanks
-   *  where the model flagged an issue (the same «перепитування» the estimate import gives). */
-  const transferReceiptItems = (items: RecognizedReceiptItem[]) => {
-    setAdditional((list) => [
-      ...list,
-      ...items.map((it) => ({
-        name: it.name,
-        type: it.type,
-        unit: it.unit ?? 'PIECE',
-        unitPrice: it.unitPrice == null ? '' : String(it.unitPrice),
-        quantity: it.quantity == null ? '' : String(it.quantity),
-      })),
-    ]);
-    toast.success(t('acts.receiptItemsTransferred', { count: items.length }));
+  const headerRequest = () => ({
+    kind, issuedAt, periodFrom, periodTo,
+    title: effectiveTitle.trim() || null,
+    contractRef: contractRef.trim() || null,
+    advanceOffset: advance.trim() === '' ? null : num(advance),
+    showMaterials, showCumulative,
+  });
+
+  /**
+   * Write header + lines and answer with the id the act now lives under. On «/acts/new» this is
+   * where the act is BORN — «Новий акт» only opens the editor, so a mistaken tap and a Back leave
+   * nothing behind. The two receipt toggles are update-only fields; they can't have been touched on
+   * a new act (the receipts section needs a saved row), so create sends the header alone.
+   */
+  const persist = async (): Promise<string> => {
+    if (!isNew) {
+      await updateHeader.mutateAsync({ ...headerRequest(), receiptsToExpenses, showReceiptPhotos });
+      await replaceItems.mutateAsync({ items: buildItems() });
+      return id;
+    }
+    newActUuid.current ??= newUuid(); // X-Entity-Uuid — a retried create must not double-number
+    const created = await create.mutateAsync({ req: headerRequest(), id: newActUuid.current });
+    await actsApi.replaceItems(created.id, { items: buildItems() });
+    invalidateAct(created.id);
+    return created.id;
   };
 
   const onSave = async () => {
     try {
-      await updateHeader.mutateAsync({
-        kind, issuedAt, periodFrom, periodTo,
-        title: effectiveTitle.trim() || null,
-        contractRef: contractRef.trim() || null,
-        advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos,
-      });
-      await replaceItems.mutateAsync({ items: buildItems() });
+      const savedId = await persist();
       setSavedSnapshot(currentSnapshot); // the form as sent is now the saved reference
       toast.success(t('acts.saved'));
+      if (isNew) {
+        // The act has a row now: move onto its real URL so receipts, share and PDF address it.
+        // Nothing is left unsaved, so the leave guard must let this navigation through.
+        skipLeaveGuard.current = true;
+        void navigate(routes.act(savedId), { replace: true });
+      }
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -342,19 +404,22 @@ export function ActEditorPage() {
   const onSign = async () => {
     if (!signerName.trim()) return;
     try {
-      // Persist current edits first so the signed act reflects the screen.
-      await updateHeader.mutateAsync({
-        kind, issuedAt, periodFrom, periodTo,
-        title: effectiveTitle.trim() || null,
-        contractRef: contractRef.trim() || null,
-        advanceOffset: advance.trim() === '' ? null : num(advance),
-        showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos,
-      });
-      await replaceItems.mutateAsync({ items: buildItems() });
-      await signOffline.mutateAsync(signerName.trim());
+      // Persist current edits first so the signed act reflects the screen (creating it, if this is
+      // still «/acts/new» — the master may fill an act and sign it in one sitting).
+      const actId = await persist();
+      if (isNew) {
+        await actsApi.signOffline(actId, { signerName: signerName.trim() });
+        invalidateAct(actId);
+      } else {
+        await signOffline.mutateAsync(signerName.trim());
+      }
       setSavedSnapshot(currentSnapshot); // everything on screen is persisted (and now immutable)
       setSignOpen(false);
       toast.success(t('acts.signed'));
+      if (isNew) {
+        skipLeaveGuard.current = true;
+        void navigate(routes.act(actId), { replace: true });
+      }
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -401,17 +466,23 @@ export function ActEditorPage() {
         <button type="button" onClick={() => navigate(routes.project(projectId) + '?tab=acts')}
           aria-label={t('common.back')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary">←</button>
+        {/* A new act has no number or status yet — both are the server's, minted on «Зберегти». */}
         <span className="truncate text-sm font-semibold text-primary">
-          {t('acts.title', { number: act.data.number })}
+          {act.data ? t('acts.title', { number: act.data.number }) : t('acts.newTitle')}
         </span>
-        <span className="shrink-0">
-          <Badge variant={ACT_STATUS_VARIANT[act.data.status]}>{t('acts.status.' + act.data.status)}</Badge>
-        </span>
+        {act.data && (
+          <span className="shrink-0">
+            <Badge variant={ACT_STATUS_VARIANT[act.data.status]}>{t('acts.status.' + act.data.status)}</Badge>
+          </span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button type="button" onClick={() => setShareOpen(true)} aria-label={t('acts.share')}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
+          {act.data && (
+            <button type="button" onClick={() => setShareOpen(true)} aria-label={t('acts.share')}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
+          )}
           {!signed && (
-            <Button className="px-3 py-2" loading={updateHeader.isPending || replaceItems.isPending}
+            <Button className="px-3 py-2"
+              loading={create.isPending || updateHeader.isPending || replaceItems.isPending}
               onClick={() => void onSave()}>
               {dirty ? t('common.save') + ' •' : t('common.save')}
             </Button>
@@ -419,8 +490,10 @@ export function ActEditorPage() {
         </div>
       </div>
 
-      {/* Header */}
-      <div className="mb-4 space-y-3 rounded-card border border-border bg-surface p-3.5">
+      {/* Header — the act’s own fields, titled like every other block so the editor reads as a
+          stack of panels rather than one long form. */}
+      <Section title={t('acts.detailsTitle')} flush>
+        <div className="space-y-3">
         <div className="flex gap-1 rounded-xl bg-surface-sunken p-1">
           {(['INTERIM', 'FINAL'] as WorkActKind[]).map((k) => (
             <button key={k} type="button" disabled={signed} onClick={() => setKind(k)}
@@ -457,7 +530,8 @@ export function ActEditorPage() {
         {!signed && (
           <Checkbox label={t('acts.showMaterials')} checked={showMaterials} onChange={() => setShowMaterials((v) => !v)} />
         )}
-      </div>
+        </div>
+      </Section>
 
       {/* Progress lines — grouped estimate → category (same shape as the act PDF), with a group
           tick per category so a whole work stage selects in one tap (master feedback). */}
@@ -472,9 +546,11 @@ export function ActEditorPage() {
         if (visible.length === 0) return null; // the whole estimate is closed — nothing to offer
         const categories = categorize(visible);
         const sectioned = categories.length > 1 || (categories.length === 1 && categories[0][0] !== '');
+        const groupTotal = visible.reduce(
+          (sum, l) => sum + num(qty[l.estimateItemId] ?? '') * l.unitPrice, 0);
         return (
-        <div key={estimateId} className="mb-4">
-          <h3 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-muted">{group.name}</h3>
+        <Section key={estimateId} title={group.name}
+          aside={groupTotal > 0 ? formatMoney(groupTotal) : undefined}>
           <div className="space-y-2">
             {categories.map(([cat, lines]) => {
               const fillable = lines.filter((l) => l.remaining > 0);
@@ -538,16 +614,13 @@ export function ActEditorPage() {
               );
             })}
           </div>
-        </div>
+        </Section>
         );
       })}
 
       {/* Additional works */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center gap-1.5">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-muted">{t('acts.additionalTitle')}</h3>
-          <InfoPopover text={t('acts.additionalInfo')} />
-        </div>
+      <Section title={t('acts.additionalTitle')} info={t('acts.additionalInfo')}
+        aside={additionalTotal > 0 ? formatMoney(additionalTotal) : undefined}>
         <div className="space-y-2">
           {additional.map((a, i) => {
             const dupEstimates = [...(estimatesByLineName.get(a.name.trim().toLowerCase()) ?? [])];
@@ -593,30 +666,68 @@ export function ActEditorPage() {
             {t('acts.addAdditional')}
           </button>
         )}
-      </div>
+      </Section>
 
-      <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
-        toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
-        showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos}
-        onTransferItems={transferReceiptItems} />
-
-      {/* Advance + totals */}
-      {!signed && (
-        <Field label={t('acts.advance')}>
-          <Input inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)} className="max-w-[200px]" />
-        </Field>
+      {/* A receipt is an upload against a real act row (and its photo is mandatory), so the section
+          waits for the first save instead of holding a pile of files in memory. */}
+      {isNew ? (
+        <Section title={t('acts.receiptsTitle')} info={t('acts.receiptsInfo')}>
+          <p className="text-sm text-muted">{t('acts.receiptsAfterSave')}</p>
+        </Section>
+      ) : (
+        <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+          toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
+          showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />
       )}
-      <div className="mt-3 space-y-1 rounded-card border border-border bg-surface-sunken p-3.5 text-sm">
-        <Row label={t('acts.total')} value={formatMoneyExact(total)} />
-        {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoneyExact(receiptsTotal)} />}
-        {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoneyExact(num(advance))} />}
-        <Row label={t('acts.payable')} value={formatMoneyExact(payable)} bold />
-      </div>
-      {!signed && (
-        <div className="mt-2">
-          <Checkbox label={t('acts.showCumulative')} checked={showCumulative} onChange={() => setShowCumulative((v) => !v)} />
+
+      {/* The bill. Its own panel because it is the block the master and the client both read last,
+          and «Зараховано авансу» is an input that changes the figure right under it. */}
+      <Section title={t('acts.settlementTitle')} flush>
+        {!signed && (
+          <div>
+            <div className="mb-1 flex items-center gap-1.5">
+              <span className="text-sm font-medium text-secondary">{t('acts.advance')}</span>
+              <InfoPopover text={t('acts.advanceInfo')} />
+            </div>
+            <Input inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)} className="max-w-[200px]" />
+            <p className="mt-1 text-xs text-muted">{t('acts.advanceHint')}</p>
+            {unearnedAdvance != null && unearnedAdvance > 0 && (
+              <div className="mt-2 rounded-card border border-border bg-surface p-2.5">
+                <p className="text-xs text-secondary">
+                  {t('acts.advanceUnearned', { amount: formatMoney(unearnedAdvance) })}
+                </p>
+                {advanceSuggestion > 0 && num(advance) !== advanceSuggestion && (
+                  <button type="button" className="mt-1.5 text-xs font-semibold text-brand"
+                    onClick={() => setAdvance(String(advanceSuggestion))}>
+                    {t('acts.advanceApply', { amount: formatMoney(advanceSuggestion) })}
+                  </button>
+                )}
+              </div>
+            )}
+            {unearnedAdvance === 0 && (
+              <p className="mt-2 text-xs text-muted">{t('acts.advanceNone')}</p>
+            )}
+            {/* The one thing nothing else can catch: the same advance credited on two acts. It is a
+                warning, not a block — the master may be crediting money he never logged as a payment. */}
+            {unearnedAdvance != null && num(advance) > unearnedAdvance && (
+              <p className="mt-2 rounded-card bg-amber-50 p-2 text-xs text-amber-700">
+                {t('acts.advanceOverUnearned', { amount: formatMoney(unearnedAdvance) })}
+              </p>
+            )}
+          </div>
+        )}
+        <div className={(signed ? '' : 'mt-3 border-t border-border pt-3 ') + 'space-y-1 text-sm'}>
+          <Row label={t('acts.total')} value={formatMoneyExact(total)} />
+          {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoneyExact(receiptsTotal)} />}
+          {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoneyExact(num(advance))} />}
+          <Row label={t('acts.payable')} value={formatMoneyExact(payable)} bold />
         </div>
-      )}
+        {!signed && (
+          <div className="mt-3 border-t border-border pt-3">
+            <Checkbox label={t('acts.showCumulative')} checked={showCumulative} onChange={() => setShowCumulative((v) => !v)} />
+          </div>
+        )}
+      </Section>
 
       {/* Actions — a speed-dial FAB so the master reaches Save/Sign/Share/PDF/Delete from anywhere on a
           long editor without scrolling to the bottom. Ordered so the primary Save sits nearest the
@@ -624,13 +735,16 @@ export function ActEditorPage() {
       <Fab ariaLabel={t('acts.actionsMenu')} position="bottom-6 right-4 lg:bottom-8 lg:right-8">
         {(close) => (
           <>
-            {(act.data.status === 'DRAFT' || act.data.status === 'REJECTED') && (
+            {/* Delete / PDF / share all address a server row — an unsaved new act has none. */}
+            {(act.data?.status === 'DRAFT' || act.data?.status === 'REJECTED') && (
               <FabAction icon="🗑" label={t('common.delete')} onClick={() => close(() => setConfirmDelete(true))} />
             )}
-            <FabAction icon="📄" label={t('acts.pdf')} onClick={() => close(() => void onPdf())} />
+            {act.data && <FabAction icon="📄" label={t('acts.pdf')} onClick={() => close(() => void onPdf())} />}
             {/* Same sheet as the top bar's 🔗. Duplicated on purpose: deep in a long editor the top
                 bar is scrolled away, and «поділитися» is exactly what the master reaches for there. */}
-            <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => setShareOpen(true))} />
+            {act.data && (
+              <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => setShareOpen(true))} />
+            )}
             {!signed && (
               <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => {
                 if (!hasLines) {
@@ -669,13 +783,13 @@ export function ActEditorPage() {
         })}
         onClose={() => setConfirmDelete(false)} />
 
-      <ActShareSheet actId={id} open={shareOpen} onClose={() => setShareOpen(false)} />
+      {!isNew && <ActShareSheet actId={id} open={shareOpen} onClose={() => setShareOpen(false)} />}
 
       {/* Unsaved edits + an in-app back/swipe → an explicit choice instead of silent loss. */}
       <ConfirmDialog
         open={leaveBlocker.state === 'blocked'}
         title={t('acts.leaveTitle')}
-        message={t('acts.leaveText')}
+        message={isNew ? t('acts.leaveNewText') : t('acts.leaveText')}
         confirmLabel={t('acts.leaveConfirm')}
         onConfirm={() => { if (leaveBlocker.state === 'blocked') leaveBlocker.proceed(); }}
         onClose={() => { if (leaveBlocker.state === 'blocked') leaveBlocker.reset(); }} />

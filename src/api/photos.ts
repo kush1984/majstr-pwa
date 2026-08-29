@@ -74,14 +74,19 @@ export const photosApi = {
     return api.delete(`/api/projects/${projectId}/photos/${photoId}`).then(() => undefined);
   },
 
-  /** Fetch an authenticated photo file as an object URL (caller revokes it). */
-  async fetchBlobUrl(fileUrl: string): Promise<string> {
+  /** The raw bytes behind an authenticated photo endpoint — the receipt card re-reads its own
+   *  stored photo from here to try the fiscal QR again, for free, before spending a model call. */
+  async fetchBlob(fileUrl: string): Promise<Blob> {
     const access = await ensureAccessToken();
     const resp = await fetch(`${config.apiBaseUrl}${fileUrl}`, {
       headers: { Authorization: `Bearer ${access ?? ''}` },
     });
     if (!resp.ok) throw new Error(`Photo request failed: ${resp.status}`);
-    const blob = await resp.blob();
-    return URL.createObjectURL(blob);
+    return resp.blob();
+  },
+
+  /** The same bytes as an object URL (caller revokes it). */
+  async fetchBlobUrl(fileUrl: string): Promise<string> {
+    return URL.createObjectURL(await photosApi.fetchBlob(fileUrl));
   },
 };

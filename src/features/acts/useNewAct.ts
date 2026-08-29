@@ -1,9 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { toast } from '@/hooks/useToast.ts';
-import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
-import { newUuid } from '@/lib/uuid.ts';
-import { useCreateAct } from './useActs.ts';
 import type { WorkActResponse } from '@/api/types.ts';
 
 /** Why «+ Новий акт» / «Згенерувати акт» is unavailable: one act is still open, or a FINAL act
@@ -12,7 +8,7 @@ export type ActBlock = 'open' | 'final' | null;
 
 // LOCAL calendar day, not toISOString() (which is UTC): issuedAt is the legal date on the document,
 // and before ~03:00 Kyiv time the UTC date is still yesterday (review fix).
-const isoDay = (d: Date): string =>
+export const isoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function actCreateBlock(acts: WorkActResponse[]): ActBlock {
@@ -38,39 +34,25 @@ function defaultPeriodFrom(acts: WorkActResponse[], objectCreatedAt?: string): s
   return isoDay(objectCreatedAt ? new Date(objectCreatedAt) : new Date());
 }
 
-/** Shared create-then-open flow for both entry points. `scopeEstimateId` (the economy panel
- *  «Згенерувати акт» menu item) restricts the editor to that one estimate's positions; the Acts tab
- *  button passes none, so the act spans every SIGNED estimate on the object. */
+/**
+ * Open the editor on a NEW act. Nothing is created here: «Новий акт» used to POST a draft the
+ * instant it was tapped, so a mistaken tap and a Back left a real numbered act on the object
+ * («може випадково натиснули»). The act is now born on «Зберегти» — until then it lives only in the
+ * editor's state, and leaving asks first.
+ *
+ * <p>The defaults ride the query string because there is no row to read them from yet: the period
+ * start depends on the object's acts, which this side already has loaded and the editor does not.
+ * `scopeEstimateId` (the economy panel's «Згенерувати акт») restricts the editor to that one
+ * estimate's positions; the Acts tab button passes none, so every SIGNED estimate is offered.</p>
+ */
 export function useNewAct(objectId: string, objectCreatedAt?: string) {
   const navigate = useNavigate();
-  const create = useCreateAct(objectId);
 
   const start = (acts: WorkActResponse[], scopeEstimateId?: string) => {
-    const today = isoDay(new Date());
-    create.mutate(
-      {
-        req: {
-          kind: 'INTERIM',
-          issuedAt: today,
-          periodFrom: defaultPeriodFrom(acts, objectCreatedAt),
-          periodTo: today,
-          showMaterials: true,
-          // The «ДОВІДКОВО» reference only makes sense from the second act on — off by default,
-          // the master opts in per act (acts-fix; mirrors the backend WorkActCreator default).
-          showCumulative: false,
-        },
-        // One UUID per logical create — a retry replays THIS create instead of minting a twin.
-        id: newUuid(),
-      },
-      {
-        onSuccess: (act) => {
-          const suffix = scopeEstimateId ? `?scope=${scopeEstimateId}` : '';
-          void navigate(routes.act(act.id) + suffix);
-        },
-        onError: (err) => toast.error(toAppError(err).message),
-      },
-    );
+    const params = new URLSearchParams({ from: defaultPeriodFrom(acts, objectCreatedAt) });
+    if (scopeEstimateId) params.set('scope', scopeEstimateId);
+    void navigate(`${routes.newAct(objectId)}&${params.toString()}`);
   };
 
-  return { start, creating: create.isPending };
+  return { start };
 }

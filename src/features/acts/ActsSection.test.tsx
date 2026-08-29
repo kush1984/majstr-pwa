@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActsSection } from './ActsSection.tsx';
@@ -25,11 +25,20 @@ function act(over: Partial<WorkActResponse> = {}): WorkActResponse {
   };
 }
 
+/** Prints the current URL so a navigation can be asserted on. */
+function LocationProbe() {
+  const loc = useLocation();
+  return <div data-testid="loc">{loc.pathname + loc.search}</div>;
+}
+
 function renderSection() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <MemoryRouter>
+        {children}
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>
   );
   return render(<ActsSection objectId="p1" objectCreatedAt="2026-08-01T00:00:00Z" />, { wrapper });
@@ -46,6 +55,19 @@ describe('ActsSection', () => {
     const btn = await screen.findByText('+ Новий акт');
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText('Актів ще немає')).toBeTruthy();
+  });
+
+  it('«+ Новий акт» only opens the editor — nothing is created until «Зберегти»', async () => {
+    // Master feedback: a mistaken tap plus a Back used to leave a real numbered act on the object.
+    vi.mocked(actsApi.list).mockResolvedValue([act({ status: 'SIGNED', periodTo: '2026-08-14' })]);
+
+    renderSection();
+    fireEvent.click(await screen.findByText('+ Новий акт'));
+
+    expect(actsApi.create).not.toHaveBeenCalled();
+    // The period start still comes from this side (it knows the object's acts) — via the URL now.
+    expect(screen.getByTestId('loc').textContent)
+      .toBe('/acts/new?project=p1&from=2026-08-15');
   });
 
   it('an open (DRAFT/SENT) act blocks creating another', async () => {

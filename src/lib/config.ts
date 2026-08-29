@@ -48,6 +48,10 @@ export const routes = {
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
   act: (id: string) => `/acts/${id}`,
+  // A new act exists only on the phone until «Зберегти» (master feedback: opening the editor and
+  // going back used to leave a real act behind). The defaults it opens with ride the query string,
+  // since there is no server row yet to read them from.
+  newAct: (projectId: string) => `/acts/new?project=${projectId}`,
   // Import a ready estimate onto an existing object (Excel/photo → LLM).
   importEstimate: (projectId: string) => `/estimates/import?projectId=${projectId}`,
 } as const;

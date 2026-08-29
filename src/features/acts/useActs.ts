@@ -50,13 +50,22 @@ export function useCreateAct(projectId: string) {
   });
 }
 
-function useActWriter(id: string, projectId: string) {
+/** Invalidate everything one act write touches, with the act id passed at call time — the new-act
+ *  editor only learns it after its create call returns. */
+export function useActsInvalidator(projectId: string) {
   const qc = useQueryClient();
-  return () => {
+  return (id: string) => {
     void qc.invalidateQueries({ queryKey: actKey(id) });
     void qc.invalidateQueries({ queryKey: actsKey(projectId) });
     void qc.invalidateQueries({ queryKey: progressKey(projectId) });
   };
+}
+
+/** Invalidate everything one act write touches. Exported so the receipt batch, which drives
+ *  actsApi directly to keep per-file control, refreshes exactly what the mutations do. */
+export function useActWriter(id: string, projectId: string) {
+  const invalidate = useActsInvalidator(projectId);
+  return () => invalidate(id);
 }
 
 export function useUpdateActHeader(id: string, projectId: string) {
@@ -107,17 +116,6 @@ export function useSignActOffline(id: string, projectId: string) {
     onSuccess: () => {
       invalidate();
     },
-  });
-}
-
-/** Receipts are saved the moment they are added — a file upload can't ride the header's
- *  «Зберегти», and a photo the master already picked must not be lost by leaving the screen. */
-export function useAddActReceipt(id: string, projectId: string) {
-  const invalidate = useActWriter(id, projectId);
-  return useMutation({
-    mutationFn: (req: { label: string; amount: number; issuedAt?: string | null; file: File; itemized?: boolean; saveToPhotos?: boolean }) =>
-      actsApi.addReceipt(id, req),
-    onSuccess: invalidate,
   });
 }
 

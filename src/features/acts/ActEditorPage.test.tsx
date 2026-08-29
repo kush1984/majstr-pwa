@@ -6,12 +6,14 @@ import '@/lib/i18n.ts';
 import { ActEditorPage } from './ActEditorPage.tsx';
 import { actsApi } from '@/api/acts.ts';
 import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
-import type { ActProgressResponse, WorkActResponse } from '@/api/types.ts';
+import { economyApi } from '@/api/economy.ts';
+import type { ActProgressResponse, ObjectEconomyResponse, WorkActResponse } from '@/api/types.ts';
 
 vi.mock('@/api/acts.ts', () => ({
   actsApi: {
     get: vi.fn(),
     progress: vi.fn(),
+    create: vi.fn(() => Promise.resolve({ id: `a-new` } as WorkActResponse)),
     updateHeader: vi.fn(() => Promise.resolve({} as WorkActResponse)),
     replaceItems: vi.fn(() => Promise.resolve({} as WorkActResponse)),
     signOffline: vi.fn(() => Promise.resolve({} as WorkActResponse)),
@@ -28,6 +30,9 @@ vi.mock('@/api/portal.ts', () => ({
   actPortalApi: { publish: vi.fn(() => Promise.resolve({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true })), sendEmail: vi.fn(), state: vi.fn() },
 }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { fetchBlobUrl: vi.fn(() => Promise.resolve('blob:receipt')) } }));
+// «Зараховано авансу» reads the object's own economy to say what it is FOR — money the client has
+// already paid that no signed act has accepted yet. Mocked here so these tests own that number.
+vi.mock('@/api/economy.ts', () => ({ economyApi: { economy: vi.fn() } }));
 
 function money(n: number): string {
   return formatMoney(n).replace(/\s+/g, ' ');
@@ -95,10 +100,97 @@ function renderEditor(search = '') {
   return { ...view, router };
 }
 
+/**
+ * The «/acts/new» editor: an act that has NO server row yet. Both routes are registered exactly as
+ * in the app, so the static '/acts/new' outranks the dynamic '/acts/:id'.
+ */
+function renderNewEditor(search = '?project=p1&from=2026-08-01') {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      { path: '/acts/new', element: <ActEditorPage /> },
+      { path: '/acts/:id', element: <ActEditorPage /> },
+      { path: '*', element: <div>відкрито інший екран</div> },
+    ],
+    { initialEntries: [`/acts/new${search}`] },
+  );
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return { ...view, router };
+}
+
+/** Only `acts` matters here — it is all the editor reads off the economy. */
+function economy(acceptedByActs: number, received: number): ObjectEconomyResponse {
+  return { estimates: [], acts: { contracted: 0, acceptedByActs, received }, payments: null, internals: null };
+}
+
+/** The advance input carries no label element — it is the textbox in «Зараховано авансу»'s block. */
+function advanceInput(): HTMLElement {
+  const block = screen.getByText('Зараховано авансу').closest('div')?.parentElement as HTMLElement;
+  return within(block).getByRole('textbox');
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(actsApi.get).mockResolvedValue(draftAct());
   vi.mocked(actsApi.progress).mockResolvedValue(progress());
+  vi.mocked(economyApi.economy).mockResolvedValue(economy(0, 0));
+});
+
+describe('ActEditorPage (new act)', () => {
+  it('opening «Новий акт» creates nothing — the act is born on «Зберегти»', async () => {
+    renderNewEditor();
+
+    // The editor is fully usable, off the query string alone: no GET, and above all no POST.
+    await screen.findByText('Шпаклювання стін');
+    expect(actsApi.get).not.toHaveBeenCalled();
+    expect(actsApi.create).not.toHaveBeenCalled();
+    expect(screen.getByText('Новий акт')).toBeTruthy(); // no number yet — the server mints it
+
+    // The period start rides the query string (computed off the object's acts by the caller).
+    expect(screen.getByDisplayValue('2026-08-01')).toBeTruthy();
+
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox'));
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+
+    await waitFor(() => expect(actsApi.create).toHaveBeenCalledTimes(1));
+    const [projectId, req, uuid] = vi.mocked(actsApi.create).mock.calls[0];
+    expect(projectId).toBe('p1');
+    expect(req.periodFrom).toBe('2026-08-01');
+    expect(uuid).toBeTruthy(); // X-Entity-Uuid — a retried create must not double-number the object
+    // Lines go on the row the create just answered with, not on the '' the URL carried.
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(actsApi.replaceItems).mock.calls[0][0]).toBe('a-new');
+    expect(vi.mocked(actsApi.replaceItems).mock.calls[0][1].items).toHaveLength(1);
+  });
+
+  it('receipts wait for the first save — there is no act row to attach a photo to', async () => {
+    renderNewEditor();
+
+    expect(await screen.findByText('Збережіть акт, щоб додати чеки та рахунки.')).toBeTruthy();
+    // The panel itself IS titled before the first save — it says where receipts will live; what
+    // must be absent is the section that can actually take one.
+    expect(screen.queryByText('Чеків ще немає.')).toBeNull();
+  });
+
+  it('leaving an unsaved new act asks first, and says it will not be created', async () => {
+    const { router } = renderNewEditor();
+
+    await screen.findByText('Шпаклювання стін');
+    // Nothing was even typed: an act with no server row behind it is unsaved by definition.
+    fireEvent.click(screen.getByLabelText('Назад'));
+
+    expect(await screen.findByText(/він не створиться/)).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/acts/new');
+
+    fireEvent.click(screen.getByText('Вийти без збереження'));
+    expect(await screen.findByText('відкрито інший екран')).toBeTruthy();
+    expect(actsApi.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('ActEditorPage', () => {
@@ -284,8 +376,8 @@ describe('ActEditorPage', () => {
     vi.mocked(actsApi.get).mockResolvedValue({
       ...draftAct(),
       receipts: [
-        { id: 'r1', label: 'Епіцентр — клей', amount: 2400, issuedAt: '2026-08-03', hasPhoto: true, itemized: false, sortOrder: 0 },
-        { id: 'r2', label: 'Нова Пошта', amount: 600, issuedAt: null, hasPhoto: false, itemized: false, sortOrder: 1 },
+        { id: 'r1', label: 'Епіцентр — клей', amount: 2400, returnedAmount: 0, issuedAt: '2026-08-03', hasPhoto: true, itemized: false, sortOrder: 0 },
+        { id: 'r2', label: 'Нова Пошта', amount: 600, returnedAmount: 0, issuedAt: null, hasPhoto: false, itemized: false, sortOrder: 1 },
       ],
       receiptsTotal: 3000,
     });
@@ -295,6 +387,26 @@ describe('ActEditorPage', () => {
     expect(screen.getByText('Нова Пошта')).toBeTruthy();
     // Works 0 + receipts 3 000 → «До сплати» carries them; the subtotal row spells them out.
     expect(screen.getAllByText(moneyExact(3000)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a partial return reaches «До сплати», not just the receipts panel (V115)', async () => {
+    // The editor computes its own receipts subtotal off the rows, so it has to net the return the
+    // same way the panel and the server's `payable` do — or the master reads two different bills
+    // on one screen.
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(),
+      receipts: [
+        { id: 'r1', label: 'Цвяхи', amount: 2000, returnedAmount: 500, issuedAt: null, hasPhoto: true, itemized: false, sortOrder: 0 },
+      ],
+      receiptsTotal: 1500,
+    });
+    renderEditor();
+
+    await screen.findByText('Цвяхи');
+    // 1 500 twice (the panel's own subtotal + the settlement block), and the gross 2 000 never as a
+    // total — it survives only on the row, where it says what the paper says.
+    expect(screen.getAllByText(moneyExact(1500)).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(moneyExact(2000))).toBeNull();
   });
 
   it('saves from the button on the screen itself, not only from the FAB', async () => {
@@ -332,5 +444,51 @@ describe('ActEditorPage', () => {
     fireEvent.click(share[share.length - 1]);
 
     expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
+  });
+});
+
+/**
+ * «Зараховано авансу» used to be a bare number field whose meaning the master had to carry in his
+ * head («отой аванс — то для мене поки загадка»). It now says what it is for in the object's own
+ * numbers: the money the client paid ahead that no SIGNED act has accepted yet.
+ */
+describe('ActEditorPage — the advance field explains itself', () => {
+  it('names the object\u2019s unearned advance and credits it in one tap', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economy(4000, 14000)); // 10 000 ₴ paid ahead
+    renderEditor();
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox')); // full remainder: 66.5 × 145 = 9 642,50
+
+    const apply = await screen.findByRole('button', { name: /Зарахувати/ });
+    // Never more than this act is worth — the offer is min(unearned, act value), not the full 10 000.
+    expect(apply.textContent?.replace(/\s+/g, ' ')).toContain(money(9642.5));
+    fireEvent.click(apply);
+
+    expect(screen.getByDisplayValue('9642.5')).toBeTruthy();
+    // «До сплати» drops to what is left after the advance — the whole point of the field.
+    const payable = screen.getByText('До сплати').parentElement as HTMLElement;
+    expect(payable.textContent?.replace(/\s+/g, ' ')).toContain(moneyExact(0));
+  });
+
+  it('says plainly when there is no advance to credit', async () => {
+    renderEditor(); // default economy: the client has paid nothing
+    await screen.findByText('Шпаклювання стін');
+
+    expect(await screen.findByText(/ще нічого не платив наперед/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Зарахувати/ })).toBeNull();
+  });
+
+  it('warns — but does not block — when more is credited than the client paid ahead', async () => {
+    // The one thing nothing else catches: the same advance credited on two different acts.
+    vi.mocked(economyApi.economy).mockResolvedValue(economy(4000, 5000)); // 1 000 ₴ unearned
+    renderEditor();
+    await screen.findByText('Шпаклювання стін');
+    await screen.findByText(/Клієнт уже заплатив наперед/);
+
+    fireEvent.change(advanceInput(), { target: { value: '3000' } });
+
+    expect(screen.getByText(/Більше, ніж клієнт заплатив наперед/)).toBeTruthy();
+    // A warning, not a gate: the value the master typed stands.
+    expect(screen.getByDisplayValue('3000')).toBeTruthy();
   });
 });

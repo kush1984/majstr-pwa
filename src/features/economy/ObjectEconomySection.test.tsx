@@ -195,6 +195,24 @@ describe('ObjectEconomySection', () => {
     expect(screen.getByText('дод. роботи з акта')).toBeTruthy();
   });
 
+  it('an ADDENDUM rollup has no ⋮ at all — both its actions were dead ends', async () => {
+    // «Згенерувати акт» would open a scoped editor with no positions (WorkActService.progress
+    // skips ADDENDUM estimates — this money IS an act already), and «Не враховувати цей кошторис»
+    // is answered 409 ESTIMATE_ADDENDUM_LOCKED because unticking the rollup pushes «Прийнято
+    // актами» past «За договором». A regular panel keeps its menu.
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({
+        estimates: [panel(), panel({ id: 'e2', name: 'Додаткові роботи до акта № 7', kind: 'ADDENDUM' })],
+      }),
+    );
+
+    renderSection('PRO');
+
+    await screen.findByText('Додаткові роботи до акта № 7');
+    // Two panels on screen, exactly one ⋮ — the regular estimate keeps both its actions.
+    expect(screen.getAllByLabelText('Дії')).toHaveLength(1);
+  });
+
   it('a panel excluded from the counted total says so honestly', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(
       economyFixture({ estimates: [panel({ countedInEconomy: false })] }),

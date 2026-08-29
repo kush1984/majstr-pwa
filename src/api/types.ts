@@ -1365,26 +1365,19 @@ export interface WorkActItemResponse {
 export interface WorkActReceiptResponse {
   id: string;
   label: string;
+  /** What the paper says — never reduced by a return, so it still matches the photo. */
   amount: number;
+  /** Part of the material taken back to the shop. What is billed is amount − returnedAmount. */
+  returnedAmount: number;
   issuedAt: string | null;
   /** A photo of the paper was uploaded — fetch it from the act's receipt file endpoint. */
   hasPhoto: boolean;
-  /** The receipt's positions were carried into the act as its own lines (round 2) — the amount is
-   *  shown as reference but excluded from «Разом за чеками»/payable. */
+  /** LEGACY: a receipt whose positions were carried into the act as its own lines. Carrying them
+   *  was removed (2026-08-28), so this is false on everything new; rows that predate the removal
+   *  — some frozen into a SIGNED act — still show the amount as reference only, excluded from
+   *  «Разом за чеками»/payable. */
   itemized: boolean;
   sortOrder: number;
-}
-
-/** One recognized position off a receipt photo — the same review shape the estimate's receipt
- *  import uses: nullable fields plus `issues` naming what the model could not read. */
-export interface RecognizedReceiptItem {
-  name: string;
-  unit: Unit | null;
-  quantity: number | null;
-  unitPrice: number | null;
-  type: ItemType;
-  category: string | null;
-  issues: string[];
 }
 
 /** What the model read off a receipt photo. recognized=false = soft fallback to manual entry. */
@@ -1393,7 +1386,6 @@ export interface ActReceiptRecognizeResponse {
   label: string | null;
   amount: number | null;
   issuedAt: string | null;
-  items: RecognizedReceiptItem[];
 }
 
 export interface WorkActResponse {
@@ -1456,6 +1448,8 @@ export interface WorkActUpdateRequest extends WorkActCreateRequest {
 export interface WorkActReceiptRequest {
   label: string;
   amount: number;
+  /** Omitted or null = no return. The server caps it at `amount` (WORK_ACT_RECEIPT_RETURN_TOO_BIG). */
+  returnedAmount?: number | null;
   issuedAt?: string | null;
 }
 
