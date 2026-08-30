@@ -9,6 +9,7 @@ import { initOutbox } from '@/lib/outbox/init.ts';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
+import { initPostHog } from './lib/posthog.ts';
 import { captureRefFromUrl, captureUtmFromUrl } from './lib/referral.ts';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import { installOnlineTracking } from './lib/onlineStatus.ts';
@@ -18,6 +19,10 @@ import './styles/index.css';
 // Start error reporting before anything else so even early crashes are caught.
 // No-op unless VITE_SENTRY_DSN is set.
 initSentry();
+
+// Product analytics + session replay. No-op unless VITE_POSTHOG_KEY is set, and even then it
+// starts OPTED OUT — nothing is captured until the master's privacy consent is stamped.
+initPostHog();
 
 // Seed the online/offline state from navigator.onLine BEFORE anything subscribes to it. TanStack's
 // default only listens for TRANSITIONS, so an app opened in flight mode would otherwise believe it

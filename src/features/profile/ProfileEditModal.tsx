@@ -265,7 +265,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
           </div>
         </div>
       ) : (
-      <div className="space-y-4">
+      <div className="ph-mask space-y-4">
         <FormField
           label={t('common.fullName')}
           required

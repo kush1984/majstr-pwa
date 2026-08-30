@@ -250,3 +250,21 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
       .toHaveBeenCalledWith('obj1', { fromPaymentId: 'pay1', toPaymentId: 'pay2' }));
   });
 });
+
+describe('PaymentsBlock — the progress strip (green-strip iteration)', () => {
+  it('prints the TRUE percent on an overpayment, not a rounded-down 100 %', () => {
+    // The strip used to cap the label at 100 %, so 25 000 ₴ received against a 20 000 ₴ contract
+    // read exactly like a contract paid to the last hryvnia. The bar clamps; the number does not.
+    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 25000 })]));
+
+    expect(screen.getByText(/125%/)).toBeTruthy();
+  });
+
+  it('fills solid green once the contract is fully received', () => {
+    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 20000 })]));
+
+    const fill = screen.getByTestId('progress-fill');
+    expect(fill.className).toContain('bg-success');
+    expect(fill.className).not.toContain('bg-gradient-to-r');
+  });
+});

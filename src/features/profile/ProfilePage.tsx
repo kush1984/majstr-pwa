@@ -128,8 +128,8 @@ export function ProfilePage() {
         {t('profile.title')}
       </h1>
 
-      {/* Hero */}
-      <div className="mb-4 rounded-card bg-gradient-to-br from-brand-soft to-brand-soft-2 p-5 text-center">
+      {/* Hero. Session-replay masking: everything inside is redacted in the recording (lib/posthog.ts). */}
+      <div className="ph-mask mb-4 rounded-card bg-gradient-to-br from-brand-soft to-brand-soft-2 p-5 text-center">
         <div className="mx-auto mb-3 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-brand text-3xl font-bold text-white shadow-cta">
           {initials(me?.fullName) || '—'}
         </div>

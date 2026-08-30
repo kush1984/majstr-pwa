@@ -97,8 +97,9 @@ export function ClientPicker({
     switchTo(m);
   };
 
+  // Session-replay masking: everything inside is redacted in the recording (lib/posthog.ts).
   return (
-    <div>
+    <div className="ph-mask">
       <div className="mb-3 flex gap-1 rounded-xl bg-surface-sunken p-1">
         {modes.map((m) => (
           <button

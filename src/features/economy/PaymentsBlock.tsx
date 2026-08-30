@@ -4,6 +4,7 @@ import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { formatMoney, formatAmount } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
@@ -84,10 +85,12 @@ function dueDateWarning(iso: string, isCreate: boolean, t: (k: string) => string
 
 /** Header line ("Отримано X з Y ₴ · Z%" + one (i)) plus a thin progress bar underneath — no
  *  separate За договором/Отримано/Залишок tiles, this single line says the same thing in less
- *  space. Same design + wording as the client portal's compact payments card. */
+ *  space. Same design + wording as the client portal's compact payments card, and the bar itself
+ *  is the shared {@link ProgressStrip} so the two can't drift apart. */
 function PaymentStrip({ received, total }: { received: number; total: number }) {
   const { t } = useTranslation();
-  const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
+  // Uncapped on purpose: an overpayment reads «112 %» here, not a rounded-down «100 %».
+  const pct = progressPct(received, total);
   return (
     <div className="mt-2">
       <p className="flex flex-wrap items-center gap-1 text-xs text-muted">
@@ -96,9 +99,7 @@ function PaymentStrip({ received, total }: { received: number; total: number }) 
         </span>
         <InfoPopover text={t('economy.receivedInfo')} label={t('economy.paymentsTitle')} />
       </p>
-      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-sunken">
-        <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />
-      </div>
+      <ProgressStrip value={received} total={total} />
     </div>
   );
 }

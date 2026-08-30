@@ -113,12 +113,13 @@ export function ClientEditModal({
 
   const taxWarn = clientTaxIdWarning(form.taxId, form.clientType);
 
+  // The ph-mask below redacts name / phone / email in session replay (lib/posthog.ts).
   return (
     <Modal open={open} onClose={onClose} title={t('clients.editTitle')}>
       {client.isPending ? (
         <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
       ) : (
-        <div className="space-y-3">
+        <div className="ph-mask space-y-3">
           <Field label={t('common.fullName')}>
             <Input value={form.fullName} onChange={set('fullName')} invalid={errors.fullName}
               placeholder={t('clients.namePlaceholder')} />

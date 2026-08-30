@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { estimatesApi } from '@/api/estimates.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { track } from '@/lib/posthog.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import type {
@@ -162,6 +163,9 @@ export function useCreateEstimate() {
           void qc.invalidateQueries({ queryKey: ['projects'] });
         },
         optimistic: () => {
+          // The other half of this event lives in `useApplyTemplate` — an estimate is born either
+          // empty here or composed from bundles there, and both are «створив кошторис».
+          track('estimate_created', { itemCount: 0, fromTemplate: false });
           qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, id], optimistic);
           const summary: EstimateSummary = {
             id, projectId, name: optimistic.name, status: 'DRAFT',

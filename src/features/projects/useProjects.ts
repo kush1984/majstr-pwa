@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { projectsApi } from '@/api/projects.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { track } from '@/lib/posthog.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -74,6 +75,10 @@ export function useCreateProject() {
         online: () => projectsApi.create(req, id),
         onOnlineSuccess: invalidate,
         optimistic: () => {
+          // Fired here, not in `online`: the object exists for the master the moment the
+          // optimistic row lands, and an object authored in a basement must count the same as
+          // one authored on wifi (the capture itself is queued by the SDK, never a request now).
+          track('project_created', { hasClient: req.clientId != null });
           qc.setQueryData<ProjectResponse[]>([...PROJECTS_KEY, 'list', 'all'], (old) => [optimistic, ...(old ?? [])]);
           qc.setQueryData<ProjectResponse>([...PROJECTS_KEY, 'detail', id], optimistic);
           return optimistic;

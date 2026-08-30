@@ -14,6 +14,7 @@ import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useEconomy, useExpenses, useDeleteExpense, useToggleEstimateCounted } from './useEconomy.ts';
 import { useActs } from '@/features/acts/useActs.ts';
@@ -207,7 +208,6 @@ function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
   const { t } = useTranslation();
   const { contracted, acceptedByActs, received } = acts;
   if (contracted === 0 && acceptedByActs === 0 && received === 0) return null;
-  const pct = (v: number) => (contracted > 0 ? Math.min(100, Math.round((v / contracted) * 100)) : 0);
   const diff = acceptedByActs - received;
   // Work still under contract but not yet closed by acts — the figure the master keeps re-deriving
   // in his head; name it inside the «Прийнято актами» hint (acts-fix, Chunk C).
@@ -223,9 +223,9 @@ function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
         <span className="text-xs text-muted">{t('economy.contracted')}</span>
         <span className="font-mono text-sm font-semibold tabular-nums text-primary">{formatMoney(contracted)}</span>
       </div>
-      <AxisStrip label={t('economy.acceptedByActs')} value={acceptedByActs} pct={pct(acceptedByActs)}
+      <AxisStrip label={t('economy.acceptedByActs')} value={acceptedByActs} total={contracted}
         info={t('economy.acceptedInfo', { amount: formatMoney(notYetAccepted) })} />
-      <AxisStrip label={t('economy.received')} value={received} pct={pct(received)} />
+      <AxisStrip label={t('economy.received')} value={received} total={contracted} />
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2">
         <span className="flex items-center gap-1 text-xs font-medium text-secondary">
           {balanceLabel}
@@ -237,21 +237,21 @@ function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
   );
 }
 
-function AxisStrip({ label, value, pct, info }: {
-  label: string; value: number; pct: number; info?: string;
+/** Twin of PaymentStrip — same label shape, same shared {@link ProgressStrip} bar underneath. */
+function AxisStrip({ label, value, total, info }: {
+  label: string; value: number; total: number; info?: string;
 }) {
+  const pct = progressPct(value, total);
   return (
     <div className="mt-2">
       <p className="flex flex-wrap items-center gap-1 text-xs text-muted">
         <span className="font-mono tabular-nums">
-          {label} {formatMoney(value)} {/* twin of PaymentStrip */}
+          {label} {formatMoney(value)}
           <span className="text-faint"> · {pct}%</span>
         </span>
         {info && <InfoPopover text={info} label={label} />}
       </p>
-      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-sunken">
-        <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />
-      </div>
+      <ProgressStrip value={value} total={total} />
     </div>
   );
 }
@@ -319,8 +319,9 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
   const internals = eco?.internals ?? null;
   const list = expenses.data ?? [];
 
+  // Session-replay masking: everything inside is redacted in the recording (lib/posthog.ts).
   return (
-    <section className="space-y-3">
+    <section className="ph-mask space-y-3">
       {panels.length > 0 && (
         <div className="space-y-2">
           {panels.map((p) => (

@@ -3,6 +3,7 @@ import { authApi } from '@/api/auth.ts';
 import type { AuthResponse, LoginRequest } from '@/api/types.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
+import { applyAnalyticsIdentity } from '@/lib/posthog.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
 import { discardForeignOps } from '@/lib/outbox/outbox.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -36,6 +37,9 @@ export function useLogin() {
       qc.setQueryData(ME_QUERY_KEY, data.user);
       // Tag error reports with the user id (no PII) for context.
       setSentryUser(data.user.id);
+      // Analytics identity too — `reset()` on logout deliberately wiped it, so this is what makes
+      // the next master on a shared phone their own person rather than an append to the previous.
+      applyAnalyticsIdentity(data.user);
     },
   });
 }

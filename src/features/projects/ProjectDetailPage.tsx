@@ -347,7 +347,7 @@ export function ProjectDetailPage() {
         <div className="mb-3 text-xs text-muted">📍 {p.address}</div>
         <Badge variant={OBJECT_STAGE_VARIANT[p.stage]}>{t('status.stage.' + p.stage)}</Badge>
         {p.clientFullName && (
-          <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+          <div className="ph-mask mt-3 flex items-center gap-2 border-t border-border pt-3">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-soft text-[11px] font-bold text-brand">
               {initials(p.clientFullName)}
             </span>

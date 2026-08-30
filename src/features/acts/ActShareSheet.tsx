@@ -8,6 +8,7 @@ import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
+import { track } from '@/lib/posthog.ts';
 import { actPortalApi } from '@/api/portal.ts';
 
 /**
@@ -37,7 +38,13 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
     setBusy('copy');
     try {
       const { copied } = await copyWhenReady(() => Promise.resolve(url ?? ''));
-      if (copied && url) { toast.success(t('estimate.linkCopied')); onClose(); }
+      if (copied && url) {
+        // The sheet publishes on OPEN (DRAFT→SENT), so the honest «поділився» moment is the one
+        // where the link left the app — same rule as the estimate sheet.
+        track('act_shared', { channel: 'link' });
+        toast.success(t('estimate.linkCopied'));
+        onClose();
+      }
       else toast.error(t('estimate.linkCopyFailed'));
     } finally { setBusy(null); }
   };
@@ -46,6 +53,7 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
     setBusy('email');
     try {
       await actPortalApi.sendEmail(actId);
+      track('act_shared', { channel: 'email' });
       toast.success(t('estimate.emailSent'));
       onClose();
     } catch (err) {

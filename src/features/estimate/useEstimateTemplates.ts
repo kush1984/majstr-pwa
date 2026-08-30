@@ -19,6 +19,7 @@ import type {
 import { isNetworkError, offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { enqueue } from '@/lib/outbox/outbox.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { track } from '@/lib/posthog.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 
@@ -346,6 +347,7 @@ export function useApplyTemplate() {
         try {
           const created = await estimateTemplatesApi.applyToProject(
             args.projectId, args.templateIds, args.req);
+          track('estimate_created', { itemCount: created.items.length, fromTemplate: true });
           void qc.invalidateQueries({ queryKey: ['projects'] });
           void qc.invalidateQueries({ queryKey: ['dashboard'] });
           return created;
@@ -440,5 +442,8 @@ async function applyTemplateOffline(
   };
   qc.setQueryData<EstimateSummary[]>(['project-estimates', projectId],
     (old) => [summary, ...(old ?? [])]);
+  // The offline half of the same event — composed on the device, but just as much a created
+  // estimate as the online one. Counting only the online path would make basements look idle.
+  track('estimate_created', { itemCount: items.length, fromTemplate: true });
   return optimistic;
 }

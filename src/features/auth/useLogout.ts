@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { authApi } from '@/api/auth.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
+import { resetAnalytics } from '@/lib/posthog.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
 import { routes } from '@/lib/config.ts';
 
@@ -28,6 +29,9 @@ export function useLogout() {
     }
     tokens.clear();
     setSentryUser(null);
+    // Drop the analytics identity as well. A crew shares one phone: without this the next person
+    // to log in is appended to the previous master's person, and their replay is filed under them.
+    resetAnalytics();
     qc.clear();
     void clearPersistedCache(); // the local copy is temporary — logout wipes it from the device
     // The outbox is NOT wiped. It is owner-stamped, so it can only ever be replayed by the same

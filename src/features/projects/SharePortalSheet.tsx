@@ -8,6 +8,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
+import { track } from '@/lib/posthog.ts';
 import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
@@ -223,6 +224,10 @@ export function SharePortalSheet({
       });
       invalidateAfterShare();
       if (copied && value) {
+        // Only on a link that actually reached the clipboard. The sheet MINTS the single-estimate
+        // link when it opens, so counting the open would repeat the very lie the backend funnel's
+        // estimate half still tells («опублікував АБО просто відкрив шторку»).
+        track('estimate_shared', { scope: singleEstimateId ? 'estimate' : 'object', channel: 'link' });
         toast.success(t('estimate.linkCopied'));
         onClose();
       } else {
@@ -246,6 +251,7 @@ export function SharePortalSheet({
         await (mode === 'economy' ? economyPortalApi.sendEmail(project.id) : portalApi.sendEmail(project.id));
       }
       invalidateAfterShare();
+      track('estimate_shared', { scope: singleEstimateId ? 'estimate' : 'object', channel: 'email' });
       toast.success(t('estimate.emailSent'));
       onClose();
     } catch (err) {

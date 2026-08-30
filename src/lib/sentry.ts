@@ -26,8 +26,10 @@ export function initSentry(): void {
     environment: config.sentryEnvironment,
     // No automatic IP / cookie / user collection — we add only what we choose.
     sendDefaultPii: false,
-    // Keep it lightweight: errors only, no performance tracing / replay by
-    // default (can be turned on later if needed).
+    // Keep it lightweight: errors only, no performance tracing.
+    // Session replay stays OFF here on purpose — it lives in lib/posthog.ts and only there.
+    // Two recorders would double the cost and record the same screens twice, and PostHog is the
+    // one with the masking rules the privacy policy names. Do not add a replay integration.
     tracesSampleRate: 0,
     beforeSend: scrubEvent,
     beforeBreadcrumb: scrubBreadcrumb,

@@ -3,6 +3,15 @@
  * `import.meta.env` directly. Cheap to mock in tests, easy to grep.
  */
 
+/**
+ * Replay sample rate from the env, 0..1. Anything missing or unparseable falls back to 1 —
+ * recording everything is the deliberate default (see lib/posthog.ts).
+ */
+function replaySampleRate(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 1;
+}
+
 export const config = {
   // `??` (not `||`) so an *explicitly empty* VITE_API_BASE_URL stays "" — that
   // makes axios use relative `/api/...` URLs, which the Vite dev proxy forwards
@@ -25,6 +34,13 @@ export const config = {
   // build mode so we don't need an extra env var for the common case.
   sentryEnvironment:
     import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
+
+  // PostHog product analytics + session replay. Empty key → the SDK is never even imported
+  // (lib/posthog.ts), so nothing is collected locally. EU region on purpose — the data is
+  // Ukrainian masters' and stays in Frankfurt, not the US.
+  posthogKey: import.meta.env.VITE_POSTHOG_KEY ?? '',
+  posthogHost: import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com',
+  posthogReplaySampleRate: replaySampleRate(import.meta.env.VITE_POSTHOG_REPLAY_SAMPLE_RATE),
 } as const;
 
 export const routes = {

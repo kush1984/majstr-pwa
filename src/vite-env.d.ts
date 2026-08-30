@@ -7,6 +7,9 @@ interface ImportMetaEnv {
   readonly VITE_SENTRY_ENVIRONMENT: string;
   readonly VITE_SUPPORT_EMAIL: string;
   readonly VITE_SUPPORT_PHONE: string;
+  readonly VITE_POSTHOG_KEY: string;
+  readonly VITE_POSTHOG_HOST: string;
+  readonly VITE_POSTHOG_REPLAY_SAMPLE_RATE: string;
 }
 
 /** App version injected at build time from package.json (vite.config `define`). */

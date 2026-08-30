@@ -6,6 +6,7 @@ import { initials } from '@/lib/format.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useAutoPrefetch } from '@/lib/useAutoPrefetch.ts';
 import { setSentryUser } from '@/lib/sentry.ts';
+import { applyAnalyticsIdentity } from '@/lib/posthog.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { usePushRefresh } from '@/hooks/usePushRefresh.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
@@ -34,6 +35,14 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   useEffect(() => {
     if (me?.id) setSentryUser(me.id);
   }, [me?.id]);
+
+  // Same for analytics, but keyed on the WHOLE `me`: consent (and the plan we segment replays by)
+  // can change without the id changing, and this is the effect that has to notice. React Query's
+  // structural sharing keeps the object identity stable while the JSON is deep-equal, so this does
+  // not re-fire on every refetch. Nothing is captured until consent is stamped — see lib/posthog.ts.
+  useEffect(() => {
+    if (me) applyAnalyticsIdentity(me);
+  }, [me]);
 
   // Keep the backend's stored push subscription in sync with the browser's
   // actual one: re-POST it on every app open, and again whenever the SW reports

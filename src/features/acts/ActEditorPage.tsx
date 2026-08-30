@@ -15,6 +15,7 @@ import { Badge } from '@/components/Badge.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { useLeaveGuard } from '@/hooks/useLeaveGuard.ts';
 import { toAppError } from '@/api/errors.ts';
+import { track } from '@/lib/posthog.ts';
 import { actsApi } from '@/api/acts.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
@@ -380,6 +381,9 @@ export function ActEditorPage() {
     }
     newActUuid.current ??= newUuid(); // X-Entity-Uuid — a retried create must not double-number
     const created = await create.mutateAsync({ req: headerRequest(), id: newActUuid.current });
+    // «Новий акт» creates nothing — THIS is where an act is born, and it is the only place, so
+    // «Зберегти» and «Підписати» both count once each through the door they already share.
+    track('act_created');
     await actsApi.replaceItems(created.id, { items: buildItems() });
     invalidateAct(created.id);
     return created.id;
@@ -413,6 +417,9 @@ export function ActEditorPage() {
       } else {
         await signOffline.mutateAsync(signerName.trim());
       }
+      // The OFFLINE signature only — the master signing on the client's behalf, in their own
+      // browser. A portal signature happens in the client's browser and is never measured.
+      track('act_signed', { mode: 'offline' });
       setSavedSnapshot(currentSnapshot); // everything on screen is persisted (and now immutable)
       setSignOpen(false);
       toast.success(t('acts.signed'));
