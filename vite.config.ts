@@ -24,7 +24,13 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate': in autoUpdate mode the generated registration DISCARDS the
+      // `onNeedRefresh` callback (it destructures it and never calls it) and reloads the page
+      // itself on `activated`. That silent reload can drop unsaved work on the explicit-save
+      // screens (act editor, template editor), which is why `main.tsx` passes a callback and
+      // `<UpdateBanner>` exists at all. Both halves are needed — see `src/sw.ts`'s update
+      // lifecycle comment for the other one.
+      registerType: 'prompt',
       // SW is DISABLED in dev: an active dev service worker precaches the app
       // shell and serves stale JS/CSS, defeating HMR (changes don't show until
       // you manually unregister it). Production builds still ship the SW.

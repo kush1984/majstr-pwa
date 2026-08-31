@@ -94,10 +94,26 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Activate updated SW immediately on next page load so the user does not
-// stay on a stale build after autoUpdate finds a new version.
-self.addEventListener('install', () => { void self.skipWaiting(); });
+// ---------- update lifecycle ----------
+//
+// A new build INSTALLS and then WAITS. It must, because waiting is the state the
+// «нова версія — Оновити» banner is shown for: `registerType: 'prompt'` reports a new version
+// through `onNeedRefresh`, which only fires for a worker sitting in `waiting`. This used to be
+// `skipWaiting()` on install, which — together with the old `registerType: 'autoUpdate'` — made
+// that banner unreachable code for a year: the worker never waited, the plugin never called
+// `onNeedRefresh`, and a deploy silently `location.reload()`-ed the master mid-estimate, which is
+// the exact thing the banner exists to prevent. Put `skipWaiting()` back on install and the
+// banner goes dead again, silently, with every test still green.
+//
+// The master decides instead: their tap on «Оновити» sends this message (workbox-window's
+// `messageSkipWaiting()` posts `{type: 'SKIP_WAITING'}`), the new worker activates, `clients.claim()`
+// makes it take over the open page, and the plugin reloads onto the new build.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
 self.addEventListener('activate', (event) => {
+  // Claim on activate is what makes the reload land: without it the already-open page keeps the
+  // OLD worker as its controller, `controlling` never fires, and the tap appears to do nothing.
   event.waitUntil(self.clients.claim());
 });
 
