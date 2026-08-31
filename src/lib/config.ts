@@ -4,10 +4,20 @@
  */
 
 /**
- * Replay sample rate from the env, 0..1. Anything missing or unparseable falls back to 1 —
+ * Replay sample rate from the env, 0..1. Missing, blank or unparseable falls back to 1 —
  * recording everything is the deliberate default (see lib/posthog.ts).
+ *
+ * The BLANK case is the one that bites, which is why it is checked before `Number` and not left
+ * to the range test: `Number("")` is **0**, a perfectly valid rate that silently records nothing.
+ * An empty-string variable is not a hypothetical — a hosting dashboard is exactly where one gets
+ * created by hand, and the failure it causes (SDK loads, session never recorded) looks nothing
+ * like its cause. An unset var and a var set to nothing both mean "nobody chose", so both take
+ * the default; only a real number turns replay down.
+ *
+ * Exported for tests.
  */
-function replaySampleRate(raw: string | undefined): number {
+export function replaySampleRate(raw: string | undefined): number {
+  if (!raw?.trim()) return 1;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 1;
 }
