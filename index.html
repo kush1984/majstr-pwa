@@ -47,14 +47,99 @@
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "UAH" }
     }
     </script>
-    <!-- Structured data: the publisher, so brand queries resolve to the site. -->
+    <!-- Structured data: the publisher, so brand queries resolve to the site. This is
+         the app's entity signal ("Бренд як сутність"). NOTE: no `sameAs` yet — it must
+         list ONLY real, live profiles; a fabricated/empty sameAs is a broken entity
+         signal, worse than none. Add it (LinkedIn / GitHub org / Facebook / Instagram)
+         the moment those profiles exist. -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "Organization",
       "name": "Majstr",
       "url": "https://majstr.pro/",
-      "logo": "https://majstr.pro/icons/icon-512.png"
+      "logo": "https://majstr.pro/icons/icon-512.png",
+      "description": "Застосунок для майстрів-підрядників і бригад: каталог робіт із ринковими цінами, готові шаблони, заміри об'єкта, портал клієнта з онлайн-підписом, акти виконаних робіт і облік заробітку по об'єкту.",
+      "email": "support@majstr.pro",
+      "foundingDate": "2026",
+      "areaServed": "UA",
+      "knowsLanguage": ["uk"],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "email": "support@majstr.pro",
+        "availableLanguage": ["uk"]
+      }
+    }
+    </script>
+
+    <!-- Structured data: FAQ. Mirrors the VISIBLE FAQ accordion in
+         src/features/landing/LandingPage.tsx word-for-word (uk.json faqQ1..faqA7, the
+         default render language). Structured data must describe on-page content — change
+         one, change the other in the same commit. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "inLanguage": "uk",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Скільки коштує Majstr?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Базовий тариф безкоштовний: два об'єкти з порталом клієнта, онлайн-підписом, PDF і фото. PRO — платна підписка (місячна або річна), яка знімає ліміт об'єктів та додає розпізнавання фото й імпорт кошторисів. Новим користувачам доступний пробний PRO-період."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Чи потрібна клієнту реєстрація, щоб підписати кошторис?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Ні. Клієнт відкриває посилання з телефона, переглядає кошторис по позиціях і підписує онлайн — без реєстрації й без застосунку."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Чи працює Majstr без інтернету?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Так, майже все: об'єкти, клієнти, кошториси, заміри й акти можна створювати офлайн, а вони синхронізуються, щойно з'явиться зв'язок. Виняток — фото: їх завантаження та розпізнавання потребують мережі."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Чи можна вигрузити кошторис у PDF?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Так. Кошторис і акт виконаних робіт можна відкрити чи надіслати клієнту як PDF. На тарифі PRO PDF формується з вашим логотипом."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Чим Majstr відрізняється від АВК-5?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "АВК-5 — для державних будівельних кошторисів за ДСТУ з ресурсними нормами. Majstr — для приватних майстрів і бригад: ринкові ціни, швидкий кошторис клієнту й портал з онлайн-підписом, без державних норм."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Що входить у безкоштовний тариф?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Два об'єкти, до трьох кошторисів на об'єкт, портал клієнта з онлайн-підписом, PDF, фото, заміри об'єкта, економіка об'єкта та акти виконаних робіт. Без картки."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Чи є в Majstr акти виконаних робіт?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Так. З підписаного кошторису формується акт, який клієнт підписує окремим посиланням онлайн; до акта можна додати чеки за матеріали."
+          }
+        }
+      ]
     }
     </script>
 
@@ -95,7 +180,7 @@
         </p>
         <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Що всередині</h2>
         <ul style="padding-left:20px;color:#4a3b2e;margin:0">
-          <li style="margin-bottom:8px"><strong>Каталог 960+ робіт із ринковими цінами</strong> та 140 готових шаблонів під типові роботи.</li>
+          <li style="margin-bottom:8px"><strong>Каталог 1000+ робіт із ринковими цінами</strong> та 120+ готових шаблонів під типові роботи.</li>
           <li style="margin-bottom:8px"><strong>Клієнт погоджує кошторис онлайн</strong> — відкриває посилання з телефона й підписує, без реєстрації.</li>
           <li style="margin-bottom:8px"><strong>Заміри об'єкта</strong> (PRO) — кімнати, стіни, стелі зі скосами, перегородки, відкоси; площа підставляється в позиції.</li>
           <li style="margin-bottom:8px"><strong>Фото ескізу, чека чи прайсу</strong> (PRO) — позиції та заміри вносяться самі, ти лише звіряєш.</li>

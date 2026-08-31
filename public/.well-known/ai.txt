@@ -1,0 +1,26 @@
+# ai.txt — created 2026-08-31.
+#
+# NON-STANDARD declaration of intent, NOT an access-control mechanism. The file that
+# actually governs crawler access is /robots.txt, and every crawler that matters
+# respects it — this one is a courtesy signal with no confirmed enforcement anywhere.
+# We are fine with reputable AI crawlers reading the PUBLIC pages (the landing and the
+# privacy policy). App routes and client portals stay disallowed in robots.txt, which
+# is the real control; do not treat an Allow here as opening them.
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /

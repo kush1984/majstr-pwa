@@ -1,13 +1,26 @@
-# majstr.pro — only the public landing ("/") should be indexed. The app routes
-# below are auth-gated SPA views with no public content; keep them out of the index.
+# majstr.pro — only the public landing ("/") and the privacy policy ("/privacy")
+# are meant to be indexed. Everything below is either an auth-gated app view with
+# no public content, or a tokenised client portal that must NEVER be indexed (it
+# carries the client's personal data and the estimate/act totals).
+#
+# Client portals (?p= / ?e= / ?a= / ?t=) all live under the single path
+# /portal/index.html, so one prefix rule closes every kind. That path is served by
+# the backend; if the backend ever answers on a different origin, it must carry its
+# own robots rule too — this file only governs majstr.pro.
 User-agent: *
 Disallow: /login
 Disallow: /register
 Disallow: /verify-email
+Disallow: /forgot-password
+Disallow: /reset-password
 Disallow: /projects
 Disallow: /catalog
+Disallow: /templates
 Disallow: /profile
 Disallow: /new
 Disallow: /estimates
+Disallow: /acts
+Disallow: /billing
+Disallow: /portal/
 
 Sitemap: https://majstr.pro/sitemap.xml

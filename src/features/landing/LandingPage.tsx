@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { routes } from '@/lib/config.ts';
 import { config } from '@/lib/config.ts';
+import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 
 /**
  * Public marketing landing — what a logged-OUT visitor sees at "/". Pure
@@ -20,6 +21,7 @@ export function LandingPage() {
       <ProblemSolution />
       <Features />
       <HowItWorks />
+      <Faq />
       <FinalCTA />
       <LandingFooter />
     </div>
@@ -291,14 +293,19 @@ function PsItem({
 
 function Features() {
   const { t } = useTranslation();
-  // `pro` marks what a FREE plan genuinely can't reach (PlanConfig: FREE has only
-  // CLIENT_PORTAL / ONLINE_SIGNATURE / PHOTO_REPORTS). Saying it here, up front, is the
-  // point — a master who signs up and hits an unannounced paywall doesn't come back.
+  // `pro` marks what a FREE plan genuinely can't reach, so a master who signs up doesn't
+  // hit an unannounced paywall. The truly-paid feature is photo recognition/import (02 —
+  // SKETCH/RECEIPT/ESTIMATE import, the only LLM-calling flows). Заміри (01) and Економіка
+  // (04) are PRO in the permanent plan but currently opened to FREE
+  // (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY) — so their badge is driven off that flag and
+  // snaps back to PRO automatically when the temp unlock is reverted. Keep this the FOURTH
+  // consumer of the flag in sync with the other three (see tempFreeUnlocks.ts).
+  const measurementsAndEconomyPro = !TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY;
   const feats = [
-    { n: '01', title: t('landing.feature1Title'), text: t('landing.feature1Text'), pro: true },
+    { n: '01', title: t('landing.feature1Title'), text: t('landing.feature1Text'), pro: measurementsAndEconomyPro },
     { n: '02', title: t('landing.feature2Title'), text: t('landing.feature2Text'), pro: true },
     { n: '03', title: t('landing.feature3Title'), text: t('landing.feature3Text'), pro: false },
-    { n: '04', title: t('landing.feature4Title'), text: t('landing.feature4Text'), pro: true },
+    { n: '04', title: t('landing.feature4Title'), text: t('landing.feature4Text'), pro: measurementsAndEconomyPro },
   ];
   return (
     <section className="px-6 pb-16 sm:pb-[84px]">
@@ -367,6 +374,50 @@ function HowItWorks() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Visible FAQ — an accordion of the questions a master actually asks. The text here
+ * is mirrored WORD-FOR-WORD by the FAQPage JSON-LD in index.html (same seven Q/A, in
+ * Ukrainian, the default render language): structured data that describes content not
+ * visible on the page is a policy violation, so change one and change the other in the
+ * same commit. Accordions are an allowed FAQ pattern — the answers are in the DOM even
+ * while collapsed, so crawlers and no-JS-off renderers still read them.
+ */
+function Faq() {
+  const { t } = useTranslation();
+  const items = [1, 2, 3, 4, 5, 6, 7].map((n) => ({
+    q: t(`landing.faqQ${n}`),
+    a: t(`landing.faqA${n}`),
+  }));
+  return (
+    <section className="px-6 pb-16 sm:pb-[84px]">
+      <div className="mx-auto max-w-[760px]">
+        <SectionHead eyebrow={t('landing.faqEyebrow')} title={t('landing.faqTitle')} />
+        <div className="space-y-3">
+          {items.map((item) => (
+            <details
+              key={item.q}
+              className="group rounded-[14px] border border-landing-line bg-white px-[22px] py-1 transition open:border-landing-ink"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-[18px] text-[17px] font-bold tracking-[-0.01em] marker:hidden">
+                {item.q}
+                <span
+                  aria-hidden
+                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border border-landing-line font-mono text-landing-amber-deep transition group-open:rotate-45"
+                >
+                  +
+                </span>
+              </summary>
+              <p className="pb-[18px] pr-8 text-[15px] leading-relaxed text-landing-muted">
+                {item.a}
+              </p>
+            </details>
+          ))}
         </div>
       </div>
     </section>
