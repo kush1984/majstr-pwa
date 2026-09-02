@@ -6,6 +6,8 @@ import '@/lib/i18n.ts';
 import { ActReceiptsSection } from './ActReceiptsSection.tsx';
 import { actsApi } from '@/api/acts.ts';
 import { decodeQrFromFile } from '@/lib/qr.ts';
+import { useOnline } from '@/lib/useOnline.ts';
+import { dropQueuedReceipt, patchQueuedReceipt, type QueuedActReceipt } from './offlineReceipts.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
 
 const unread = { recognized: false, label: null, amount: null, issuedAt: null };
@@ -21,6 +23,17 @@ vi.mock('@/api/acts.ts', () => ({
   },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+// The queue has its own test (offlineReceipts.test.ts); what this one asks is only which door a
+// click on a not-yet-sent receipt goes through — the outbox or the server.
+vi.mock('./offlineReceipts.ts', async (orig) => ({
+  ...(await orig<typeof import('./offlineReceipts.ts')>()),
+  patchQueuedReceipt: vi.fn(() => Promise.resolve(true)),
+  dropQueuedReceipt: vi.fn(() => Promise.resolve(true)),
+}));
+vi.mock('@/lib/useOnline.ts', async (orig) => ({
+  ...(await orig<typeof import('@/lib/useOnline.ts')>()),
+  useOnline: vi.fn(() => true),
+}));
 vi.mock('@/api/photos.ts', () => ({
   photosApi: {
     list: vi.fn(() => Promise.resolve([])),
@@ -48,6 +61,7 @@ function renderSection(over: Partial<Parameters<typeof ActReceiptsSection>[0]> =
   );
   return render(
     <ActReceiptsSection actId="a1" projectId="p1" receipts={[receipt({ hasPhoto: false })]} signed={false}
+      queued={new Map()} onQueuedChanged={() => {}}
       toExpenses onToExpensesChange={() => {}}
       showPhotosInPdf onShowPhotosInPdfChange={() => {}} {...over} />,
     { wrapper },
@@ -65,8 +79,20 @@ function pickAndStart(count: number, before?: () => void) {
   return files;
 }
 
+/** One receipt still sitting in the outbox, as the editor hands it down. */
+function queuedMap(id = 'q1'): Map<string, QueuedActReceipt> {
+  return new Map([[id, {
+    id,
+    payload: { actId: 'a1', amount: 0, file: { bytes: new ArrayBuffer(4), fileName: 'r.jpg', mimeType: 'image/jpeg' } },
+    file: new File(['x'], 'r.jpg', { type: 'image/jpeg' }),
+  }]]);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useOnline).mockReturnValue(true);
+  vi.mocked(patchQueuedReceipt).mockResolvedValue(true);
+  vi.mocked(dropQueuedReceipt).mockResolvedValue(true);
   // clearAllMocks keeps implementations, so every default is re-stated here — otherwise a
   // mockResolvedValue set by one test silently decides the outcome of the next one.
   vi.mocked(decodeQrFromFile).mockResolvedValue(null);
@@ -308,6 +334,7 @@ describe('ActReceiptsSection', () => {
 
     rerender(
       <ActReceiptsSection actId="a1" projectId="p1" receipts={[receipt()]} signed
+        queued={new Map()} onQueuedChanged={() => {}}
         toExpenses onToExpensesChange={() => {}}
         showPhotosInPdf onShowPhotosInPdfChange={() => {}} />,
     );
@@ -323,5 +350,74 @@ describe('ActReceiptsSection', () => {
     fireEvent.click(screen.getAllByText('Видалити').at(-1)!);
 
     await waitFor(() => expect(actsApi.removeReceipt).toHaveBeenCalledWith('a1', 'r1'));
+  });
+
+  it('a receipt still in the queue says so, is named, and is offered no read', () => {
+    // It counts into «Разом за чеками» like any other receipt — a subtotal that ignores a
+    // photographed receipt until the queue drains is the same lie as losing it. But «Чек №N» is the
+    // server's name (N counts the act's receipts) and the read works on the STORED photo, so
+    // neither of those exists yet.
+    renderSection({
+      receipts: [receipt({ id: 'q1', label: '', amount: 0, issuedAt: null, hasPhoto: true })],
+      queued: queuedMap(),
+    });
+
+    expect(screen.getByText('Чек з телефону')).toBeTruthy();
+    expect(screen.getByText(/Ще не надіслано/)).toBeTruthy();
+    expect(screen.queryByText('✨ Розпізнати')).toBeNull();
+  });
+
+  it('editing a queued receipt writes into the outbox and never touches the server', async () => {
+    const onQueuedChanged = vi.fn();
+    renderSection({
+      receipts: [receipt({ id: 'q1', label: '', amount: 0, issuedAt: null, hasPhoto: true })],
+      queued: queuedMap(), onQueuedChanged,
+    });
+
+    fireEvent.click(screen.getByText('Редагувати'));
+    // No return field before the receipt lands: the create endpoint carries no such value, so a
+    // number typed here would go nowhere.
+    expect(screen.queryByText('Повернення, ₴')).toBeNull();
+    const [labelInput, amountInput] = screen.getAllByRole('textbox');
+    fireEvent.change(labelInput, { target: { value: 'Епіцентр' } });
+    fireEvent.change(amountInput, { target: { value: '420' } });
+    fireEvent.click(screen.getByText('Зберегти'));
+
+    await waitFor(() => expect(patchQueuedReceipt).toHaveBeenCalledWith('q1', {
+      label: 'Епіцентр', amount: 420, issuedAt: null,
+    }));
+    expect(actsApi.updateReceipt).not.toHaveBeenCalled();
+    expect(onQueuedChanged).toHaveBeenCalled();
+  });
+
+  it('deleting a queued receipt drops the op instead of asking the server', async () => {
+    renderSection({
+      receipts: [receipt({ id: 'q1', label: '', amount: 0, hasPhoto: true })],
+      queued: queuedMap(),
+    });
+
+    fireEvent.click(screen.getByText('Видалити'));
+    await screen.findByText('Видалити чек?');
+    fireEvent.click(screen.getAllByText('Видалити').at(-1)!);
+
+    await waitFor(() => expect(dropQueuedReceipt).toHaveBeenCalledWith('q1'));
+    expect(actsApi.removeReceipt).not.toHaveBeenCalled();
+  });
+
+  it('offline the batch sheet locks the reader off and says why', () => {
+    // Neither the tax service behind the QR nor the model can be reached — but the photos still
+    // land, which is the whole point, so the sheet says that instead of hiding the tick the master
+    // ticked last time.
+    vi.mocked(useOnline).mockReturnValue(false);
+    renderSection({ receipts: [] });
+
+    const files = [new File(['x'], 'r.jpg', { type: 'image/jpeg' })];
+    fireEvent.change(document.querySelectorAll('input[type="file"]')[1], { target: { files } });
+
+    const tick = screen.getByText('Прочитати суми автоматично')
+      .closest('label')!.querySelector('input') as HTMLInputElement;
+    expect(tick.disabled).toBe(true);
+    expect(tick.checked).toBe(false);
+    expect(screen.getByText(/Звʼязку немає/)).toBeTruthy();
   });
 });

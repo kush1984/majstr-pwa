@@ -10,8 +10,9 @@ import type { OutboxOp } from '@/lib/outbox/types.ts';
 
 /** A friendly name for a blocked op, dug out of its payload (shape differs per entity). */
 function opName(op: OutboxOp): string {
-  const p = op.payload as { name?: string; fullName?: string; req?: { name?: string } } | undefined;
-  return p?.name ?? p?.fullName ?? p?.req?.name ?? '';
+  const p = op.payload as
+    { name?: string; fullName?: string; label?: string; req?: { name?: string } } | undefined;
+  return p?.name ?? p?.fullName ?? p?.label ?? p?.req?.name ?? '';
 }
 
 /**
@@ -68,9 +69,15 @@ export function SyncReviewSheet({ open, onClose }: { open: boolean; onClose: () 
                 <span className="text-muted">{t(`sync.entity.${op.entity}`)}</span>
                 <span className="min-w-0 flex-1 truncate font-medium text-primary">{opName(op)}</span>
               </div>
-              {op.blockReason === 'stuck' && (
+              {op.blockReason === 'stuck' ? (
                 <p className="mt-0.5 text-xs text-amber">{t('sync.reasonStuck')}</p>
-              )}
+              ) : op.lastError ? (
+                // The server's own localized sentence, per row — «сервер не прийняв» alone leaves
+                // the master guessing which of his changes was refused and why. An act receipt
+                // queued against an act that was signed meanwhile reads «Акт підписано —
+                // редагувати не можна», which is a decision he can act on.
+                <p className="mt-0.5 text-xs text-amber">{op.lastError}</p>
+              ) : null}
             </li>
           ))}
         </ul>

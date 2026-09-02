@@ -16,6 +16,8 @@ import { formatMoneyExact } from '@/lib/format.ts';
 import { ReceiptOrdinal, ReceiptPhoto } from '@/features/photos/ReceiptPhoto.tsx';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
+import { useOnline } from '@/lib/useOnline.ts';
+import { dropQueuedReceipt, patchQueuedReceipt, type QueuedActReceipt } from './offlineReceipts.ts';
 import { useDeleteActReceipt, useUpdateActReceipt } from './useActs.ts';
 import { useReceiptBatch, type ReceiptBatchChoice } from './useReceiptBatch.ts';
 import type { ActReceiptRecognizeResponse, WorkActReceiptResponse } from '@/api/types.ts';
@@ -41,6 +43,12 @@ import type { ActReceiptRecognizeResponse, WorkActReceiptResponse } from '@/api/
  * from what is billed. The card shows both, because a card showing only 1 500 next to a photo
  * reading 2 000 looks like an error.</p>
  *
+ * <p>A receipt can also be photographed with no connection at all (offline-act-receipts). Such a
+ * row is real to the master immediately — it counts into «Разом за чеками» and «До сплати», its sum
+ * and date are editable and deleting it is deleting it — but it lives in the outbox until the queue
+ * drains, so it says it has not been sent yet, and the two things that need a server (reading the
+ * paper, entering a return) say so instead of failing.</p>
+ *
  * <p>Reading a receipt's POSITIONS into the act was removed (2026-08-28) — a receipt here answers
  * «скільки заплачено за матеріал і який папір це доводить», and the sum plus the photo answer it
  * whole. Rows created by the old flow still read as they were signed: {@code itemized} stays on the
@@ -64,6 +72,8 @@ export function ActReceiptsSection({
   projectId,
   receipts,
   signed,
+  queued,
+  onQueuedChanged,
   toExpenses,
   onToExpensesChange,
   showPhotosInPdf,
@@ -71,8 +81,14 @@ export function ActReceiptsSection({
 }: {
   actId: string;
   projectId: string;
+  /** Server rows AND anything still queued on the device, merged by the page — so this panel's
+   *  subtotal and the editor's «До сплати» can never disagree about what exists. */
   receipts: WorkActReceiptResponse[];
   signed: boolean;
+  /** The queued ones by id: they carry their photo as bytes and are corrected in the queue itself. */
+  queued: Map<string, QueuedActReceipt>;
+  /** An in-place queue edit changes no op COUNT, so the page has to be told to re-read. */
+  onQueuedChanged: () => void;
   toExpenses: boolean;
   onToExpensesChange: (v: boolean) => void;
   /** PDF-appendix-only toggle: the portal always shows the photos. */
@@ -80,6 +96,7 @@ export function ActReceiptsSection({
   onShowPhotosInPdfChange: (v: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const online = useOnline();
   const update = useUpdateActReceipt(actId, projectId);
   const remove = useDeleteActReceipt(actId, projectId);
 
@@ -127,7 +144,10 @@ export function ActReceiptsSection({
     const out = await batch.run(files, choice);
     if (out.error) toast.error(out.error);
     if (out.saved === 0) return;
-    if (out.unread > 0) toast.info(t('acts.receiptBatchUnread', { count: out.unread }));
+    // Offline the photos were not «not read» — they have not even been sent yet, and «не вдалося
+    // прочитати» would name a failure that did not happen.
+    if (out.offline) toast.success(t('acts.receiptBatchQueued', { count: out.saved }));
+    else if (out.unread > 0) toast.info(t('acts.receiptBatchUnread', { count: out.unread }));
     else toast.success(t('acts.receiptBatchDone', { count: out.saved }));
   };
 
@@ -181,6 +201,16 @@ export function ActReceiptsSection({
   const onEditSubmit = async (v: ReceiptFormValue) => {
     if (!editing) return;
     try {
+      // A receipt that has not synced has no server row to PATCH — the queued create IS the row, so
+      // the correction goes into it. If the queue drained while the dialog was open the patch finds
+      // nothing and we fall through to the ordinary update: by then the row does exist.
+      if (queued.has(editing.id) && (await patchQueuedReceipt(editing.id, {
+        label: v.label, amount: v.amount, issuedAt: v.issuedAt,
+      }))) {
+        onQueuedChanged();
+        setEditing(null);
+        return;
+      }
       await update.mutateAsync({
         receiptId: editing.id,
         req: { label: v.label, amount: v.amount, returnedAmount: v.returnedAmount, issuedAt: v.issuedAt },
@@ -229,6 +259,7 @@ export function ActReceiptsSection({
         {receipts.map((r, i) => {
           const needsAmount = r.amount <= 0;
           const returned = r.returnedAmount > 0;
+          const pending = queued.get(r.id) ?? null;
           return (
             <li key={r.id}
               className={'rounded-card border bg-surface p-3 '
@@ -241,7 +272,12 @@ export function ActReceiptsSection({
                     signing, so renumbering it under the master would make the signed paper and this
                     list disagree. */}
                 <ReceiptOrdinal n={i + 1} className="pt-0.5" />
-                {r.hasPhoto ? (
+                {pending ? (
+                  // The photo is on the device, not on the server: rendering it from the queued
+                  // bytes is what makes an unsent receipt look like a receipt and not like a stub.
+                  <ReceiptPhoto variant="thumb" title={r.label || t('acts.receiptQueuedName')}
+                    source={{ kind: 'file', file: pending.file }} />
+                ) : r.hasPhoto ? (
                   <ReceiptPhoto variant="thumb" title={r.label}
                     source={{ kind: 'stored', fileUrl: actsApi.receiptFileUrl(actId, r.id) }} />
                 ) : (
@@ -249,7 +285,12 @@ export function ActReceiptsSection({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-medium text-primary">{r.label}</span>
+                    {/* «Чек №N» is the server's name and only the server can give it: N counts the
+                        act's receipts, which a phone holding three unsent photos cannot know. Until
+                        it lands the row says what it is instead of showing an empty line. */}
+                    <span className={'text-sm font-medium ' + (r.label ? 'text-primary' : 'text-muted')}>
+                      {r.label || t('acts.receiptQueuedName')}
+                    </span>
                     {/* Kopecks as typed (master feedback) — money display must not round. An itemized
                         receipt's amount is muted reference: its positions bill it in the act. */}
                     {needsAmount ? (
@@ -275,6 +316,7 @@ export function ActReceiptsSection({
                     <p className="mt-0.5 text-xs text-muted">{t('acts.receiptItemizedBadge')}</p>
                   )}
                   {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{r.issuedAt}</p>}
+                  {pending && <p className="mt-0.5 text-xs text-warning">{t('acts.receiptQueuedBadge')}</p>}
                   {(needsAmount || !r.issuedAt) && !signed && (
                     <p className="mt-1 text-xs text-warning">
                       {t(needsAmount ? 'acts.receiptIncomplete' : 'acts.receiptIncompleteDate')}
@@ -282,7 +324,9 @@ export function ActReceiptsSection({
                   )}
                   {!signed && (
                     <div className="mt-2 flex flex-wrap gap-3">
-                      {needsAmount && (
+                      {/* The read works on the STORED photo, so an unsent receipt has nothing to
+                          read yet — and every rung of it needs the network in any case. */}
+                      {needsAmount && !pending && online && (
                         <button type="button" className="text-xs font-semibold text-brand"
                           disabled={readingId != null} onClick={() => void readCard(r)}>
                           {readingId === r.id ? t('acts.receiptRecognizing') : `✨ ${t('acts.receiptRecognizeOne')}`}
@@ -351,6 +395,7 @@ export function ActReceiptsSection({
 
       <BatchChoiceSheet
         files={picked}
+        online={online}
         galleryRoom={galleryRoom}
         onClose={() => setPicked(null)}
         onStart={(choice) => void startBatch(choice)}
@@ -359,6 +404,7 @@ export function ActReceiptsSection({
       <ReceiptForm
         actId={actId}
         editing={editing}
+        pending={editing ? (queued.get(editing.id) ?? null) : null}
         busy={update.isPending}
         onSubmit={onEditSubmit}
         onClose={() => setEditing(null)}
@@ -369,6 +415,15 @@ export function ActReceiptsSection({
         message={t('acts.receiptDeleteConfirm')} confirmLabel={t('common.delete')} loading={remove.isPending}
         onConfirm={() => {
           if (!confirmDelete) return;
+          // Dropping the queued create IS the delete — there is nothing on the server to ask about.
+          if (queued.has(confirmDelete.id)) {
+            void dropQueuedReceipt(confirmDelete.id).then((dropped) => {
+              if (!dropped) return;
+              onQueuedChanged();
+              setConfirmDelete(null);
+            });
+            return;
+          }
           remove.mutate(confirmDelete.id, {
             onSuccess: () => setConfirmDelete(null),
             onError: (err) => toast.error(toAppError(err).message),
@@ -388,11 +443,17 @@ export function ActReceiptsSection({
  * link cost him the receipt. Making it a choice he takes knowingly, with the slow-link case named
  * in plain words right under the tick, is the honest version of that: the photos land either way.
  * The fiscal QR is not part of the question — it is local, exact and free, so it always runs.</p>
+ *
+ * <p>With no connection there is no question left to ask: neither the tax service behind the QR nor
+ * the model can be reached, so the tick is off and locked and the sheet says the photos will be sent
+ * when the link comes back. It stays visible rather than disappearing — the master ticked it last
+ * time and needs to see why it is not happening now.</p>
  */
 function BatchChoiceSheet({
-  files, galleryRoom, onClose, onStart,
+  files, online, galleryRoom, onClose, onStart,
 }: {
   files: File[] | null;
+  online: boolean;
   /** How many more receipt photos fit in the object's gallery; null = unlimited. */
   galleryRoom: number | null;
   onClose: () => void;
@@ -401,6 +462,7 @@ function BatchChoiceSheet({
   const { t } = useTranslation();
   const [withAi, setWithAi] = useState(true);
   const [saveToPhotos, setSaveToPhotos] = useState(false);
+  const reading = withAi && online;
 
   // Deliberately NOT reseeded per batch: a master who reads receipts one way reads the next pile
   // the same way, and re-ticking the same boxes every time is the friction this replaced.
@@ -412,11 +474,15 @@ function BatchChoiceSheet({
         <p className="text-sm text-secondary">{t('acts.receiptBatchIntro', { count })}</p>
 
         <label className="flex items-start gap-2">
-          <input type="checkbox" checked={withAi} onChange={() => setWithAi((v) => !v)}
+          <input type="checkbox" checked={reading} disabled={!online} onChange={() => setWithAi((v) => !v)}
             className="mt-0.5 h-4 w-4 accent-brand" />
-          <span className="text-sm text-secondary">{t('acts.receiptBatchWithAi')}</span>
+          <span className={'text-sm ' + (online ? 'text-secondary' : 'text-muted')}>
+            {t('acts.receiptBatchWithAi')}
+          </span>
         </label>
-        <p className="-mt-1 pl-6 text-xs text-muted">{t('acts.receiptBatchWithAiHint')}</p>
+        <p className="-mt-1 pl-6 text-xs text-muted">
+          {t(online ? 'acts.receiptBatchWithAiHint' : 'acts.receiptBatchOffline')}
+        </p>
 
         <label className="flex items-start gap-2">
           <input type="checkbox" checked={saveToPhotos} onChange={() => setSaveToPhotos((v) => !v)}
@@ -434,7 +500,7 @@ function BatchChoiceSheet({
           </p>
         )}
 
-        <Button fullWidth onClick={() => onStart({ withAi, saveToPhotos })}>
+        <Button fullWidth onClick={() => onStart({ withAi: reading, saveToPhotos })}>
           {t('acts.receiptBatchStart', { count })}
         </Button>
       </div>
@@ -449,12 +515,18 @@ function BatchChoiceSheet({
  * <p>The reader here is a top-up, not the first read: the receipt was already read once at upload.
  * It fills the three footer fields and nothing else — carrying the paper's positions into the act
  * was removed on 2026-08-28.</p>
+ *
+ * <p>A receipt still in the outbox is edited here too, with two fields fewer in practice: there is
+ * no stored photo to read (so the reader is not offered), and the create endpoint carries no return
+ * — a return happens after the shop anyway, by which time the receipt has long landed.</p>
  */
 function ReceiptForm({
-  actId, editing, busy, onSubmit, onClose, recognize,
+  actId, editing, pending, busy, onSubmit, onClose, recognize,
 }: {
   actId: string;
   editing: WorkActReceiptResponse | null;
+  /** Set when this receipt has not synced yet — its photo comes from the queue, not the server. */
+  pending: QueuedActReceipt | null;
   busy: boolean;
   onSubmit: (v: ReceiptFormValue) => void;
   onClose: () => void;
@@ -522,9 +594,16 @@ function ReceiptForm({
         {editing?.hasPhoto && (
           <div>
             <ReceiptPhoto variant="preview" title={editing.label}
-              source={{ kind: 'stored', fileUrl: actsApi.receiptFileUrl(actId, editing.id) }} />
+              source={pending
+                ? { kind: 'file', file: pending.file }
+                : { kind: 'stored', fileUrl: actsApi.receiptFileUrl(actId, editing.id) }} />
             <p className="mt-1 text-center text-xs text-muted">{t('acts.receiptCheckAgainstPhoto')}</p>
           </div>
+        )}
+        {pending && (
+          <p className="rounded-card border border-warning/40 bg-warning/10 p-2.5 text-xs text-secondary">
+            {t('acts.receiptQueuedHint')}
+          </p>
         )}
 
         <Field label={t('acts.receiptLabel')}>
@@ -539,15 +618,18 @@ function ReceiptForm({
           </Field>
         </div>
         {/* Its own full-width row under the pair, not a third column: on a phone three money boxes
-            side by side leave no room for either label. */}
-        <Field label={t('acts.receiptReturned')}>
-          <Input inputMode="decimal" value={returned} placeholder="0" onChange={(e) => setReturned(e.target.value)} />
-        </Field>
-        {returnTooBig ? (
+            side by side leave no room for either label. Hidden entirely until the receipt lands —
+            the create endpoint has no such field, so a number typed here would go nowhere. */}
+        {!pending && (
+          <Field label={t('acts.receiptReturned')}>
+            <Input inputMode="decimal" value={returned} placeholder="0" onChange={(e) => setReturned(e.target.value)} />
+          </Field>
+        )}
+        {!pending && (returnTooBig ? (
           <p className="-mt-1 text-xs text-danger">{t('acts.receiptReturnedTooBig')}</p>
         ) : (
           <p className="-mt-1 text-xs text-muted">{t('acts.receiptReturnedHint')}</p>
-        )}
+        ))}
         {num(returned) > 0 && !returnTooBig && (
           <div className="flex justify-between rounded-card bg-surface-sunken px-3 py-2 text-sm font-semibold text-primary">
             <span>{t('acts.receiptBilled')}</span>
@@ -557,24 +639,26 @@ function ReceiptForm({
         {/* Under the fields, not above them (master feedback): the receipt was already read once on
             upload, so here the reader is a top-up for what is still blank — not the first thing the
             master came in for. */}
-        <div className="border-t border-border pt-3">
-          <div className="flex items-center gap-1.5">
-            <Button fullWidth variant="secondary" disabled={reading || nothingToRead}
-              onClick={() => void run()}>
-              ✨ {t('acts.receiptRecognizeOne')}
-            </Button>
-            <InfoPopover text={t('acts.receiptRecognizeInfo')} />
+        {!pending && (
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center gap-1.5">
+              <Button fullWidth variant="secondary" disabled={reading || nothingToRead}
+                onClick={() => void run()}>
+                ✨ {t('acts.receiptRecognizeOne')}
+              </Button>
+              <InfoPopover text={t('acts.receiptRecognizeInfo')} />
+            </div>
+            {nothingToRead && (
+              <p className="mt-1.5 text-xs text-muted">{t('acts.receiptNothingToRead')}</p>
+            )}
+            {reading && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-muted">
+                <Spinner size="sm" />
+                {t('acts.receiptRecognizing')}
+              </p>
+            )}
           </div>
-          {nothingToRead && (
-            <p className="mt-1.5 text-xs text-muted">{t('acts.receiptNothingToRead')}</p>
-          )}
-          {reading && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-muted">
-              <Spinner size="sm" />
-              {t('acts.receiptRecognizing')}
-            </p>
-          )}
-        </div>
+        )}
 
         <Button fullWidth loading={busy} disabled={!valid || reading}
           onClick={() => onSubmit({

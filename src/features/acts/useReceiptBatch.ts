@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
+import { onlineManager } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
 import { toAppError } from '@/api/errors.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { addActReceipt } from './offlineReceipts.ts';
 import { useActWriter } from './useActs.ts';
 import type { ActReceiptRecognizeResponse, WorkActReceiptResponse } from '@/api/types.ts';
 
@@ -22,6 +24,8 @@ export interface ReceiptBatchProgress {
 
 export interface ReceiptBatchOutcome {
   saved: number;
+  /** The photos were queued on the device, not uploaded — there was no connection. */
+  offline: boolean;
   failed: number;
   /** Saved, but still without a sum — the master types these in by hand. */
   unread: number;
@@ -85,6 +89,9 @@ export function useReceiptBatch(actId: string, projectId: string) {
   const run = useCallback(
     async (files: File[], choice: ReceiptBatchChoice): Promise<ReceiptBatchOutcome> => {
       cancelled.current = false;
+      // Read once, before the loop: whether this batch was uploaded or queued has to be ONE answer
+      // for the whole pile, or the closing toast describes a state that never existed.
+      const online = onlineManager.isOnline();
       const saved: { receipt: WorkActReceiptResponse; file: File }[] = [];
       let failed = 0;
       let error: string | null = null;
@@ -95,7 +102,7 @@ export function useReceiptBatch(actId: string, projectId: string) {
         try {
           // A per-file client UUID: a retry over a weak link is exactly where this batch lives, and
           // a duplicated receipt is duplicated money — in the act AND in the ADDENDUM it rolls into.
-          const receipt = await actsApi.addReceipt(actId, {
+          const receipt = await addActReceipt(actId, {
             id: newUuid(),
             amount: 0,
             file,
@@ -111,7 +118,13 @@ export function useReceiptBatch(actId: string, projectId: string) {
       invalidate(); // the rows exist now — show them before anything is read
 
       let unread = 0;
-      if (saved.length > 0) {
+      // Every rung of the read needs the network — the fiscal QR is decoded on the phone but
+      // resolved by the tax service, and the model obviously runs nowhere near it. Offline the
+      // paper is simply filed and the sums are the master's to type, which is the state this
+      // whole flow was rebuilt to make legal.
+      if (!online) {
+        unread = saved.length;
+      } else if (saved.length > 0) {
         setProgress({ phase: 'reading', done: 0, total: saved.length });
         for (const [i, entry] of saved.entries()) {
           if (cancelled.current) {
@@ -144,7 +157,7 @@ export function useReceiptBatch(actId: string, projectId: string) {
       }
 
       setProgress(null);
-      return { saved: saved.length, failed, unread, error };
+      return { saved: saved.length, offline: !online, failed, unread, error };
     },
     [actId, invalidate, readOne],
   );

@@ -9,6 +9,9 @@ import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { economyApi } from '@/api/economy.ts';
+import { actsApi } from '@/api/acts.ts';
+import { fromQueuedFile } from './queuedFile.ts';
+import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
 import type {
   EstimateItemsOrderRequest,
   BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
@@ -236,6 +239,35 @@ export function initOutbox(qc: QueryClient): () => void {
   registerOutboxHandler('templateItemOrder', async (op) => {
     const p = op.payload as { req: TemplateItemsOrderRequest };
     await estimateTemplatesApi.reorderItems(op.entityId, p.req);
+  });
+
+  // An act receipt photographed offline (offline-act-receipts). CREATE only, and deliberately so:
+  // the master photographs the paper and types the amount and the date, nothing is read for him
+  // and nothing is re-read later. The photo rides the payload as BYTES (see queuedFile.ts).
+  //
+  // Replaying with the op's entityId as X-Entity-Uuid is what makes a retry safe: a receipt that
+  // already landed comes back as the existing row instead of duplicating money in the act AND in
+  // the ADDENDUM estimate its receipts roll into on signing.
+  //
+  // The gallery copy needs no second op — `saveToPhotos` rides this same request, and the backend
+  // makes that copy in a REQUIRES_NEW transaction it swallows failures from, so it can never cost
+  // the master the receipt itself.
+  registerOutboxHandler(ACT_RECEIPT_ENTITY, async (op) => {
+    const p = op.payload as ActReceiptOpPayload;
+    if (op.type !== 'create') {
+      // Editing or deleting a receipt that has not synced yet is done in the QUEUE
+      // (patchPendingCreate / dropPendingCreate), never as an op of its own — there is no server
+      // row to address. Reaching here means a build changed that; fail loudly. See note above.
+      throw new Error(`actReceipt: unsupported op type "${op.type}"`);
+    }
+    await actsApi.addReceipt(p.actId, {
+      id: op.entityId,
+      label: p.label,
+      amount: p.amount,
+      issuedAt: p.issuedAt,
+      saveToPhotos: p.saveToPhotos,
+      file: fromQueuedFile(p.file),
+    });
   });
 
   // Classify replay failures: a NETWORK blip / 5xx / 429 retries; a permanent 4xx blocks the op for

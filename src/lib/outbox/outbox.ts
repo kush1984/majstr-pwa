@@ -1,6 +1,7 @@
 import { onlineManager } from '@tanstack/react-query';
 import { outboxDb } from './db.ts';
 import { tokens } from '@/lib/tokens.ts';
+import { toAppError } from '@/api/errors.ts';
 import type { NewOutboxOp, OutboxHandler, OutboxOp } from './types.ts';
 
 /**
@@ -143,6 +144,52 @@ export async function enqueueLatest(op: NewOutboxOp): Promise<void> {
   });
   // Re-counted rather than incremented: this both adds and removes rows.
   await refreshPending();
+}
+
+/**
+ * Edit a create that has not replayed yet, in place.
+ *
+ * <p>Deliberately NOT a queued `update` op: the entity has no server id, so an update would replay
+ * against nothing. A correction made before the queue drains is not a second fact about the row —
+ * it is what the row always was, as far as the server will ever know.</p>
+ *
+ * <p>Returns false when the op is gone (it drained between the read and the write), which is the
+ * caller's cue that this is now an ordinary online edit.</p>
+ */
+export async function patchPendingCreate(
+  entity: string,
+  entityId: string,
+  patch: (payload: unknown) => unknown,
+): Promise<boolean> {
+  return outboxDb.transaction('rw', outboxDb.ops, async () => {
+    const op = await outboxDb.ops
+      .where('entityId')
+      .equals(entityId)
+      .filter((o) => o.entity === entity && o.type === 'create')
+      .first();
+    if (!op?.seq) return false;
+    await outboxDb.ops.update(op.seq, {
+      payload: patch(op.payload),
+      // A blocked op edited by the master is a fresh attempt: it was blocked on the CONTENT the
+      // server refused, and the content just changed. Leave a `stuck` one blocked — retries ran
+      // out for reasons an edit does not fix.
+      ...(op.status === 'blocked' && op.blockReason !== 'stuck'
+        ? { status: 'pending' as const, attempts: 0 }
+        : {}),
+    });
+    return true;
+  });
+}
+
+/** Drop a create that has not replayed yet — the offline equivalent of deleting the row. */
+export async function dropPendingCreate(entity: string, entityId: string): Promise<boolean> {
+  const removed = await outboxDb.ops
+    .where('entityId')
+    .equals(entityId)
+    .filter((o) => o.entity === entity && o.type === 'create')
+    .delete();
+  if (removed > 0) await refreshPending();
+  return removed > 0;
 }
 
 /** How many ops are still queued (pending or failed). */
@@ -385,7 +432,15 @@ export function startOutboxSync(onFlush?: (result: { synced: number; failed: num
   };
 }
 
+/**
+ * What to store on a failed/blocked op — and it must be the SERVER's own words.
+ *
+ * <p>`e.message` on an axios error is «Request failed with status code 409», which tells the master
+ * nothing about the receipt he is looking at. `toAppError` unwraps the backend's localized message,
+ * so a blocked op can say «Акт підписано — редагувати не можна» in the sync sheet. That matters
+ * most for the ops that can be refused for a reason the master can act on: an act signed on another
+ * device while his queue waited is his money, and «сервер не прийняв» is not an answer.</p>
+ */
 function errMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return String(e);
+  return toAppError(e).message;
 }

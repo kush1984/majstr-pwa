@@ -31,6 +31,7 @@ import {
 import { isoDay } from './useNewAct.ts';
 import { useEconomy } from '@/features/economy/useEconomy.ts';
 import { ActReceiptsSection, billedOf } from './ActReceiptsSection.tsx';
+import { mergeQueuedReceipts, usePendingActReceipts } from './offlineReceipts.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
 import { UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
@@ -227,7 +228,13 @@ export function ActEditorPage() {
     () => additional.reduce((sum, a) => sum + num(a.quantity) * num(a.unitPrice), 0), [additional]);
   // Receipts are saved the moment they are added, so they come straight off the loaded act — they
   // are money the client owes on this act, hence inside «До сплати», not a decorative appendix.
-  const receipts = act.data?.receipts ?? [];
+  //
+  // Merged with whatever the phone is still carrying (offline-act-receipts) HERE, at the one place
+  // both the panel and this page's «До сплати» read from: a receipt photographed in a basement is
+  // money the master has already spent, and a total that quietly ignores it until the queue drains
+  // is the same lie in the opposite direction as losing the photo.
+  const { queued, refresh: refreshQueued } = usePendingActReceipts(id);
+  const receipts = mergeQueuedReceipts(act.data?.receipts ?? [], queued);
   // Itemized receipts are reference-only — their positions already bill the money as act lines.
   // `billedOf` (not `amount`) — a partial return must reach «До сплати» here exactly as it reaches
   // the receipts panel's own subtotal and the server's `payable`.
@@ -713,6 +720,7 @@ export function ActEditorPage() {
         </Section>
       ) : (
         <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+          queued={queued} onQueuedChanged={refreshQueued}
           toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
           showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />
       )}
