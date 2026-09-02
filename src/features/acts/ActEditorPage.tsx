@@ -21,6 +21,7 @@ import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { CatalogAutocomplete } from '@/features/estimate/CatalogAutocomplete.tsx';
+import { CatalogPicker } from '@/features/catalog/CatalogPicker.tsx';
 import { routes } from '@/lib/config.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import {
@@ -117,6 +118,7 @@ export function ActEditorPage() {
   const [showReceiptPhotos, setShowReceiptPhotos] = useState(true);
   const [qty, setQty] = useState<Record<string, string>>({}); // estimateItemId → quantity
   const [additional, setAdditional] = useState<Additional[]>([]);
+  const [catalogPicker, setCatalogPicker] = useState(false);
   const [seeded, setSeeded] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
   const [signerName, setSignerName] = useState('');
@@ -441,11 +443,17 @@ export function ActEditorPage() {
     }
   };
 
-  const addAdditional = () => {
+  // Off-estimate work is work the client never signed for, so say it once — whichever way the row
+  // is created (typed by hand or taken from the catalog).
+  const warnAboutAdditional = () => {
     if (typeof localStorage !== 'undefined' && !localStorage.getItem(ADDITIONAL_WARNED_KEY)) {
       localStorage.setItem(ADDITIONAL_WARNED_KEY, '1');
       toast.info(t('acts.additionalWarn'));
     }
+  };
+
+  const addAdditional = () => {
+    warnAboutAdditional();
     setAdditional((a) => [...a, { name: '', type: 'WORK', unit: 'M2', unitPrice: '', quantity: '' }]);
   };
 
@@ -668,12 +676,34 @@ export function ActEditorPage() {
             );
           })}
         </div>
+        {/* Two doors, the same two everywhere else a position is added: browse the catalog, or type
+            it. Acts only ever had the type-ahead, which answers «як це називалось?» but not «що я
+            взагалі роблю на цьому об'єкті» — the browse picker is the one that shows the trade. */}
         {!signed && (
-          <button type="button" onClick={addAdditional} className="mt-2 text-sm font-semibold text-brand">
-            {t('acts.addAdditional')}
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
+            <button type="button" onClick={() => setCatalogPicker(true)}
+              className="text-sm font-semibold text-brand">{t('acts.addAdditionalFromCatalog')}</button>
+            <button type="button" onClick={addAdditional}
+              className="text-sm font-semibold text-brand">{t('acts.addAdditional')}</button>
+          </div>
         )}
       </Section>
+
+      <Modal open={catalogPicker} onClose={() => setCatalogPicker(false)} size="lg"
+        title={t('acts.addAdditionalFromCatalog')}>
+        <CatalogPicker
+          hint={t('acts.additionalQtyHint')}
+          onPick={(picks) => {
+            warnAboutAdditional();
+            setAdditional((list) => [...list, ...picks.map((item) => ({
+              name: item.name, type: item.type, unit: item.unit,
+              unitPrice: String(item.defaultPrice), quantity: '',
+            }))]);
+            setCatalogPicker(false);
+            return Promise.resolve();
+          }}
+        />
+      </Modal>
 
       {/* A receipt is an upload against a real act row (and its photo is mandatory), so the section
           waits for the first save instead of holding a pile of files in memory. */}

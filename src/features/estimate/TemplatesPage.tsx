@@ -14,6 +14,7 @@ import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Chip } from '@/components/Chip.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -27,14 +28,12 @@ import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
-import { formatMoney } from '@/lib/format.ts';
 import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { ITEM_TYPE_OPTIONS, UNIT_OPTIONS } from '@/features/catalog/catalogItemSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useCatalog } from '@/features/catalog/useCatalog.ts';
+import { CatalogPicker } from '@/features/catalog/CatalogPicker.tsx';
+import { AddPositionTabs, type AddPositionTab } from '@/features/catalog/AddPositionTabs.tsx';
 import {
-  TradeFilterChips,
-  tradeMatches,
   customTradeKey,
   type TradeKey,
 } from '@/features/catalog/TradeFilterChips.tsx';
@@ -307,6 +306,7 @@ function Row({
   onDelete?: () => void;
 }) {
   const { t } = useTranslation();
+  const description = template.description?.trim() ?? '';
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-3">
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
@@ -315,6 +315,15 @@ function Row({
           {t('templates.itemsCount', { count: template.itemCount })}
         </span>
       </button>
+      {/* A finish level is a bundle (V121), and what it PROMISES is the half the client reads —
+          «не всі вкурсі таких рівнів». Beside the row, never inside it: the row is a button. */}
+      {description !== '' && (
+        <span className="flex flex-shrink-0 items-center">
+          <InfoPopover label={template.name}>
+            <span className="whitespace-pre-line">{description}</span>
+          </InfoPopover>
+        </span>
+      )}
       {onEdit && (
         <button
           type="button"
@@ -386,6 +395,23 @@ function TradeMove({
   );
 }
 
+/** What the bundle promises the client, above its composition — the master has to be able to read
+ *  the paragraph he is about to put his name to, not just the (i) on the row. */
+function TemplateDescription({ text }: { text: string | null | undefined }) {
+  const { t } = useTranslation();
+  const description = text?.trim() ?? '';
+  if (description === '') return null;
+  return (
+    <div className="mb-3 rounded-xl bg-surface-sunken px-3 py-2.5">
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
+        {t('templates.promiseTitle')}
+      </p>
+      <p className="whitespace-pre-line text-xs leading-snug text-primary">{description}</p>
+      <p className="mt-1.5 text-[11px] text-muted">{t('templates.promiseHint')}</p>
+    </div>
+  );
+}
+
 /** Read-only composition — what a row tap shows (own and default alike). */
 function Preview({ templateId }: { templateId: string }) {
   const { t } = useTranslation();
@@ -409,35 +435,44 @@ function Preview({ templateId }: { templateId: string }) {
 
   const items = data.items ?? [];
   if (items.length === 0) {
-    return <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>;
+    return (
+      <>
+        <TemplateDescription text={data.description} />
+        <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>
+      </>
+    );
   }
   // Numbered, because the order is the sequence the works are done in — not decoration.
   return (
-    <div className="max-h-[60dvh] space-y-1 overflow-y-auto">
-      {items.map((item, index) => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
-        >
-          <span className="min-w-0 break-words text-primary">
-            <span className="mr-1.5 text-xs font-semibold text-faint">{index + 1}.</span>
-            {item.name}
-          </span>
-          <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
-        </div>
-      ))}
-    </div>
+    <>
+      <TemplateDescription text={data.description} />
+      <div className="max-h-[60dvh] space-y-1 overflow-y-auto">
+        {items.map((item, index) => (
+          <div
+            key={item.id}
+            className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
+          >
+            <span className="min-w-0 break-words text-primary">
+              <span className="mr-1.5 text-xs font-semibold text-faint">{index + 1}.</span>
+              {item.name}
+            </span>
+            <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
-type AddTab = 'catalog' | 'manual';
 
 /** One position while it is being edited. `isNew` marks a draft-only row that has no server id yet. */
 type DraftItem = EstimateTemplateItemView & { isNew?: boolean };
-/** The whole editable state of a template: its name and its sequence of positions. */
-type Draft = { name: string; items: DraftItem[] };
+/** The whole editable state of a template: its name, what it promises the client, and its
+ *  sequence of positions. */
+type Draft = { name: string; description: string; items: DraftItem[] };
 
-const toDraft = (d: EstimateTemplateDetail): Draft => ({ name: d.name, items: d.items ?? [] });
+const toDraft = (d: EstimateTemplateDetail): Draft =>
+  ({ name: d.name, description: d.description ?? '', items: d.items ?? [] });
 const reqOf = (i: DraftItem): TemplateItemRequest => ({ name: i.name, type: i.type, unit: i.unit });
 const sameItem = (a: DraftItem, b: DraftItem) =>
   a.name === b.name && a.type === b.type && a.unit === b.unit;
@@ -485,11 +520,12 @@ function EditModal({
 
   // The draft IS the editor. Seeded from the composition once it arrives; the name is editable from
   // the first frame because the summary always carries it, even offline with no cached detail.
-  const [draft, setDraft] = useState<Draft>({ name: template.name, items: [] });
-  const [baseline, setBaseline] = useState<Draft>({ name: template.name, items: [] });
+  const seed: Draft = { name: template.name, description: template.description ?? '', items: [] };
+  const [draft, setDraft] = useState<Draft>(seed);
+  const [baseline, setBaseline] = useState<Draft>(seed);
   const [seeded, setSeeded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<AddTab>('catalog');
+  const [tab, setTab] = useState<AddPositionTab>('catalog');
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [editingItem, setEditingItem] = useState<DraftItem | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -506,15 +542,18 @@ function EditModal({
     // only a draft-only row can exist pre-seed, everything else IS what just loaded.
     setDraft((d) => ({
       name: d.name === baseline.name ? loaded.name : d.name,
+      description: d.description === baseline.description ? loaded.description : d.description,
       items: [...loaded.items, ...d.items.filter((i) => i.isNew)],
     }));
     setBaseline(loaded);
     setSeeded(true);
-  }, [data, seeded, baseline.name]);
+  }, [data, seeded, baseline.name, baseline.description]);
 
   const items = draft.items;
   const trimmed = draft.name.trim();
-  const dirty = trimmed !== baseline.name || !sameItems(items, baseline.items);
+  const promise = draft.description.trim();
+  const promiseChanged = promise !== baseline.description.trim();
+  const dirty = trimmed !== baseline.name || promiseChanged || !sameItems(items, baseline.items);
   /**
    * Rows that differ from what is on the server — added this session, or edited and not yet written.
    * Derived, not tracked: with an explicit save the highlight means «ще не збережено», so it lights
@@ -573,12 +612,19 @@ function EditModal({
     if (!canSave || saving) return false;
     setSaving(true);
     let name = baseline.name;
+    let described = baseline.description;
     let working = [...items];
     let latest = data;
     try {
-      if (trimmed !== baseline.name) {
-        follow(await rename.mutateAsync({ id: activeId, name: trimmed }));
+      if (trimmed !== baseline.name || promiseChanged) {
+        // One call carries both — the endpoint is the template's metadata, and `description` is
+        // sent ONLY when it actually changed: absent means «leave it as it is», so a plain rename
+        // can never drop the paragraph the client reads (V121).
+        follow(await rename.mutateAsync({
+          id: activeId, name: trimmed, description: promiseChanged ? promise : undefined,
+        }));
         name = trimmed;
+        if (promiseChanged) described = promise;
       }
       for (const gone of baseline.items.filter((b) => !working.some((i) => i.id === b.id))) {
         latest = (await removeItem.mutateAsync(gone.id)) ?? latest;
@@ -613,14 +659,14 @@ function EditModal({
       toast.success(t('templates.saved'));
       // Every op landed, so the server now matches the draft — re-seed from what we WROTE, not
       // from `latest`: the answer to the last op predates the ones after it.
-      setDraft({ name: trimmed, items: working });
-      setBaseline({ name: trimmed, items: working });
+      setDraft({ name: trimmed, description: promise, items: working });
+      setBaseline({ name: trimmed, description: promise, items: working });
       return true;
     } catch (err) {
       toast.error(toAppError(err).message);
       // `latest` is the answer to the last op that SUCCEEDED, so it describes the server exactly.
-      setDraft({ name: draft.name, items: working });
-      setBaseline({ name, items: latest?.items ?? baseline.items });
+      setDraft({ name: draft.name, description: draft.description, items: working });
+      setBaseline({ name, description: described, items: latest?.items ?? baseline.items });
       return false;
     } finally {
       setSaving(false);
@@ -667,6 +713,32 @@ function EditModal({
         {dirty ? t('templates.unsavedHint') : t('templates.saveHint')}
       </p>
 
+      {/* What the bundle PROMISES the client (V121). A finish level is a chain of works, so the
+          level is this bundle — and the sentence that says which paints may go on top and what the
+          tolerances are belongs here, once, rather than on every position it contains. It is
+          copied onto the estimate at apply time and printed under the client's table. */}
+      <div className="mb-3">
+        <label
+          htmlFor="template-description"
+          className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-brand"
+        >
+          {t('templates.promiseTitle')}
+        </label>
+        {/* text-base, not text-sm: iOS Safari force-zooms the page on focus of anything
+            under 16px, and this is a field the master types a paragraph into. */}
+        <textarea
+          id="template-description"
+          data-testid="template-description"
+          rows={4}
+          maxLength={1000}
+          placeholder={t('templates.promisePlaceholder')}
+          value={draft.description}
+          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+          className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
+        />
+        <p className="mt-1 text-[11px] text-muted">{t('templates.promiseHint')}</p>
+      </div>
+
       {stillDefault && (
         <p className="mb-3 rounded-xl bg-brand-soft px-3 py-2 text-xs text-primary">
           {t('templates.defaultForkHint')}
@@ -704,9 +776,19 @@ function EditModal({
 
       {/* Add position — catalog (browse) or manual */}
       <div className="rounded-xl border border-border p-3">
-        <TabSwitch tab={tab} onChange={setTab} />
+        <AddPositionTabs tab={tab} onChange={setTab} />
         {tab === 'catalog' ? (
-          <CatalogPicker existingNames={items.map((i) => i.name)} onPick={onAdd} />
+          <CatalogPicker
+            disabledNames={items.map((i) => i.name)}
+            listHeightClass="max-h-[30dvh]"
+            onPick={async (picks) => {
+              // No batch endpoint for template items — append one by one (the server assigns the
+              // next sort order each time). Sequential so the order is stable.
+              for (const item of picks) {
+                await onAdd({ name: item.name, type: item.type, unit: item.unit });
+              }
+            }}
+          />
         ) : (
           <ManualForm offerCatalogSave submitLabel={t('templates.addItem')} onSubmit={onAdd} />
         )}
@@ -760,27 +842,6 @@ function EditModal({
         </div>
       </Modal>
     </Modal>
-  );
-}
-
-function TabSwitch({ tab, onChange }: { tab: AddTab; onChange: (next: AddTab) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="mb-3 flex gap-1 rounded-xl bg-surface-sunken p-1">
-      {(['catalog', 'manual'] as AddTab[]).map((tabKey) => (
-        <button
-          key={tabKey}
-          type="button"
-          onClick={() => onChange(tabKey)}
-          className={cn(
-            'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors',
-            tab === tabKey ? 'bg-surface text-primary shadow-card' : 'text-muted',
-          )}
-        >
-          {tabKey === 'catalog' ? t('templates.addFromCatalog') : t('templates.addManual')}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -906,14 +967,23 @@ function PositionSheet({
 }) {
   const { t } = useTranslation();
   // Opens on MANUAL: an edit usually starts from what is already there, and that tab shows it.
-  const [tab, setTab] = useState<AddTab>('manual');
+  const [tab, setTab] = useState<AddPositionTab>('manual');
   return (
     <Modal open onClose={onClose} title={t('templates.editItemTitle')}>
-      <TabSwitch tab={tab} onChange={setTab} />
+      <AddPositionTabs tab={tab} onChange={setTab} />
       {tab === 'catalog' ? (
         <>
           <p className="mb-2 text-xs text-muted">{t('templates.pickReplacement')}</p>
-          <CatalogPicker existingNames={existingNames} onPick={onSubmit} single />
+          <CatalogPicker
+            disabledNames={existingNames}
+            single
+            listHeightClass="max-h-[30dvh]"
+            onPick={async (picks) => {
+              for (const item of picks) {
+                await onSubmit({ name: item.name, type: item.type, unit: item.unit });
+              }
+            }}
+          />
         </>
       ) : (
         <ManualForm
@@ -923,161 +993,6 @@ function PositionSheet({
         />
       )}
     </Modal>
-  );
-}
-
-/**
- * Browse the catalog, filter by trade (2+ trades) + name, then take positions into the template
- * (name+type+unit only — no quantity/price; those are resolved when the template is applied).
- * Positions already in the bundle are shown disabled so they can't be added twice.
- *
- * `single` turns it into a replacement picker for ONE position: a tap applies straight away, with
- * no basket to confirm — there is nothing to accumulate when only one position can win.
- */
-function CatalogPicker({
-  existingNames,
-  onPick,
-  single,
-}: {
-  existingNames: string[];
-  onPick: (req: TemplateItemRequest) => Promise<void>;
-  single?: boolean;
-}) {
-  const { t } = useTranslation();
-  const online = useOnline();
-  const { data, isPending } = useCatalog();
-  const [q, setQ] = useState('');
-  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-
-  const present = useMemo(
-    () => new Set(existingNames.map((n) => n.trim().toLowerCase())),
-    [existingNames],
-  );
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (data ?? [])
-      .filter((i) => tradeMatches(i, tradeFilter))
-      .filter((i) => !needle || i.name.toLowerCase().includes(needle));
-  }, [data, q, tradeFilter]);
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const pickOne = async (itemId: string) => {
-    const item = (data ?? []).find((i) => i.id === itemId);
-    if (!item || busy) return;
-    setBusy(true);
-    try {
-      await onPick({ name: item.name, type: item.type, unit: item.unit });
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const addSelected = async () => {
-    if (selected.size === 0) return;
-    const picks = (data ?? []).filter((i) => selected.has(i.id));
-    setBusy(true);
-    try {
-      // No batch endpoint for template items — append one by one (the server assigns
-      // the next sort order each time). Sequential so order is stable.
-      for (const item of picks) {
-        await onPick({ name: item.name, type: item.type, unit: item.unit });
-      }
-      toast.success(t('estimate.itemsAdded', { count: picks.length }));
-      setSelected(new Set());
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div>
-      <TradeFilterChips items={data ?? []} value={tradeFilter} onChange={setTradeFilter} />
-      <Input
-        placeholder={t('estimate.searchCatalog')}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        className="mb-3"
-      />
-      <div className="max-h-[30dvh] space-y-1.5 overflow-y-auto">
-        {isPending ? (
-          <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
-        ) : !online && (data?.length ?? 0) === 0 ? (
-          // Not "нічого не знайдено" — the catalog simply never reached the device.
-          <OfflineNotCached compact what={t('offline.dataCatalog')} />
-        ) : filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
-        ) : (
-          filtered.map((item) => {
-            const already = present.has(item.name.trim().toLowerCase());
-            const checked = selected.has(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                data-testid="catalog-row"
-                disabled={already || (Boolean(single) && busy)}
-                onClick={() => (single ? void pickOne(item.id) : toggle(item.id))}
-                className={cn(
-                  'flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors',
-                  already
-                    ? 'cursor-not-allowed border-border bg-surface-sunken opacity-50'
-                    : checked
-                      ? 'border-brand bg-brand-soft'
-                      : 'border-border bg-surface',
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  {!single && (
-                    <span
-                      className={cn(
-                        'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border text-xs',
-                        checked
-                          ? 'border-brand bg-brand text-white'
-                          : 'border-border text-transparent',
-                      )}
-                    >
-                      ✓
-                    </span>
-                  )}
-                  <span className="min-w-0">
-                    <span className="block break-words text-sm font-medium text-primary">
-                      {item.name}
-                    </span>
-                    <span className="block text-xs text-muted">
-                      {t('unitPer', { unit: t('units.' + item.unit) })}
-                    </span>
-                  </span>
-                </span>
-                <span className="whitespace-nowrap text-sm font-semibold text-primary">
-                  {formatMoney(item.defaultPrice)}
-                </span>
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      {!single && selected.size > 0 && (
-        <div className="mt-3 border-t border-border pt-3">
-          <Button fullWidth loading={busy} onClick={addSelected}>
-            {t('estimate.addNItems', { count: selected.size })}
-          </Button>
-        </div>
-      )}
-    </div>
   );
 }
 

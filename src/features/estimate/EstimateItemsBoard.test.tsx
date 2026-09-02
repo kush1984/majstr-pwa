@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
 import type { EstimateItemResponse } from '@/api/types.ts';
@@ -165,5 +165,63 @@ describe('EstimateItemsBoard — scroll anchor', () => {
     );
     expect(container.querySelector('[data-item-id="a"]')).toBeTruthy();
     expect(container.querySelector('[data-item-id="b"]')).toBeTruthy();
+  });
+});
+
+describe('EstimateItemsBoard — the explanation a line carries from the catalog', () => {
+  const Q4 = 'Підготовка ГКЛ під фарбування · Q4 (еліт)';
+  const MEANS = 'Найвищий рівень: під глянцеву фарбу.';
+  const infoTriggers = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>('[aria-haspopup="dialog"]'));
+
+  it('keeps the explanation behind an (i), never inline under the name', () => {
+    // «звідки клієнт має знати що це таке?» — V119 froze the catalog wording onto the line, and
+    // this board is where the master meets it. V121 moved it BESIDE the row: rendered inline it
+    // ran the width of the board and pushed the whole estimate sideways («все пливе»).
+    const { container } = render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: Q4, description: MEANS })]}
+        signed={false}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(MEANS)).toBeNull();
+
+    const info = infoTriggers(container);
+    expect(info).toHaveLength(1);
+    fireEvent.click(info[0]);
+    expect(screen.getByText(MEANS)).toBeTruthy();
+  });
+
+  it('leaves a line the master typed himself with nothing but its own name', () => {
+    const { container } = render(
+      <EstimateItemsBoard
+        items={[
+          line({ id: 'a', name: Q4, description: MEANS, sortOrder: 0 }),
+          line({ id: 'b', name: 'Демонтаж', description: null, sortOrder: 1 }),
+        ]}
+        signed={false}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    // Exactly one (i) — the explanation belongs to the row that carries the text, and an
+    // unexplained position must not inherit its neighbour's.
+    expect(infoTriggers(container)).toHaveLength(1);
+    expect(screen.getByText('Демонтаж').closest('button')!.textContent).not.toContain('рівень');
+  });
+
+  it('never puts the (i) inside the row button — that would be invalid markup', () => {
+    const { container } = render(
+      <EstimateItemsBoard
+        items={[line({ id: 'a', name: Q4, description: MEANS })]}
+        signed={false}
+        onEdit={vi.fn()}
+        onArrange={vi.fn()}
+      />,
+    );
+    // The trigger IS a button, so what must hold is that nothing above it is one.
+    expect(infoTriggers(container)[0].parentElement!.closest('button')).toBeNull();
   });
 });

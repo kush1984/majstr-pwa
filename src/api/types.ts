@@ -415,6 +415,12 @@ export interface EstimateItemResponse {
   type: ItemType;
   name: string;
   category: string | null;
+  /**
+   * Plain words for a trade shorthand, frozen onto the line when it came from the catalog (V119).
+   * «Q4 (еліт)» is a level a plasterer knows and nobody else does, and the client reads this same
+   * wording in the portal and in the PDF. Null for a line the master wrote himself.
+   */
+  description?: string | null;
   unit: Unit;
   quantity: number;
   unitPrice: number;
@@ -475,6 +481,11 @@ export interface EstimateResponse {
   status: EstimateStatus;
   validUntil: string | null;
   notes: string | null;
+  /** What the applied bundle promised the client - the finish level and its tolerances (V121).
+   *  A SNAPSHOT taken when the bundle was applied, absent for an estimate built by hand. Read
+   *  only: there is no request field for it, and re-wording the bundle never touches a signed
+   *  estimate. The client reads it under the table in the portal and in the PDF. */
+  qualityNote?: string | null;
   createdAt: string;
   updatedAt: string;
   items: EstimateItemResponse[];
@@ -553,10 +564,24 @@ export interface CatalogItemResponse {
   unit: Unit;
   defaultPrice: number;
   /**
+   * What the position actually covers, when the name alone can't say it (backend V116 — «Q3 vs Q4»
+   * is not distinguishable by name). READ-ONLY: `CatalogItemRequest` deliberately has no matching
+   * field, since a PATCH omitting it would null the text.
+   */
+  description?: string | null;
+  /**
    * The master's own arrangement (backend V87). Satisfies `Arrangeable`, so the catalog shares the
    * estimate board's drag arithmetic instead of owning a second copy of it.
    */
   sortOrder: number;
+  /** Where the LIBRARY files this position's category within its own trade's sequence — for
+   *  drywall that is the order the work is actually done in (підготовка → каркас → звукоізоляція →
+   *  оздоблення → надбавки). Absent for a folder the master invented, which sorts last.
+   *
+   *  `sortOrder` cannot answer this: it is ONE global rank taken from the trade the row is STORED
+   *  under, so a row re-filed by `asSelectedTradeSees` carries a rank from the wrong trade — which
+   *  is why the drywall chip opened on «Каркас і обшивка». */
+  categoryOrder?: number | null;
   createdAt: string;
   /** Other trades that ALSO recognize this exact (name, type, unit) per the default catalog —
    *  never includes `trade` itself. A master's catalog has one row per (name, type, unit), so a
@@ -564,7 +589,19 @@ export interface CatalogItemResponse {
    *  claimed it first; this is how the OTHER trade's filter chip still finds it. The server
    *  always sends this (empty array when nothing is shared) — optional here only so fixtures/
    *  optimistic objects that predate this field don't all need updating. */
-  sharedTrades?: Trade[];
+  sharedTrades?: SharedTrade[];
+}
+
+/** One foreign trade that ships a position, and the category IT files that position under.
+ *  The two can legitimately disagree: backend V116 copied ten painter positions verbatim into
+ *  drywall phases, so «Поклейка склополотна» is the painter's «Шпалери» and the drywaller's
+ *  «Оздоблення під фарбування» at the same time. Rendering the STORED category under the other
+ *  trade's chip is what put a Шпалери folder on a drywall screen. */
+export interface SharedTrade {
+  trade: Trade;
+  category?: string | null;
+  /** Where THAT trade's sequence puts the category above — see `CatalogItemResponse.categoryOrder`. */
+  categoryOrder?: number | null;
 }
 
 export interface CatalogItemRequest {
@@ -1279,6 +1316,9 @@ export interface NoteRequest {
 export interface EstimateTemplateSummary {
   id: string;
   name: string;
+  /** What this bundle means, in the client's words (V121) - a finish level and its tolerances.
+   *  Copied onto the estimate's `qualityNote` when the bundle is applied. */
+  description?: string | null;
   trade: Trade | null;
   /** Set only for a master's OWN template filed under a master-invented trade — always
    *  null for a system default. */
@@ -1315,6 +1355,7 @@ export interface TemplateItemsOrderRequest {
 export interface EstimateTemplateDetail {
   id: string;
   name: string;
+  description?: string | null;
   trade: Trade | null;
   customTradeId: string | null;
   customTradeName: string | null;
@@ -1322,9 +1363,29 @@ export interface EstimateTemplateDetail {
   items: EstimateTemplateItemView[];
 }
 
+/**
+ * One picked bundle in an apply request. `itemIds` absent (or empty) means the WHOLE bundle —
+ * only a list that actually names positions narrows anything, so a bundle can never silently
+ * contribute nothing.
+ */
+export interface TemplatePickRequest {
+  templateId: string;
+  itemIds?: string[];
+}
+
+/** Body of «create ONE estimate from these bundles, taking only these positions». */
+export interface ApplyTemplatesRequest {
+  templates: TemplatePickRequest[];
+  estimate?: EstimateCreateRequest;
+}
+
 /** Body for "save the current estimate as a template" / rename. */
 export interface SaveAsTemplateRequest {
   name: string;
+  /** Three-valued on a PATCH: absent = leave as it is, `''` = clear, text = write. A plain
+   *  rename (and an offline replay of one) must not silently drop the paragraph the client
+   *  reads - hence "absent" rather than "null means unchanged". */
+  description?: string;
   /** Trade to file it under; null/absent = general (shown under every trade). */
   trade?: Trade | null;
   /** A master-invented trade instead of one of the above — wins over `trade` when set. */

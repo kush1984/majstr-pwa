@@ -188,9 +188,19 @@ export function initOutbox(qc: QueryClient): () => void {
   // (save-as-template reads a server-side estimate), so there is no create branch.
   registerOutboxHandler('estimateTemplate', async (op) => {
     if (op.type === 'update') {
-      const p = op.payload as { op: 'rename'; name: string } | { op: 'trade'; trade: Trade | null };
-      if (p.op === 'rename') await estimateTemplatesApi.rename(op.entityId, { name: p.name });
-      else await estimateTemplatesApi.setTrade(op.entityId, { trade: p.trade });
+      const p = op.payload as
+        | { op: 'rename'; name: string; description?: string }
+        | { op: 'trade'; trade: Trade | null };
+      if (p.op === 'rename') {
+        // `description` stays THREE-valued across the queue: absent replays as «leave it as it
+        // is». Defaulting it to '' here would clear the paragraph the client reads on every
+        // offline rename (V121).
+        await estimateTemplatesApi.rename(op.entityId, {
+          name: p.name, description: p.description,
+        });
+      } else {
+        await estimateTemplatesApi.setTrade(op.entityId, { trade: p.trade });
+      }
     } else if (op.type === 'delete') {
       await estimateTemplatesApi.remove(op.entityId);
     } else {

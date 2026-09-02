@@ -70,7 +70,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: { name: 'Ванна' },
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: { name: 'Ванна' },
     });
 
     // --- the composed estimate ------------------------------------------------
@@ -117,7 +117,7 @@ describe('useApplyTemplate offline', () => {
     const { result } = harness((c) => c.setQueryData(TEMPLATE_KEY, template));
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
     });
 
     expect(estimate.items).toHaveLength(3);
@@ -131,7 +131,7 @@ describe('useApplyTemplate offline', () => {
     const { result } = harness((c) => c.setQueryData(CATALOG_KEY, catalog));
 
     await expect(result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
     })).rejects.toBeInstanceOf(TemplateNotCachedError);
 
     expect(await listOutbox()).toHaveLength(0); // nothing half-queued
@@ -147,11 +147,11 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
     });
 
     // The server's substitution stays authoritative while there is a connection.
-    expect(spy).toHaveBeenCalledWith(PROJECT_ID, ['tpl-1'], {});
+    expect(spy).toHaveBeenCalledWith(PROJECT_ID, [{ templateId: 'tpl-1' }], {});
     expect(estimate).toBe(served);
     expect(await listOutbox()).toHaveLength(0);
     spy.mockRestore();
@@ -176,7 +176,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1', 'tpl-2'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }, { templateId: 'tpl-2' }], req: {},
     });
 
     expect(estimate.items.map((i) => i.name)).toEqual([
@@ -188,6 +188,35 @@ describe('useApplyTemplate offline', () => {
     expect(await listOutbox()).toHaveLength(5); // one estimate + four lines
   });
 
+  it('takes only the ticked positions, and an empty pick still means the whole bundle', async () => {
+    // Mirrors EstimateTemplateService: the subset is applied BEFORE the name de-dup, so an untick
+    // in the first bundle lets the second one's wording of the same position through instead of
+    // dropping the line entirely.
+    const second: EstimateTemplateDetail = {
+      id: 'tpl-2', name: 'Підлога плиткою', trade: 'TILING',
+      customTradeId: null, customTradeName: null, isDefault: true,
+      items: [
+        { id: 'ti-4', name: 'ШТУКАТУРКА СТІН', type: 'WORK', unit: 'M2', sortOrder: 0 },
+        { id: 'ti-5', name: 'Стяжка', type: 'WORK', unit: 'M2', sortOrder: 1 },
+      ],
+    };
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, template);
+      c.setQueryData(['estimate-templates', 'tpl-2'], second);
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID,
+      // tpl-1 narrowed to its second line only; tpl-2 named no position, so it comes whole.
+      picks: [{ templateId: 'tpl-1', itemIds: ['ti-2'] }, { templateId: 'tpl-2' }],
+      req: {},
+    });
+
+    expect(estimate.items.map((i) => i.name)).toEqual(['Плитка', 'ШТУКАТУРКА СТІН', 'Стяжка']);
+    expect(estimate.items.map((i) => i.sortOrder)).toEqual([0, 1, 2]);
+  });
+
   it('refuses when ONE of several bundles was never cached', async () => {
     // Applying the rest would produce an estimate that is short a section and looks complete.
     const { result } = harness((c) => {
@@ -196,7 +225,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     await expect(result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1', 'never-opened'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }, { templateId: 'never-opened' }], req: {},
     })).rejects.toBeInstanceOf(TemplateNotCachedError);
 
     expect(await listOutbox()).toHaveLength(0);
@@ -213,7 +242,7 @@ describe('useApplyTemplate offline', () => {
     });
 
     const estimate = await result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
     });
 
     expect(estimate.items).toHaveLength(3);
@@ -233,10 +262,106 @@ describe('useApplyTemplate offline', () => {
     });
 
     await expect(result.current.mutateAsync({
-      projectId: PROJECT_ID, templateIds: ['tpl-1'], req: {},
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
     })).rejects.toBe(rejected);
 
     expect(await listOutbox()).toHaveLength(0); // a 400 is not something replay can fix
     spy.mockRestore();
+  });
+});
+
+/**
+ * V121 — a finish level is a BUNDLE, and the paragraph it promises the client rides onto the
+ * estimate at apply time as a SNAPSHOT (never a join). The offline composition therefore has to
+ * take the same snapshot the server takes, or an estimate authored with no signal would read
+ * differently from one authored with a bar of signal.
+ */
+describe('useApplyTemplate offline — the finish level the bundle promises', () => {
+  beforeEach(async () => {
+    await clearOutbox();
+    onlineManager.setOnline(false);
+  });
+
+  const Q4 = 'Q4 — суцільне шпаклювання по всій площині. Під глянець і бокове світло.';
+
+  const described = (id: string, name: string, description: string | null): EstimateTemplateDetail => ({
+    ...template, id, name, description,
+    items: [{ id: `${id}-1`, name: 'Штукатурка стін', type: 'WORK', unit: 'M2', sortOrder: 0 }],
+  });
+
+  it('copies the paragraph onto the estimate the master is about to fill in', async () => {
+    const { qc, result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, described('tpl-1', 'Підготовка ГКЛ · Q4', Q4));
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
+    });
+
+    expect(estimate.qualityNote).toBe(Q4);
+    expect(qc.getQueryData<EstimateResponse>(['estimate', estimate.id])?.qualityNote).toBe(Q4);
+  });
+
+  it('says the same thing once when two bundles promise the same level', async () => {
+    // The client reads this under the table. Applying Q4 alongside a bundle that repeats its
+    // wording must not make him read the paragraph twice — the server dedups, so this does.
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, described('tpl-1', 'Q4 — стеля', Q4));
+      c.setQueryData(['estimate-templates', 'tpl-2'], described('tpl-2', 'Q4 — стіни', ` ${Q4} `));
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }, { templateId: 'tpl-2' }], req: {},
+    });
+
+    expect(estimate.qualityNote).toBe(Q4);
+  });
+
+  it('joins two different levels in the order they were picked', async () => {
+    const q1 = 'Q1 — стики і саморізи, далі плитка.';
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, described('tpl-1', 'Q4', Q4));
+      c.setQueryData(['estimate-templates', 'tpl-2'], described('tpl-2', 'Q1', q1));
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-2' }, { templateId: 'tpl-1' }], req: {},
+    });
+
+    expect(estimate.qualityNote).toBe(`${q1}\n\n${Q4}`);
+  });
+
+  it('leaves it absent when no bundle explains itself', async () => {
+    // Most bundles are a list of jobs and nothing more. An empty «Стандарт робіт» card under the
+    // client's table would read as a promise the master never made.
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, described('tpl-1', 'Санвузол', '   '));
+      c.setQueryData(CATALOG_KEY, catalog);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
+    });
+
+    expect(estimate.qualityNote).toBeNull();
+  });
+
+  it('carries each line its own catalog explanation (V119), matched the same way as its price', async () => {
+    const means = 'Машинна штукатурка, маяки, під фарбування.';
+    const { result } = harness((c) => {
+      c.setQueryData(TEMPLATE_KEY, template);
+      c.setQueryData(CATALOG_KEY, [{ ...catalog[0], description: means }, ...catalog.slice(1)]);
+    });
+
+    const estimate = await result.current.mutateAsync({
+      projectId: PROJECT_ID, picks: [{ templateId: 'tpl-1' }], req: {},
+    });
+
+    expect(estimate.items[0].description).toBe(means);
+    // No catalog match → no explanation, exactly as the price falls back to 0.
+    expect(estimate.items[2].description).toBeNull();
   });
 });

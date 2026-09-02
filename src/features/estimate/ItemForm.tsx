@@ -76,6 +76,7 @@ export function ItemForm({
   // POSITION/TOTAL picker would be actively misleading here (there is no real base to point at,
   // and re-picking one would not do anything), so this renders a completely different, honest block.
   const isFrozen = Boolean(initial?.baseOriginLabel);
+  const explanation = initial?.description?.trim() ?? '';
   // «%» is a share OF something: «Від позиції» (a markup on one line) or «Від кошторису» (a share of
   // the works- or materials-subtotal). Default POSITION — a legacy MANUAL/null line opens as POSITION
   // too (MANUAL is gone from the product for a LIVE line); a detached one keeps its frozen amount and
@@ -241,6 +242,18 @@ export function ItemForm({
           <Input id="it-name" invalid={Boolean(errors.name)} {...register('name')} />
         )}
       </FormField>
+
+      {/* Read-only, and the full text — the board clamps it to one line, so this is where the
+          master actually reads what «Q4 (еліт)» means. It came from the catalog with the position
+          and is frozen onto the line (V119), which is why there is no field to edit it here: the
+          wording belongs to the catalog position, and the client signed this copy of it. */}
+      {explanation !== '' && (
+        <div className="rounded-xl border border-border bg-surface-sunken p-3">
+          <p className="text-xs font-semibold text-muted">{t('estimate.itemExplanation')}</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-primary">{explanation}</p>
+          <p className="mt-1.5 text-[11px] text-faint">{t('estimate.itemExplanationHint')}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <FormField label={t('estimate.type')} htmlFor="it-type" required error={errors.type?.message}>

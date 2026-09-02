@@ -1,11 +1,13 @@
 import { api } from './client.ts';
 import type {
+  ApplyTemplatesRequest,
   EstimateCreateRequest,
   EstimateResponse,
   EstimateTemplateDetail,
   EstimateTemplateSummary,
   SaveAsTemplateRequest,
   TemplateItemRequest,
+  TemplatePickRequest,
   TemplateItemsOrderRequest,
   TemplateTradeRequest,
 } from './types.ts';
@@ -102,16 +104,18 @@ export const estimateTemplatesApi = {
    * Create ONE new estimate in a project from one or more templates. The server concatenates the
    * picked bundles in order and drops a position the moment a name repeats, so overlapping
    * bundles (every tiling bundle carries «Ґрунтівка поверхні») cannot bill the same work twice.
+   *
+   * Each pick may name the positions to take out of that bundle — a big bundle is often applied
+   * for five or six of its lines. Naming none takes the whole bundle.
    */
   applyToProject(
     projectId: string,
-    templateIds: string[],
+    picks: TemplatePickRequest[],
     req: EstimateCreateRequest,
   ): Promise<EstimateResponse> {
+    const body: ApplyTemplatesRequest = { templates: picks, estimate: req };
     return api
-      .post<EstimateResponse>(`/api/projects/${projectId}/estimates/from-templates`, req, {
-        params: { ids: templateIds.join(',') },
-      })
+      .post<EstimateResponse>(`/api/projects/${projectId}/estimates/from-templates`, body)
       .then((r) => r.data);
   },
 };

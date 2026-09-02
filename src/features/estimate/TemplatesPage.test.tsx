@@ -389,3 +389,62 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
     }));
   });
 });
+
+/**
+ * V121 — a finish level is a bundle, and the bundle explains itself to the client: «Q4» means
+ * nothing to the person signing, so the paragraph the master writes here is copied onto every
+ * estimate the bundle composes and printed under the client's table.
+ */
+describe('TemplatesPage — the paragraph the client reads', () => {
+  const Q4 = 'Q4 — суцільне шпаклювання, під глянець і бокове світло.';
+  const described: EstimateTemplateSummary = { ...own, description: Q4 };
+  const describedDetail: EstimateTemplateDetail = { ...ownDetail, description: Q4 };
+
+  it('offers the paragraph behind an (i) in the list, so a long one cannot push the row around', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([described]);
+    renderPage();
+
+    expect(await screen.findByText('Моя ванна')).toBeTruthy();
+    expect(screen.queryByText(Q4)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Моя ванна' }));
+    expect(await screen.findByText(Q4)).toBeTruthy();
+  });
+
+  it('writes it with «Зберегти», in the same call as the name', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.rename).mockResolvedValue(described);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+
+    const field = await screen.findByTestId('template-description');
+    // Nothing is written while he types — this editor is explicit-save like the act editor.
+    fireEvent.change(field, { target: { value: Q4 } });
+    expect(estimateTemplatesApi.rename).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('template-save'));
+    await waitFor(() => expect(estimateTemplatesApi.rename)
+      .toHaveBeenCalledWith('own1', { name: 'Моя ванна', description: Q4 }));
+    expect(estimateTemplatesApi.rename).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rename alone sends no description — «absent» is what leaves it alone', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([described]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(describedDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.rename).mockResolvedValue({ ...described, name: 'Ванна Q4' });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await screen.findByTestId('template-description');
+
+    fireEvent.change(screen.getByDisplayValue('Моя ванна'), { target: { value: 'Ванна Q4' } });
+    fireEvent.click(screen.getByTestId('template-save'));
+
+    await waitFor(() => expect(estimateTemplatesApi.rename)
+      .toHaveBeenCalledWith('own1', { name: 'Ванна Q4', description: undefined }));
+  });
+});

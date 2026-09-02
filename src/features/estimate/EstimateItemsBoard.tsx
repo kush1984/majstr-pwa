@@ -11,6 +11,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { percentLabel } from './percentLine.ts';
@@ -367,6 +368,7 @@ function ItemRow({
   const closed = item.closedByActs ?? 0;
   const fullyClosed = closed > 0 && closed >= item.quantity;
   const partlyClosed = closed > 0 && !fullyClosed;
+  const description = item.description?.trim() ?? '';
 
   // `data-item-id` is the anchor the editor scrolls a just-added/edited line to. Rows are nested
   // inside category sections, so the page cannot hold a ref per line — it finds this by id instead.
@@ -464,6 +466,16 @@ function ItemRow({
           </span>
         </span>
       </button>
+      {/* The explanation the line carries from the catalog (V119) lives BESIDE the row, never
+          inside it (V121): rendered inline it ran the width of the board and pushed the whole
+          estimate sideways — «все пливе». Same shape as the catalog board, minus the clamped
+          preview line: an estimate row already carries quantity, unit price and act progress
+          under the name, and a fourth line of grey text there is what made it flow. */}
+      {description !== '' && (
+        <span className="flex flex-shrink-0 items-center pl-0.5">
+          <InfoPopover text={description} label={item.name} />
+        </span>
+      )}
     </div>
   );
 }

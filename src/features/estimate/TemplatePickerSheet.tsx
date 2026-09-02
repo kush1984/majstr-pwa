@@ -3,11 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { useEstimateTemplate, useEstimateTemplates } from './useEstimateTemplates.ts';
+
+/** One bundle the master picked, plus the positions ticked inside it — `itemIds: null` is the
+ *  whole bundle, which is what a bundle nobody drilled into means. */
+export type TemplatePick = { template: EstimateTemplateSummary; itemIds: string[] | null };
 
 /**
  * Picks estimate templates: lists the master's own and the system defaults grouped by trade, lets
@@ -21,6 +26,15 @@ import { useEstimateTemplate, useEstimateTemplates } from './useEstimateTemplate
  * estimate. Tapping the row toggles it (the whole row is the target, which is what works with a
  * thumb); the chevron on the right opens the preview instead. Duplicate positions across bundles
  * are dropped server-side and, offline, by the same rule locally.
+ *
+ * <b>And only the positions the master wants.</b> «деколи із великого шаблону треба 5-6 позицій і
+ * це довго потім викидати» — so the preview is a CHECKLIST, not a read-only list, and the subset
+ * it remembers rides the apply request. The preview's footer used to be a
+ * «Обрати цей шаблон»/«Прибрати з вибору» toggle, which said nothing about the ticks just made;
+ * it is «Готово» now, and the bundle's own tick follows the positions — untick every one of them
+ * and the bundle drops out of the selection, because a bundle contributing nothing is not a thing
+ * the master can mean. A bundle nobody drilled into keeps `itemIds: null` (all of it), so nothing
+ * changes for the master who just wants the whole thing.
  */
 export function TemplatePickerSheet({
   open,
@@ -30,7 +44,7 @@ export function TemplatePickerSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  onPick: (templates: EstimateTemplateSummary[]) => void;
+  onPick: (picks: TemplatePick[]) => void;
   applying?: boolean;
 }) {
   const { t } = useTranslation();
@@ -38,6 +52,10 @@ export function TemplatePickerSheet({
   const { data, isPending, isError } = useEstimateTemplates();
   const [preview, setPreview] = useState<EstimateTemplateSummary | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  // templateId → the positions ticked in it. A bundle absent from here is taken whole; the entry
+  // outlives the preview closing and reopening, which is the «запамятати вибране» the master asked
+  // for.
+  const [subsets, setSubsets] = useState<Record<string, string[]>>({});
   const [query, setQuery] = useState('');
   const [trade, setTrade] = useState<string | null>(null);
 
@@ -46,9 +64,30 @@ export function TemplatePickerSheet({
   const toggle = (id: string) =>
     setPicked((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
+  /** The preview's «Готово»: the ticks decide both the subset and the bundle's own tick. */
+  const applySubset = (templateId: string, itemIds: string[], total: number) => {
+    setSubsets((s) => {
+      const next = { ...s };
+      // Everything ticked is not a subset — keeping one would freeze the bundle as it is today,
+      // and a position added to it tomorrow would silently never arrive.
+      if (itemIds.length === 0 || itemIds.length === total) delete next[templateId];
+      else next[templateId] = itemIds;
+      return next;
+    });
+    setPicked((ids) => {
+      if (itemIds.length === 0) return ids.filter((x) => x !== templateId);
+      return ids.includes(templateId) ? ids : [...ids, templateId];
+    });
+    setPreview(null);
+  };
+
   const chosen = useMemo(
-    () => picked.map((id) => (data ?? []).find((t) => t.id === id)).filter(Boolean) as EstimateTemplateSummary[],
-    [picked, data],
+    () =>
+      picked
+        .map((id) => (data ?? []).find((t) => t.id === id))
+        .filter((tpl): tpl is EstimateTemplateSummary => !!tpl)
+        .map((tpl) => ({ template: tpl, itemIds: subsets[tpl.id] ?? null })),
+    [picked, data, subsets],
   );
 
   // A master with one busy trade can have 20+ default bundles, which is a long scroll to find
@@ -86,6 +125,7 @@ export function TemplatePickerSheet({
   const close = () => {
     setPreview(null);
     setPicked([]);
+    setSubsets({});
     setQuery('');
     setTrade(null);
     onClose();
@@ -97,12 +137,14 @@ export function TemplatePickerSheet({
         <TemplatePreview
           template={preview}
           selected={picked.includes(preview.id)}
+          pickedItemIds={subsets[preview.id] ?? null}
           applying={applying}
           onBack={() => setPreview(null)}
           onToggle={() => {
             toggle(preview.id);
             setPreview(null);
           }}
+          onDone={(itemIds, total) => applySubset(preview.id, itemIds, total)}
         />
       ) : isPending ? (
         <div className="flex justify-center py-8 text-brand">
@@ -162,6 +204,7 @@ export function TemplatePickerSheet({
                     key={tpl.id}
                     template={tpl}
                     selected={picked.includes(tpl.id)}
+                    pickedCount={subsets[tpl.id]?.length ?? null}
                     onToggle={() => toggle(tpl.id)}
                     onOpen={() => setPreview(tpl)}
                   />
@@ -192,6 +235,7 @@ export function TemplatePickerSheet({
                           key={tpl.id}
                           template={tpl}
                           selected={picked.includes(tpl.id)}
+                          pickedCount={subsets[tpl.id]?.length ?? null}
                           onToggle={() => toggle(tpl.id)}
                           onOpen={() => setPreview(tpl)}
                         />
@@ -245,15 +289,19 @@ function TradeChip({
 function TemplateRow({
   template,
   selected,
+  pickedCount,
   onToggle,
   onOpen,
 }: {
   template: EstimateTemplateSummary;
   selected: boolean;
+  /** How many of its positions are ticked, when the master narrowed it; null = the whole bundle. */
+  pickedCount: number | null;
   onToggle: () => void;
   onOpen: () => void;
 }) {
   const { t } = useTranslation();
+  const description = template.description?.trim() ?? '';
   return (
     <div
       className={`flex items-stretch rounded-xl border bg-surface ${
@@ -277,10 +325,21 @@ function TemplateRow({
         <span className="min-w-0 flex-1">
           <span className="block break-words text-sm font-medium text-primary">{template.name}</span>
           <span className="block text-xs text-muted">
-            {t('templates.itemsCount', { count: template.itemCount })}
+            {pickedCount === null
+              ? t('templates.itemsCount', { count: template.itemCount })
+              : t('templates.pickedOfCount', { count: pickedCount, total: template.itemCount })}
           </span>
         </span>
       </button>
+      {/* A finish level is a bundle (V121): what it promises the client is the half a master
+          picking «Q3+» over «Q3» is actually choosing between. Beside the row — it is a button. */}
+      {description !== '' && (
+        <span className="flex flex-shrink-0 items-center pr-1">
+          <InfoPopover label={template.name}>
+            <span className="whitespace-pre-line">{description}</span>
+          </InfoPopover>
+        </span>
+      )}
       <button
         type="button"
         onClick={onOpen}
@@ -293,28 +352,65 @@ function TemplateRow({
   );
 }
 
+/**
+ * A bundle's composition — a CHECKLIST, not a read-only list. «деколи із великого шаблону треба
+ * 5-6 позицій і це довго потім викидати», so the master narrows the bundle here and «Готово»
+ * carries the ticks back; the parent remembers them for as long as the sheet is open.
+ *
+ * `ticked === null` is «the whole bundle», the same convention the parent stores — so a position
+ * ADDED to the bundle later is included by a master who never narrowed it, and a remembered subset
+ * that names a position since deleted simply doesn't match anything.
+ */
 function TemplatePreview({
   template,
   selected,
+  pickedItemIds,
   applying,
   onBack,
   onToggle,
+  onDone,
 }: {
   template: EstimateTemplateSummary;
   selected: boolean;
+  pickedItemIds: string[] | null;
   applying: boolean;
   onBack: () => void;
   onToggle: () => void;
+  onDone: (itemIds: string[], total: number) => void;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
   const { data, isPending } = useEstimateTemplate(template.id);
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const [ticked, setTicked] = useState<string[] | null>(pickedItemIds);
+  const tickedIds = useMemo(
+    () => (ticked === null ? items.map((it) => it.id) : items.filter((it) => ticked.includes(it.id)).map((it) => it.id)),
+    [ticked, items],
+  );
+  const allTicked = tickedIds.length === items.length;
+
+  const toggleItem = (id: string) =>
+    setTicked((cur) => {
+      const base = cur === null ? items.map((it) => it.id) : cur;
+      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+    });
 
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-3 text-xs font-semibold text-brand">
         ← {t('common.back')}
       </button>
+      {(template.description?.trim() ?? '') !== '' && (
+        <div className="mb-3 rounded-xl bg-surface-sunken px-3 py-2.5">
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
+            {t('templates.promiseTitle')}
+          </p>
+          <p className="whitespace-pre-line text-xs leading-snug text-primary">
+            {template.description?.trim()}
+          </p>
+          <p className="mt-1.5 text-[11px] text-muted">{t('templates.promiseHint')}</p>
+        </div>
+      )}
       <p className="mb-3 text-xs text-muted">{t('templates.pricesHint')}</p>
       {isPending ? (
         <div className="flex justify-center py-6 text-brand">
@@ -332,23 +428,60 @@ function TemplatePreview({
           </div>
         )
       ) : (
-        <div className="mb-5 max-h-[40dvh] space-y-1 overflow-y-auto">
-          {(data.items ?? []).map((item, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-3 rounded-lg bg-surface-sunken px-3 py-2 text-sm"
+        <>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-primary">
+              {t('templates.pickedOfCount', { count: tickedIds.length, total: items.length })}
+            </span>
+            <button
+              type="button"
+              onClick={() => setTicked(allTicked ? [] : null)}
+              className="min-h-[32px] px-1 text-xs font-semibold text-brand"
             >
-              <span className="min-w-0 break-words text-primary">{item.name}</span>
-              <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
-            </div>
-          ))}
-        </div>
+              {t(allTicked ? 'templates.clearAll' : 'templates.selectAll')}
+            </button>
+          </div>
+          <div className="mb-4 max-h-[40dvh] space-y-1 overflow-y-auto">
+            {items.map((item) => {
+              const on = tickedIds.includes(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleItem(item.id)}
+                  aria-pressed={on}
+                  className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm ${
+                    on ? 'bg-surface-sunken' : 'bg-surface-sunken opacity-50'
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border text-[11px] font-bold ${
+                      on ? 'border-brand bg-brand text-white' : 'border-border text-transparent'
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  <span className="min-w-0 flex-1 break-words text-primary">{item.name}</span>
+                  <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
       {/* The preview only picks; applying is the sheet's footer, because the master may still
-          want to add another bundle before creating the estimate. */}
-      <Button fullWidth variant={selected ? 'secondary' : 'primary'} loading={applying} onClick={onToggle}>
-        {t(selected ? 'templates.deselect' : 'templates.select')}
-      </Button>
+          want to add another bundle before creating the estimate. Without a composition to tick
+          there is nothing to narrow, so the plain select/deselect toggle stays as the fallback. */}
+      {data ? (
+        <Button fullWidth loading={applying} onClick={() => onDone(tickedIds, items.length)}>
+          {t('templates.done')}
+        </Button>
+      ) : (
+        <Button fullWidth variant={selected ? 'secondary' : 'primary'} loading={applying} onClick={onToggle}>
+          {t(selected ? 'templates.deselect' : 'templates.select')}
+        </Button>
+      )}
     </div>
   );
 }

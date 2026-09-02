@@ -14,7 +14,10 @@ const CUSTOM = item('OTHER', 'ct1', 'Натяжні стелі');
 // Filed under TILING (whichever trade claimed the (owner, name, type, unit) slot first), but the
 // same name/type/unit also ships under PAINTER per the default catalog — see
 // CatalogItemResponse.sharedTrades / CatalogService.sharedTradesFor.
-const SHARED_TILING_PAINTER: TradedEntity = { trade: 'TILING', customTradeId: null, customTradeName: null, sharedTrades: ['PAINTER'] };
+const SHARED_TILING_PAINTER: TradedEntity = {
+  trade: 'TILING', customTradeId: null, customTradeName: null,
+  sharedTrades: [{ trade: 'PAINTER', category: 'Організаційні послуги' }],
+};
 
 describe('tradeMatches', () => {
   it('empty selection means all trades', () => {

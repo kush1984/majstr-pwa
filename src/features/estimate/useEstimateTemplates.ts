@@ -13,6 +13,7 @@ import type {
   EstimateTemplateItemView,
   EstimateTemplateSummary,
   TemplateItemRequest,
+  TemplatePickRequest,
   TemplateItemsOrderRequest,
   Trade,
 } from '@/api/types.ts';
@@ -142,21 +143,37 @@ export function useSetTemplateTrade() {
   });
 }
 
-/** Rename a template. Returns the server's row so the caller can follow a FORK — renaming a
- *  system default answers with the master's own copy, under a different id. */
+/**
+ * Rename a template and/or rewrite what it PROMISES the client (V121). Returns the server's row so
+ * the caller can follow a FORK — writing on a system default answers with the master's own copy,
+ * under a different id.
+ *
+ * `description` is three-valued and `undefined` is the meaningful state: absent = «leave it as it
+ * is», `''` = clear, text = write. The endpoint is otherwise a full replace, so a plain rename that
+ * simply omitted the field would silently drop a paragraph the client reads — and the same is true
+ * of an offline replay, which is why the flag rides the queued payload rather than being re-derived
+ * when the queue drains.
+ */
 export function useRenameTemplate() {
   const qc = useQueryClient();
   const invalidate = useInvalidateTemplates();
   return useMutation({
     networkMode: 'always',
-    mutationFn: ({ id, name }: { id: string; name: string }): Promise<EstimateTemplateSummary | undefined> =>
+    mutationFn: ({ id, name, description }: { id: string; name: string; description?: string }):
+    Promise<EstimateTemplateSummary | undefined> =>
       offlineMutate<EstimateTemplateSummary | undefined>({
-        entity: 'estimateTemplate', entityId: id, type: 'update', payload: { op: 'rename', name }, deps: [],
-        online: () => estimateTemplatesApi.rename(id, { name }),
+        entity: 'estimateTemplate', entityId: id, type: 'update',
+        // The KEY is omitted, not set to undefined: «absent» is one of the three values the server
+        // reads, and it is the one that means «leave the paragraph the client reads alone».
+        payload: { op: 'rename', name, ...(description === undefined ? {} : { description }) }, deps: [],
+        online: () => estimateTemplatesApi.rename(id, { name, description }),
         onOnlineSuccess: invalidate,
         optimistic: () => {
-          patchSummary(qc, id, (t) => ({ ...t, name }));
-          patchDetail(qc, id, (d) => ({ ...d, name }));
+          const edit = <T extends { name: string; description?: string | null }>(row: T): T => ({
+            ...row, name, ...(description === undefined ? {} : { description: description || null }),
+          });
+          patchSummary(qc, id, edit);
+          patchDetail(qc, id, edit);
           return undefined;
         },
       }),
@@ -341,12 +358,12 @@ export function useApplyTemplate() {
   return useMutation({
     networkMode: 'always', // never let it sit paused offline — we have a real offline path
     mutationFn: async (
-      args: { projectId: string; templateIds: string[]; req: EstimateCreateRequest },
+      args: { projectId: string; picks: TemplatePickRequest[]; req: EstimateCreateRequest },
     ): Promise<EstimateResponse> => {
       if (onlineManager.isOnline()) {
         try {
           const created = await estimateTemplatesApi.applyToProject(
-            args.projectId, args.templateIds, args.req);
+            args.projectId, args.picks, args.req);
           track('estimate_created', { itemCount: created.items.length, fromTemplate: true });
           void qc.invalidateQueries({ queryKey: ['projects'] });
           void qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -360,13 +377,30 @@ export function useApplyTemplate() {
   });
 }
 
+/**
+ * The finish level the applied bundles promise the client (V121) — the local twin of
+ * `EstimateTemplateService.qualityNote`, and it has to stay one: distinct non-blank descriptions,
+ * joined in the order they were picked with a blank line between, capped at the column's 1000
+ * characters. Applying Q4 twice must not make the client read the same paragraph twice.
+ *
+ * Only the SNAPSHOT is composed here. The server takes its own when the queued create lands, off
+ * the bundles as they are then — which is the same wording unless the master re-writes a bundle
+ * while the queue is still draining, and either wording is one he wrote himself.
+ */
+function qualityNote(templates: (EstimateTemplateDetail | undefined)[]): string | null {
+  const joined = [...new Set(
+    templates.map((t) => t?.description?.trim()).filter((d): d is string => !!d),
+  )].join('\n\n');
+  return joined === '' ? null : joined.slice(0, 1000);
+}
+
 /** The offline half of {@link useApplyTemplate}: compose locally, then queue create + N lines. */
 async function applyTemplateOffline(
   qc: QueryClient,
-  { projectId, templateIds, req }: { projectId: string; templateIds: string[]; req: EstimateCreateRequest },
+  { projectId, picks, req }: { projectId: string; picks: TemplatePickRequest[]; req: EstimateCreateRequest },
 ): Promise<EstimateResponse> {
-  const templates = templateIds.map((id) =>
-    qc.getQueryData<EstimateTemplateDetail>([...ESTIMATE_TEMPLATE_KEY, id]));
+  const templates = picks.map(({ templateId }) =>
+    qc.getQueryData<EstimateTemplateDetail>([...ESTIMATE_TEMPLATE_KEY, templateId]));
   if (templates.some((tpl) => !tpl)) {
     // Refuse loudly rather than create an EMPTY estimate the master would think is the template.
     // One missing bundle out of several is still a refusal: silently applying the rest would
@@ -387,8 +421,15 @@ async function applyTemplateOffline(
   // a position contributed by an earlier one must not come back from a later one. Same key as the
   // catalog lookup right above, so a line that resolves to one catalog row appears once.
   // sortOrder is renumbered across the whole result — each template counts its own from 0.
+  // Only the ticked positions come across, and the subset is applied BEFORE the de-dup — same
+  // order as the server, so unticking a shared position in one bundle lets the next bundle's copy
+  // through instead of dropping the line.
   const seen = new Set<string>();
-  const lines = templates.flatMap((tpl) => tpl!.items ?? [])
+  const lines = templates.flatMap((tpl, i) => {
+    const wanted = picks[i].itemIds;
+    const items = tpl!.items ?? [];
+    return wanted && wanted.length > 0 ? items.filter((ti) => wanted.includes(ti.id)) : items;
+  })
     .filter((ti) => {
       const key = ti.name.trim().toLowerCase();
       return seen.has(key) ? false : (seen.add(key), true);
@@ -404,7 +445,10 @@ async function applyTemplateOffline(
         unitPrice: match?.defaultPrice ?? 0,
         sortOrder: index,
       };
-      return { id: newUuid(), request };
+      // The line's own explanation rides the same catalog match as its price (V119) — it is not
+      // part of the request (there is no field for it), so it is carried separately onto the
+      // optimistic row and re-derived server-side when the queued create lands.
+      return { id: newUuid(), request, description: match?.description ?? null };
     });
 
   // Queue the estimate first, then its lines depending on it: the engine replays in `seq` order
@@ -421,8 +465,9 @@ async function applyTemplateOffline(
   }
 
   // Optimistic cache, so the estimate opens filled in immediately.
-  const items: EstimateItemResponse[] = lines.map(({ id, request }) => ({
+  const items: EstimateItemResponse[] = lines.map(({ id, request, description }) => ({
     id, type: request.type, name: request.name, category: request.category ?? null,
+    description,
     unit: request.unit, quantity: 0, unitPrice: request.unitPrice,
     lineTotal: 0, sortOrder: request.sortOrder ?? 0, measurementRefs: [], quantityManual: false,
         // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
@@ -431,6 +476,7 @@ async function applyTemplateOffline(
   const optimistic: EstimateResponse = {
     id: estimateId, projectId, name: req.name ?? null, status: 'DRAFT',
     validUntil: req.validUntil ?? null, notes: req.notes ?? null,
+    qualityNote: qualityNote(templates),
     createdAt: now, updatedAt: now, items,
     // Every quantity is 0, so every total is 0 — no rounding to worry about.
     worksSubtotal: 0, materialsSubtotal: 0, total: 0, depositAmount: null, balance: 0,

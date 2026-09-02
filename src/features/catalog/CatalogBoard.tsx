@@ -2,16 +2,19 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
+import { InfoPopover } from '@/components/InfoPopover.tsx';
 import type { CatalogItemResponse } from '@/api/types.ts';
 import { sectionId, toSections, type Section } from '@/features/estimate/estimateArrange.ts';
+import { catalogSectionRank } from './sharedCategory.ts';
 
 /**
  * The master's own catalog, grouped into categories. A row tap opens the position for editing; in
  * selection mode a tap ticks it instead (whole categories tick from their header).
  *
- * <p>Positions are shown in the order the backend returns them (category, then name). There is no
- * manual drag-reordering here — a catalog is a reference list a master searches and prices, not one
- * he arranges, and the grips only added weight to every row.</p>
+ * <p>Folders come out in the order the work is done in ({@link catalogSectionRank}); inside a
+ * folder, positions are shown in the order the backend returns them. There is no manual
+ * drag-reordering here — a catalog is a reference list a master searches and prices, not one he
+ * arranges, and the grips only added weight to every row.</p>
  */
 export interface CatalogSelection {
   selected: Set<string>;
@@ -29,7 +32,7 @@ export function CatalogBoard({
   /** Selection mode — present, it takes over the row's tap; editing steps aside. */
   selection?: CatalogSelection;
 }) {
-  const sections = useMemo(() => toSections(items), [items]);
+  const sections = useMemo(() => toSections(items, catalogSectionRank), [items]);
 
   return (
     <>
@@ -114,6 +117,7 @@ function ItemRow({
 }) {
   const { t } = useTranslation();
   const picked = selection ? selection.selected.has(item.id) : false;
+  const description = item.description?.trim();
 
   return (
     <div className="flex items-stretch gap-1">
@@ -141,12 +145,24 @@ function ItemRow({
           {/* Wraps instead of truncating: catalog names are long and specific, and the tail is
               exactly what tells two positions apart. */}
           <span className="block break-words text-sm font-medium text-primary">{item.name}</span>
+          {/* One clamped line, same as the picker: enough to tell Q3 from Q3+ at a glance, with
+              the (i) beside the row holding the rest. «не всі вкурсі таких рівнів». */}
+          {description != null && description !== '' && (
+            <span className="block truncate text-[11px] leading-tight text-muted">
+              {description}
+            </span>
+          )}
           <span className="block text-xs text-muted">за {t('units.' + item.unit)}</span>
         </span>
         <span className="whitespace-nowrap text-sm font-bold text-primary">
           {formatMoney(item.defaultPrice)}
         </span>
       </button>
+      {description != null && description !== '' && (
+        <span className="flex flex-shrink-0 items-center pl-0.5">
+          <InfoPopover text={description} label={item.name} />
+        </span>
+      )}
     </div>
   );
 }

@@ -161,3 +161,66 @@ describe('useEstimateTemplates — editing a position and its order (offline)', 
     expect(ops[0].payload).toMatchObject({ req: { itemIds: ['i1', 'i2'] } });
   });
 });
+
+/**
+ * V121 — the bundle carries the paragraph the client reads under his table, and `description` is
+ * THREE-valued on the way to the server: absent = leave it as it is, blank = clear, text = write.
+ * A rename is the common write, and it must never be able to drop a paragraph it never knew about
+ * — least of all on an offline replay, where the op that lands is the only thing the server sees.
+ */
+describe('useEstimateTemplates — the paragraph the client reads (V121)', () => {
+  const Q4 = 'Q4 — під глянець і бокове світло. Контроль ковзним світлом: 6 точок.';
+
+  function seedDescribed(qc: QueryClient) {
+    qc.setQueryData<EstimateTemplateSummary[]>(ESTIMATE_TEMPLATE_KEY, [
+      { id: 't1', name: 'Підготовка ГКЛ · Q4', description: Q4, trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: false, itemCount: 1 },
+    ]);
+    qc.setQueryData<EstimateTemplateDetail>(detailKey('t1'), {
+      id: 't1', name: 'Підготовка ГКЛ · Q4', description: Q4, trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: false,
+      items: [{ id: 'i1', name: 'Грунтування', type: 'WORK', unit: 'M2', sortOrder: 0 }],
+    });
+  }
+
+  it('a plain rename queues no description at all — and keeps the cached one', async () => {
+    const { qc, wrapper } = setup();
+    seedDescribed(qc);
+    const { result } = renderHook(() => useRenameTemplate(), { wrapper });
+
+    await act(async () => { await result.current.mutateAsync({ id: 't1', name: 'Q4 — стеля' }); });
+
+    expect(qc.getQueryData<EstimateTemplateDetail>(detailKey('t1'))?.description).toBe(Q4);
+    const [op] = await listOutbox();
+    // Not `description: null` — the KEY has to be missing, or the replay clears the paragraph.
+    expect(Object.hasOwn(op.payload as object, 'description')).toBe(false);
+  });
+
+  it('carries a rewritten paragraph in the same op as the name', async () => {
+    const { qc, wrapper } = setup();
+    seedDescribed(qc);
+    const { result } = renderHook(() => useRenameTemplate(), { wrapper });
+    const rewritten = 'Q4 — плюс шліфування під бокове світло.';
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: 't1', name: 'Підготовка ГКЛ · Q4', description: rewritten });
+    });
+
+    expect(qc.getQueryData<EstimateTemplateDetail>(detailKey('t1'))?.description).toBe(rewritten);
+    expect(qc.getQueryData<EstimateTemplateSummary[]>(ESTIMATE_TEMPLATE_KEY)?.[0].description).toBe(rewritten);
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1); // one door for the template's metadata, not two round trips
+    expect(ops[0].payload).toMatchObject({ op: 'rename', description: rewritten });
+  });
+
+  it('an emptied field clears it, which is a different thing from saying nothing', async () => {
+    const { qc, wrapper } = setup();
+    seedDescribed(qc);
+    const { result } = renderHook(() => useRenameTemplate(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ id: 't1', name: 'Підготовка ГКЛ · Q4', description: '' });
+    });
+
+    expect(qc.getQueryData<EstimateTemplateDetail>(detailKey('t1'))?.description).toBeNull();
+    expect((await listOutbox())[0].payload).toMatchObject({ description: '' });
+  });
+});

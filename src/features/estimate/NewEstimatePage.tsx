@@ -20,9 +20,8 @@ import {
 } from '@/features/clients/ClientPicker.tsx';
 import { useCreateProject, useProjects } from '@/features/projects/useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
-import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
+import { TemplatePickerSheet, type TemplatePick } from '@/features/estimate/TemplatePickerSheet.tsx';
 import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
-import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 /**
@@ -48,8 +47,10 @@ export function NewEstimatePage() {
   const [estName, setEstName] = useState('');
   const [busy, setBusy] = useState(false);
   // Empty estimate vs. start from templates (positions pre-filled, prices from the master's
-  // catalog). The picker hands back every chosen bundle; several merge into ONE estimate.
-  const [templates, setTemplates] = useState<EstimateTemplateSummary[]>([]);
+  // catalog). The picker hands back every chosen bundle — with the positions ticked inside it,
+  // since a big bundle is often applied for five or six of its lines; several merge into ONE
+  // estimate.
+  const [templates, setTemplates] = useState<TemplatePick[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Import mode: create the object, then hand off to the file/photo import wizard.
   const [importMode, setImportMode] = useState(false);
@@ -91,7 +92,13 @@ export function NewEstimatePage() {
       const req = { name: estName.trim() || undefined };
       const estimate = templates.length > 0
         ? await applyTemplate.mutateAsync({
-            projectId: proj.id, templateIds: templates.map((tpl) => tpl.id), req })
+            projectId: proj.id,
+            picks: templates.map((p) => ({
+              templateId: p.template.id,
+              itemIds: p.itemIds ?? undefined,
+            })),
+            req,
+          })
         : await createEstimate.mutateAsync({ projectId: proj.id, req });
       void navigate(routes.estimate(estimate.id), { replace: true });
     } catch (err) {
@@ -154,7 +161,7 @@ export function NewEstimatePage() {
               )}
             >
               {templates.length === 1
-                ? t('templates.chosen', { name: templates[0].name })
+                ? t('templates.chosen', { name: templates[0].template.name })
                 : templates.length > 1
                   ? t('templates.applyCount', { count: templates.length })
                   : t('templates.fromTemplate')}

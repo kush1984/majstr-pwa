@@ -21,14 +21,14 @@ import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
-import type { EstimateSummary, EstimateTemplateSummary } from '@/api/types.ts';
+import type { EstimateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
 import { ObjectStatusFabActions, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
 import { ConsolidateSheet } from '@/features/estimate/ConsolidateSheet.tsx';
-import { TemplatePickerSheet } from '@/features/estimate/TemplatePickerSheet.tsx';
+import { TemplatePickerSheet, type TemplatePick } from '@/features/estimate/TemplatePickerSheet.tsx';
 import { PhotosSection } from '@/features/photos/PhotosSection.tsx';
 import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/useEstimateTemplates.ts';
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
@@ -207,12 +207,14 @@ export function ProjectDetailPage() {
   // template and catalog (same name-matching rule as the server) and queues it. This is the
   // second entry point for that action — the wizard has the other one, and both must behave
   // the same, or the master just meets the wall from a different screen.
-  const onPickTemplate = async (tpls: EstimateTemplateSummary[]) => {
+  const onPickTemplate = async (picks: TemplatePick[]) => {
     setTemplatePickerOpen(false);
     setEstimateChoiceOpen(false);
     try {
       const e = await applyTemplate.mutateAsync({
-        projectId: id, templateIds: tpls.map((tpl) => tpl.id), req: {},
+        projectId: id,
+        picks: picks.map((p) => ({ templateId: p.template.id, itemIds: p.itemIds ?? undefined })),
+        req: {},
       });
       void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
       void navigate(routes.estimate(e.id));

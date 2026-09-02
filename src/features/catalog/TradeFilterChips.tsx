@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
 import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
-import type { Trade } from '@/api/types.ts';
+import type { SharedTrade, Trade } from '@/api/types.ts';
 
 /** A selected filter/picker key — a system Trade, or `custom:<id>` for a master-invented
  *  trade (`user_trade`). Shared by the catalog filter, the estimate-template filter, and
@@ -29,7 +29,7 @@ export interface TradedEntity {
    *  a position two of the master's trades both use is filed under whichever claimed it first;
    *  without this, selecting the OTHER trade's chip would hide a real, priced position. Absent
    *  on entities that don't carry this data (e.g. estimate-template summaries) — treated as none. */
-  sharedTrades?: readonly Trade[];
+  sharedTrades?: readonly SharedTrade[];
 }
 
 /**
@@ -42,7 +42,7 @@ export function tradeMatches(entity: TradedEntity, selected: ReadonlySet<TradeKe
   if (selected.size === 0) return true;
   if (entity.customTradeId) return selected.has(customTradeKey(entity.customTradeId));
   if (selected.has(entity.trade == null ? 'OTHER' : entity.trade)) return true;
-  return entity.sharedTrades?.some((tr) => selected.has(tr)) ?? false;
+  return entity.sharedTrades?.some((s) => selected.has(s.trade)) ?? false;
 }
 
 /**
@@ -77,7 +77,7 @@ export function TradeFilterChips({
     }
     // A shared position (see TradedEntity.sharedTrades) makes its OTHER trade's chip clickable
     // even on the rare catalog where nothing is directly tagged with that trade yet.
-    for (const tr of item.sharedTrades ?? []) systemPresent.add(tr);
+    for (const s of item.sharedTrades ?? []) systemPresent.add(s.trade);
   }
   const systemChips = TRADE_VALUES.filter((tr) => systemPresent.has(tr));
   const customChips = [...customPresent.entries()].sort((a, b) => a[1].localeCompare(b[1], 'uk'));

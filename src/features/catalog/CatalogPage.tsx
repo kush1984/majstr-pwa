@@ -24,6 +24,7 @@ import {
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 import { CatalogBoard } from './CatalogBoard.tsx';
 import { TradeFilterChips, tradeMatches, type TradeKey } from './TradeFilterChips.tsx';
+import { asSelectedTradeSees } from './sharedCategory.ts';
 
 type TypeFilter = ItemType | 'ALL';
 const FILTERS: { value: TypeFilter; labelKey: string }[] = [
@@ -60,9 +61,12 @@ export function CatalogPage() {
 
   // Trade narrows the SET; the type chips (Усі/Роботи/Матеріали) filter within it — both client-side.
   const visible = useMemo(
-    () => (data ?? [])
-      .filter((i) => filter === 'ALL' || i.type === filter)
-      .filter((i) => tradeMatches(i, tradeFilter)),
+    () => asSelectedTradeSees(
+      (data ?? [])
+        .filter((i) => filter === 'ALL' || i.type === filter)
+        .filter((i) => tradeMatches(i, tradeFilter)),
+      tradeFilter,
+    ),
     [data, filter, tradeFilter],
   );
   // Prefill a new item's trade when the filter narrows to exactly one trade

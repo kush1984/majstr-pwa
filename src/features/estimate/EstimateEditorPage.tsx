@@ -512,6 +512,22 @@ export function EstimateEditorPage() {
               sourceEstimateIds={est.sourceEstimateIds}
               signed={signed}
             />
+
+            {/* What the applied bundle promised the client (V121) — shown here because this is
+                where it is PRINTED: under the table, in the portal and in the PDF. The master
+                should not have to open the client's link to find out what his own estimate says.
+                Read-only on purpose: it is a snapshot taken when the bundle was applied, so it is
+                edited by editing the bundle, and re-wording the bundle never rewrites an estimate
+                the client already signed. */}
+            {(est.qualityNote?.trim() ?? '') !== '' && (
+              <div className="mt-4 rounded-card border border-border bg-surface p-4">
+                <h2 className="mb-1 text-sm font-bold text-primary">{t('estimate.qualityNote')}</h2>
+                <p className="mb-2 text-[11px] text-muted">{t('estimate.qualityNoteHint')}</p>
+                <p className="whitespace-pre-line text-xs leading-snug text-primary">
+                  {est.qualityNote?.trim()}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Desktop summary */}

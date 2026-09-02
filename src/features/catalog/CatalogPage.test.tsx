@@ -133,3 +133,32 @@ describe('CatalogPage — the master arranges and prunes his own catalog', () =>
     expect(screen.getByRole('button', { name: 'Стартовий набір' })).toBeTruthy();
   });
 });
+
+describe('CatalogPage — position explanations', () => {
+  const explained: CatalogItemResponse = {
+    ...item, id: 'c2', name: 'Підготовка ГКЛ під фарбування · Q4 (еліт)', category: 'Оздоблення',
+    description: 'Найвищий рівень: суцільне шпаклювання, під глянцеву фарбу та бокове світло.',
+  };
+
+  it('shows what a level means, in the master own catalog as well as in the picker', async () => {
+    // «та і сам майстер може не знати, бо не всі вкурсі таких рівнів» — the library is where he
+    // reads it before the line ever reaches an estimate.
+    vi.mocked(catalogApi.list).mockResolvedValue([explained]);
+
+    renderPage();
+
+    expect(await screen.findByText(/Найвищий рівень/)).toBeTruthy();
+    // The (i) holding the full text sits BESIDE the row, never inside it — a button within a
+    // button is invalid markup. Its accessible name is the position it explains.
+    expect(screen.getAllByRole('button', { name: explained.name })).toHaveLength(1);
+  });
+
+  it('offers no (i) on a position that needs no explaining', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([item]);
+
+    renderPage();
+
+    await screen.findByText(LONG);
+    expect(screen.queryByRole('button', { name: LONG })).toBeNull();
+  });
+});

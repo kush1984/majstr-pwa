@@ -29,9 +29,22 @@ export interface Section<T extends Arrangeable = Arrangeable> {
   items: T[];
 }
 
-/** Group rows into sections, in the order `sortOrder` puts them. */
-export function toSections<T extends Arrangeable>(items: T[]): Section<T>[] {
-  const sorted = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
+/**
+ * Group rows into sections, in the order `sortOrder` puts them.
+ *
+ * `sectionRank` is the catalog's exception and the estimate board must never pass one: there the
+ * order IS the master's drag, while the catalog has no grips and its folders have to come out in
+ * the order the work is done in — a sequence only the library knows (`categoryOrder`). Ranking the
+ * rows by it BEFORE grouping is what decides section order, since a section opens where its first
+ * row appears; inside a section `sortOrder` still rules, so a position the master typed himself
+ * stays where he put it.
+ */
+export function toSections<T extends Arrangeable>(
+  items: T[],
+  sectionRank?: (item: T) => number,
+): Section<T>[] {
+  const rank = sectionRank ?? (() => 0);
+  const sorted = [...items].sort((a, b) => rank(a) - rank(b) || a.sortOrder - b.sortOrder);
   const sections: Section<T>[] = [];
   const byCategory = new Map<string, Section<T>>();
   for (const item of sorted) {
