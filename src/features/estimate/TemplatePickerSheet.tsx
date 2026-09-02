@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -6,9 +6,19 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
-import { TRADE_EMOJI } from '@/lib/labels.ts';
-import type { EstimateTemplateSummary } from '@/api/types.ts';
+import { cn } from '@/lib/cn.ts';
+import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
+import { parseCustomTradeKey } from '@/features/catalog/TradeFilterChips.tsx';
+import type { EstimateTemplateSummary, Trade } from '@/api/types.ts';
+import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
 import { useEstimateTemplate, useEstimateTemplates } from './useEstimateTemplates.ts';
+
+/**
+ * At or below this many bundles a level opens by default — a short list was never the problem,
+ * and collapsing it would only add a tap. Lower than the catalog picker's cap because a template
+ * row is two lines tall and carries a chevron of its own.
+ */
+const AUTO_EXPAND_MAX_TEMPLATES = 6;
 
 /** One bundle the master picked, plus the positions ticked inside it — `itemIds: null` is the
  *  whole bundle, which is what a bundle nobody drilled into means. */
@@ -35,6 +45,17 @@ export type TemplatePick = { template: EstimateTemplateSummary; itemIds: string[
  * and the bundle drops out of the selection, because a bundle contributing nothing is not a thing
  * the master can mean. A bundle nobody drilled into keeps `itemIds: null` (all of it), so nothing
  * changes for the master who just wants the whole thing.
+ *
+ * <b>Trade is a LEVEL, and there are no chips.</b> The defaults used to sit behind a trade filter,
+ * which is exactly the wrong control here: a chip answers «покажи мені тільки це», while this sheet
+ * exists to compose ONE estimate — «з можливістю вибирати шаблони з різних трейдів для одного
+ * кошторису». The selection always survived the filter, but with the other trades hidden the master
+ * could not SEE it accumulating, so cross-trade picking read as impossible. The branches
+ * ({@link toTemplateTree}) show every trade at once, each carrying a badge with how many of its
+ * bundles are ticked, so a pick made in one trade stays visible while another is being browsed. A
+ * single branch draws no trade header at all — the rule the chips already had, which is why a
+ * one-trade master sees what he saw before. The search box stays: it is the control that actually
+ * shortens a long list, and it opens every branch while it runs.
  */
 export function TemplatePickerSheet({
   open,
@@ -57,7 +78,9 @@ export function TemplatePickerSheet({
   // for.
   const [subsets, setSubsets] = useState<Record<string, string[]>>({});
   const [query, setQuery] = useState('');
-  const [trade, setTrade] = useState<string | null>(null);
+  // Which branches the master opened, keyed per SECTION and trade — the same trade legitimately
+  // has both own bundles and defaults, and one shared key would open and close both together.
+  const [openState, setOpenState] = useState<Record<string, boolean>>({});
 
   // Order matters — it decides which bundle's wording survives a duplicate, so the selection is
   // an array in tap order, not a Set.
@@ -91,44 +114,68 @@ export function TemplatePickerSheet({
   );
 
   // A master with one busy trade can have 20+ default bundles, which is a long scroll to find
-  // «Паркан профнастил». The trade chips only help when there IS more than one trade, so the
-  // search box is the part that carries this; both filter the LIST only — a bundle already ticked
-  // stays ticked and still counts in the footer while it is filtered out of view.
+  // «Паркан профнастил» — so the search box stays even though the chips went. It filters the LIST
+  // only: a bundle already ticked stays ticked and still counts in the footer while it is filtered
+  // out of view.
   const needle = query.trim().toLowerCase();
   const matches = (tpl: EstimateTemplateSummary) =>
     needle === '' || tpl.name.toLowerCase().includes(needle);
+  const searching = needle !== '';
 
   const allDefaults = useMemo(() => (data ?? []).filter((t) => t.isDefault), [data]);
-  const trades = useMemo(
-    () => [...new Set(allDefaults.map((t) => t.trade ?? 'GENERAL'))],
-    [allDefaults],
-  );
 
   const own = useMemo(
     () => (data ?? []).filter((t) => !t.isDefault && matches(t)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, needle],
   );
-  const defaultsByTrade = useMemo(() => {
-    const groups = new Map<string, EstimateTemplateSummary[]>();
-    for (const tpl of allDefaults) {
-      const key = tpl.trade ?? 'GENERAL';
-      if (!matches(tpl) || (trade !== null && key !== trade)) continue;
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(tpl);
-      else groups.set(key, [tpl]);
-    }
-    return [...groups.entries()];
+  const defaults = useMemo(
+    () => allDefaults.filter(matches),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDefaults, needle, trade]);
+    [allDefaults, needle],
+  );
+  const ownBranches = useMemo(() => toTemplateTree(own), [own]);
+  const defaultBranches = useMemo(() => toTemplateTree(defaults), [defaults]);
+
+  const isOpen = (key: string, fallback: boolean) => searching || (openState[key] ?? fallback);
+  const toggleOpen = (key: string, fallback: boolean) =>
+    setOpenState((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
   const close = () => {
     setPreview(null);
     setPicked([]);
     setSubsets({});
     setQuery('');
-    setTrade(null);
+    setOpenState({});
     onClose();
+  };
+
+  /** One section's worth of branches — «Мої шаблони» and «Готові шаблони» render identically. */
+  const renderBranches = (scope: 'own' | 'default', branches: TemplateBranch[], total: number) => {
+    // One branch = nothing for a trade level to disambiguate, so it is not drawn and its bundles
+    // sit at the top of the section, exactly as they did before the tree.
+    const showTrade = branches.length > 1;
+    const autoOpen = !showTrade || total <= AUTO_EXPAND_MAX_TEMPLATES;
+    return (
+      <div className={showTrade ? 'space-y-2' : 'space-y-1.5'}>
+        {branches.map((branch) => {
+          const key = `${scope}:${branch.key}`;
+          return (
+            <TemplateBranchNode
+              key={key}
+              branch={branch}
+              showTrade={showTrade}
+              open={isOpen(key, autoOpen)}
+              onToggle={searching ? undefined : () => toggleOpen(key, autoOpen)}
+              picked={picked}
+              subsets={subsets}
+              onTogglePick={toggle}
+              onOpen={setPreview}
+            />
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -158,7 +205,7 @@ export function TemplatePickerSheet({
         <div className="space-y-5">
           {/* Sticky so it survives the scroll it exists to shorten. */}
           {allDefaults.length > 8 && (
-            <div className="sticky top-0 z-10 -mt-1 space-y-2 bg-surface pb-2 pt-1">
+            <div className="sticky top-0 z-10 -mt-1 bg-surface pb-2 pt-1">
               <input
                 type="search"
                 value={query}
@@ -167,22 +214,6 @@ export function TemplatePickerSheet({
                 aria-label={t('templates.searchPlaceholder')}
                 className="h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-sm text-primary placeholder:text-muted"
               />
-              {trades.length > 1 && (
-                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-                  <TradeChip active={trade === null} onClick={() => setTrade(null)}>
-                    {t('templates.filterAll')}
-                  </TradeChip>
-                  {trades.map((code) => (
-                    <TradeChip
-                      key={code}
-                      active={trade === code}
-                      onClick={() => setTrade(trade === code ? null : code)}
-                    >
-                      {TRADE_EMOJI[code] ?? '📦'} {t('trades.' + code)}
-                    </TradeChip>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
@@ -198,18 +229,7 @@ export function TemplatePickerSheet({
                 {t(needle ? 'templates.nothingFound' : 'templates.emptyMy')}
               </p>
             ) : (
-              <div className="space-y-1.5">
-                {own.map((tpl) => (
-                  <TemplateRow
-                    key={tpl.id}
-                    template={tpl}
-                    selected={picked.includes(tpl.id)}
-                    pickedCount={subsets[tpl.id]?.length ?? null}
-                    onToggle={() => toggle(tpl.id)}
-                    onOpen={() => setPreview(tpl)}
-                  />
-                ))}
-              </div>
+              renderBranches('own', ownBranches, own.length)
             )}
           </section>
 
@@ -218,32 +238,12 @@ export function TemplatePickerSheet({
             <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
               {t('templates.defaultTemplates')}
             </h3>
-            {defaultsByTrade.length === 0 ? (
+            {defaultBranches.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted">
-                {t(needle || trade !== null ? 'templates.nothingFound' : 'templates.emptyNone')}
+                {t(needle ? 'templates.nothingFound' : 'templates.emptyNone')}
               </p>
             ) : (
-              <div className="space-y-4">
-                {defaultsByTrade.map(([trade, items]) => (
-                  <div key={trade}>
-                    <div className="mb-1.5 text-xs font-semibold text-muted">
-                      {TRADE_EMOJI[trade as keyof typeof TRADE_EMOJI] ?? '📦'} {t('trades.' + trade)}
-                    </div>
-                    <div className="space-y-1.5">
-                      {items.map((tpl) => (
-                        <TemplateRow
-                          key={tpl.id}
-                          template={tpl}
-                          selected={picked.includes(tpl.id)}
-                          pickedCount={subsets[tpl.id]?.length ?? null}
-                          onToggle={() => toggle(tpl.id)}
-                          onOpen={() => setPreview(tpl)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              renderBranches('default', defaultBranches, defaults.length)
             )}
           </section>
 
@@ -261,28 +261,91 @@ export function TemplatePickerSheet({
   );
 }
 
-function TradeChip({
-  active,
-  onClick,
-  children,
+/** One trade and its bundles. With a single branch the trade header is not drawn at all. */
+function TemplateBranchNode({
+  branch,
+  showTrade,
+  open,
+  onToggle,
+  picked,
+  subsets,
+  onTogglePick,
+  onOpen,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
+  branch: TemplateBranch;
+  showTrade: boolean;
+  open: boolean;
+  /** Absent while searching — every branch stays open, so a collapsed one cannot swallow a hit. */
+  onToggle?: () => void;
+  picked: readonly string[];
+  subsets: Record<string, string[]>;
+  onTogglePick: (id: string) => void;
+  onOpen: (tpl: EstimateTemplateSummary) => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      // h-11, matching the search box: 44 px is the thumb minimum, and a filter row is exactly the
-      // kind of secondary control that quietly ends up at 32 px and unusable one-handed.
-      className={`h-11 flex-shrink-0 whitespace-nowrap rounded-full border px-3.5 text-xs font-semibold ${
-        active ? 'border-brand bg-brand-soft text-brand' : 'border-border bg-surface text-muted'
-      }`}
+  const { t } = useTranslation();
+  const custom = parseCustomTradeKey(branch.key) !== null;
+  // A custom trade with no name left is still a real branch — it reads OTHER underneath (V91),
+  // which is the honest label for it.
+  const label = custom
+    ? (branch.customName?.trim() ?? '') || t('trades.OTHER')
+    : t('trades.' + branch.key);
+  const pickedHere = branch.templates.filter((tpl) => picked.includes(tpl.id)).length;
+
+  const rows = (
+    <div
+      className={cn(
+        'space-y-1.5',
+        // A thin rail, not an indent: at 375px every level of padding is width the bundle name
+        // loses, and the name is the thing being read.
+        showTrade && 'mt-1.5 border-l-2 border-brand-soft pl-2',
+      )}
     >
-      {children}
-    </button>
+      {branch.templates.map((tpl) => (
+        <TemplateRow
+          key={tpl.id}
+          template={tpl}
+          selected={picked.includes(tpl.id)}
+          pickedCount={subsets[tpl.id]?.length ?? null}
+          onToggle={() => onTogglePick(tpl.id)}
+          onOpen={() => onOpen(tpl)}
+        />
+      ))}
+    </div>
+  );
+
+  if (!showTrade) return rows;
+
+  return (
+    <section>
+      <button
+        type="button"
+        data-testid="template-trade"
+        onClick={onToggle}
+        disabled={onToggle == null}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-brand-soft px-3.5 py-2.5 text-left"
+      >
+        {onToggle && (
+          <span
+            aria-hidden
+            className={cn('text-[10px] text-muted transition-transform', open && 'rotate-90')}
+          >
+            ▶
+          </span>
+        )}
+        <span aria-hidden>{custom ? CUSTOM_TRADE_EMOJI : TRADE_EMOJI[branch.key as Trade]}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-bold text-primary">{label}</span>
+        {/* The point of the whole tree: a closed branch must still say it holds picks, or a
+            selection spanning two trades looks like it was lost when the master browses on. */}
+        {pickedHere > 0 && (
+          <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+            {pickedHere}
+          </span>
+        )}
+        <span className="text-xs font-semibold text-muted">{branch.templates.length}</span>
+      </button>
+      {open && rows}
+    </section>
   );
 }
 

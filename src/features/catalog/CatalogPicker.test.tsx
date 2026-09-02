@@ -180,3 +180,73 @@ describe('CatalogPicker — description', () => {
     expect(screen.getAllByRole('button', { name: 'Шпаклювання стін' })).toHaveLength(1);
   });
 });
+
+describe('CatalogPicker — trade is the top level', () => {
+  /** Two trades, big enough that the tree opens on the TRADES — the shape that made the master
+   *  ask «не зрозуміло яка категорія до чого відноситься». */
+  function twoTradeCatalog(): CatalogItemResponse[] {
+    return [
+      ...bigCatalog(),
+      ...['Монтаж каркаса', 'Обшивка ГКЛ', 'Ґрунтування ГКЛ'].map((name, i) =>
+        anItem({ id: `d${i}`, name, trade: 'DRYWALL', category: 'Каркас і обшивка' }),
+      ),
+    ];
+  }
+
+  it('names the trade above its folders — the thing chips could not do with two ticked', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTradeCatalog());
+    renderPicker();
+
+    const trades = await screen.findAllByTestId('catalog-trade');
+    expect(trades).toHaveLength(2);
+    expect(trades[0].textContent).toContain('Малярні роботи');
+    expect(trades[1].textContent).toContain('Гіпсокартон');
+    expect(trades[1].textContent).toContain('3'); // and how much is inside
+  });
+
+  it('a big multi-trade catalog opens on the TRADES, and one tap opens one trade', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTradeCatalog());
+    renderPicker();
+
+    const trades = await screen.findAllByTestId('catalog-trade');
+    expect(screen.queryAllByTestId('catalog-category')).toHaveLength(0);
+
+    fireEvent.click(trades[1]); // Гіпсокартон
+    await waitFor(() => expect(screen.getAllByTestId('catalog-category')).toHaveLength(1));
+    expect(screen.getByText('Каркас і обшивка')).toBeTruthy();
+    // The painter's folders stay shut: one trade's contents cannot be mistaken for another's.
+    expect(screen.queryByText('Плиточні роботи')).toBeNull();
+  });
+
+  it('draws no trade level for a one-trade master — nothing to disambiguate', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(bigCatalog());
+    renderPicker();
+
+    await screen.findAllByTestId('catalog-category');
+    expect(screen.queryAllByTestId('catalog-trade')).toHaveLength(0);
+  });
+
+  it('a shared position shows under both trades but is added ONCE', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([
+      anItem({ id: 'p', name: 'Фарбування стін', trade: 'PAINTER', category: 'Малярні роботи' }),
+      anItem({
+        id: 'hatch',
+        name: 'Установка люка-ревізії',
+        trade: 'PAINTER',
+        category: 'Малярні роботи',
+        sharedTrades: [{ trade: 'DRYWALL', category: 'Каркас і обшивка' }],
+      }),
+      anItem({ id: 'd', name: 'Монтаж каркаса', trade: 'DRYWALL', category: 'Каркас і обшивка' }),
+    ]);
+    const { onPick } = renderPicker();
+
+    const rows = await screen.findAllByTestId('catalog-row');
+    expect(rows).toHaveLength(4); // 2 painter + 2 drywall, the hatch counted in both
+    expect(screen.getAllByText('Установка люка-ревізії')).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByText('Установка люка-ревізії')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
+    await waitFor(() => expect(onPick).toHaveBeenCalled());
+    expect(vi.mocked(onPick).mock.calls[0][0].map((i) => i.id)).toEqual(['hatch']);
+  });
+});

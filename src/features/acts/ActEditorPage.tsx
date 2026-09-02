@@ -690,7 +690,7 @@ export function ActEditorPage() {
       </Section>
 
       <Modal open={catalogPicker} onClose={() => setCatalogPicker(false)} size="lg"
-        title={t('acts.addAdditionalFromCatalog')}>
+        title={t('acts.additionalFromCatalogTitle')}>
         <CatalogPicker
           hint={t('acts.additionalQtyHint')}
           onPick={(picks) => {

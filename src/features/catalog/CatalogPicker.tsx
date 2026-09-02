@@ -10,11 +10,11 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { toSections } from '@/features/estimate/estimateArrange.ts';
+import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useCatalog } from './useCatalog.ts';
-import { TradeFilterChips, tradeMatches, type TradeKey } from './TradeFilterChips.tsx';
-import { asSelectedTradeSees, catalogSectionRank } from './sharedCategory.ts';
-import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
+import { parseCustomTradeKey } from './TradeFilterChips.tsx';
+import { toTradeTree, type TradeBranch } from './catalogTree.ts';
+import type { CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
 
 type TypeFilter = ItemType | 'ALL';
 
@@ -25,9 +25,10 @@ const TYPE_FILTERS: { value: TypeFilter; labelKey: string }[] = [
 ];
 
 /**
- * At or below this many positions every category opens by default: a flat list was never the
- * problem at this size, and collapsing it would only add a tap. Above it the master gets the
- * folders first — which is the whole point («не навантажуй відразу всім»).
+ * At or below this many positions a level opens by default — the trades over the whole catalog,
+ * the folders inside one trade: a flat list was never the problem at this size, and collapsing it
+ * would only add a tap. Above it the master gets the headings first — which is the whole point
+ * («не навантажуй відразу всім»).
  */
 const AUTO_EXPAND_MAX_ITEMS = 10;
 
@@ -37,15 +38,19 @@ const AUTO_EXPAND_MAX_ITEMS = 10;
  * once. Before it there were two near-identical copies plus a surface with no browse at all, and
  * only the copies could ever be fixed together.
  *
- * <p>Positions are grouped into their CATEGORY, collapsed, because the flat list is what a master
- * told us was unusable: «не класифіковано, не систематизовано, плоскі списки, логічна цепочка як
- * дерево програми просто відсутня». The grouping is {@link toSections} — the same function the
- * catalog page groups by, not a second copy of the arithmetic — so a category means exactly the
- * same thing on both screens, ordered by the master's own `sortOrder`.</p>
+ * <p>Positions are a TREE — trade → category → position, collapsed — because the flat list is what
+ * a master told us was unusable: «не класифіковано, не систематизовано, плоскі списки, логічна
+ * цепочка як дерево програми просто відсутня». The grouping is {@link toTradeTree} over
+ * {@link toSections}, the same function the catalog page groups by, so a category means exactly
+ * the same thing on both screens and comes out in the library's execution order.</p>
  *
- * <p><b>Trade stays a chip row, not a level of the tree.</b> A master's catalog holds only the
- * trades he works, most often one (`TradeFilterChips` hides itself under two), so a trade level
- * would be a tap that answers nothing. The volume — and the complaint — is INSIDE one trade.</p>
+ * <p><b>Trade is a LEVEL, and there are no chips.</b> It used to be a chip row on the argument that
+ * a master works one trade and a level would be a tap answering nothing — true of him then, false
+ * of him now: with several trades ticked the folders were contiguous per trade but unlabelled, so
+ * «не зрозуміло яка категорія до чого відноситься», which is the same complaint the folders were
+ * built to answer, one level up. The tree says it outright and needs no filter to do it. A single
+ * branch renders no trade level at all (the rule the chips already had — they hid themselves under
+ * two), so a one-trade master sees exactly what he saw before.</p>
  *
  * <p><b>Search shows only the categories that HAVE a hit, and flattens nothing.</b> A category
  * with no match does not render at all; the ones that remain are expanded and their header is
@@ -80,7 +85,6 @@ export function CatalogPicker({
   const { data, isPending } = useCatalog();
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
-  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -92,23 +96,25 @@ export function CatalogPicker({
 
   const searching = q.trim().length > 0;
 
+  // The flat, DEDUPED list — one entry per position, whatever the tree does with it. It is what
+  // the basket adds and what decides "nothing found", so a position two branches both show can
+  // never be added twice or counted twice.
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return asSelectedTradeSees(
-      (data ?? [])
-        .filter((i) => typeFilter === 'ALL' || i.type === typeFilter)
-        .filter((i) => tradeMatches(i, tradeFilter))
-        .filter((i) => !needle || i.name.toLowerCase().includes(needle)),
-      tradeFilter,
-    );
-  }, [data, q, typeFilter, tradeFilter]);
+    return (data ?? [])
+      .filter((i) => typeFilter === 'ALL' || i.type === typeFilter)
+      .filter((i) => !needle || i.name.toLowerCase().includes(needle));
+  }, [data, q, typeFilter]);
 
-  const sections = useMemo(() => toSections(filtered, catalogSectionRank), [filtered]);
+  const branches = useMemo(() => toTradeTree(filtered), [filtered]);
 
-  const autoExpand = sections.length <= 1 || filtered.length <= AUTO_EXPAND_MAX_ITEMS;
-  const isOpen = (category: string) => searching || (openState[category] ?? autoExpand);
-  const toggleSection = (category: string) =>
-    setOpenState((prev) => ({ ...prev, [category]: !(prev[category] ?? autoExpand) }));
+  // One branch = nothing for a trade level to disambiguate, so it is not drawn and its categories
+  // sit at the top level, exactly as they did before the tree.
+  const showTrades = branches.length > 1;
+  const autoOpenTrade = !showTrades || filtered.length <= AUTO_EXPAND_MAX_ITEMS;
+  const isOpen = (key: string, fallback: boolean) => searching || (openState[key] ?? fallback);
+  const toggleOpen = (key: string, fallback: boolean) =>
+    setOpenState((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -139,7 +145,6 @@ export function CatalogPicker({
 
   return (
     <div>
-      <TradeFilterChips items={data ?? []} value={tradeFilter} onChange={setTradeFilter} />
       <div className="mb-3 flex gap-2">
         {TYPE_FILTERS.map((f) => (
           <Chip key={f.value} active={typeFilter === f.value} onClick={() => setTypeFilter(f.value)}>
@@ -164,13 +169,21 @@ export function CatalogPicker({
         ) : filtered.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
         ) : (
-          sections.map((section) => (
-            <CategoryFolder
-              key={section.category}
-              category={section.category}
-              items={section.items}
-              open={isOpen(section.category)}
-              onToggle={searching ? undefined : () => toggleSection(section.category)}
+          branches.map((branch) => (
+            <TradeBranchNode
+              key={branch.key}
+              branch={branch}
+              showTrade={showTrades}
+              open={isOpen(tradeOpenKey(branch), autoOpenTrade)}
+              onToggle={searching ? undefined : () => toggleOpen(tradeOpenKey(branch), autoOpenTrade)}
+              isCategoryOpen={(category, fallback) =>
+                isOpen(categoryOpenKey(branch, category), fallback)
+              }
+              onToggleCategory={
+                searching
+                  ? undefined
+                  : (category, fallback) => toggleOpen(categoryOpenKey(branch, category), fallback)
+              }
               selected={selected}
               blocked={blocked}
               single={single}
@@ -190,6 +203,118 @@ export function CatalogPicker({
         </div>
       )}
     </div>
+  );
+}
+
+// Open state is keyed per LEVEL and per BRANCH: the same category name legitimately exists under
+// two trades («Підготовка» is a phase in most of them), and one shared key would open and close
+// both folders together.
+const tradeOpenKey = (branch: TradeBranch) => `t:${branch.key}`;
+const categoryOpenKey = (branch: TradeBranch, category: string) => `c:${branch.key}|${category}`;
+
+/** One trade and its folders. With a single branch the trade header is not drawn at all. */
+function TradeBranchNode({
+  branch,
+  showTrade,
+  open,
+  onToggle,
+  isCategoryOpen,
+  onToggleCategory,
+  selected,
+  blocked,
+  single,
+  busy,
+  onRow,
+}: {
+  branch: TradeBranch;
+  showTrade: boolean;
+  open: boolean;
+  /** Absent while searching — every level stays open, see the picker's doc. */
+  onToggle?: () => void;
+  isCategoryOpen: (category: string, fallback: boolean) => boolean;
+  onToggleCategory?: (category: string, fallback: boolean) => void;
+  selected: ReadonlySet<string>;
+  blocked: ReadonlySet<string>;
+  single?: boolean;
+  busy: boolean;
+  onRow: (item: CatalogItemResponse) => void;
+}) {
+  const { t } = useTranslation();
+  const custom = parseCustomTradeKey(branch.key) !== null;
+  // A custom trade with no name left is still a real branch — it reads OTHER underneath (V91),
+  // which is the honest label for it.
+  const label = custom
+    ? (branch.customName?.trim() ?? '') || t('trades.OTHER')
+    : t('trades.' + branch.key);
+  const picked = branch.sections.reduce(
+    (n, s) => n + s.items.filter((i) => selected.has(i.id)).length,
+    0,
+  );
+  // Inside ONE trade the old rule still applies: a short trade opens its folders, a long one
+  // shows them closed.
+  const autoOpenCategory = branch.sections.length <= 1 || branch.count <= AUTO_EXPAND_MAX_ITEMS;
+
+  const folders = (
+    <div
+      className={cn(
+        'space-y-2',
+        // A thin rail, not an indent: at 375px every level of padding is width the position name
+        // loses, and the name is the thing being read.
+        showTrade && 'mt-1.5 border-l-2 border-brand-soft pl-2',
+      )}
+    >
+      {branch.sections.map((section) => (
+        <CategoryFolder
+          key={section.category}
+          category={section.category}
+          items={section.items}
+          open={isCategoryOpen(section.category, autoOpenCategory)}
+          onToggle={
+            onToggleCategory
+              ? () => onToggleCategory(section.category, autoOpenCategory)
+              : undefined
+          }
+          selected={selected}
+          blocked={blocked}
+          single={single}
+          busy={busy}
+          onRow={onRow}
+        />
+      ))}
+    </div>
+  );
+
+  if (!showTrade) return folders;
+
+  return (
+    <section>
+      <button
+        type="button"
+        data-testid="catalog-trade"
+        onClick={onToggle}
+        disabled={onToggle == null}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-brand-soft px-3.5 py-2.5 text-left"
+      >
+        {onToggle && (
+          <span
+            aria-hidden
+            className={cn('text-[10px] text-muted transition-transform', open && 'rotate-90')}
+          >
+            ▶
+          </span>
+        )}
+        <span aria-hidden>{custom ? CUSTOM_TRADE_EMOJI : TRADE_EMOJI[branch.key as Trade]}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-bold text-primary">{label}</span>
+        {picked > 0 && (
+          <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+            {picked}
+          </span>
+        )}
+        <span className="text-xs font-semibold text-muted">{branch.count}</span>
+      </button>
+      {open && folders}
+    </section>
   );
 }
 

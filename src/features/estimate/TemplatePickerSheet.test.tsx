@@ -274,3 +274,97 @@ describe('TemplatePickerSheet — what a bundle promises', () => {
     expect(container.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(0);
   });
 });
+
+/**
+ * The chips are gone and trade is a level. The complaint they answered — «з можливістю вибирати
+ * шаблони з різних трейдів для одного кошторису» — was never about the DATA (the selection always
+ * survived the filter); it was that an active chip hid the other trades, so a cross-trade pick was
+ * invisible while it was being made.
+ */
+describe('TemplatePickerSheet — trade is the top level', () => {
+  /** Two trades, long enough that the branches start shut — the shape a real master's list has. */
+  function twoTradeDefaults(): EstimateTemplateSummary[] {
+    const builder = Array.from({ length: 7 }, (_, i) => ({
+      id: `b${i}`, name: `Кладка ${i}`, trade: 'BUILDER' as const, customTradeId: null,
+      customTradeName: null, isDefault: true, itemCount: 5,
+    }));
+    const tiling = ['Санвузол повний', 'Підлога плиткою'].map((name, i) => ({
+      id: `t${i}`, name, trade: 'TILING' as const, customTradeId: null, customTradeName: null,
+      isDefault: true, itemCount: 8,
+    }));
+    return [...builder, ...tiling];
+  }
+
+  it('names each trade above its bundles, in the library order, and opens on the TRADES', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...twoTradeDefaults()]);
+    renderPicker(vi.fn());
+
+    const trades = await screen.findAllByTestId('template-trade');
+    expect(trades).toHaveLength(2);
+    // TILING before BUILDER — the library's own trade order, the one the catalog is ranked by.
+    expect(trades[0].textContent).toContain('Плитка');
+    expect(trades[1].textContent).toContain('Будівельник');
+    expect(trades[1].textContent).toContain('7'); // and how much is inside
+    expect(screen.queryByText('Кладка 0')).toBeNull();
+
+    fireEvent.click(trades[1]);
+    expect(await screen.findByText('Кладка 0')).toBeTruthy();
+    // The other trade stays shut: one trade's bundles cannot be mistaken for another's.
+    expect(screen.queryByText('Санвузол повний')).toBeNull();
+  });
+
+  it('a bundle ticked in one trade stays counted while another trade is browsed', async () => {
+    // The whole reason the chips went: this is one estimate built out of two trades.
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...twoTradeDefaults()]);
+    const onPick = vi.fn();
+    renderPicker(onPick);
+
+    const trades = await screen.findAllByTestId('template-trade');
+    fireEvent.click(trades[0]); // Плитка
+    fireEvent.click(toggleFor('Санвузол повний'));
+    fireEvent.click(trades[0]); // shut it again and move on
+
+    // The branch says it still holds a pick, so the selection cannot read as lost.
+    await waitFor(() => expect(screen.queryByText('Санвузол повний')).toBeNull());
+    expect(screen.getAllByTestId('template-trade')[0].textContent).toContain('1');
+
+    fireEvent.click(screen.getAllByTestId('template-trade')[1]); // Будівельник
+    fireEvent.click(await screen.findByText('Кладка 2'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити кошторис (2)' }));
+    await waitFor(() => expect(onPick).toHaveBeenCalled());
+    expect(vi.mocked(onPick).mock.calls[0][0].map((p: TemplatePick) => p.template.id)).toEqual([
+      't0',
+      'b2',
+    ]);
+  });
+
+  it('draws no trade level for a one-trade list — nothing to disambiguate', async () => {
+    const builder = Array.from({ length: 9 }, (_, i) => ({
+      id: `b${i}`, name: `Кладка ${i}`, trade: 'BUILDER' as const, customTradeId: null,
+      customTradeName: null, isDefault: true, itemCount: 5,
+    }));
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...builder]);
+    renderPicker(vi.fn());
+
+    expect(await screen.findByText('Кладка 0')).toBeTruthy();
+    expect(screen.queryAllByTestId('template-trade')).toHaveLength(0);
+  });
+
+  it('a search opens every branch — a collapsed trade cannot swallow a hit', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...twoTradeDefaults()]);
+    renderPicker(vi.fn());
+
+    await screen.findAllByTestId('template-trade');
+    expect(screen.queryByText('Санвузол повний')).toBeNull();
+
+    // A needle that hits BOTH trades, so the trade level is still drawn — and every branch it
+    // draws is open, hit or not, the same rule the catalog picker's folders follow.
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'к' } });
+
+    expect(await screen.findByText('Підлога плиткою')).toBeTruthy();
+    expect(screen.getByText('Кладка 0')).toBeTruthy();
+    expect(screen.queryAllByTestId('template-trade')).toHaveLength(2);
+    expect(screen.queryByText('Санвузол повний')).toBeNull(); // no 'к' in it
+  });
+});
