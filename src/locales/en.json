@@ -917,6 +917,25 @@
     "savePhotoPartial": "Your plan allows {{max}} receipt photos per object. The first {{saved}} of {{total}} will be saved; every line was added to the estimate.",
     "photosCapReached": "This object has reached its receipt-photo limit ({{max}}). The lines were added, the photos were not saved."
   },
+  "dictation": {
+    "fabLabel": "Dictate positions",
+    "title": "Dictate positions",
+    "hint": "Type or dictate with your keyboard’s microphone — one position per line, or just one after another. We split it into a name, a quantity and a unit and pull prices from your catalog.",
+    "fieldLabel": "Text with positions",
+    "placeholder": "For example: hang wallpaper 20 square metres, plaster the walls to beacons 35 square metres at 250, install skirting 18 metres",
+    "catalogHint": "Prices come from your catalog. If a position is not there, we say so in the list and you type the price yourself.",
+    "recognize": "Recognize",
+    "parsing": "Reading the text…",
+    "reviewHint": "Check the positions before adding. Prices from here are not added to the catalog.",
+    "nothingFound": "No positions found in the text. Try being more specific — what is done, how much and in what units.",
+    "backToText": "Back to the text",
+    "notInCatalog": "Not in your catalog — type the price",
+    "spokenAs": "You said: {{text}}",
+    "unpricedWarning_one": "Positions with no price: {{count}}. You can add them and fill the price in the estimate later.",
+    "unpricedWarning_other": "Positions with no price: {{count}}. You can add them and fill the prices in the estimate later.",
+    "addN": "Add {{count}} positions",
+    "added": "Added {{count}} positions"
+  },
   "import": {
     "title": "Import price list",
     "intro": "Move your price list into Majstr: upload a file or paste rows from a table. The columns you need are name, price, unit (fix the rest on the next step).",

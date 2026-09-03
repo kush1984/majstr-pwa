@@ -29,6 +29,8 @@ import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
+import { DictationSheet } from './DictationSheet.tsx';
+import { hasOnScreenKeyboard } from '@/lib/deviceInput.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
@@ -130,6 +132,9 @@ export function EstimateEditorPage() {
   const duplicate = useDuplicateEstimate(id);
 
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [dictationOpen, setDictationOpen] = useState(false);
+  // Evaluated on render, not once at module load, so a DevTools device-mode toggle is picked up.
+  const onScreenKeyboard = hasOnScreenKeyboard();
   const [pdfSheetOpen, setPdfSheetOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const { data: me } = useMe(); // for the custom trades on «зберегти як шаблон»
@@ -571,6 +576,20 @@ export function EstimateEditorPage() {
                 onClick={() => close(() => setMarkupOpen(true))}
               />
             )}
+            {/* Typed or dictated with the keyboard's own microphone — we add no audio,
+                the OS already transcribes Ukrainian better than we could. Online-only: the parse
+                is a model call.
+
+                Phones and tablets ONLY: the whole point is the 🎤 on the on-screen keyboard, and
+                Windows voice typing has no Ukrainian at all — on a desktop this would be an
+                invitation the OS cannot honour. */}
+            {!signed && onScreenKeyboard && (
+              <FabAction
+                icon="🎤"
+                label={t('dictation.fabLabel')}
+                onClick={() => close(guard(() => setDictationOpen(true)))}
+              />
+            )}
             {!signed && (
               <FabAction
                 icon="🧾"
@@ -622,6 +641,8 @@ export function EstimateEditorPage() {
         onClose={() => setAddOpen(false)}
         onAdded={markTouched}
       />
+
+      <DictationSheet open={dictationOpen} onClose={() => setDictationOpen(false)} estimateId={id} />
 
       {projectId && (
         <ReceiptImportSheet

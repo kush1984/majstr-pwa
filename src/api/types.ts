@@ -1260,6 +1260,45 @@ export interface ReceiptItemsCommitItem {
 }
 
 // ---------------------------------------------------------------------------
+// Dictation — free text the master typed or dictated with the keyboard's own
+// microphone → positions, matched against HIS catalog. Cut 0: no audio, no
+// offline, no PRO gate (an hourly per-account counter bounds it instead).
+// ---------------------------------------------------------------------------
+
+/** One proposed position. `issues` is the whole point of the review: a token is present when a
+ *  value could NOT be established, so nothing is quietly filled in behind the master's back.
+ *  `'catalog'` = nothing in his price list matched what he said (so the price is his to type),
+ *  `'unit'` / `'quantity'` / `'price'` = it was not spoken and the catalog had none. */
+export interface DictationItem {
+  /** The catalog's own wording when matched, otherwise the spoken words. */
+  name: string;
+  /** What he actually said — kept so a wrong match is visible, not silent. */
+  spokenName: string;
+  unit: Unit | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  type: ItemType;
+  category: string | null;
+  catalogItemId: string | null;
+  issues: string[];
+}
+
+export interface DictationParseResponse {
+  items: DictationItem[];
+}
+
+/** Same shape as the receipt commit, kept separate on purpose — the two flows are free to
+ *  diverge (the backend gave dictation its own DTO for the same reason). */
+export interface DictationCommitItem {
+  name: string;
+  unit: Unit;
+  quantity: number;
+  unitPrice: number;
+  type: ItemType;
+  category: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Object photos — private receipts + progress photos shareable with the client.
 // ---------------------------------------------------------------------------
 
