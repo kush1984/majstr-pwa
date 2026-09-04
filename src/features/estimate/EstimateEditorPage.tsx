@@ -164,7 +164,7 @@ export function EstimateEditorPage() {
     if (!row) return;
     scrollTo.current = null;
     scrollRowIntoView(row);
-  }, [lastTouched, estimate.data, addOpen, editing]);
+  }, [lastTouched, estimate.data, addOpen, editing, dictationOpen, receiptOpen]);
 
   if (estimate.isPending) {
     return (
@@ -644,7 +644,7 @@ export function EstimateEditorPage() {
         onAdded={markTouched}
       />
 
-      <DictationSheet open={dictationOpen} onClose={() => setDictationOpen(false)} estimateId={id} />
+      <DictationSheet open={dictationOpen} onClose={() => setDictationOpen(false)} estimateId={id} onAdded={markTouched} />
 
       {projectId && (
         <ReceiptImportSheet

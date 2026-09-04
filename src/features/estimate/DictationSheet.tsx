@@ -39,6 +39,11 @@ interface Draft {
   price: string;
   unit: Unit | '';
   type: ItemType;
+  /** The matched catalog row's category — carried onto the estimate line, so the position lands
+   *  in its category on the estimate board instead of «Без категорії» (master feedback 2026-09-04:
+   *  «чому воно не підтягує трейд і категорію»). Same rule as name/unit/price: the parse read
+   *  this, so the commit sends it. Editable in the drawer is out of scope for now. */
+  category: string | null;
   /** Did his own price list have this position? A miss means the price is his to type. */
   matched: boolean;
   /** The matched catalog row's id — remembered so we can teach a synonym pointing at it after commit. */
@@ -65,6 +70,7 @@ function toDrafts(items: DictationItem[]): Draft[] {
     price: it.unitPrice != null && it.unitPrice > 0 ? String(it.unitPrice) : '',
     unit: it.unit ?? '',
     type: it.type,
+    category: it.category ?? null,
     matched: it.catalogItemId != null,
     catalogItemId: it.catalogItemId ?? null,
     saveToCatalog: false,
@@ -96,10 +102,18 @@ export function DictationSheet({
   open,
   onClose,
   estimateId,
+  onAdded,
 }: {
   open: boolean;
   onClose: () => void;
   estimateId: string;
+  /**
+   * Ids of the just-appended estimate lines, so the parent can highlight them (green new / orange
+   * touched, {@code EstimateEditorPage.markTouched}) and scroll the first one into view. Called
+   * BEFORE `onClose`, so `lastTouched` lands while this sheet is still on screen; the actual scroll
+   * happens after the modal-lock lifts, driven by `estimate.data` refetch after `invalidateEstimate`.
+   */
+  onAdded?: (ids: string[]) => void;
 }) {
   const { t } = useTranslation();
   const invalidateEstimate = useInvalidateEstimate(estimateId);
@@ -162,7 +176,7 @@ export function DictationSheet({
   const commit = async () => {
     setCommitting(true);
     try {
-      await dictationApi.commit(
+      const updated = await dictationApi.commit(
         estimateId,
         included.map((d) => ({
           name: d.name.trim(),
@@ -170,9 +184,16 @@ export function DictationSheet({
           quantity: num(d.quantity),
           unitPrice: num(d.price),
           type: d.type,
-          category: null,
+          // Carried from the matched catalog row; null on a genuinely new position. The estimate
+          // line uses this to sort into its category on the board.
+          category: d.category,
         })),
       );
+      // Backend `appendItems` orders by ascending sortOrder and appends new rows at the tail —
+      // so the last `included.length` items in the response are exactly the ones just added.
+      // Tell the editor about them so it can green-highlight + scroll (see `markTouched`).
+      const newIds = updated.items.slice(-included.length).map((r) => r.id);
+      onAdded?.(newIds);
       invalidateEstimate();
       // Only AFTER the lines actually landed: the estimate is what he asked for, the catalog copy is
       // a bonus, and a failing copy must never look like the dictation failed.
@@ -362,44 +383,42 @@ export function DictationSheet({
                           {d.include ? '🗑' : '↩'}
                         </button>
                       </div>
-                      {/* Two different facts, both worth a line: whether his price list answered,
-                          and — when it answered with a different wording — what he actually said.
-                          The «впишіть ціну» hint HIDES the moment the price is typed — otherwise it
-                          keeps hectoring the master after he has done exactly what it asked (master
-                          feedback 2026-09-04: «ціна ж є, чому воно її тут згадує»). Once priced,
-                          the row is fine; a soft «нова позиція» line says so instead. */}
-                      {!d.matched && (
-                        <>
-                          <p className="mt-1 text-xs text-amber-700">
+                      {/* An unmatched row gets a distinct «Нова позиція» card with the save-to-catalog
+                          offer front and centre — a plain inline checkbox was easy to miss (master
+                          feedback 2026-09-04: «воно не питає чи додати в каталог, якщо такої
+                          позиції нема взагалі»). The card also lets the amber «впишіть ціну» hint
+                          collapse to a soft «нова позиція» line once the price is there («ціна ж є,
+                          чому воно її тут згадує»). */}
+                      {!d.matched && d.include && (
+                        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2">
+                          <p className="text-xs font-semibold text-amber-800">
                             {noPrice ? t('dictation.notInCatalog') : t('dictation.newPositionOk')}
                           </p>
-                          {d.include && (
-                            // Offered on a miss only, and DEAD until the row has a price. A 0 ₴
-                            // catalog row is exactly what this screen's flagging rule exists to
-                            // prevent — saved here, the NEXT dictation would match it and price the
-                            // line at 0 silently, a week later, through the back door.
-                            <label
-                              className={cn(
-                                'mt-2 flex items-start gap-2 text-xs',
-                                noPrice ? 'text-muted' : 'text-secondary',
+                          {/* Offered on a miss only, and DEAD until the row has a price. A 0 ₴
+                              catalog row is exactly what this screen's flagging rule exists to
+                              prevent — saved here, the NEXT dictation would match it and price the
+                              line at 0 silently, a week later, through the back door. */}
+                          <label
+                            className={cn(
+                              'mt-2 flex items-start gap-2 text-sm',
+                              noPrice ? 'text-muted' : 'text-secondary',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-5 w-5 flex-shrink-0"
+                              checked={d.saveToCatalog && !noPrice}
+                              disabled={noPrice}
+                              onChange={(e) => patch(d.key, { saveToCatalog: e.target.checked })}
+                            />
+                            <span>
+                              {t('dictation.saveToCatalog')}
+                              {noPrice && (
+                                <span className="mt-0.5 block text-xs">{t('dictation.saveNeedsPrice')}</span>
                               )}
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 h-4 w-4 flex-shrink-0"
-                                checked={d.saveToCatalog && !noPrice}
-                                disabled={noPrice}
-                                onChange={(e) => patch(d.key, { saveToCatalog: e.target.checked })}
-                              />
-                              <span>
-                                {t('dictation.saveToCatalog')}
-                                {noPrice && (
-                                  <span className="block">{t('dictation.saveNeedsPrice')}</span>
-                                )}
-                              </span>
-                            </label>
-                          )}
-                        </>
+                            </span>
+                          </label>
+                        </div>
                       )}
                       {d.matched && wordingDiffers(d.spokenName, d.name) && (
                         <>

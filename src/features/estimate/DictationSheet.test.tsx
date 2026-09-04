@@ -36,12 +36,23 @@ function item(over: Partial<DictationItem> = {}): DictationItem {
   };
 }
 
-function renderSheet() {
+function renderSheet(onAdded?: (ids: string[]) => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<DictationSheet open onClose={() => {}} estimateId="e1" />, { wrapper });
+  return render(
+    <DictationSheet open onClose={() => {}} estimateId="e1" onAdded={onAdded} />,
+    { wrapper },
+  );
+}
+
+/** A tiny stand-in for the estimate response `dictationApi.commit` returns. Backend appends new
+ *  rows at the tail in sortOrder — the sheet reads THAT to hand new-item ids to the parent. */
+function commitResponse(ids: string[]) {
+  return {
+    items: ids.map((id, i) => ({ id, name: `row-${i}`, sortOrder: i })),
+  } as unknown as Awaited<ReturnType<typeof dictationApi.commit>>;
 }
 
 /** Type text into the field and run the parse. */
@@ -62,8 +73,7 @@ describe('DictationSheet', () => {
       items: [item(), item({ name: 'Монтаж плінтуса', spokenName: 'монтаж плінтуса',
         unit: 'M', quantity: 18, unitPrice: 90, catalogItemId: 'c2', category: null })],
     });
-    vi.mocked(dictationApi.commit).mockResolvedValue(
-      {} as unknown as Awaited<ReturnType<typeof dictationApi.commit>>);
+    vi.mocked(dictationApi.commit).mockResolvedValue(commitResponse(['line-1', 'line-2']));
 
     renderSheet();
     await dictate();
@@ -76,8 +86,10 @@ describe('DictationSheet', () => {
     fireEvent.click(screen.getByText(/^Додати 1/));
 
     await waitFor(() => expect(dictationApi.commit).toHaveBeenCalled());
+    // Category carries over from the matched catalog row (master feedback: «чому воно не підтягує
+    // трейд і категорію»). Sent to the backend so the estimate line lands in its category.
     expect(vi.mocked(dictationApi.commit).mock.calls[0][1]).toEqual([
-      { name: 'Поклейка шпалер', unit: 'M2', quantity: 20, unitPrice: 150, type: 'WORK', category: null },
+      { name: 'Поклейка шпалер', unit: 'M2', quantity: 20, unitPrice: 150, type: 'WORK', category: 'Шпалери' },
     ]);
   });
 
@@ -105,6 +117,27 @@ describe('DictationSheet', () => {
     expect(screen.queryByText('Немає у вашому каталозі — впишіть ціну')).toBeNull();
     expect(screen.getByText('Нова позиція — не з каталогу')).toBeTruthy();
     expect(screen.getByText(/^Додати 1/).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('hands the parent the newly-added item ids so it can green-highlight and scroll to them', async () => {
+    // The rule: the backend appends new rows at the tail in sortOrder, so the last
+    // `included.length` items of the response ARE the ones just added. The parent's `markTouched`
+    // paints them green and drives `scrollRowIntoView` — same pipeline the catalog picker uses.
+    vi.mocked(dictationApi.parse).mockResolvedValue({
+      items: [item(), item({ name: 'Монтаж плінтуса', spokenName: 'монтаж плінтуса',
+        unit: 'M', quantity: 18, unitPrice: 90, catalogItemId: 'c2', category: null })],
+    });
+    // Response includes some EXISTING rows before the new ones — proves the sheet takes the LAST
+    // N, not everything.
+    vi.mocked(dictationApi.commit).mockResolvedValue(
+      commitResponse(['old-1', 'old-2', 'old-3', 'new-A', 'new-B']));
+    const onAdded = vi.fn();
+
+    renderSheet(onAdded);
+    await dictate();
+    fireEvent.click(screen.getByText(/^Додати 2/));
+
+    await waitFor(() => expect(onAdded).toHaveBeenCalledWith(['new-A', 'new-B']));
   });
 
   it('a 0 or negative price also blocks the commit — empty is not the only bad shape', async () => {
@@ -174,8 +207,7 @@ describe('DictationSheet', () => {
         unit: 'M2', quantity: 12, unitPrice: null, catalogItemId: null, category: null,
         issues: ['catalog', 'price'] })],
     });
-    vi.mocked(dictationApi.commit).mockResolvedValue(
-      {} as unknown as Awaited<ReturnType<typeof dictationApi.commit>>);
+    vi.mocked(dictationApi.commit).mockResolvedValue(commitResponse(['line-1', 'line-2']));
 
     renderSheet();
     await dictate('демонтаж старої плитки 12 квадратів');
@@ -213,8 +245,7 @@ describe('DictationSheet', () => {
           unit: 'M', quantity: 18, unitPrice: 90, catalogItemId: 'c-baseboard', category: null }),
       ],
     });
-    vi.mocked(dictationApi.commit).mockResolvedValue(
-      {} as unknown as Awaited<ReturnType<typeof dictationApi.commit>>);
+    vi.mocked(dictationApi.commit).mockResolvedValue(commitResponse(['line-1', 'line-2']));
     vi.mocked(dictationApi.saveSynonym).mockResolvedValue(undefined);
 
     renderSheet();
@@ -235,8 +266,7 @@ describe('DictationSheet', () => {
     vi.mocked(dictationApi.parse).mockResolvedValue({
       items: [item({ spokenName: 'шпалери', catalogItemId: 'c-wallpaper' })],
     });
-    vi.mocked(dictationApi.commit).mockResolvedValue(
-      {} as unknown as Awaited<ReturnType<typeof dictationApi.commit>>);
+    vi.mocked(dictationApi.commit).mockResolvedValue(commitResponse(['line-1', 'line-2']));
     vi.mocked(dictationApi.saveSynonym).mockRejectedValue(new Error('boom'));
 
     renderSheet();
