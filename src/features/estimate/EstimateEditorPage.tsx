@@ -31,6 +31,7 @@ import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { DictationSheet } from './DictationSheet.tsx';
 import { hasOnScreenKeyboard } from '@/lib/deviceInput.ts';
+import { speechAvailability } from '@/lib/speech.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
@@ -134,7 +135,11 @@ export function EstimateEditorPage() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [dictationOpen, setDictationOpen] = useState(false);
   // Evaluated on render, not once at module load, so a DevTools device-mode toggle is picked up.
-  const onScreenKeyboard = hasOnScreenKeyboard();
+  // Two independent ways to dictate, and either one is enough to offer the entry point: the OS
+  // keyboard's own microphone (phones and tablets) or the in-app one (any browser that actually has
+  // the Web Speech API — which includes a desktop Chrome, where Windows voice typing has no
+  // Ukrainian and this is now the only way to try the flow at all).
+  const canDictate = hasOnScreenKeyboard() || speechAvailability() === 'ready';
   const [pdfSheetOpen, setPdfSheetOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const { data: me } = useMe(); // for the custom trades on «зберегти як шаблон»
@@ -576,14 +581,11 @@ export function EstimateEditorPage() {
                 onClick={() => close(() => setMarkupOpen(true))}
               />
             )}
-            {/* Typed or dictated with the keyboard's own microphone — we add no audio,
-                the OS already transcribes Ukrainian better than we could. Online-only: the parse
-                is a model call.
-
-                Phones and tablets ONLY: the whole point is the 🎤 on the on-screen keyboard, and
-                Windows voice typing has no Ukrainian at all — on a desktop this would be an
-                invitation the OS cannot honour. */}
-            {!signed && onScreenKeyboard && (
+            {/* Typed or dictated. Two microphones and either one qualifies: the OS keyboard's own
+                🎤 on a phone/tablet, or the in-app Web Speech API in a browser that has it
+                (including desktop Chrome, where Windows voice typing lacks Ukrainian and this is
+                now the only way to try the flow). Online-only: the parse is a model call. */}
+            {!signed && canDictate && (
               <FabAction
                 icon="🎤"
                 label={t('dictation.fabLabel')}

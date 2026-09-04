@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -11,9 +11,17 @@ import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { cn } from '@/lib/cn.ts';
+import { useSpeechDictation } from '@/hooks/useSpeechDictation.ts';
+import { useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
 import { useInvalidateEstimate } from './useEstimate.ts';
 import { UNITS } from '@/api/types.ts';
 import type { DictationItem, ItemType, Unit } from '@/api/types.ts';
+
+/** Wording differs (case/whitespace/punctuation aside) — the two sentences worth teaching a synonym for. */
+function wordingDiffers(spoken: string, matched: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return norm(spoken) !== '' && norm(spoken) !== norm(matched);
+}
 
 /** Parse a decimal field to a finite number, blank/garbage → 0 (master may fill later). */
 function num(s: string): number {
@@ -33,6 +41,16 @@ interface Draft {
   type: ItemType;
   /** Did his own price list have this position? A miss means the price is his to type. */
   matched: boolean;
+  /** The matched catalog row's id — remembered so we can teach a synonym pointing at it after commit. */
+  catalogItemId: string | null;
+  /** Learn this position into his catalog too — offered only on a miss, and only once it has a price. */
+  saveToCatalog: boolean;
+  /**
+   * Teach the system to recognise the spoken wording as the matched row next time — offered only on
+   * a matched row whose wording differs. See docs/open-questions.md → «A learned synonym outlives
+   * the catalog position it points at».
+   */
+  saveSynonym: boolean;
   include: boolean;
 }
 
@@ -48,19 +66,27 @@ function toDrafts(items: DictationItem[]): Draft[] {
     unit: it.unit ?? '',
     type: it.type,
     matched: it.catalogItemId != null,
+    catalogItemId: it.catalogItemId ?? null,
+    saveToCatalog: false,
+    saveSynonym: false,
     include: true,
   }));
 }
 
 /**
- * Dictate (or type) positions into an open estimate — cut 0.
+ * Dictate (or type) positions into an open estimate.
  *
- * <p><b>There is no audio here, deliberately.</b> The field is plain text and the microphone is the
- * one already on the master's PHONE keyboard: the OS transcribes far better than we would, in
- * Ukrainian, on the device. (Windows voice typing has no Ukrainian — on a desktop the text is
- * typed, which changes nothing here: this screen starts once the text is in the field.) What we add is the part it cannot do — splitting «поклеїти
- * шпалери двадцять квадратів по 250» into a position, a number and a unit, and pinning it to HIS
- * price list.</p>
+ * <p><b>Two microphones, and the in-app one is the optional half.</b> Cut 0 shipped the field plus
+ * the microphone already on the master's PHONE keyboard — the OS transcribes Ukrainian on the
+ * device, for free, and that path still works everywhere and is still the fallback. Cut 1 adds the
+ * in-app button he asked for («натиснув надиктувати і воно відкрило мікрофон»), which is the Web
+ * Speech API and therefore <b>not available everywhere</b> — most importantly not inside a PWA
+ * installed on iOS, where it fails silently. `useSpeechDictation` answers that question; when the
+ * answer is no, this screen is exactly what cut 0 shipped. See `lib/speech.ts`.</p>
+ *
+ * <p>Either way we record and store no audio. What we add is the part the OS cannot do — splitting
+ * «поклеїти шпалери двадцять квадратів по 250» into a position, a number and a unit, and pinning it
+ * to HIS price list.</p>
  *
  * <p><b>A miss is shown, never priced at 0 ₴ behind his back.</b> A row the catalog had no answer
  * for is flagged in the review with its price field empty — that is the whole reason this screen
@@ -82,8 +108,18 @@ export function DictationSheet({
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
+  const createCatalogItem = useCreateCatalogItem();
+
+  // A spoken chunk goes in on its OWN LINE: the recogniser ends an utterance at a pause, which is
+  // usually one position, and a line break is the split this flow already documents («одна позиція
+  // на рядок»). It is appended, never written over — he can keep typing between two utterances.
+  const appendSpoken = useCallback((chunk: string) => {
+    setText((prev) => (prev.trim() ? prev.replace(/\s+$/, '') + '\n' + chunk : chunk));
+  }, []);
+  const mic = useSpeechDictation({ onFinal: appendSpoken });
 
   const reset = () => {
+    mic.stop();
     setStep('input');
     setText('');
     setDrafts([]);
@@ -99,14 +135,19 @@ export function DictationSheet({
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...p } : d)));
 
   const included = drafts.filter((d) => d.include);
-  const hasBad = included.some((d) => !d.name.trim() || !d.unit);
   const unpriced = included.filter((d) => num(d.price) <= 0).length;
+  // Empty / 0 / negative price blocks the commit end-to-end (master feedback 2026-09-04: «з пустою
+  // ціною чи 0 чи мінусом числом не зберігаємо нічого»). All-or-nothing: one bad row disables the
+  // whole «Додати», the top-of-review banner names how many, and the backend `@DecimalMin(inclusive
+  // = false)` refuses it belt-and-braces if the button is ever bypassed.
+  const hasBad = included.some((d) => !d.name.trim() || !d.unit || num(d.price) <= 0);
 
   const runParse = async () => {
     if (!online) {
       toast.error(t('offline.needConnection'));
       return;
     }
+    mic.stop(); // a recogniser still listening while we read the text is a second source of truth
     setStep('parsing');
     try {
       const res = await dictationApi.parse(estimateId, text.trim());
@@ -133,7 +174,52 @@ export function DictationSheet({
         })),
       );
       invalidateEstimate();
-      toast.success(t('dictation.added', { count: included.length }));
+      // Only AFTER the lines actually landed: the estimate is what he asked for, the catalog copy is
+      // a bonus, and a failing copy must never look like the dictation failed.
+      const learn = included.filter((d) => !d.matched && d.saveToCatalog && num(d.price) > 0);
+      let saved = 0;
+      let failed = false;
+      for (const d of learn) {
+        try {
+          await createCatalogItem.mutateAsync({
+            name: d.name.trim(),
+            type: d.type,
+            unit: d.unit as Unit,
+            defaultPrice: num(d.price),
+            // No trade and no category are asked for here — a dictation review is the wrong place
+            // for two more pickers, so the position lands in the «Інше» pile and he re-files it in
+            // the catalog if he cares. Logged in open-questions.
+            trade: 'OTHER',
+          });
+          saved += 1;
+        } catch {
+          failed = true;
+        }
+      }
+      // Same rule for synonyms: only after the lines landed, and a failure never rolls back the
+      // commit. A synonym is only worth teaching when it points at a MATCHED row and the wording
+      // differs — a matched row with identical wording teaches nothing new.
+      const teach = included.filter(
+        (d) => d.matched && d.saveSynonym && d.catalogItemId && wordingDiffers(d.spokenName, d.name),
+      );
+      let synonyms = 0;
+      let synonymFailed = false;
+      for (const d of teach) {
+        try {
+          await dictationApi.saveSynonym(d.catalogItemId as string, d.spokenName);
+          synonyms += 1;
+        } catch {
+          synonymFailed = true;
+        }
+      }
+      toast.success(
+        saved > 0
+          ? t('dictation.addedAndSaved', { count: included.length, saved })
+          : t('dictation.added', { count: included.length }),
+      );
+      if (synonyms > 0) toast.success(t('dictation.learnedSynonyms', { count: synonyms }));
+      if (failed) toast.error(t('dictation.catalogSaveFailed'));
+      if (synonymFailed) toast.error(t('dictation.synonymSaveFailed'));
       close();
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -145,11 +231,68 @@ export function DictationSheet({
     <Modal open={open} onClose={close} title={t('dictation.title')} size="lg">
       {step === 'input' && (
         <div className="space-y-3">
-          <p className="text-sm text-muted">{t('dictation.hint')}</p>
+          {/* Mic-first layout (2026-09-04): the big pulsing button leads the sheet — the OS
+              keyboard's own microphone is not the only path any more, and the master's first tap
+              should land on the one thing THIS sheet adds. The textarea sits under it, still
+              full-size and full-width; the keyboard's own 🎤 is one of the ways to fill it, named
+              in the hint but not surfaced as a competing button. Layout ordering: mic → hint →
+              textarea → catalog hint → «Розпізнати». See docs/iteration-dictation.md §7.2. */}
+          {mic.available && (
+            <button
+              type="button"
+              onClick={() => (mic.listening ? mic.stop() : mic.start())}
+              aria-pressed={mic.listening}
+              aria-label={mic.listening ? t('dictation.micStop') : t('dictation.micStart')}
+              className={cn(
+                'relative flex w-full flex-col items-center justify-center gap-1 rounded-2xl border-2 py-6 transition-colors',
+                mic.listening
+                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  : 'border-brand-300 bg-brand-50/40 text-brand-700 hover:bg-brand-50',
+              )}
+            >
+              <span className="relative flex h-16 w-16 items-center justify-center">
+                {mic.listening && (
+                  // A soft ping BEHIND the icon — the confidence-inspiring visual borrowed from
+                  // the marketplace patterns (Epicentr et al.). Never on the icon itself: an icon
+                  // that pulses reads as broken, not listening.
+                  <span
+                    aria-hidden="true"
+                    className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-60"
+                  />
+                )}
+                <span className="relative text-4xl">{mic.listening ? '⏹' : '🎤'}</span>
+              </span>
+              <span className="text-base font-semibold">
+                {mic.listening ? t('dictation.micStop') : t('dictation.micStart')}
+              </span>
+              {mic.listening && (
+                // What is being heard — larger than in cut 1 (was `text-sm`), because it IS the
+                // whole feedback the master gets that the mic is doing anything.
+                <span aria-live="polite" className="mt-1 min-h-[1.5rem] text-base text-brand-700">
+                  {mic.interim || t('dictation.listening')}
+                </span>
+              )}
+            </button>
+          )}
+          {mic.blocked && (
+            // The button is gone for this session; say why, and point at the one that still works.
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              {mic.blocked === 'denied'
+                ? t('dictation.micDenied')
+                : mic.blocked === 'audio'
+                  ? t('dictation.micNoDevice')
+                  : mic.blocked === 'network'
+                    ? t('dictation.micNoNetwork')
+                    : t('dictation.micNoService')}
+            </p>
+          )}
+          <p className="text-xs text-muted">
+            {mic.available ? t('dictation.hintOrType') : t('dictation.hint')}
+          </p>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            rows={7}
+            rows={mic.available ? 5 : 7}
             aria-label={t('dictation.fieldLabel')}
             placeholder={t('dictation.placeholder')}
             className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
@@ -181,10 +324,10 @@ export function DictationSheet({
             <>
               <p className="mb-3 text-sm text-muted">{t('dictation.reviewHint')}</p>
               {unpriced > 0 && (
-                // Named before he taps «Додати», not after: an unpriced line is legal (he may fill
-                // it in the editor) but it must never be something he finds out about later.
+                // Named before he taps «Додати»: an unpriced line BLOCKS the commit (master
+                // feedback 2026-09-04) — the button is disabled below and the banner says why.
                 <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  {t('dictation.unpricedWarning', { count: unpriced })}
+                  {t('dictation.unpricedBlocking', { count: unpriced })}
                 </p>
               )}
               <div className="max-h-[55dvh] space-y-2 overflow-y-auto">
@@ -220,14 +363,66 @@ export function DictationSheet({
                         </button>
                       </div>
                       {/* Two different facts, both worth a line: whether his price list answered,
-                          and — when it answered with a different wording — what he actually said. */}
+                          and — when it answered with a different wording — what he actually said.
+                          The «впишіть ціну» hint HIDES the moment the price is typed — otherwise it
+                          keeps hectoring the master after he has done exactly what it asked (master
+                          feedback 2026-09-04: «ціна ж є, чому воно її тут згадує»). Once priced,
+                          the row is fine; a soft «нова позиція» line says so instead. */}
                       {!d.matched && (
-                        <p className="mt-1 text-xs text-amber-700">{t('dictation.notInCatalog')}</p>
+                        <>
+                          <p className="mt-1 text-xs text-amber-700">
+                            {noPrice ? t('dictation.notInCatalog') : t('dictation.newPositionOk')}
+                          </p>
+                          {d.include && (
+                            // Offered on a miss only, and DEAD until the row has a price. A 0 ₴
+                            // catalog row is exactly what this screen's flagging rule exists to
+                            // prevent — saved here, the NEXT dictation would match it and price the
+                            // line at 0 silently, a week later, through the back door.
+                            <label
+                              className={cn(
+                                'mt-2 flex items-start gap-2 text-xs',
+                                noPrice ? 'text-muted' : 'text-secondary',
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 flex-shrink-0"
+                                checked={d.saveToCatalog && !noPrice}
+                                disabled={noPrice}
+                                onChange={(e) => patch(d.key, { saveToCatalog: e.target.checked })}
+                              />
+                              <span>
+                                {t('dictation.saveToCatalog')}
+                                {noPrice && (
+                                  <span className="block">{t('dictation.saveNeedsPrice')}</span>
+                                )}
+                              </span>
+                            </label>
+                          )}
+                        </>
                       )}
-                      {d.matched && d.spokenName.trim().toLowerCase() !== d.name.trim().toLowerCase() && (
-                        <p className="mt-1 text-xs text-muted">
-                          {t('dictation.spokenAs', { text: d.spokenName })}
-                        </p>
+                      {d.matched && wordingDiffers(d.spokenName, d.name) && (
+                        <>
+                          <p className="mt-1 text-xs text-muted">
+                            {t('dictation.spokenAs', { text: d.spokenName })}
+                          </p>
+                          {d.include && d.catalogItemId && (
+                            // Teach «say X, mean THIS row» — offered only on a matched-but-different
+                            // row. On an identical wording there is nothing to learn; on an unmatched
+                            // row a synonym would point at a row that does not yet exist (the master
+                            // ticks «save to catalog» there instead, and next time the exact-name
+                            // rung matches without needing a synonym).
+                            <label className="mt-2 flex items-start gap-2 text-xs text-secondary">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 flex-shrink-0"
+                                checked={d.saveSynonym}
+                                onChange={(e) => patch(d.key, { saveSynonym: e.target.checked })}
+                              />
+                              <span>{t('dictation.saveSynonym', { text: d.spokenName })}</span>
+                            </label>
+                          )}
+                        </>
                       )}
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <Input

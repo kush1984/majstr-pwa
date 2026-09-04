@@ -29,4 +29,15 @@ export const dictationApi = {
       .post<EstimateResponse>(`/api/estimates/${estimateId}/dictation/commit`, { items })
       .then((r) => r.data);
   },
+
+  /**
+   * Teach «say X, mean THIS catalog row» for the current master. The next dictation matches this
+   * spoken wording outright — no Dice pass, no tie to refuse. Overwrites any previous target for the
+   * same wording; per-master.
+   */
+  saveSynonym(catalogItemId: string, spokenText: string): Promise<void> {
+    return api
+      .post<void>(`/api/dictation/synonyms`, { catalogItemId, spokenText })
+      .then(() => undefined);
+  },
 };
