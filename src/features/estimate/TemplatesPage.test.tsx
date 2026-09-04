@@ -192,25 +192,54 @@ describe('TemplatesPage — edit own template', () => {
   });
 });
 
-describe('TemplatesPage — trade filter chips', () => {
+describe('TemplatesPage — trade is a level, not a filter', () => {
   const defaults: EstimateTemplateSummary[] = [
     { id: 'd1', name: 'Електрика квартири', trade: 'ELECTRICAL', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 3 },
     { id: 'd2', name: 'Санвузол сантехніка', trade: 'PLUMBING', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 4 },
   ];
 
-  it('narrows the list to the picked trade', async () => {
+  it('shows every trade at once and collapses one without hiding the others', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ...defaults]);
 
     renderPage();
 
-    // Both defaults visible with no filter.
+    // The whole point of the tree over the chips: nothing is filtered away to begin with.
     expect(await screen.findByText('Електрика квартири')).toBeTruthy();
     expect(screen.getByText('Санвузол сантехніка')).toBeTruthy();
 
-    // Pick the "Сантехніка" chip (capital С matches only the chip label, not the
-    // lowercase row name) → the electrical default drops out.
+    // Shut the plumbing branch (capital С matches the branch header, not the lowercase row
+    // name) → its bundle folds away and the OTHER trade stays on screen.
     fireEvent.click(screen.getByRole('button', { name: /Сантехніка/ }));
-    await waitFor(() => expect(screen.queryByText('Електрика квартири')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Санвузол сантехніка')).toBeNull());
+    expect(screen.getByText('Електрика квартири')).toBeTruthy();
+  });
+
+  it('draws no trade level for a section that holds a single trade', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, defaults[0]]);
+
+    renderPage();
+
+    expect(await screen.findByText('Моя ванна')).toBeTruthy();
+    // One branch per section here — a level with nothing to disambiguate is not drawn, the same
+    // rule the chips had (they hid themselves under two trades).
+    expect(screen.queryAllByTestId('templates-trade')).toHaveLength(0);
+  });
+
+  it('keeps the two sections apart: opening a trade in one leaves its twin in the other alone', async () => {
+    const ownPlumbing: EstimateTemplateSummary = {
+      id: 'own2', name: 'Моя сантехніка', trade: 'PLUMBING', customTradeId: null, customTradeName: null, isDefault: false, itemCount: 2,
+    };
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, ownPlumbing, ...defaults]);
+
+    renderPage();
+
+    expect(await screen.findByText('Моя сантехніка')).toBeTruthy();
+    // «Сантехніка» is a branch in BOTH «Мої» and «Готові». One shared open key would fold them
+    // together, which is why the state is keyed per section.
+    const plumbing = screen.getAllByRole('button', { name: /Сантехніка/ });
+    expect(plumbing).toHaveLength(2);
+    fireEvent.click(plumbing[0]);
+    await waitFor(() => expect(screen.queryByText('Моя сантехніка')).toBeNull());
     expect(screen.getByText('Санвузол сантехніка')).toBeTruthy();
   });
 });

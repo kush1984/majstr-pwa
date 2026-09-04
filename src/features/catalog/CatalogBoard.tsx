@@ -1,20 +1,20 @@
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import type { CatalogItemResponse } from '@/api/types.ts';
-import { sectionId, toSections, type Section } from '@/features/estimate/estimateArrange.ts';
-import { catalogSectionRank } from './sharedCategory.ts';
+import { sectionId, type Section } from '@/features/estimate/estimateArrange.ts';
 
 /**
- * The master's own catalog, grouped into categories. A row tap opens the position for editing; in
- * selection mode a tap ticks it instead (whole categories tick from their header).
+ * The folders of ONE trade branch of the catalog page — category → position, collapsible, the same
+ * shape the catalog picker uses. A row tap opens the position for editing; in selection mode a tap
+ * ticks it instead (whole categories tick from their header, whole trades from the level above).
  *
- * <p>Folders come out in the order the work is done in ({@link catalogSectionRank}); inside a
- * folder, positions are shown in the order the backend returns them. There is no manual
- * drag-reordering here — a catalog is a reference list a master searches and prices, not one he
- * arranges, and the grips only added weight to every row.</p>
+ * <p>Sections come from the caller (grouped by {@link catalogSectionRank}, so folders come out in
+ * the order the work is done in) because the page groups by TRADE first and a board renders one
+ * branch. Inside a folder, positions are shown in the order the backend returns them — there is no
+ * manual drag-reordering here: a catalog is a reference list a master searches and prices, not one
+ * he arranges, and the grips only added weight to every row.</p>
  */
 export interface CatalogSelection {
   selected: Set<string>;
@@ -23,17 +23,21 @@ export interface CatalogSelection {
 }
 
 export function CatalogBoard({
-  items,
+  sections,
   onEdit,
   selection,
+  isCategoryOpen,
+  onToggleCategory,
 }: {
-  items: CatalogItemResponse[];
+  sections: Section<CatalogItemResponse>[];
   onEdit: (item: CatalogItemResponse) => void;
   /** Selection mode — present, it takes over the row's tap; editing steps aside. */
   selection?: CatalogSelection;
+  isCategoryOpen: (category: string) => boolean;
+  /** Absent = the folder headers are inert (searching: every folder stays open, so a collapsed
+   *  one can never swallow a hit). */
+  onToggleCategory?: (category: string) => void;
 }) {
-  const sections = useMemo(() => toSections(items, catalogSectionRank), [items]);
-
   return (
     <>
       {sections.map((section) => (
@@ -42,6 +46,8 @@ export function CatalogBoard({
           section={section}
           onEdit={onEdit}
           selection={selection}
+          open={isCategoryOpen(section.category)}
+          onToggle={onToggleCategory ? () => onToggleCategory(section.category) : undefined}
         />
       ))}
     </>
@@ -68,21 +74,25 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function CategoryBlock({
-  section, onEdit, selection,
+  section, onEdit, selection, open, onToggle,
 }: {
   section: Section<CatalogItemResponse>;
   onEdit: (item: CatalogItemResponse) => void;
   selection?: CatalogSelection;
+  open: boolean;
+  onToggle?: () => void;
 }) {
   const { t } = useTranslation();
   const ids = section.items.map((i) => i.id);
   const allPicked = selection ? ids.every((id) => selection.selected.has(id)) : false;
+  const picked = selection ? ids.filter((id) => selection.selected.has(id)).length : 0;
 
   return (
-    <section className="mb-5 rounded-xl">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand">
+    <section>
+      <div className="flex items-center gap-1">
         {/* Ticking a whole category is the point of selection here even more than in an estimate:
-            a master dropping a trade he does not do is removing a hundred rows, not five. */}
+            a master dropping a trade he does not do is removing a hundred rows, not five. Beside
+            the header, never inside it — the header is a button now. */}
         {selection && (
           <button
             type="button"
@@ -94,16 +104,42 @@ function CategoryBlock({
             <Tick on={allPicked} />
           </button>
         )}
-        <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-        <span className="min-w-0 flex-1 break-words">{label(section.category, t)}</span>
-        <span className="font-bold normal-case text-muted">· {section.items.length}</span>
+        <button
+          type="button"
+          data-testid="catalog-category"
+          onClick={onToggle}
+          disabled={onToggle == null}
+          aria-expanded={open}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-xl bg-surface-sunken px-3.5 py-2.5 text-left"
+        >
+          {onToggle && (
+            <span
+              aria-hidden
+              className={cn('text-[10px] text-muted transition-transform', open && 'rotate-90')}
+            >
+              ▶
+            </span>
+          )}
+          <span className="min-w-0 flex-1 break-words text-sm font-semibold text-primary">
+            {label(section.category, t)}
+          </span>
+          {/* A closed folder must still say it holds ticks, or the selection count reads as a bug. */}
+          {picked > 0 && (
+            <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+              {picked}
+            </span>
+          )}
+          <span className="text-xs font-semibold text-muted">{section.items.length}</span>
+        </button>
       </div>
 
-      <div className="space-y-1.5">
-        {section.items.map((item) => (
-          <ItemRow key={item.id} item={item} onEdit={onEdit} selection={selection} />
-        ))}
-      </div>
+      {open && (
+        <div className="mt-1.5 space-y-1.5">
+          {section.items.map((item) => (
+            <ItemRow key={item.id} item={item} onEdit={onEdit} selection={selection} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

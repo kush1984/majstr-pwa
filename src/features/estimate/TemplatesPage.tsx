@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
@@ -12,7 +12,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
-import { Chip } from '@/components/Chip.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Input } from '@/components/Input.tsx';
@@ -28,15 +27,10 @@ import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
-import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { ITEM_TYPE_OPTIONS, UNIT_OPTIONS } from '@/features/catalog/catalogItemSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { CatalogPicker } from '@/features/catalog/CatalogPicker.tsx';
 import { AddPositionTabs, type AddPositionTab } from '@/features/catalog/AddPositionTabs.tsx';
-import {
-  customTradeKey,
-  type TradeKey,
-} from '@/features/catalog/TradeFilterChips.tsx';
 import {
   SaveToCatalogPrompt,
   type CatalogSaveDraft,
@@ -47,10 +41,11 @@ import type {
   EstimateTemplateSummary,
   ItemType,
   TemplateItemRequest,
-  Trade,
   Unit,
 } from '@/api/types.ts';
+import { TradeLevel } from '@/features/catalog/TradeLevel.tsx';
 import { TradeSelect } from './TradeSelect.tsx';
+import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
 import {
   useAddTemplateItem,
   useDeleteTemplate,
@@ -86,57 +81,21 @@ export function TemplatesPage() {
   const [editing, setEditing] = useState<EstimateTemplateSummary | null>(null);
   const [deleting, setDeleting] = useState<EstimateTemplateSummary | null>(null);
 
-  // Trade filter chips over the whole list — same pattern as the catalog, but templates use
-  // GENERAL (not OTHER) for "no specific trade", so this stays its own small implementation
-  // rather than the shared TradeFilterChips (which hardcodes the catalog's OTHER semantics).
-  // Built from the trades actually present, so it never shows an empty filter.
-  const [tradeFilter, setTradeFilter] = useState<Set<TradeKey>>(new Set());
-  // useCallback, not a plain arrow: the two memos below filter with it, and a fresh
-  // function each render would either be a lying dependency list or defeat the memo.
-  // A custom trade is own-templates-only (a default can never carry one — the DB CHECK
-  // pins is_default=false alongside it), so passing it through here is always safe.
-  const matchTrade = useCallback(
-    (trade: string | null, customTradeId?: string | null) => {
-      if (tradeFilter.size === 0) return true;
-      if (customTradeId) return tradeFilter.has(customTradeKey(customTradeId));
-      return tradeFilter.has((trade ?? 'GENERAL') as TradeKey);
-    },
-    [tradeFilter],
-  );
+  // Trade is a LEVEL here, not a filter — the same move both pickers made one round earlier, for
+  // the reason the master gave: «на мобільних так реально простіше». A chip ANSWERS «покажи тільки
+  // це», so the other trades (and any bundle in them) were hidden rather than walkable. The tree
+  // re-orders nothing: the flat list already clustered by trade, it just never said so.
+  // Open state is keyed per SECTION and per branch — «Малярні роботи» exists in both «Мої» and
+  // «Готові», and one shared key would open the two together.
+  const [openState, setOpenState] = useState<Record<string, boolean>>({});
+  const toggleOpen = (key: string, fallback: boolean) =>
+    setOpenState((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
-  const presentTrades = useMemo(() => {
-    const system = new Set<Trade>();
-    const customs = new Map<string, string>();
-    for (const tpl of data ?? []) {
-      if (tpl.customTradeId) customs.set(tpl.customTradeId, tpl.customTradeName ?? '');
-      else system.add(tpl.trade ?? 'GENERAL');
-    }
-    return { system: [...system], customs: [...customs.entries()] };
-  }, [data]);
-  const totalPresentTrades = presentTrades.system.length + presentTrades.customs.length;
-  const toggleTemplateTrade = (key: TradeKey) =>
-    setTradeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next.size >= totalPresentTrades ? new Set() : next;
-    });
-
-  const own = useMemo(
-    () => (data ?? []).filter((x) => !x.isDefault && matchTrade(x.trade, x.customTradeId)),
-    [data, matchTrade],
-  );
-  const defaultsByTrade = useMemo(() => {
-    const groups = new Map<string, EstimateTemplateSummary[]>();
-    for (const tpl of (data ?? []).filter((x) => x.isDefault && matchTrade(x.trade))) {
-      const key = tpl.trade ?? 'GENERAL';
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(tpl);
-      else groups.set(key, [tpl]);
-    }
-    return [...groups.entries()];
-  }, [data, matchTrade]);
-  const hasOwnTemplates = (data ?? []).some((x) => !x.isDefault);
+  const own = useMemo(() => (data ?? []).filter((x) => !x.isDefault), [data]);
+  const defaults = useMemo(() => (data ?? []).filter((x) => x.isDefault), [data]);
+  const ownBranches = useMemo(() => toTemplateTree(own), [own]);
+  const defaultBranches = useMemo(() => toTemplateTree(defaults), [defaults]);
+  const hasOwnTemplates = own.length > 0;
 
   const confirmDelete = async () => {
     if (!deleting) return;
@@ -178,27 +137,6 @@ export function TemplatesPage() {
         />
       ) : (
         <div className="space-y-6">
-          {totalPresentTrades >= 2 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <Chip active={tradeFilter.size === 0} onClick={() => setTradeFilter(new Set())}>
-                {t('catalog.allTrades')}
-              </Chip>
-              {presentTrades.system.map((tr) => (
-                <Chip key={tr} active={tradeFilter.has(tr)} onClick={() => toggleTemplateTrade(tr)}>
-                  {TRADE_EMOJI[tr]} {t('trades.' + tr)}
-                </Chip>
-              ))}
-              {presentTrades.customs.map(([id, name]) => (
-                <Chip
-                  key={id}
-                  active={tradeFilter.has(customTradeKey(id))}
-                  onClick={() => toggleTemplateTrade(customTradeKey(id))}
-                >
-                  {CUSTOM_TRADE_EMOJI} {name}
-                </Chip>
-              ))}
-            </div>
-          )}
           {/* My templates */}
           <section>
             <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
@@ -207,17 +145,15 @@ export function TemplatesPage() {
             {!hasOwnTemplates ? (
               <EmptyState icon="📋" title={t('templates.myTemplates')} text={t('templates.emptyMy')} />
             ) : (
-              <div className="space-y-1.5">
-                {own.map((tpl) => (
-                  <Row
-                    key={tpl.id}
-                    template={tpl}
-                    onOpen={() => setPreview(tpl)}
-                    onEdit={() => setEditing(tpl)}
-                    onDelete={() => setDeleting(tpl)}
-                  />
-                ))}
-              </div>
+              <TemplateBranches
+                scope="own"
+                branches={ownBranches}
+                openState={openState}
+                onToggle={toggleOpen}
+                onOpen={setPreview}
+                onEdit={setEditing}
+                onDelete={setDeleting}
+              />
             )}
           </section>
 
@@ -226,26 +162,16 @@ export function TemplatesPage() {
             <h2 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
               {t('templates.defaultTemplates')}
             </h2>
-            <div className="space-y-4">
-              {defaultsByTrade.map(([trade, items]) => (
-                <div key={trade}>
-                  <div className="mb-1.5 text-xs font-semibold text-muted">
-                    {TRADE_EMOJI[trade as keyof typeof TRADE_EMOJI] ?? '📦'} {t('trades.' + trade)}
-                  </div>
-                  <div className="space-y-1.5">
-                    {items.map((tpl) => (
-                      <Row
-                        key={tpl.id}
-                        template={tpl}
-                        onOpen={() => setPreview(tpl)}
-                        onEdit={() => setEditing(tpl)}
-                        onDelete={() => setDeleting(tpl)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <TemplateBranches
+              scope="def"
+              branches={defaultBranches}
+              openState={openState}
+              onToggle={toggleOpen}
+              onOpen={setPreview}
+              onEdit={setEditing}
+              onDelete={setDeleting}
+            />
+
             {/* Always offered: which defaults are hidden is not something the device can know
                 (the list simply omits them), so there is nothing to condition this on. */}
             <button
@@ -291,6 +217,72 @@ export function TemplatesPage() {
         onConfirm={confirmDelete}
       />
     </>
+  );
+}
+
+/** How few bundles a section may hold and still open every branch by itself. */
+const AUTO_EXPAND_MAX = 8;
+
+/**
+ * One section's bundles as TRADE → bundle. Both «Мої» and «Готові» render through this — the two
+ * used to disagree (own templates were a flat list, defaults carried their own little emoji
+ * headings), which is exactly the drift a second copy produces.
+ *
+ * <p>A SINGLE branch draws no trade level at all (the rule the chips already had — they hid
+ * themselves under two trades), applied to each section on its own: a master with one trade of his
+ * own still walks the whole library below.</p>
+ */
+function TemplateBranches({
+  scope,
+  branches,
+  openState,
+  onToggle,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  scope: string;
+  branches: TemplateBranch[];
+  openState: Record<string, boolean>;
+  onToggle: (key: string, fallback: boolean) => void;
+  onOpen: (tpl: EstimateTemplateSummary) => void;
+  onEdit: (tpl: EstimateTemplateSummary) => void;
+  onDelete: (tpl: EstimateTemplateSummary) => void;
+}) {
+  const show = branches.length > 1;
+  const total = branches.reduce((sum, b) => sum + b.templates.length, 0);
+  // A short section is open on arrival; the full library is not — a dozen branches unrolled is the
+  // scroll the tree exists to remove.
+  const fallback = !show || total <= AUTO_EXPAND_MAX;
+
+  return (
+    <div className="space-y-2">
+      {branches.map((branch) => {
+        const key = `${scope}:${branch.key}`;
+        return (
+          <TradeLevel
+            key={key}
+            show={show}
+            tradeKey={branch.key}
+            customName={branch.customName}
+            count={branch.templates.length}
+            open={openState[key] ?? fallback}
+            onToggle={() => onToggle(key, fallback)}
+            testId="templates-trade"
+          >
+            {branch.templates.map((tpl) => (
+              <Row
+                key={tpl.id}
+                template={tpl}
+                onOpen={() => onOpen(tpl)}
+                onEdit={() => onEdit(tpl)}
+                onDelete={() => onDelete(tpl)}
+              />
+            ))}
+          </TradeLevel>
+        );
+      })}
+    </div>
   );
 }
 

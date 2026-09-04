@@ -1,7 +1,7 @@
 import type { CatalogItemResponse } from '@/api/types.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { toSections, type Section } from '@/features/estimate/estimateArrange.ts';
-import { customTradeKey, type TradeKey } from './TradeFilterChips.tsx';
+import { customTradeKey, type TradeKey } from './tradeKey.ts';
 import { catalogSectionRank } from './sharedCategory.ts';
 
 /** One trade and everything the master's catalog holds under it, already grouped into folders. */
@@ -38,9 +38,8 @@ export function tradeKeyOf(item: CatalogItemResponse): TradeKey {
  * master's trades both use is stored once under whichever claimed it first — showing it only
  * there is what made him ask «що тут робить категорія Шпалери?» on the drywall screen, and
  * hiding it from the other branch would be worse: he would not find a priced position where he
- * goes looking for it. This supersedes {@link asSelectedTradeSees}'s one-trade-at-a-time
- * re-filing, which could only ever answer for a single chip. The row keeps its id, so ticking
- * either copy ticks the position once.</p>
+ * goes looking for it. This replaced the old one-trade-at-a-time re-filing, which could only ever
+ * answer for a single chip. The row keeps its id, so ticking either copy ticks the position once.</p>
  *
  * <p><b>Bounded by the trades the catalog actually uses.</b> `sharedTrades` names every trade the
  * LIBRARY ships the name under, not the master's — a drywaller owns «Установка люка-ревізії
@@ -69,7 +68,7 @@ export function toTradeTree(items: readonly CatalogItemResponse[]): TradeBranch[
     for (const shared of item.sharedTrades ?? []) {
       if (shared.trade === own || !stored.has(shared.trade)) continue;
       // No category on the other side means that trade files it nowhere in particular — keep the
-      // stored one rather than inventing «Без категорії», same call `asSelectedTradeSees` makes.
+      // stored one rather than inventing «Без категорії».
       push(shared.trade, shared.category == null
         ? item
         : { ...item, category: shared.category, categoryOrder: shared.categoryOrder });

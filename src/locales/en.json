@@ -1045,7 +1045,8 @@
     "deleteSelectedTitle": "Delete the selected positions?",
     "deleteSelectedMessage": "This removes {{count}} position(s) from your catalog. Estimates already written do not change — they keep their own prices. Templates look prices up by name, so these positions will come back with a zero price.",
     "deleteAllTitle": "Delete everything currently on screen?",
-    "deleteAllMessage": "This removes {{count}} position(s) — everything the current filter shows. Estimates do not change; templates for these positions will give a zero price.",
+    "deleteAllMessage": "This removes {{count}} position(s) — everything the catalog holds under the type filter (All / Works / Materials). Search does not affect it. Estimates do not change; templates for these positions will give a zero price.",
+    "nothingFound": "Nothing found — try another name",
     "deleted": "Deleted: {{count}}",
     "actionsMenu": "Catalog actions"
   },

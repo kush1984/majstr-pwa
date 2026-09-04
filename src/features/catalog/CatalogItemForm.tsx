@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { customTradeKey, parseCustomTradeKey, type TradeKey } from './TradeFilterChips.tsx';
+import { customTradeKey, parseCustomTradeKey, type TradeKey } from './tradeKey.ts';
 import type { CatalogItemRequest, CatalogItemResponse, Trade } from '@/api/types.ts';
 import {
   catalogItemSchema,

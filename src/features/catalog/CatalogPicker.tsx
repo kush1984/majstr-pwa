@@ -10,11 +10,10 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useCatalog } from './useCatalog.ts';
-import { parseCustomTradeKey } from './TradeFilterChips.tsx';
+import { TradeLevel } from './TradeLevel.tsx';
 import { toTradeTree, type TradeBranch } from './catalogTree.ts';
-import type { CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
+import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
 
 type TypeFilter = ItemType | 'ALL';
 
@@ -239,13 +238,6 @@ function TradeBranchNode({
   busy: boolean;
   onRow: (item: CatalogItemResponse) => void;
 }) {
-  const { t } = useTranslation();
-  const custom = parseCustomTradeKey(branch.key) !== null;
-  // A custom trade with no name left is still a real branch — it reads OTHER underneath (V91),
-  // which is the honest label for it.
-  const label = custom
-    ? (branch.customName?.trim() ?? '') || t('trades.OTHER')
-    : t('trades.' + branch.key);
   const picked = branch.sections.reduce(
     (n, s) => n + s.items.filter((i) => selected.has(i.id)).length,
     0,
@@ -254,14 +246,17 @@ function TradeBranchNode({
   // shows them closed.
   const autoOpenCategory = branch.sections.length <= 1 || branch.count <= AUTO_EXPAND_MAX_ITEMS;
 
-  const folders = (
-    <div
-      className={cn(
-        'space-y-2',
-        // A thin rail, not an indent: at 375px every level of padding is width the position name
-        // loses, and the name is the thing being read.
-        showTrade && 'mt-1.5 border-l-2 border-brand-soft pl-2',
-      )}
+  return (
+    <TradeLevel
+      show={showTrade}
+      tradeKey={branch.key}
+      customName={branch.customName}
+      count={branch.count}
+      badge={picked}
+      open={open}
+      onToggle={onToggle}
+      testId="catalog-trade"
+      bodyClass="space-y-2"
     >
       {branch.sections.map((section) => (
         <CategoryFolder
@@ -281,40 +276,7 @@ function TradeBranchNode({
           onRow={onRow}
         />
       ))}
-    </div>
-  );
-
-  if (!showTrade) return folders;
-
-  return (
-    <section>
-      <button
-        type="button"
-        data-testid="catalog-trade"
-        onClick={onToggle}
-        disabled={onToggle == null}
-        aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-brand-soft px-3.5 py-2.5 text-left"
-      >
-        {onToggle && (
-          <span
-            aria-hidden
-            className={cn('text-[10px] text-muted transition-transform', open && 'rotate-90')}
-          >
-            ▶
-          </span>
-        )}
-        <span aria-hidden>{custom ? CUSTOM_TRADE_EMOJI : TRADE_EMOJI[branch.key as Trade]}</span>
-        <span className="min-w-0 flex-1 break-words text-sm font-bold text-primary">{label}</span>
-        {picked > 0 && (
-          <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
-            {picked}
-          </span>
-        )}
-        <span className="text-xs font-semibold text-muted">{branch.count}</span>
-      </button>
-      {open && folders}
-    </section>
+    </TradeLevel>
   );
 }
 

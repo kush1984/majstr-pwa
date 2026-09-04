@@ -579,14 +579,14 @@ export interface CatalogItemResponse {
    *  оздоблення → надбавки). Absent for a folder the master invented, which sorts last.
    *
    *  `sortOrder` cannot answer this: it is ONE global rank taken from the trade the row is STORED
-   *  under, so a row re-filed by `asSelectedTradeSees` carries a rank from the wrong trade — which
-   *  is why the drywall chip opened on «Каркас і обшивка». */
+   *  under, so a row shown under ANOTHER trade's branch carries a rank from the wrong trade — which
+   *  is why the drywall board opened on «Каркас і обшивка». */
   categoryOrder?: number | null;
   createdAt: string;
   /** Other trades that ALSO recognize this exact (name, type, unit) per the default catalog —
    *  never includes `trade` itself. A master's catalog has one row per (name, type, unit), so a
    *  position two of his trades both ship under identical wording is filed under whichever trade
-   *  claimed it first; this is how the OTHER trade's filter chip still finds it. The server
+   *  claimed it first; this is how the OTHER trade's branch still finds it. The server
    *  always sends this (empty array when nothing is shared) — optional here only so fixtures/
    *  optimistic objects that predate this field don't all need updating. */
   sharedTrades?: SharedTrade[];

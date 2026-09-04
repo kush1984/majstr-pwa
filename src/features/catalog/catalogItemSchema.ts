@@ -36,7 +36,7 @@ export const catalogItemSchema = z.object({
   category: z.string().max(100, i18n.t('validation.categoryTooLong')),
   newCategory: z.string().max(100, i18n.t('validation.categoryTooLong')),
   // Always a trade — "no specific trade" is OTHER ("Інше"), the single catch-all. Either a
-  // system Trade literal or `custom:<uuid>` for a master-invented trade (see TradeFilterChips).
+  // system Trade literal or `custom:<uuid>` for a master-invented trade (see tradeKey.ts).
   tradeChoice: z.string().min(1),
   defaultPrice: priceString,
 });

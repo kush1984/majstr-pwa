@@ -162,3 +162,131 @@ describe('CatalogPage — position explanations', () => {
     expect(screen.queryByRole('button', { name: LONG })).toBeNull();
   });
 });
+
+describe('CatalogPage — trade is a level, not a filter', () => {
+  const row = (
+    id: string, name: string, trade: CatalogItemResponse['trade'], category: string,
+  ): CatalogItemResponse => ({
+    id, name, category, trade, customTradeId: null, customTradeName: null,
+    type: 'WORK', unit: 'M2', defaultPrice: 100, sortOrder: 0, createdAt: '',
+  });
+
+  // Ten rows: enough to be past SEARCH_FROM, so the search box is offered.
+  const twoTrades: CatalogItemResponse[] = [
+    row('t1', 'Укладання плитки', 'TILING', 'Плитка'),
+    row('t2', 'Затирання швів', 'TILING', 'Плитка'),
+    row('t3', 'Гідроізоляція підлоги', 'TILING', 'Підготовка'),
+    row('t4', 'Різання плитки', 'TILING', 'Плитка'),
+    row('t5', 'Укладання мозаїки', 'TILING', 'Плитка'),
+    row('p1', 'Фарбування стін', 'PAINTER', 'Фарбування'),
+    row('p2', 'Шпаклювання стін', 'PAINTER', 'Шпаклювання'),
+    row('p3', 'Грунтування стін', 'PAINTER', 'Підготовка'),
+    row('p4', 'Поклейка шпалер', 'PAINTER', 'Шпалери'),
+    row('p5', 'Фарбування стелі', 'PAINTER', 'Фарбування'),
+  ];
+
+  it('shows both trades at once and folds one without hiding the other', async () => {
+    // The chips ANSWERED «покажи тільки це». A tree lets the master walk the trades instead,
+    // which is the whole ask: «на мобільних так реально простіше».
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
+    renderPage();
+
+    expect(await screen.findByTestId('catalog-trade')).toBeTruthy();
+    expect(screen.getAllByTestId('catalog-trade')).toHaveLength(2);
+
+    const tiling = screen.getAllByTestId('catalog-trade')
+      .find((b) => b.textContent?.includes('Плиткові'))!;
+    fireEvent.click(tiling);
+    await waitFor(() => expect(screen.queryByText('Укладання плитки')).toBeNull());
+    // The other trade is untouched — a fold is not a filter.
+    expect(screen.getByText('Фарбування стін')).toBeTruthy();
+  });
+
+  it('draws no trade level at all for a one-trade catalog', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades.filter((i) => i.trade === 'TILING'));
+    renderPage();
+
+    expect(await screen.findByText('Укладання плитки')).toBeTruthy();
+    expect(screen.queryAllByTestId('catalog-trade')).toHaveLength(0);
+  });
+
+  it('search cuts across the trades and opens every level, so nothing hides in a shut folder', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
+
+    // Fold the painter branch FIRST, then search — a collapsed folder must not swallow a hit.
+    const painter = screen.getAllByTestId('catalog-trade')
+      .find((b) => b.textContent?.includes('Малярні'))!;
+    fireEvent.click(painter);
+    await waitFor(() => expect(screen.queryByText('Фарбування стін')).toBeNull());
+
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+      target: { value: 'фарбування' },
+    });
+
+    await waitFor(() => expect(screen.getByText('Фарбування стін')).toBeTruthy());
+    expect(screen.getByText('Фарбування стелі')).toBeTruthy();
+    expect(screen.queryByText('Укладання плитки')).toBeNull();
+  });
+
+  it('a search that matches nothing says so — it does not offer «Стартовий набір»', async () => {
+    // The onboarding over a full catalog would read as «your catalog is empty», which it is not.
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
+
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+      target: { value: 'ламінат' },
+    });
+
+    expect(await screen.findByText(/Нічого не знайдено/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Стартовий набір' })).toBeNull();
+  });
+
+  it('«Видалити все» means the whole catalog under the TYPE filter, not what search left on screen', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
+    vi.mocked(catalogApi.deleteItems).mockResolvedValue({ deleted: 10 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
+
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+      target: { value: 'плитки' },
+    });
+    await waitFor(() => expect(screen.queryByText('Фарбування стін')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Дії з каталогом' }));
+    fireEvent.click(screen.getByText('Видалити все'));
+
+    // The confirm names all ten, and deletes all ten — an «all» that quietly meant «the four you
+    // can see» would be the worse of the two lies.
+    expect(await screen.findByText(/Буде видалено 10 поз\./)).toBeTruthy();
+    const buttons = screen.getAllByRole('button', { name: 'Видалити' });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(catalogApi.deleteItems).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(catalogApi.deleteItems).mock.calls[0][0]).toHaveLength(10);
+  });
+
+  it('ticks a whole trade in one tap — the bulk delete the chips could never offer', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
+    vi.mocked(catalogApi.deleteItems).mockResolvedValue({ deleted: 5 });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Дії з каталогом' }));
+    fireEvent.click(screen.getByText('Видалити позиції'));
+    fireEvent.click(screen.getByRole('button', { name: 'Плиткові роботи' }));
+
+    expect(await screen.findByText('Вибрано: 5')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Видалити' })[0]);
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Видалити' }).length).toBeGreaterThan(1));
+    const buttons = screen.getAllByRole('button', { name: 'Видалити' });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(catalogApi.deleteItems).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(catalogApi.deleteItems).mock.calls[0][0].sort())
+      .toEqual(['t1', 't2', 't3', 't4', 't5']);
+  });
+});

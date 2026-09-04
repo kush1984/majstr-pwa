@@ -6,10 +6,8 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
-import { cn } from '@/lib/cn.ts';
-import { TRADE_EMOJI, CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
-import { parseCustomTradeKey } from '@/features/catalog/TradeFilterChips.tsx';
-import type { EstimateTemplateSummary, Trade } from '@/api/types.ts';
+import { TradeLevel } from '@/features/catalog/TradeLevel.tsx';
+import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
 import { useEstimateTemplate, useEstimateTemplates } from './useEstimateTemplates.ts';
 
@@ -282,23 +280,20 @@ function TemplateBranchNode({
   onTogglePick: (id: string) => void;
   onOpen: (tpl: EstimateTemplateSummary) => void;
 }) {
-  const { t } = useTranslation();
-  const custom = parseCustomTradeKey(branch.key) !== null;
-  // A custom trade with no name left is still a real branch — it reads OTHER underneath (V91),
-  // which is the honest label for it.
-  const label = custom
-    ? (branch.customName?.trim() ?? '') || t('trades.OTHER')
-    : t('trades.' + branch.key);
   const pickedHere = branch.templates.filter((tpl) => picked.includes(tpl.id)).length;
 
-  const rows = (
-    <div
-      className={cn(
-        'space-y-1.5',
-        // A thin rail, not an indent: at 375px every level of padding is width the bundle name
-        // loses, and the name is the thing being read.
-        showTrade && 'mt-1.5 border-l-2 border-brand-soft pl-2',
-      )}
+  return (
+    <TradeLevel
+      show={showTrade}
+      tradeKey={branch.key}
+      customName={branch.customName}
+      count={branch.templates.length}
+      /* The point of the whole tree: a closed branch must still say it holds picks, or a
+         selection spanning two trades looks like it was lost when the master browses on. */
+      badge={pickedHere}
+      open={open}
+      onToggle={onToggle}
+      testId="template-trade"
     >
       {branch.templates.map((tpl) => (
         <TemplateRow
@@ -310,42 +305,7 @@ function TemplateBranchNode({
           onOpen={() => onOpen(tpl)}
         />
       ))}
-    </div>
-  );
-
-  if (!showTrade) return rows;
-
-  return (
-    <section>
-      <button
-        type="button"
-        data-testid="template-trade"
-        onClick={onToggle}
-        disabled={onToggle == null}
-        aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-brand-soft px-3.5 py-2.5 text-left"
-      >
-        {onToggle && (
-          <span
-            aria-hidden
-            className={cn('text-[10px] text-muted transition-transform', open && 'rotate-90')}
-          >
-            ▶
-          </span>
-        )}
-        <span aria-hidden>{custom ? CUSTOM_TRADE_EMOJI : TRADE_EMOJI[branch.key as Trade]}</span>
-        <span className="min-w-0 flex-1 break-words text-sm font-bold text-primary">{label}</span>
-        {/* The point of the whole tree: a closed branch must still say it holds picks, or a
-            selection spanning two trades looks like it was lost when the master browses on. */}
-        {pickedHere > 0 && (
-          <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
-            {pickedHere}
-          </span>
-        )}
-        <span className="text-xs font-semibold text-muted">{branch.templates.length}</span>
-      </button>
-      {open && rows}
-    </section>
+    </TradeLevel>
   );
 }
 

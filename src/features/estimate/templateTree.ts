@@ -1,6 +1,6 @@
 import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
-import { customTradeKey, type TradeKey } from '@/features/catalog/TradeFilterChips.tsx';
+import { customTradeKey, type TradeKey } from '@/features/catalog/tradeKey.ts';
 
 /** One trade and the bundles filed under it. */
 export interface TemplateBranch {
