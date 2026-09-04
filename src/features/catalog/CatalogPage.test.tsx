@@ -191,11 +191,11 @@ describe('CatalogPage — trade is a level, not a filter', () => {
     vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
     renderPage();
 
-    expect(await screen.findByTestId('catalog-trade')).toBeTruthy();
-    expect(screen.getAllByTestId('catalog-trade')).toHaveLength(2);
+    // findBy* THROWS on more than one match — and there are deliberately two branches here.
+    expect(await screen.findAllByTestId('catalog-trade')).toHaveLength(2);
 
     const tiling = screen.getAllByTestId('catalog-trade')
-      .find((b) => b.textContent?.includes('Плиткові'))!;
+      .find((b) => b.textContent?.includes('Плитка'))!;
     fireEvent.click(tiling);
     await waitFor(() => expect(screen.queryByText('Укладання плитки')).toBeNull());
     // The other trade is untouched — a fold is not a filter.
@@ -221,7 +221,7 @@ describe('CatalogPage — trade is a level, not a filter', () => {
     fireEvent.click(painter);
     await waitFor(() => expect(screen.queryByText('Фарбування стін')).toBeNull());
 
-    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі...'), {
       target: { value: 'фарбування' },
     });
 
@@ -236,7 +236,7 @@ describe('CatalogPage — trade is a level, not a filter', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
 
-    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі...'), {
       target: { value: 'ламінат' },
     });
 
@@ -250,7 +250,7 @@ describe('CatalogPage — trade is a level, not a filter', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
 
-    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі'), {
+    fireEvent.change(screen.getByPlaceholderText('Пошук у каталозі...'), {
       target: { value: 'плитки' },
     });
     await waitFor(() => expect(screen.queryByText('Фарбування стін')).toBeNull());
@@ -276,7 +276,7 @@ describe('CatalogPage — trade is a level, not a filter', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Дії з каталогом' }));
     fireEvent.click(screen.getByText('Видалити позиції'));
-    fireEvent.click(screen.getByRole('button', { name: 'Плиткові роботи' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Плитка' }));
 
     expect(await screen.findByText('Вибрано: 5')).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: 'Видалити' })[0]);
