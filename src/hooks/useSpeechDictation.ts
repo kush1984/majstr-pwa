@@ -37,11 +37,23 @@ export function useSpeechDictation({
   const [interim, setInterim] = useState('');
   const [blocked, setBlocked] = useState<SpeechBlock | null>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
+  /**
+   * True while the master WANTS to keep dictating. `stop()` clears it (his intent), and only then
+   * does `onend` NOT re-arm the recogniser.
+   *
+   * <p>Master feedback 2026-09-04: «дуже скоро обривається конекшин коли надиктовуєш» — the Web
+   * Speech API's `continuous: false` mode ends the recogniser at the first pause, which reads to
+   * the master as the mic breaking mid-sentence. We keep `continuous: false` (iOS hangs otherwise)
+   * and simulate a longer listen by re-starting on `onend` unless he tapped stop.</p>
+   */
+  const wantListenRef = useRef(false);
   // The callback changes on every render of the sheet; the recogniser is created once per start.
   const onFinalRef = useRef(onFinal);
   onFinalRef.current = onFinal;
 
   const teardown = useCallback(() => {
+    // Component unmounted or the recogniser is being reset: no more restarts.
+    wantListenRef.current = false;
     const rec = recRef.current;
     recRef.current = null;
     if (!rec) return;
@@ -58,6 +70,9 @@ export function useSpeechDictation({
   useEffect(() => teardown, [teardown]);
 
   const stop = useCallback(() => {
+    // Clear intent FIRST — `stop()` will call `onend` synchronously on some browsers, and the
+    // auto-restart branch below reads this ref to decide whether to re-arm.
+    wantListenRef.current = false;
     const rec = recRef.current;
     setListening(false);
     setInterim('');
@@ -76,6 +91,7 @@ export function useSpeechDictation({
       setBlocked('service');
       return;
     }
+    wantListenRef.current = true;
     const rec = new Ctor();
     rec.lang = lang;
     rec.continuous = false; // see the doc comment — never true
@@ -97,6 +113,9 @@ export function useSpeechDictation({
 
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') return;
+      // A real error (denied / no device / offline / service refused) ends the session — clear
+      // intent so onend does NOT try to re-arm into a broken state, and the button vanishes.
+      wantListenRef.current = false;
       setBlocked(
         e.error === 'not-allowed'
           ? 'denied'
@@ -110,8 +129,18 @@ export function useSpeechDictation({
 
     rec.onend = () => {
       recRef.current = null;
-      setListening(false);
       setInterim('');
+      // Re-arm on the next tick if the master still wants to be heard. `continuous: false` is a
+      // must (iOS hangs otherwise), but the master reads a mid-sentence auto-stop as the mic
+      // breaking; a small delay lets a pending final result settle and dodges the tight-loop that
+      // some browsers reject as abuse.
+      if (wantListenRef.current) {
+        window.setTimeout(() => {
+          if (wantListenRef.current) start();
+        }, 200);
+      } else {
+        setListening(false);
+      }
     };
 
     recRef.current = rec;

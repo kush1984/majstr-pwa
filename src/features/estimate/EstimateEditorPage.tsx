@@ -428,6 +428,7 @@ export function EstimateEditorPage() {
               <>
                 <EstimateItemsBoard
                   items={est.items}
+                  estimateId={id}
                   signed={signed}
                   touched={touched}
                   lastTouched={lastTouched}

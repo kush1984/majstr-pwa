@@ -223,13 +223,17 @@ describe('DictationSheet', () => {
 
     await waitFor(() => expect(dictationApi.commit).toHaveBeenCalled());
     // Called ONLY after the estimate lines land — a failing catalog copy must never look like the
-    // dictation failed. And with the trade left to «Інше», see open-questions.md.
+    // dictation failed. The name arrives capitalised (Web Speech returns lowercase; the review
+    // capitalises the first letter for an unmatched row, master feedback 2026-09-04).
     await waitFor(() => expect(createCatalogItemMock).toHaveBeenCalledTimes(1));
     expect(createCatalogItemMock.mock.calls[0][0]).toMatchObject({
-      name: 'демонтаж старої плитки',
+      name: 'Демонтаж старої плитки',
       unit: 'M2',
       defaultPrice: 450,
+      // Default target trade with no custom-trade picker touched = OTHER — same behaviour a master
+      // without custom trades had before the phase-4 dropdown existed.
       trade: 'OTHER',
+      customTradeId: null,
     });
     // A miss is not synonym material — a synonym needs a row to point AT.
     expect(dictationApi.saveSynonym).not.toHaveBeenCalled();

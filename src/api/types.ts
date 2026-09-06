@@ -416,6 +416,13 @@ export interface EstimateItemResponse {
   name: string;
   category: string | null;
   /**
+   * Snapshot of the position's trade at add time (V125). Null for a line the master typed himself
+   * (no catalog source) or an ADDENDUM row. The estimate board / portal render a trade badge on
+   * category headers only when the estimate carries ≥ 2 distinct non-null trades — a NULL row does
+   * not count as a "trade".
+   */
+  trade?: Trade | null;
+  /**
    * Plain words for a trade shorthand, frozen onto the line when it came from the catalog (V119).
    * «Q4 (еліт)» is a level a plasterer knows and nobody else does, and the client reads this same
    * wording in the portal and in the PDF. Null for a line the master wrote himself.
@@ -1279,6 +1286,11 @@ export interface DictationItem {
   unitPrice: number | null;
   type: ItemType;
   category: string | null;
+  /**
+   * Trade of the matched catalog row (V125). Null on an unmatched row. Rendered as a small badge
+   * on the review row so the master sees under WHICH trade a matched position is filed.
+   */
+  trade?: Trade | null;
   catalogItemId: string | null;
   issues: string[];
 }

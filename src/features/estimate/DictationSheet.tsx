@@ -14,13 +14,27 @@ import { cn } from '@/lib/cn.ts';
 import { useSpeechDictation } from '@/hooks/useSpeechDictation.ts';
 import { useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
 import { useInvalidateEstimate } from './useEstimate.ts';
+import { TradeBadge } from '@/components/TradeBadge.tsx';
+import { useMe } from '@/features/auth/useMe.ts';
 import { UNITS } from '@/api/types.ts';
-import type { DictationItem, ItemType, Unit } from '@/api/types.ts';
+import type { DictationItem, ItemType, Trade, Unit } from '@/api/types.ts';
 
 /** Wording differs (case/whitespace/punctuation aside) — the two sentences worth teaching a synonym for. */
 function wordingDiffers(spoken: string, matched: string): boolean {
   const norm = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   return norm(spoken) !== '' && norm(spoken) !== norm(matched);
+}
+
+/**
+ * Uppercase the first letter of a dictated name — the Web Speech API returns everything lowercase,
+ * and the master's own price list uses «Штукатурити стіни…», not «штукатурити». Master feedback
+ * 2026-09-04: «позиції надиктовані пишуться з малої букви, перша має бути велика». Only touches an
+ * UNMATCHED row's name; a matched row already carries the catalog's own capitalisation.
+ */
+function capitalizeFirst(s: string): string {
+  const trimmed = s.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toLocaleUpperCase('uk-UA') + trimmed.slice(1);
 }
 
 /** Parse a decimal field to a finite number, blank/garbage → 0 (master may fill later). */
@@ -44,12 +58,22 @@ interface Draft {
    *  «чому воно не підтягує трейд і категорію»). Same rule as name/unit/price: the parse read
    *  this, so the commit sends it. Editable in the drawer is out of scope for now. */
   category: string | null;
+  /** The matched catalog row's trade — shown as a small badge on the review row. Null on an
+   *  unmatched row; on save-to-catalog the master picks a trade explicitly (see `saveTrade`). */
+  trade: Trade | null;
   /** Did his own price list have this position? A miss means the price is his to type. */
   matched: boolean;
   /** The matched catalog row's id — remembered so we can teach a synonym pointing at it after commit. */
   catalogItemId: string | null;
   /** Learn this position into his catalog too — offered only on a miss, and only once it has a price. */
   saveToCatalog: boolean;
+  /** Under which system trade a save-to-catalog position should be filed (default: OTHER, keeps
+   *  the existing «Інше» pile behaviour for a master who never touches the picker). Ignored when
+   *  `saveCustomTradeId` is set. */
+  saveTrade: Trade;
+  /** Under which of the master's OWN custom trades (`user_trade`) the save-to-catalog position
+   *  should be filed; overrides `saveTrade`. Null = a system trade is used. */
+  saveCustomTradeId: string | null;
   /**
    * Teach the system to recognise the spoken wording as the matched row next time — offered only on
    * a matched row whose wording differs. See docs/open-questions.md → «A learned synonym outlives
@@ -64,16 +88,24 @@ type Step = 'input' | 'parsing' | 'review';
 function toDrafts(items: DictationItem[]): Draft[] {
   return items.map((it, i) => ({
     key: i,
-    name: it.name,
+    // A matched row uses the catalog's own wording — leave it untouched. An unmatched row (the
+    // server sends back what the master said, lowercase) gets its first letter capitalised so the
+    // review reads like the estimate line the master will sign, not like a chat log.
+    name: it.catalogItemId ? it.name : capitalizeFirst(it.name),
     spokenName: it.spokenName,
     quantity: it.quantity != null && it.quantity > 0 ? String(it.quantity) : '',
     price: it.unitPrice != null && it.unitPrice > 0 ? String(it.unitPrice) : '',
     unit: it.unit ?? '',
     type: it.type,
     category: it.category ?? null,
+    trade: it.trade ?? null,
     matched: it.catalogItemId != null,
     catalogItemId: it.catalogItemId ?? null,
     saveToCatalog: false,
+    // Default target trade when saving to catalog stays OTHER — same behaviour a master without
+    // custom trades would get before this feature. Master's explicit picker overrides.
+    saveTrade: 'OTHER',
+    saveCustomTradeId: null,
     saveSynonym: false,
     include: true,
   }));
@@ -118,6 +150,7 @@ export function DictationSheet({
   const { t } = useTranslation();
   const invalidateEstimate = useInvalidateEstimate(estimateId);
   const { online } = useOnlineGuard(); // the parse is a model call — no offline path
+  const { data: me } = useMe(); // master's own trades + custom trades — feed the save-to-catalog picker
   const [step, setStep] = useState<Step>('input');
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -207,10 +240,12 @@ export function DictationSheet({
             type: d.type,
             unit: d.unit as Unit,
             defaultPrice: num(d.price),
-            // No trade and no category are asked for here — a dictation review is the wrong place
-            // for two more pickers, so the position lands in the «Інше» pile and he re-files it in
-            // the catalog if he cares. Logged in open-questions.
-            trade: 'OTHER',
+            // Master feedback 2026-09-04: «коли ми це додаємо в каталог ми маємо мати можливість
+            // вказати трейд зі списка випадаючого». The picker below the tick sets `saveTrade`
+            // (a system trade) OR `saveCustomTradeId` (one of his own custom trades). A custom
+            // trade always rides under system trade OTHER (V91 invariant).
+            trade: d.saveCustomTradeId ? 'OTHER' : d.saveTrade,
+            customTradeId: d.saveCustomTradeId,
           });
           saved += 1;
         } catch {
@@ -418,7 +453,47 @@ export function DictationSheet({
                               )}
                             </span>
                           </label>
+                          {/* Trade picker — visible only when the master ticked save-to-catalog AND
+                              the row has a price. Offers his OWN system trades + his custom trades,
+                              not the full 11 (same list `ProfileEditModal` presents). Value is a
+                              serialised key so the same <select> can carry both kinds: a system
+                              trade rides as its enum name, a custom trade as `custom:<id>`. */}
+                          {d.saveToCatalog && !noPrice && (
+                            <label className="mt-2 flex items-center gap-2 text-xs text-secondary">
+                              <span className="min-w-0 flex-shrink-0">{t('dictation.saveTradeLabel')}</span>
+                              <Select
+                                value={d.saveCustomTradeId ? 'custom:' + d.saveCustomTradeId : d.saveTrade}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v.startsWith('custom:')) {
+                                    patch(d.key, { saveCustomTradeId: v.slice('custom:'.length), saveTrade: 'OTHER' });
+                                  } else {
+                                    patch(d.key, { saveCustomTradeId: null, saveTrade: v as Trade });
+                                  }
+                                }}
+                                className="min-w-0 flex-1"
+                              >
+                                {(me?.trades ?? []).map((tr) => (
+                                  <option key={tr} value={tr}>{t('trades.' + tr)}</option>
+                                ))}
+                                {(me?.customTrades ?? []).map((ct) => (
+                                  <option key={ct.id} value={'custom:' + ct.id}>{ct.name}</option>
+                                ))}
+                                {/* «Інше» always available as a fallback for a master who never
+                                    picked a specific trade — matches the current default. */}
+                                {!(me?.trades ?? []).includes('OTHER') && (
+                                  <option value="OTHER">{t('trades.OTHER')}</option>
+                                )}
+                              </Select>
+                            </label>
+                          )}
                         </div>
+                      )}
+                      {d.matched && d.trade && (
+                        // Master feedback 2026-09-04: «в каталозі він під трейдом сантехніка, чому
+                        // тут не видно». Small badge on every matched row (regardless of wording
+                        // match), so the master can spot a wrong-trade match at a glance.
+                        <div className="mt-1"><TradeBadge trade={d.trade} /></div>
                       )}
                       {d.matched && wordingDiffers(d.spokenName, d.name) && (
                         <>

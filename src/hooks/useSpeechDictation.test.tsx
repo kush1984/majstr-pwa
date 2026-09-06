@@ -111,4 +111,39 @@ describe('useSpeechDictation', () => {
     }));
     expect(onFinal).toHaveBeenCalledWith('поклеїти шпалери');
   });
+
+  it('re-arms the recogniser on onend when the master has not tapped stop (auto-restart)', () => {
+    // Master feedback 2026-09-04: «дуже скоро обривається конекшин коли надиктовуєш» — the Web
+    // Speech API's `continuous: false` mode ends at the first pause; the hook simulates a longer
+    // listen by re-starting on `onend` unless he tapped stop. iOS-hang rule keeps `continuous: false`.
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSpeechDictation({ onFinal: vi.fn() }));
+      act(() => result.current.start());
+      expect(created).toHaveLength(1);
+
+      // Browser fires onend after a pause. The hook must schedule a fresh recogniser.
+      act(() => created[0].onend?.());
+      act(() => { vi.advanceTimersByTime(250); });
+      expect(created).toHaveLength(2);
+      expect(created[1].start).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stop() clears the intent, so a following onend does NOT re-arm the recogniser', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSpeechDictation({ onFinal: vi.fn() }));
+      act(() => result.current.start());
+      act(() => result.current.stop());
+      // Some browsers deliver onend synchronously after stop().
+      act(() => created[0].onend?.());
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(created).toHaveLength(1); // no restart
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

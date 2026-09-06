@@ -12,10 +12,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { TradeBadge } from '@/components/TradeBadge.tsx';
+import { useCollapsedCategories } from './useCollapsedCategories.ts';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { percentLabel } from './percentLine.ts';
-import type { EstimateItemResponse } from '@/api/types.ts';
+import type { EstimateItemResponse, Trade } from '@/api/types.ts';
 import {
   flatten, ITEM_ID, resolveDrag, SECTION_ID, sectionId, toSections, type Section,
 } from './estimateArrange.ts';
@@ -56,6 +58,7 @@ const collisionDetection: CollisionDetection = (args) => {
  */
 export function EstimateItemsBoard({
   items,
+  estimateId,
   signed,
   touched,
   lastTouched,
@@ -64,6 +67,8 @@ export function EstimateItemsBoard({
   selection,
 }: {
   items: EstimateItemResponse[];
+  /** Keys the per-estimate collapse memory in `localStorage`. See `useCollapsedCategories`. */
+  estimateId: string;
   /** A signed estimate is read-only: no grips, no drags. */
   signed: boolean;
   /** Ids added/edited this session — faintly highlighted so a change isn't lost in a long list. */
@@ -127,6 +132,19 @@ export function EstimateItemsBoard({
   // catalog is works-only) reads exactly as before, no «РОБОТИ» banner over a single block.
   const bothTypes = works.length > 0 && materials.length > 0;
 
+  // Distinct non-null trades in this estimate. NULL rows don't count (see V125 header): NULL means
+  // "we don't know", not a real trade. The badge on category headers appears only when 2+.
+  const showTradeBadges = useMemo(() => {
+    const seen = new Set<Trade>();
+    for (const it of items) {
+      if (it.trade) seen.add(it.trade);
+      if (seen.size >= 2) return true;
+    }
+    return false;
+  }, [items]);
+
+  const collapse = useCollapsedCategories(estimateId);
+
   return (
     <>
       {works.length > 0 && (
@@ -141,6 +159,8 @@ export function EstimateItemsBoard({
           selection={selection}
           byId={byId}
           onDragEnd={onDragEndFor('WORK', worksSections)}
+          showTradeBadges={showTradeBadges}
+          collapse={collapse}
         />
       )}
       {materials.length > 0 && (
@@ -155,6 +175,8 @@ export function EstimateItemsBoard({
           selection={selection}
           byId={byId}
           onDragEnd={onDragEndFor('MATERIAL', materialsSections)}
+          showTradeBadges={showTradeBadges}
+          collapse={collapse}
         />
       )}
 
@@ -180,6 +202,7 @@ export function EstimateItemsBoard({
  */
 function TypeGroup({
   heading, sections, startNumber, signed, touched, lastTouched, onEdit, selection, byId, onDragEnd,
+  showTradeBadges, collapse,
 }: {
   /** The section heading, or null to render the block bare (a single-type estimate). */
   heading: string | null;
@@ -193,6 +216,9 @@ function TypeGroup({
   selection?: Selection;
   byId: Map<string, EstimateItemResponse>;
   onDragEnd: (e: DragEndEvent) => void;
+  /** True iff this estimate has ≥ 2 distinct non-null trades — decides whether to render the badge. */
+  showTradeBadges: boolean;
+  collapse: ReturnType<typeof useCollapsedCategories>;
 }) {
   const sensors = useSensors(
     // 8px before a drag begins: a tap on the grip still registers as a tap, and a swipe to scroll
@@ -230,6 +256,8 @@ function TypeGroup({
               onEdit={onEdit}
               selection={selection}
               byId={byId}
+              showTradeBadges={showTradeBadges}
+              collapse={collapse}
             />
           ))}
         </SortableContext>
@@ -264,6 +292,7 @@ function Tick({ on }: { on: boolean }) {
 
 function SectionBlock({
   section, firstNumber, signed, touched, lastTouched, onEdit, selection, byId,
+  showTradeBadges, collapse,
 }: {
   section: Section<EstimateItemResponse>;
   byId: Map<string, EstimateItemResponse>;
@@ -274,6 +303,8 @@ function SectionBlock({
   lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
   selection?: Selection;
+  showTradeBadges: boolean;
+  collapse: ReturnType<typeof useCollapsedCategories>;
 }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -284,6 +315,11 @@ function SectionBlock({
   const allPicked = selection ? ids.every((id) => selection.selected.has(id)) : false;
   // What this stage costs. The master is asked it on site far more often than the grand total.
   const subtotal = section.items.reduce((sum, i) => sum + i.lineTotal, 0);
+  const collapsed = collapse.isCollapsed(section.category);
+  // The header carries the section's dominant trade. A category almost always belongs to ONE trade
+  // (a stage inside it); on the rare mix, the first item's trade is used — same rule as sortOrder,
+  // «the section IS the run of lines sharing a category, ordered by the first of them».
+  const trade = section.items.find((i) => i.trade)?.trade ?? null;
 
   return (
     <section
@@ -309,31 +345,63 @@ function SectionBlock({
         ) : (
           !signed && <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />
         )}
-        <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-        <span className="min-w-0 flex-1 truncate">{label(section.category, t)}</span>
+        {/* Chevron + name are ONE button — the whole header row is the fold target. A tiny 8-px
+            chevron is unfairly hard to hit on a phone; a header-wide tap is the master's expected
+            interaction. `type="button"` so the tap never accidentally submits an ancestor form. */}
+        <button
+          type="button"
+          onClick={() => collapse.toggle(section.category)}
+          aria-expanded={!collapsed}
+          aria-label={t(collapsed ? 'estimate.expandSection' : 'estimate.collapseSection',
+              { name: label(section.category, t) })}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+        >
+          {/* Larger than the surrounding uppercase `text-[11px]` header — master feedback
+              2026-09-04: «іконка згортання дуже маленька». `w-4` gives a stable slot so the
+              chevron doesn't jump 1 px when it rotates 90°. */}
+          <span
+            aria-hidden
+            className={`inline-flex w-4 items-center justify-center text-base leading-none text-brand transition-transform ${collapsed ? '' : 'rotate-90'}`}
+          >
+            ▸
+          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+          <span className="min-w-0 flex-1 truncate">{label(section.category, t)}</span>
+          {showTradeBadges && trade && <TradeBadge trade={trade} />}
+        </button>
+        {collapsed && (
+          // A collapsed section still tells the master how many lines it hides, so the fold is not
+          // a "did I lose those?" moment. Rendered outside the button so it never becomes part of
+          // the fold-toggle target area.
+          <span className="font-normal normal-case text-muted">
+            ({section.items.length})
+          </span>
+        )}
         <span className="font-bold normal-case text-muted">{formatMoney(subtotal)}</span>
       </div>
 
-      <div className="space-y-1.5">
-        <SortableContext
-          items={section.items.map((i) => ITEM_ID + i.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {section.items.map((item, i) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              number={firstNumber + i}
-              signed={signed}
-              touched={touched}
-              lastTouched={lastTouched}
-              onEdit={onEdit}
-              selection={selection}
-              byId={byId}
-            />
-          ))}
-        </SortableContext>
-      </div>
+      {!collapsed && (
+        <div className="space-y-1.5">
+          <SortableContext
+            items={section.items.map((i) => ITEM_ID + i.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {section.items.map((item, i) => (
+              <ItemRow
+                key={item.id}
+                item={item}
+                number={firstNumber + i}
+                signed={signed}
+                touched={touched}
+                lastTouched={lastTouched}
+                onEdit={onEdit}
+                selection={selection}
+                byId={byId}
+              />
+            ))}
+          </SortableContext>
+        </div>
+      )}
     </section>
   );
 }
