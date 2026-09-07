@@ -35,7 +35,8 @@ import { getStoredRef, getStoredUtm } from '@/lib/referral.ts';
  * The closed event list. Deliberately a typed map rather than a free `capture(name, props)`:
  * "just in case" events are how an analytics layer turns into noise nobody trusts.
  *
- * Two events are deliberately ABSENT, and neither is an oversight:
+ * Two events are deliberately ABSENT, and neither is an oversight (a third, dictation, is present
+ * for the mirror-image reason — see `dictation_parsed`):
  *
  *  - **`checkout_started`** — the backend already persists a PENDING `Payment` row (period +
  *    auto-renew intent) on every `POST /api/billing/checkout`, before the redirect. Money belongs
@@ -64,6 +65,36 @@ interface EventMap {
    *  signature happens in the client's browser and is deliberately not measured, so this event
    *  must never be read as "acts signed". */
   act_signed: { mode: 'offline' };
+  /**
+   * Dictation is the ONE flow here where PostHog is not a second opinion but the only possible
+   * source. `parse` persists nothing at all, and `commit` goes through `appendItems`, which
+   * cannot say the lines were dictated — so unlike `checkout_started` there is no backend row
+   * this could ever drift from. That is precisely what the boundary rule permits.
+   *
+   * Two events, not one, because the gap between them IS the question: a master who dictates and
+   * abandons the review is using the feature and getting nothing, and no commit-only event can
+   * see him. Reading `dictation_committed / dictation_parsed` as a rate is the point.
+   *
+   * **The dictated TEXT never travels, in any property here.** It is free-form speech about a real
+   * job and can name a client, an address or a price nobody agreed to yet — the same reason a
+   * master-invented trade never travels. Only counts leave the device.
+   */
+  dictation_parsed: {
+    itemCount: number;
+    /** Positions `CatalogMatcher` could not pin to the master's own catalog. The quality signal:
+     *  a high ratio means the matcher is failing in the field, not that dictation is unwanted. */
+    unmatchedCount: number;
+    /** Whether OUR in-app microphone produced any of this text. Deliberately not `source:
+     *  'mic' | 'keyboard'`: text typed into the field may have come from the OS keyboard's own
+     *  microphone, and we cannot tell that from typing — claiming otherwise would invent data.
+     *  Can never be true in an installed iOS PWA, which is itself worth seeing. */
+    usedMic: boolean;
+  };
+  /** Fires only once the estimate lines actually landed. `savedToCatalog`/`synonymsTaught` measure
+   *  the cut-1 learning half, whose own open question ("nothing tells the master a synonym
+   *  exists") is deferred until there is evidence masters teach enough of them to need managing —
+   *  this is that evidence, at no extra event. */
+  dictation_committed: { itemCount: number; savedToCatalog: number; synonymsTaught: number };
 }
 
 type EventName = keyof EventMap;

@@ -14,6 +14,8 @@ vi.mock('@/api/dictation.ts', () => ({
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
+const trackMock = vi.fn();
+vi.mock('@/lib/posthog.ts', () => ({ track: (...a: unknown[]) => trackMock(...a) }));
 // createCatalogItem is invoked only when a row's «save to catalog» tick is ticked; every existing
 // test above leaves that tick off, but the mutation still has to resolve for the synonym tests below.
 const createCatalogItemMock = vi.fn().mockResolvedValue({ id: 'new-item' });
@@ -283,5 +285,51 @@ describe('DictationSheet', () => {
     expect(dictationApi.commit).toHaveBeenCalledTimes(1); // NOT retried, NOT rolled back
     expect(vi.mocked(toast.error).mock.calls.some((c) =>
       String(c[0]).includes('звучання'))).toBe(true);
+  });
+
+  it('measures a parse the master abandons — the gap commit-only counting cannot see', async () => {
+    vi.mocked(dictationApi.parse).mockResolvedValue({
+      items: [item(), item({ name: 'вкрутити гачок', catalogItemId: null, unitPrice: null,
+        category: null, issues: ['catalog', 'price'] })],
+    });
+
+    renderSheet();
+    await dictate();
+
+    // Fires on reaching the review, NOT on commit: a master who dictates and walks away is using
+    // the feature and getting nothing, and that is exactly what the PRO-gate decision needs to see.
+    expect(trackMock).toHaveBeenCalledWith('dictation_parsed', {
+      itemCount: 2,
+      unmatchedCount: 1,
+      usedMic: false, // typed into the field; the in-app recogniser never produced a chunk
+    });
+    expect(trackMock.mock.calls.some((c) => c[0] === 'dictation_committed')).toBe(false);
+  });
+
+  it('counts what LANDED, not what was ticked, and never ships the dictated text', async () => {
+    vi.mocked(dictationApi.parse).mockResolvedValue({
+      items: [item({ name: 'вкрутити гачок', spokenName: 'вкрутити гачок', catalogItemId: null,
+        unitPrice: 300, category: null, issues: ['catalog'] })],
+    });
+    vi.mocked(dictationApi.commit).mockResolvedValue(commitResponse(['line-1']));
+    createCatalogItemMock.mockRejectedValue(new Error('boom')); // ticked, but never landed
+
+    renderSheet();
+    await dictate('вкрутити гачок 300');
+
+    fireEvent.click(screen.getByLabelText(/Зберегти в мій каталог/));
+    fireEvent.click(screen.getByText(/^Додати 1/));
+
+    await waitFor(() => expect(trackMock).toHaveBeenCalledWith('dictation_committed', {
+      itemCount: 1,
+      savedToCatalog: 0, // the tick was on; the save failed, so it must not be counted
+      synonymsTaught: 0,
+    }));
+
+    // The load-bearing privacy assertion: free-form speech about a real job can name a client or
+    // an address, so only counts may leave the device. Guards every property of both events.
+    const shipped = JSON.stringify(trackMock.mock.calls);
+    expect(shipped).not.toContain('вкрутити гачок');
+    expect(shipped).not.toContain('300');
   });
 });

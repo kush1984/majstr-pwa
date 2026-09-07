@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -16,6 +16,7 @@ import { useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
 import { useInvalidateEstimate } from './useEstimate.ts';
 import { TradeBadge } from '@/components/TradeBadge.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
+import { track } from '@/lib/posthog.ts';
 import { UNITS } from '@/api/types.ts';
 import type { DictationItem, ItemType, Trade, Unit } from '@/api/types.ts';
 
@@ -160,7 +161,12 @@ export function DictationSheet({
   // A spoken chunk goes in on its OWN LINE: the recogniser ends an utterance at a pause, which is
   // usually one position, and a line break is the split this flow already documents («одна позиція
   // на рядок»). It is appended, never written over — he can keep typing between two utterances.
+  // Whether OUR microphone contributed to the text now in the field. A ref, not state: nothing
+  // renders from it, and it must survive the re-render every spoken chunk causes. Read once, at
+  // parse time, into `dictation_parsed.usedMic`.
+  const usedMic = useRef(false);
   const appendSpoken = useCallback((chunk: string) => {
+    usedMic.current = true;
     setText((prev) => (prev.trim() ? prev.replace(/\s+$/, '') + '\n' + chunk : chunk));
   }, []);
   const mic = useSpeechDictation({ onFinal: appendSpoken });
@@ -171,6 +177,7 @@ export function DictationSheet({
     setText('');
     setDrafts([]);
     setCommitting(false);
+    usedMic.current = false;
   };
 
   const close = () => {
@@ -200,6 +207,14 @@ export function DictationSheet({
       const res = await dictationApi.parse(estimateId, text.trim());
       setDrafts(toDrafts(res.items));
       setStep('review');
+      // Counts only, never the text — see the `dictation_parsed` contract. Fired on the REVIEW
+      // being reached, so abandoning it still counts as a use: that gap is the whole reason this
+      // event exists beside `dictation_committed`.
+      track('dictation_parsed', {
+        itemCount: res.items.length,
+        unmatchedCount: res.items.filter((it) => it.catalogItemId == null).length,
+        usedMic: usedMic.current,
+      });
     } catch (err) {
       toast.error(toAppError(err).message);
       setStep('input'); // his text is still in the field — a failed read must not cost him it
@@ -268,6 +283,13 @@ export function DictationSheet({
           synonymFailed = true;
         }
       }
+      // After the learning loops, so the two counters report what actually landed rather than what
+      // was ticked — a failed catalog save or synonym must not inflate them.
+      track('dictation_committed', {
+        itemCount: included.length,
+        savedToCatalog: saved,
+        synonymsTaught: synonyms,
+      });
       toast.success(
         saved > 0
           ? t('dictation.addedAndSaved', { count: included.length, saved })
