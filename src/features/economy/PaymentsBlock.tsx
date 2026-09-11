@@ -6,6 +6,7 @@ import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { formatMoney, formatAmount } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -175,18 +176,15 @@ function ReceivedItemRow({
   );
 }
 
+/** The markup lives in `CollapseGroupRow` — the shopping list folds its bought rows the same way. */
 function ReceivedGroupRow({ count, expanded, onToggle }: { count: number; expanded: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex min-h-11 w-full items-center gap-2 border-b border-border py-2 text-left text-[13px] font-semibold text-success last:border-b-0"
-    >
-      <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-success" aria-hidden />
-      <span className="flex-1">{t('economy.paymentsReceivedCount', { count })}</span>
-      <span className="flex-shrink-0 font-normal text-muted" aria-hidden>{expanded ? '︿' : '⌄'}</span>
-    </button>
+    <CollapseGroupRow
+      label={t('economy.paymentsReceivedCount', { count })}
+      expanded={expanded}
+      onToggle={onToggle}
+    />
   );
 }
 

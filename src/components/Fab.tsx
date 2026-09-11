@@ -11,20 +11,29 @@ import { cn } from '@/lib/cn.ts';
  *
  * <p>Children are {@link FabAction} rows. `close()` is passed to them so an action dismisses the menu
  * before doing its work — a sheet opening under a still-expanded FAB looks broken.</p>
+ *
+ * <p><b>One action means no menu.</b> Pass `onClick` instead of `children` and the button simply
+ * does the thing. A speed-dial that opens to a single pill is a tap the master pays for nothing,
+ * and — the reason this mode exists — a «＋» that opens a menu is read as «add», so the actions
+ * hidden behind it were never found (the estimate editor's share sat there, unused, for months).</p>
  */
 export function Fab({
   ariaLabel,
   children,
+  onClick,
   // bottom-20 (80 px) clears the mobile bottom nav; a FULL-SCREEN route without that nav (the act
   // editor) passes a lower offset so the button doesn't float mid-air (master feedback, round 2).
   position = 'bottom-20 right-4 lg:bottom-8 lg:right-8',
 }: {
   ariaLabel: string;
-  children: (close: (fn?: () => void) => void) => ReactNode;
+  children?: (close: (fn?: () => void) => void) => ReactNode;
+  /** Direct-action mode: the button acts instead of opening a menu. Wins over `children`. */
+  onClick?: () => void;
   position?: string;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const direct = onClick != null;
 
   const close = (fn?: () => void) => {
     setOpen(false);
@@ -33,7 +42,7 @@ export function Fab({
 
   return (
     <>
-      {open && (
+      {open && !direct && (
         // A full-screen catcher rather than an onBlur: a tap anywhere else has to close the menu, and
         // on a touch screen there is no blur to hang that on.
         //
@@ -55,15 +64,15 @@ export function Fab({
         content's own bottom padding (AppLayout) is what keeps it from covering anything.
       */}
       <div className={cn('fixed z-50 flex flex-col items-end gap-2', position)}>
-        {open && children(close)}
+        {open && !direct && children?.(close)}
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={direct ? onClick : () => setOpen((o) => !o)}
           aria-label={ariaLabel}
-          aria-expanded={open}
+          aria-expanded={direct ? undefined : open}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-card-lg transition-transform active:scale-95"
         >
-          <span className={cn('text-3xl leading-none transition-transform', open && 'rotate-45')}>
+          <span className={cn('text-3xl leading-none transition-transform', open && !direct && 'rotate-45')}>
             ＋
           </span>
         </button>

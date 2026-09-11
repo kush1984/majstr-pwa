@@ -84,11 +84,15 @@ function economyFixture(opts: {
   pro?: { expenses: number; profit: number } | null;
   payments?: NonNullable<ObjectEconomyResponse['payments']>;
   acts?: ObjectEconomyResponse['acts'];
+  materials?: ObjectEconomyResponse['materials'];
 } = {}): ObjectEconomyResponse {
   const pro = opts.pro ?? null;
   return {
     estimates: opts.estimates ?? [panel()],
     acts: opts.acts ?? { contracted: 15000, acceptedByActs: 0, received: 1500 },
+    // Nothing bought by default: the materials card is absent until a receipt exists, so every
+    // pre-V129 assertion in this file keeps seeing exactly the screen it was written against.
+    materials: opts.materials ?? { reimbursable: 0, receiptCount: 0, unpricedCount: 0 },
     payments: pro ? (opts.payments ?? SAMPLE_PAYMENTS) : null,
     internals: pro,
   };

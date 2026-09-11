@@ -21,6 +21,7 @@ import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
+import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
 import { ObjectStatusFabActions, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
@@ -368,6 +369,8 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      <ShoppingObjectRow projectId={id} />
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1.5 border-b border-border">

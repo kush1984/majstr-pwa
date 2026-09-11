@@ -74,6 +74,14 @@ export const routes = {
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
   act: (id: string) => `/acts/${id}`,
+  // The object's material shopping list — a full-screen surface, used in a shop with no signal.
+  shopping: (projectId: string) => `/shopping/${projectId}`,
+  // «Чеки обʼєкта» (V129) — the paper photographed at the till. Object-scoped like the shopping
+  // list it follows on from, and full-screen for the same reason: it is one job, done in one go.
+  receipts: (projectId: string) => `/receipts/${projectId}`,
+  // «Скільки матеріалу купити» — the estimate's works read as a buying list (V127). It hangs off
+  // the ESTIMATE, not the object: the works it reads are that one estimate's.
+  materials: (estimateId: string) => `/estimates/${estimateId}/materials`,
   // A new act exists only on the phone until «Зберегти» (master feedback: opening the editor and
   // going back used to leave a real act behind). The defaults it opens with ride the query string,
   // since there is no server row yet to read them from.

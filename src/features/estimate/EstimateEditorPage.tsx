@@ -6,7 +6,8 @@ import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
-import { Fab, FabAction } from '@/components/Fab.tsx';
+import { Fab } from '@/components/Fab.tsx';
+import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
@@ -25,6 +26,7 @@ import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
+import { EstimateNextStep } from './EstimateNextStep.tsx';
 import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
@@ -50,6 +52,7 @@ import {
 } from './useEstimate.ts';
 import { useSaveAsTemplate } from './useEstimateTemplates.ts';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
+import { useMaterialsAvailability } from '@/features/materials/useMaterialsAvailability.ts';
 import { ReceiptPdfSheet } from './ReceiptPdfSheet.tsx';
 
 // Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
@@ -145,6 +148,8 @@ export function EstimateEditorPage() {
   const { data: me } = useMe(); // for the custom trades on «зберегти як шаблон»
   // Actions that genuinely need the server (PDF, sharing, LLM recognition) say so when offline.
   const { guard } = useOnlineGuard();
+  // «Матеріали» is hidden outright on trades V127 can calculate nothing for (V129). Unknown = shown.
+  const materialsOffered = useMaterialsAvailability(id);
 
   // The route component is reused across estimates, so drop the highlight set when the id changes —
   // yesterday's edits must not glow on a different sheet.
@@ -381,16 +386,80 @@ export function EstimateEditorPage() {
           <Badge variant={ESTIMATE_STATUS_VARIANT[est.status]}>
             {t('status.estimate.' + est.status)}
           </Badge>
-          {!signed && (
-            <button
-              type="button"
-              onClick={openEdit}
-              aria-label={t('estimate.edit')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-base leading-none text-primary"
-            >
-              ✏️
-            </button>
-          )}
+          {/* Everything occasional lives here, and that is the point of the redesign: the FAB is
+              now a single «＋ Додати позицію» and the next step is spelled out at the foot of the
+              list, so the drawer of seven pills that hid sharing behind an «add» icon is gone. A ⋮
+              in a header is the one place a phone user already looks for «what else can I do». */}
+          <ActionMenu
+            ariaLabel={t('estimate.actionsMenu')}
+            triggerClassName="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-lg leading-none text-primary"
+          >
+            {(close) => (
+              <>
+                {!signed && (
+                  <ActionMenuItem icon="✏️" label={t('estimate.menuRename')} onClick={() => { close(); openEdit(); }} />
+                )}
+                {/* Entering selection from a named action, not from a long press: on Android a long
+                    press competes with text selection and the context menu. */}
+                {!signed && est.items.length > 0 && (
+                  <ActionMenuItem
+                    icon="☑"
+                    label={t('estimate.menuSelect')}
+                    onClick={() => { close(); setPicked(new Set()); }}
+                  />
+                )}
+                {/* Duplicating is a whole-sheet decision — «зроби мені клієнтський варіант +15 %» —
+                    and it defaults to every WORK line, so no picking mode first. 📑, not 📄: the
+                    PDF action a few rows down owns that icon. */}
+                {est.items.length > 0 && (
+                  <ActionMenuItem
+                    icon="📑"
+                    label={t('estimate.menuDuplicate')}
+                    onClick={() => { close(); setMarkupOpen(true); }}
+                  />
+                )}
+                {/* Typed or dictated. Two microphones and either one qualifies: the OS keyboard's
+                    own 🎤 on a phone/tablet, or the in-app Web Speech API in a browser that has it.
+                    Online-only: the parse is a model call. */}
+                {!signed && canDictate && (
+                  <ActionMenuItem
+                    icon="🎤"
+                    label={t('dictation.fabLabel')}
+                    onClick={() => { close(); guard(() => setDictationOpen(true))(); }}
+                  />
+                )}
+                {!signed && (
+                  <ActionMenuItem
+                    icon="🧾"
+                    label={t('receipt.fabLabel')}
+                    // Open for everyone since the fiscal-QR iteration: the sheet's QR route is free
+                    // and the PRO gate moved inside onto the photo routes.
+                    onClick={() => { close(); guard(() => setReceiptOpen(true))(); }}
+                  />
+                )}
+                {/* Also in the footer block as the primary action — kept here because the footer
+                    only appears once there are positions, and a master mid-edit still reaches for
+                    the menu. Online-only: both reach the server. */}
+                <ActionMenuItem
+                  icon="📤"
+                  label={t('estimate.menuShare')}
+                  onClick={() => { close(); guard(() => void onShare())(); }}
+                />
+                <ActionMenuItem
+                  icon="📄"
+                  label={t('estimate.menuPdf')}
+                  onClick={() => { close(); guard(() => void onPdf())(); }}
+                />
+                {est.items.length > 0 && (
+                  <ActionMenuItem
+                    icon="📋"
+                    label={t('templates.saveAsTemplate')}
+                    onClick={() => { close(); openSaveTemplate(); }}
+                  />
+                )}
+              </>
+            )}
+          </ActionMenu>
         </div>
 
         {signed && (
@@ -524,20 +593,19 @@ export function EstimateEditorPage() {
               signed={signed}
             />
 
-            {/* What the applied bundle promised the client (V121) — shown here because this is
-                where it is PRINTED: under the table, in the portal and in the PDF. The master
-                should not have to open the client's link to find out what his own estimate says.
-                Read-only on purpose: it is a snapshot taken when the bundle was applied, so it is
-                edited by editing the bundle, and re-wording the bundle never rewrites an estimate
-                the client already signed. */}
-            {(est.qualityNote?.trim() ?? '') !== '' && (
-              <div className="mt-4 rounded-card border border-border bg-surface p-4">
-                <h2 className="mb-1 text-sm font-bold text-primary">{t('estimate.qualityNote')}</h2>
-                <p className="mb-2 text-[11px] text-muted">{t('estimate.qualityNoteHint')}</p>
-                <p className="whitespace-pre-line text-xs leading-snug text-primary">
-                  {est.qualityNote?.trim()}
-                </p>
-              </div>
+            {/* «Що далі» — the end of the document, and the answer to the question the master has
+                when he stops adding positions. Only once there ARE positions: with an empty list
+                the EmptyState above already says the one thing to do. */}
+            {est.items.length > 0 && (
+              <EstimateNextStep
+                status={est.status}
+                signedAt={est.signedAt}
+                onShare={guard(() => void onShare())}
+                onCreateAct={() => void navigate(routes.newAct(projectId))}
+                onMaterials={() => void navigate(routes.materials(est.id))}
+                showMaterials={materialsOffered}
+                onPdf={guard(() => void onPdf())}
+              />
             )}
           </div>
 
@@ -554,64 +622,10 @@ export function EstimateEditorPage() {
           and never jumps up with the sheet. */}
       {picked === null && <MobileSummarySheet est={est} />}
 
-      {/* Floating actions (speed-dial) — always in reach on every screen size */}
-      <Fab ariaLabel={t('estimate.actionsMenu')}>
-        {(close) => (
-          <>
-            {!signed && (
-              <FabAction icon="＋" label={t('estimate.addItemTitle')} onClick={() => close(() => setAddOpen(true))} />
-            )}
-            {/* Entering selection from the FAB, not from a long press: the rows already carry drag
-                handles, and on Android a long press competes with text selection and the context
-                menu. A named action is also the only version a master can discover. */}
-            {!signed && est.items.length > 0 && (
-              <FabAction
-                icon="☑"
-                label={t('estimate.selectItems')}
-                onClick={() => close(() => setPicked(new Set()))}
-              />
-            )}
-            {/* Its own action, not a button inside the selection bar. Duplicating is a whole-sheet
-                decision — «зроби мені клієнтський варіант +15 %» — and it defaults to every WORK
-                line, so making the master first enter a picking mode was a step that bought
-                nothing. He adjusts individual prices in the copy afterwards if he wants to. */}
-            {est.items.length > 0 && (
-              <FabAction
-                icon="📄"
-                label={t('estimate.duplicateWithMarkup')}
-                onClick={() => close(() => setMarkupOpen(true))}
-              />
-            )}
-            {/* Typed or dictated. Two microphones and either one qualifies: the OS keyboard's own
-                🎤 on a phone/tablet, or the in-app Web Speech API in a browser that has it
-                (including desktop Chrome, where Windows voice typing lacks Ukrainian and this is
-                now the only way to try the flow). Online-only: the parse is a model call. */}
-            {!signed && canDictate && (
-              <FabAction
-                icon="🎤"
-                label={t('dictation.fabLabel')}
-                onClick={() => close(guard(() => setDictationOpen(true)))}
-              />
-            )}
-            {!signed && (
-              <FabAction
-                icon="🧾"
-                label={t('receipt.fabLabel')}
-                // Open for everyone since the fiscal-QR iteration: the sheet's QR route is free,
-                // and the PRO gate moved inside onto the photo routes. Sending FREE to the upsell
-                // from here would hide a free capability behind a paywall.
-                onClick={() => close(guard(() => setReceiptOpen(true)))} // server-side either way
-              />
-            )}
-            {/* Online-only: both reach the server (a rendered PDF / a link sent to a client). */}
-            <FabAction icon="📤" label={t('estimate.shareWithClientBtn')} onClick={() => close(guard(() => void onShare()))} />
-            <FabAction icon="📄" label={t('estimate.generatePdf')} onClick={() => close(guard(() => void onPdf()))} />
-            {est.items.length > 0 && (
-              <FabAction icon="📋" label={t('templates.saveAsTemplate')} onClick={() => close(openSaveTemplate)} />
-            )}
-          </>
-        )}
-      </Fab>
+      {/* ONE action, no drawer. The «＋» now means what it looks like it means; everything else
+          moved to the header ⋮ and to the next-step block at the foot of the list. Hidden on a
+          signed estimate, which cannot gain positions. */}
+      {!signed && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       {pdfSheetOpen && (
@@ -925,8 +939,17 @@ function MarkupSheet({
  */
 function MobileSummarySheet({ est }: { est: EstimateResponse }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const dragStartY = useRef<number | null>(null);
+
+  // An estimate of works alone is where the calculator earns its keep — «0 ₴ матеріалів» under a
+  // priced works figure is the moment the master notices the half he has not costed yet. Unless we
+  // can calculate nothing for these trades, in which case the offer is noise (V129); the probe
+  // shares its query key with the editor's, so asking here costs no second request.
+  const materialsOffered = useMaterialsAvailability(est.id);
+  const noMaterials =
+    est.items.some((i) => i.type === 'WORK') && !est.items.some((i) => i.type === 'MATERIAL');
 
   // The only line that can be negative is a «−% від кошторису»; their sum is the загальна знижка to
   // flag. It is NOT subtracted again — est.total already includes it.
@@ -984,6 +1007,15 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
               <TypeBreakdown items={est.items} type="WORK" subtotal={est.worksSubtotal} label={t('estimate.works')} />
               <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
               <AdjustNote items={est.items} />
+              {noMaterials && materialsOffered && (
+                <button
+                  type="button"
+                  onClick={() => void navigate(routes.materials(est.id))}
+                  className="mt-2 min-h-11 w-full rounded-xl bg-white/10 px-3 text-sm font-medium text-white"
+                >
+                  🧮 {t('estimate.summaryCountMaterials')}
+                </button>
+              )}
             </div>
           </div>
         )}

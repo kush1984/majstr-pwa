@@ -378,10 +378,13 @@ export function useApplyTemplate() {
 }
 
 /**
- * The finish level the applied bundles promise the client (V121) — the local twin of
+ * The finish level the applied bundles describe (V121) — the local twin of
  * `EstimateTemplateService.qualityNote`, and it has to stay one: distinct non-blank descriptions,
  * joined in the order they were picked with a blank line between, capped at the column's 1000
- * characters. Applying Q4 twice must not make the client read the same paragraph twice.
+ * characters. Applying Q4 twice must not store the same paragraph twice.
+ *
+ * NOTHING RENDERS THIS ANY MORE — the client surfaces went with V122, the master's card with
+ * v1.43.1. The snapshot is still taken on both sides, so bringing it back stays a render change.
  *
  * Only the SNAPSHOT is composed here. The server takes its own when the queued create lands, off
  * the bundles as they are then — which is the same wording unless the master re-writes a bundle

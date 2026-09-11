@@ -14,6 +14,7 @@ import { formatMoney } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -162,6 +163,9 @@ export function DashboardPage() {
       >
         {t('common.addEstimate')}
       </Button>
+
+      {/* What is left to buy, per object. Renders nothing when there is nothing to buy. */}
+      <ShoppingHomeCard />
 
       {isEmpty ? (
         <EmptyState

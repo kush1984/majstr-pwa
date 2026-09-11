@@ -8,6 +8,7 @@ import { measurementsApi } from '@/api/measurements.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
+import { shoppingApi } from '@/api/shopping.ts';
 import { economyApi } from '@/api/economy.ts';
 import { actsApi } from '@/api/acts.ts';
 import { fromQueuedFile } from './queuedFile.ts';
@@ -18,7 +19,8 @@ import type {
   EstimateItemFromCatalogRequest, EstimateItemRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
   NoteRequest, ProjectRequest,
-  ProjectStatus, TemplateItemRequest, TemplateItemsOrderRequest, Trade,
+  ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
+  TemplateItemRequest, TemplateItemsOrderRequest, Trade,
 } from '@/api/types.ts';
 
 /**
@@ -161,6 +163,31 @@ export function initOutbox(qc: QueryClient): () => void {
     } else {
       await notesApi.remove(p.objectId, op.entityId);
     }
+  });
+
+  // The shopping list — entityId is the ROW id; the object id rides the payload. This is the one
+  // screen the master uses with no signal at all (a builders' merchant is a basement or a metal
+  // shed), so every action here queues, ticking a row included. The create replays under the same
+  // X-Entity-Uuid, so a retry can never leave him buying the same material twice.
+  registerOutboxHandler('shoppingItem', async (op) => {
+    if (op.type === 'create') {
+      const p = op.payload as { projectId: string; req: ShoppingListItemRequest };
+      await shoppingApi.add(p.projectId, p.req, op.entityId);
+    } else if (op.type === 'update') {
+      const p = op.payload as { projectId: string; req: ShoppingListItemUpdateRequest };
+      await shoppingApi.update(p.projectId, op.entityId, p.req);
+    } else {
+      const p = op.payload as { projectId: string };
+      await shoppingApi.remove(p.projectId, op.entityId);
+    }
+  });
+
+  // Hiding the bought rows. Its own entity keyed on the OBJECT — the op is about the whole list
+  // rather than any one row — and coalesced, since it states an end state and two offline taps
+  // mean the same thing as one. It hides, never deletes: a deleted bought row comes back unbought
+  // on the next recalculation and the material gets bought twice.
+  registerOutboxHandler('shoppingClear', async (op) => {
+    await shoppingApi.clearBought(op.entityId);
   });
 
   // Object expenses (PRO) — entityId is the EXPENSE id; the object id rides the payload.

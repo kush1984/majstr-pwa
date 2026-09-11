@@ -124,7 +124,13 @@ function renderNewEditor(search = '?project=p1&from=2026-08-01') {
 
 /** Only `acts` matters here — it is all the editor reads off the economy. */
 function economy(acceptedByActs: number, received: number): ObjectEconomyResponse {
-  return { estimates: [], acts: { contracted: 0, acceptedByActs, received }, payments: null, internals: null };
+  return {
+    estimates: [],
+    acts: { contracted: 0, acceptedByActs, received },
+    materials: { reimbursable: 0, receiptCount: 0, unpricedCount: 0 },
+    payments: null,
+    internals: null,
+  };
 }
 
 /** The advance input carries no label element — it is the textbox in «Зараховано авансу»'s block. */

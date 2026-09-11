@@ -335,8 +335,8 @@ describe('useApplyTemplate offline — the finish level the bundle promises', ()
   });
 
   it('leaves it absent when no bundle explains itself', async () => {
-    // Most bundles are a list of jobs and nothing more. An empty «Стандарт робіт» card under the
-    // client's table would read as a promise the master never made.
+    // Most bundles are a list of jobs and nothing more, so a blank description stores nothing —
+    // the column stays empty rather than holding a blank nobody can tell from a paragraph.
     const { result } = harness((c) => {
       c.setQueryData(TEMPLATE_KEY, described('tpl-1', 'Санвузол', '   '));
       c.setQueryData(CATALOG_KEY, catalog);

@@ -21,7 +21,7 @@ import { useActs } from '@/features/acts/useActs.ts';
 import { actCreateBlock, useNewAct } from '@/features/acts/useNewAct.ts';
 import { ExpenseSheet } from './ExpenseSheet.tsx';
 import { PaymentsBlock } from './PaymentsBlock.tsx';
-import type { ExpenseCategory, ExpenseResponse, ObjectEconomyActsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
+import type { ExpenseCategory, ExpenseResponse, ObjectEconomyActsResponse, ObjectEconomyMaterialsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
 
 // Прибуток/Витрати (+ the expense journal) is deliberately hidden from the UI for now
 // (economy-hide-internals iteration, after a live trial): today's formula — `profit = contracted
@@ -257,6 +257,55 @@ function AxisStrip({ label, value, total, info }: {
 }
 
 /**
+ * The materials axis (V129) — FREE-visible, and deliberately its OWN axis rather than a line inside
+ * {@link ActsAxis}. «Прийнято актами» ⊆ «За договором» counts one estimate set; a receipt joins the
+ * contract only when an act picks it up, so folding it in would quietly break that invariant and
+ * make the works figures wrong.
+ *
+ * <p>What it answers is the question the master actually has after the builders' merchant: how much
+ * of his money is out there waiting to come back. Own-cost receipts never appear here — they are
+ * already object expenses, and counting them twice is exactly the confusion this feature removes.</p>
+ *
+ * <p>Absent until there is a receipt, like every other card here: a permanent 0 ₴ row is the kind of
+ * thing that «збиває з толку», and the door for adding one is the shopping list, not the economy.</p>
+ */
+function MaterialsAxis({ materials, objectId }: {
+  materials: ObjectEconomyMaterialsResponse; objectId: string;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  if (materials.receiptCount === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        navigate(routes.receipts(objectId), { state: { from: routes.project(objectId) } })
+      }
+      className="w-full rounded-card border border-border bg-surface p-3 text-left"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1 text-xs text-muted">
+          🧾 {t('receipts.axisTitle')}
+          <InfoPopover text={t('receipts.axisInfo')} label={t('receipts.axisTitle')} />
+        </span>
+        <span className="font-mono text-sm font-semibold tabular-nums text-primary">
+          {formatMoney(materials.reimbursable)}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted">
+        {t('receipts.axisCount', { count: materials.receiptCount })}
+        {materials.unpricedCount > 0 && (
+          <span className="text-warning">
+            {' · '}
+            {t('receipts.axisUnpriced', { count: materials.unpricedCount })}
+          </span>
+        )}
+      </p>
+    </button>
+  );
+}
+
+/**
  * Object economy tab. Two tiers (economy-polish iteration tightened the split):
  * <ul>
  *   <li><b>FREE + PRO, always real data:</b> per-SIGNED-estimate act panels, clickable → the
@@ -338,6 +387,10 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
 
       {/* Works axis (acts iteration) — FREE-visible, computed unconditionally by the backend. */}
       {eco?.acts && <ActsAxis acts={eco.acts} />}
+
+      {/* Materials axis (V129) — FREE-visible for the same reason, and NEVER folded into the works
+          figures above: those count one estimate set, this is money spent, not work accepted. */}
+      {eco?.materials && <MaterialsAxis materials={eco.materials} objectId={objectId} />}
 
       {/* economy-polish: FREE stops at the acts list above now — the summary/payments/internals
           trio is ONE PRO-locked block, not three separate gates. Backend nulls payments AND

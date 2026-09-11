@@ -15,6 +15,9 @@ import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { ActEditorPage } from '@/features/acts/ActEditorPage.tsx';
+import { ShoppingListPage } from '@/features/shopping/ShoppingListPage.tsx';
+import { ProjectReceiptsPage } from '@/features/receipts/ProjectReceiptsPage.tsx';
+import { MaterialCalculatorPage } from '@/features/materials/MaterialCalculatorPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage.tsx';
@@ -110,10 +113,18 @@ export const router = createBrowserRouter([
       // Static '/estimates/import' ranks above the dynamic '/estimates/:id'.
       { path: routes.estimateImport, element: <EstimateImportPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
+      // The material calculator reads ONE estimate's works, so it hangs off that estimate.
+      { path: '/estimates/:id/materials', element: <MaterialCalculatorPage /> },
       // Static '/acts/new' ranks above the dynamic '/acts/:id' — the editor on an act that has no
       // server row yet and gets one only on «Зберегти».
       { path: '/acts/new', element: <ActEditorPage /> },
       { path: '/acts/:id', element: <ActEditorPage /> },
+      // The shopping list is used in a builders' merchant — full screen, no nav chrome, and it
+      // must open offline (the SW's navigation fallback already covers any SPA route).
+      { path: '/shopping/:projectId', element: <ShoppingListPage /> },
+      // «Чеки обʼєкта» (V129) — the step straight after the shop, and its own screen for the same
+      // reason the list is: one job, one gesture, no tab to hunt for.
+      { path: '/receipts/:projectId', element: <ProjectReceiptsPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },
     ],

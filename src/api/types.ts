@@ -231,7 +231,7 @@ export type PercentBaseKind = 'MANUAL' | 'POSITION' | 'TOTAL';
  */
 export const UNITS = [
   'M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET',
-  'M3', 'T', 'POINT', 'PERCENT', 'KM', 'DAY', 'FLOOR',
+  'M3', 'T', 'POINT', 'PERCENT', 'KM', 'DAY', 'FLOOR', 'LITRE',
 ] as const;
 
 export type Unit = (typeof UNITS)[number];
@@ -495,6 +495,8 @@ export interface EstimateResponse {
   qualityNote?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** When the client signed it. Absent (`non_null`) on anything but a SIGNED estimate. */
+  signedAt?: string | null;
   items: EstimateItemResponse[];
   worksSubtotal: number;
   materialsSubtotal: number;
@@ -798,11 +800,28 @@ export interface ObjectEconomyActsResponse {
   received: number;
 }
 
+/** The materials axis (V129) — FREE-visible, computed unconditionally like `acts`.
+ *
+ *  <p>Deliberately its OWN axis rather than a line inside the works one: a receipt at the till is a
+ *  RECEIVABLE, not contracted work. `contracted`/`acceptedByActs` count ONE estimate set so that
+ *  «Прийнято актами» ⊆ «За договором», and a receipt joins the contract only when an act picks it
+ *  up. Receipts the master marked «це моя витрата» are absent here — those are object expenses, and
+ *  counting them in both places would bill them twice.</p> */
+export interface ObjectEconomyMaterialsResponse {
+  /** What the client still owes back for material bought with the master's money. */
+  reimbursable: number;
+  receiptCount: number;
+  /** Photographed but not priced yet — they add nothing to `reimbursable` until a sum is on them. */
+  unpricedCount: number;
+}
+
 export interface ObjectEconomyResponse {
   /** Every SIGNED estimate of the object — FREE + PRO, always present. */
   estimates: SignedEstimatePanelResponse[];
   /** Contracted / accepted-by-acts / received — FREE + PRO, always present (acts iteration). */
   acts: ObjectEconomyActsResponse;
+  /** Materials bought against receipts — FREE + PRO, computed unconditionally like `acts` (V129). */
+  materials: ObjectEconomyMaterialsResponse;
   /** Contracted/received/remaining + the payment schedule. PRO only as of the economy-polish
    *  iteration — null for FREE, gated together with `internals` behind one lock teaser. */
   payments: PaymentsSummaryResponse | null;
@@ -1500,6 +1519,59 @@ export interface ActReceiptRecognizeResponse {
   issuedAt: string | null;
 }
 
+/** What a read returned for an OBJECT receipt, whichever rung read it (V129). Same three footer
+ *  fields as the act's, plus the paper's fiscal identity — which is printed in the QR only, so a
+ *  vision read leaves both null and neither is ever required. */
+export interface ReceiptRecognizeResponse {
+  recognized: boolean;
+  label: string | null;
+  amount: number | null;
+  issuedAt: string | null;
+  /** Identity of the paper. It FLAGS a duplicate on the read path; it is never a unique key. */
+  fiscalFn: string | null;
+  fiscalId: string | null;
+}
+
+/** One receipt photographed at the till and filed against the OBJECT (V129) — deliberately not
+ *  against an act: the master buys before he signs, often before an act exists at all. */
+export interface ProjectReceiptResponse {
+  id: string;
+  /** Never blank — the server names an unlabelled receipt «Чек №N», since only it knows the N. */
+  label: string;
+  /** 0 = photographed but not priced yet. A legal saved state, not a lost receipt. */
+  amount: number;
+  issuedAt: string | null;
+  hasPhoto: boolean;
+  /** true (the default) = the client owes this money back, and it touches no expense. false =
+   *  «це моя витрата», posted as a MATERIALS/RECEIPT object expense. */
+  reimbursable: boolean;
+  /** Shares its fiscal identity with a receipt already filed here — a warning to check, never a
+   *  refused save: the photo was already taken by the time we can know. */
+  duplicate: boolean;
+  sortOrder: number;
+}
+
+export interface ProjectReceiptsResponse {
+  items: ProjectReceiptResponse[];
+  /** What the client still owes back for material bought with the master's money. */
+  reimbursableTotal: number;
+  /** The «це моя витрата» pile — already object expenses, and absent from the materials axis. */
+  ownTotal: number;
+  unpricedCount: number;
+}
+
+/** A PATCH carries the row's WHOLE text state: the server requires `label` and `amount`, so a
+ *  caller changing one of them must send the other back unchanged or it erases it. */
+export interface ProjectReceiptRequest {
+  label: string;
+  amount: number;
+  issuedAt?: string | null;
+  /** Three-valued, like the server's: omit it to leave «клієнт відшкодовує» exactly as it was. */
+  reimbursable?: boolean;
+  fiscalFn?: string | null;
+  fiscalId?: string | null;
+}
+
 export interface WorkActResponse {
   id: string;
   projectId: string;
@@ -1619,4 +1691,199 @@ export interface ShareLinkResponse {
   createdAt: string;
   expiresAt: string | null;
   revoked: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Shopping list (mirror ShoppingList*Response / ShoppingList*Request)
+// ---------------------------------------------------------------------------
+
+/** Where a row came from. CALCULATOR rows are replaced by a recalculation; MANUAL rows never are. */
+export type ShoppingListItemSource = 'CALCULATOR' | 'MANUAL' | 'RECEIPT';
+
+/**
+ * One row of the list. There is deliberately NO price field: in the shop the master reads the
+ * price tag, not our forecast. `edited` is set when he changed the quantity by hand — that is what
+ * stops the next recalculation from overwriting his number.
+ */
+export interface ShoppingListItemResponse {
+  id: string;
+  materialId?: string | null;
+  name: string;
+  unit: Unit;
+  quantity: number;
+  bought: boolean;
+  boughtAt?: string | null;
+  edited: boolean;
+  /** What the last recalculation would have written into this hand-edited row; absent = nothing to offer. */
+  suggestedQuantity?: number | null;
+  /** The row carries only the difference — something for the same material is already bought. */
+  topUp: boolean;
+  source: ShoppingListItemSource;
+  sourceEstimateId?: string | null;
+  note?: string | null;
+  sortOrder: number;
+}
+
+/** The whole list of one object. `id` is null until the first row exists — a list is created lazily. */
+export interface ShoppingListResponse {
+  id?: string | null;
+  projectId: string;
+  projectName: string;
+  archivedAt?: string | null;
+  totalCount: number;
+  boughtCount: number;
+  /** At least one row came from an estimate that is not signed yet — its figures can still move. */
+  sourceEstimateUnsigned: boolean;
+  items: ShoppingListItemResponse[];
+}
+
+/** One line of the home-screen «🛒 Купити» card. Archived and fully-bought lists are not returned. */
+export interface ShoppingListSummaryResponse {
+  projectId: string;
+  projectName: string;
+  totalCount: number;
+  boughtCount: number;
+}
+
+export interface ShoppingListItemRequest {
+  materialId?: string | null;
+  name: string;
+  unit: Unit;
+  quantity: number;
+  note?: string | null;
+}
+
+/** A partial edit — an absent field means «leave it». */
+export interface ShoppingListItemUpdateRequest {
+  quantity?: number;
+  note?: string;
+  bought?: boolean;
+  /** The master's answer to a parked recalculation figure. Both answers clear it. */
+  suggestion?: 'ACCEPT' | 'KEEP_MINE';
+}
+
+/** The master's habitual calculator answers, keyed by the backend's `MaterialPrefKey` names. */
+export interface MaterialPrefsResponse {
+  prefs: Record<string, string>;
+}
+
+export interface MaterialPrefsRequest {
+  prefs: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// Material calculator (mirror MaterialCalculation* / Calculated* / Coverage*)
+// ---------------------------------------------------------------------------
+
+/** What `qtyPerUnit` multiplies: the line's own quantity, or the room's perimeter. */
+export type NormBasis = 'QUANTITY' | 'PERIMETER';
+
+/** Why a position proposes nothing. NO_NORM = we have no figure; AMBIGUOUS = two trades disagree. */
+export type CoverageGapKind = 'NO_NORM' | 'AMBIGUOUS';
+
+/**
+ * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
+ * the master can check the number rather than trust it. A PERIMETER source has no estimate line
+ * behind it, so `estimateItemId` and `name` are both absent and the screen supplies the label.
+ */
+export interface MaterialSourceLine {
+  estimateItemId?: string | null;
+  name?: string | null;
+  unit: Unit;
+  quantity: number;
+  qtyPerUnit: number;
+  /** The norm `qtyPerUnit` came from — the address a correction is written to. */
+  normId: string;
+  /** The coefficient is the master's own, not the shipped one. */
+  ownNorm: boolean;
+  basis: NormBasis;
+  amount: number;
+}
+
+/**
+ * One material to buy. `baseQuantity` is the norm's own answer, `quantity` the figure after the
+ * waste allowance and the round-up to a whole package — the number that goes on the list.
+ */
+export interface CalculatedMaterialLine {
+  materialId: string;
+  name: string;
+  unit: Unit;
+  baseQuantity: number;
+  quantity: number;
+  wastePercent: number;
+  packageSize?: number | null;
+  packageName?: string | null;
+  packages?: number | null;
+  sources: MaterialSourceLine[];
+}
+
+/** A position the calculator could not answer for — named out loud, never silently skipped. */
+export interface CoverageGap {
+  estimateItemId: string;
+  name: string;
+  unit: Unit;
+  quantity: number;
+  kind: CoverageGapKind;
+}
+
+/** «Норми відомі для 12 з 15 позицій». PERCENT and MATERIAL lines are in neither number. */
+export interface MaterialCoverage {
+  total: number;
+  covered: number;
+  gaps: CoverageGap[];
+}
+
+/** A figure the estimate cannot supply and we refuse to guess — today only the room's perimeter. */
+export interface MissingParameter {
+  /** Today always `PERIMETER`; open as a string so a second parameter is not a breaking change. */
+  parameter: string;
+  materialName: string;
+}
+
+export interface MaterialCalculationResponse {
+  materials: CalculatedMaterialLine[];
+  coverage: MaterialCoverage;
+  parameters: MissingParameter[];
+  wastePercent: number;
+  perimeter?: number | null;
+  /** The estimate behind these figures is signed, so the quantities have stopped moving. */
+  estimateSigned: boolean;
+}
+
+/** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */
+export interface MaterialNormUpdateRequest {
+  qtyPerUnit: number;
+}
+
+/**
+ * The norm the write LANDED on. `id` is NOT always the one in the URL — correcting a shipped norm
+ * forks it, and the fork's id is what comes back.
+ */
+export interface MaterialNormResponse {
+  id: string;
+  materialId: string;
+  qtyPerUnit: number;
+  ownNorm: boolean;
+}
+
+/** What the master left on the screen — every number here is his, not re-derived by the server. */
+export interface MaterialLineRequest {
+  materialId: string;
+  quantity: number;
+}
+
+export interface MaterialApplyRequest {
+  materials: MaterialLineRequest[];
+}
+
+/**
+ * Whether «Матеріали» is worth offering on this estimate at all (V129). V127 ships norms for
+ * DRYWALL only, so on any other trade the screen opens with every position listed as a gap and an
+ * empty buying list — «воно збиває з толку» (master). An absent feature is quieter than one that
+ * looks broken. `workLines`/`coveredLines` describe how partial the answer would be.
+ */
+export interface MaterialAvailabilityResponse {
+  available: boolean;
+  workLines: number;
+  coveredLines: number;
 }

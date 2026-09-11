@@ -8,6 +8,7 @@ import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
 import { notesApi } from '@/api/notes.ts';
+import { shoppingApi } from '@/api/shopping.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
 import { messagesApi } from '@/api/messages.ts';
 import { photosApi } from '@/api/photos.ts';
@@ -20,6 +21,7 @@ import { PROJECTS_KEY } from '@/features/projects/useProjects.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
 import { NOTES_KEY } from '@/features/notes/useNotes.ts';
+import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
 import { messagesKey } from '@/features/messages/useMessages.ts';
 import { PHOTOS_KEY } from '@/features/photos/usePhotos.ts';
 import { economyKeys } from '@/features/economy/useEconomy.ts';
@@ -97,6 +99,7 @@ export async function prefetchForOffline(
     () => qc.prefetchQuery({ queryKey: [...CATALOG_KEY, 'categories'], queryFn: () => catalogApi.categories() }),
     () => qc.prefetchQuery({ queryKey: ESTIMATE_TEMPLATE_KEY, queryFn: () => estimateTemplatesApi.list() }),
     () => qc.prefetchQuery({ queryKey: ['dashboard', 'metrics'], queryFn: () => dashboardApi.metrics() }),
+    () => qc.prefetchQuery({ queryKey: SHOPPING_SUMMARY_KEY, queryFn: () => shoppingApi.summary() }),
   ];
   total = core.length + 1; // + the projects list below
   report();
@@ -119,6 +122,10 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: ['project-estimates', p.id], queryFn: () => estimatesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: NOTES_KEY(p.id), queryFn: () => notesApi.list(p.id) }));
+    // The shopping list is the ONE screen used with no signal at all — if it is not cached, the
+    // feature does not exist in the shop, which is the only place it matters.
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: SHOPPING_KEY(p.id), queryFn: () => shoppingApi.get(p.id) }));
     // The object's other tabs, so none of them is blank on site.
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: messagesKey(p.id), queryFn: () => messagesApi.listForProject(p.id) }));
