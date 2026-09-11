@@ -1775,11 +1775,11 @@ export interface MaterialPrefsRequest {
 // Material calculator (mirror MaterialCalculation* / Calculated* / Coverage*)
 // ---------------------------------------------------------------------------
 
-/** What `qtyPerUnit` multiplies: the line's own quantity, or the room's perimeter. */
-export type NormBasis = 'QUANTITY' | 'PERIMETER';
-
-/** Why a position proposes nothing. NO_NORM = we have no figure; AMBIGUOUS = two trades disagree. */
-export type CoverageGapKind = 'NO_NORM' | 'AMBIGUOUS';
+/**
+ * What `qtyPerUnit` multiplies: the line's own quantity, the room's perimeter, or — for a короб —
+ * the length times the section the master typed (V131).
+ */
+export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION';
 
 /**
  * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
@@ -1797,6 +1797,8 @@ export interface MaterialSourceLine {
   /** The coefficient is the master's own, not the shipped one. */
   ownNorm: boolean;
   basis: NormBasis;
+  /** The third factor of a SECTION row — «12 м.п. × переріз 0,4 м × 2,2» — absent elsewhere. */
+  section?: number | null;
   amount: number;
 }
 
@@ -1817,27 +1819,32 @@ export interface CalculatedMaterialLine {
   sources: MaterialSourceLine[];
 }
 
-/** A position the calculator could not answer for — named out loud, never silently skipped. */
-export interface CoverageGap {
-  estimateItemId: string;
-  name: string;
-  unit: Unit;
-  quantity: number;
-  kind: CoverageGapKind;
-}
-
-/** «Норми відомі для 12 з 15 позицій». PERCENT and MATERIAL lines are in neither number. */
+/**
+ * «Порахували матеріали для: Гіпсокартон, Малярні роботи» — the trades of the positions a norm
+ * answered for, in the order the estimate mentions them (master's ruling, 2026-09-11). It replaced
+ * a «8 з 39» ratio plus a list of everything unanswered: the denominator counted lines that are not
+ * buying decisions at all, and the list filled the screen with demolition and cleanup.
+ */
 export interface MaterialCoverage {
-  total: number;
-  covered: number;
-  gaps: CoverageGap[];
+  /** `Trade` codes — labelled through `t('trades.' + code)`. */
+  trades: string[];
+  /** A counted position carries no trade at all (`estimate_items.trade` is nullable, V125). */
+  otherWorks: boolean;
 }
 
-/** A figure the estimate cannot supply and we refuse to guess — today only the room's perimeter. */
+/**
+ * A figure the estimate cannot supply and we refuse to guess: the room's `PERIMETER`, or a box's
+ * `SECTION`. The perimeter is one number for the whole estimate, so it carries no position; a
+ * section belongs to ONE position (two boxes in one estimate genuinely differ), so it names it and
+ * the screen asks once per position rather than once per material.
+ */
 export interface MissingParameter {
-  /** Today always `PERIMETER`; open as a string so a second parameter is not a breaking change. */
+  /** `PERIMETER` or `SECTION`; open as a string so a third parameter is not a breaking change. */
   parameter: string;
   materialName: string;
+  /** Set for `SECTION`, absent for `PERIMETER`. */
+  estimateItemId?: string | null;
+  positionName?: string | null;
 }
 
 export interface MaterialCalculationResponse {
@@ -1878,12 +1885,12 @@ export interface MaterialApplyRequest {
 
 /**
  * Whether «Матеріали» is worth offering on this estimate at all (V129). V127 ships norms for
- * DRYWALL only, so on any other trade the screen opens with every position listed as a gap and an
- * empty buying list — «воно збиває з толку» (master). An absent feature is quieter than one that
- * looks broken. `workLines`/`coveredLines` describe how partial the answer would be.
+ * DRYWALL only, so on any other trade the screen opens with an empty buying list — «воно збиває з
+ * толку» (master). An absent feature is quieter than one that looks broken.
+ *
+ * One field on purpose: it used to carry line counts nothing read, taken off a denominator the
+ * master has since rejected (see `MaterialCoverage`).
  */
 export interface MaterialAvailabilityResponse {
   available: boolean;
-  workLines: number;
-  coveredLines: number;
 }

@@ -45,7 +45,7 @@ function line(over: Partial<CalculatedMaterialLine> = {}): CalculatedMaterialLin
 function answer(over: Partial<MaterialCalculationResponse> = {}): MaterialCalculationResponse {
   return {
     materials: [line()],
-    coverage: { total: 1, covered: 1, gaps: [] },
+    coverage: { trades: ['DRYWALL'], otherWorks: false },
     parameters: [],
     wastePercent: 10,
     perimeter: null,
@@ -99,29 +99,35 @@ describe('MaterialCalculatorPage', () => {
     expect(screen.getByText(/запас 10 %/)).toBeTruthy();
   });
 
-  it('names the positions it could not calculate instead of only counting them', async () => {
+  it('names the trades it calculated for, and lists no gaps', async () => {
     calculate.mockResolvedValue(
-      answer({
-        coverage: {
-          total: 2,
-          covered: 1,
-          gaps: [
-            {
-              estimateItemId: 'e2',
-              name: 'Монтаж люків ревізійних',
-              unit: 'PIECE',
-              quantity: 3,
-              kind: 'NO_NORM',
-            },
-          ],
-        },
-      }),
+      answer({ coverage: { trades: ['DRYWALL', 'PAINTER'], otherWorks: false } }),
     );
     renderPage();
 
-    expect(await screen.findByText(/Порахували 1 з 2/)).toBeTruthy();
-    fireEvent.click(screen.getByText('Показати, що не порахували'));
-    expect(screen.getByText(/Монтаж люків ревізійних/)).toBeTruthy();
+    // The master's own wording (2026-09-11). «Порахували 8 з 39» over 31 named demolition lines is
+    // the shape he rejected: «то думаю треба забрати».
+    expect(
+      await screen.findByText('Порахували матеріали для: Гіпсокартон, Малярні роботи'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/не порахували/)).toBeFalsy();
+  });
+
+  /** `estimate_items.trade` is nullable (V125), so a counted position may name no trade at all. */
+  it('says «інші роботи» for a counted position that carries no trade', async () => {
+    calculate.mockResolvedValue(answer({ coverage: { trades: ['DRYWALL'], otherWorks: true } }));
+    renderPage();
+
+    expect(await screen.findByText('Порахували матеріали для: Гіпсокартон, інші роботи')).toBeTruthy();
+  });
+
+  it('says so in one line when nothing could be calculated', async () => {
+    calculate.mockResolvedValue(
+      answer({ materials: [], coverage: { trades: [], otherWorks: false } }),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/Норм для цього кошторису ще немає/)).toBeTruthy();
   });
 
   it('asks for the perimeter rather than guessing it from the area', async () => {
@@ -135,8 +141,102 @@ describe('MaterialCalculatorPage', () => {
     fireEvent.click(screen.getByText('Порахувати'));
 
     await waitFor(() =>
-      expect(calculate).toHaveBeenCalledWith('est-1', { wastePercent: 10, perimeter: 16 }),
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: 16,
+        sections: undefined,
+      }),
     );
+  });
+
+  it('asks each box for its own section, never one figure for both', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'SECTION',
+            materialName: 'Лист ГКЛ',
+            estimateItemId: 'e1',
+            positionName: 'Монтаж короба (прямого)',
+          },
+          {
+            parameter: 'SECTION',
+            materialName: 'Профіль CD 60×27',
+            estimateItemId: 'e1',
+            positionName: 'Монтаж короба (прямого)',
+          },
+          {
+            parameter: 'SECTION',
+            materialName: 'Лист ГКЛ',
+            estimateItemId: 'e2',
+            positionName: 'Монтаж ніші',
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібен переріз')).toBeTruthy();
+    // One input per POSITION: the board and the ribs of one короб share a single розгортка.
+    fireEvent.change(screen.getByLabelText('Монтаж короба (прямого)'), {
+      target: { value: '0,4' },
+    });
+    fireEvent.change(screen.getByLabelText('Монтаж ніші'), { target: { value: '1,2' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: 'e1:0.4,e2:1.2',
+      }),
+    );
+  });
+
+  it('does not ask for a perimeter when the only missing figure is a section', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        parameters: [
+          {
+            parameter: 'SECTION',
+            materialName: 'Лист ГКЛ',
+            estimateItemId: 'e1',
+            positionName: 'Монтаж короба (прямого)',
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібен переріз')).toBeTruthy();
+    expect(screen.queryByText('Потрібен периметр')).toBeFalsy();
+  });
+
+  it('shows the section as its own factor in the arithmetic', async () => {
+    const boxed = line({
+      unit: 'M2',
+      sources: [
+        {
+          estimateItemId: 'e1',
+          name: 'Монтаж короба (прямого)',
+          unit: 'LINEAR_METER',
+          quantity: 12,
+          qtyPerUnit: 2.2,
+          normId: 'n1',
+          ownNorm: false,
+          basis: 'SECTION',
+          section: 0.4,
+          amount: 10.56,
+        },
+      ],
+    });
+    calculate.mockResolvedValue(answer({ materials: [boxed] }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+
+    // «12 м.п. × переріз 0,4 м × 2,2 = 10,56» — a mistyped розгортка is visible, not hidden.
+    expect(screen.getByText(/переріз 0,4 м.*×.*2,2.*=.*10,56/)).toBeTruthy();
   });
 
   it('re-asks the server for a new allowance instead of scaling the answer on screen', async () => {
@@ -145,7 +245,11 @@ describe('MaterialCalculatorPage', () => {
 
     // Rounding runs UP to a whole package, so 10 % and 15 % of one base are not a factor apart.
     await waitFor(() =>
-      expect(calculate).toHaveBeenCalledWith('est-1', { wastePercent: 15, perimeter: undefined }),
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 15,
+        perimeter: undefined,
+        sections: undefined,
+      }),
     );
   });
 

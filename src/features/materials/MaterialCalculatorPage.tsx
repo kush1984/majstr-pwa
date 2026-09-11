@@ -14,7 +14,6 @@ import { materialsApi } from '@/api/materials.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
 import type {
   CalculatedMaterialLine,
-  CoverageGap,
   MaterialLineRequest,
   MaterialSourceLine,
 } from '@/api/types.ts';
@@ -28,8 +27,10 @@ import type {
  *   and the master's own figure is what leaves this screen;
  * - every row shows its arithmetic — «20 м² × 1 лист/м² = 20», so a wrong answer is visibly wrong
  *   instead of mysteriously wrong;
- * - what the calculator could NOT answer is said out loud, with the positions named. A coverage
- *   report that hides its gaps is worse than no calculator at all.
+ * - one calm line says what the answer covers — «Порахували матеріали для: Гіпсокартон, Малярні
+ *   роботи» (master's wording). It replaced «Порахували 8 з 39 позицій» over a list of the 31
+ *   others: on his own estimate those were demolition and cleanup lines that consume no material,
+ *   so the screen read as broken while the arithmetic was right.
  *
  * The waste allowance re-asks the server rather than scaling on the client: rounding runs UP to a
  * whole package, so 5 % and 10 % of the same base are not a multiplication apart. Correcting a norm
@@ -50,23 +51,45 @@ export function MaterialCalculatorPage() {
   const [waste, setWaste] = useState(10);
   const [perimeterInput, setPerimeterInput] = useState('');
   const [perimeter, setPerimeter] = useState<number | undefined>(undefined);
+  const [sectionInputs, setSectionInputs] = useState<Record<string, string>>({});
+  const [sections, setSections] = useState<string | undefined>(undefined);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
-  const [gapsOpen, setGapsOpen] = useState(false);
 
   const calc = useQuery({
-    queryKey: ['materials', id, waste, perimeter ?? null],
-    queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter }),
+    queryKey: ['materials', id, waste, perimeter ?? null, sections ?? null],
+    queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter, sections }),
     enabled: Boolean(id),
   });
 
   // The server re-rounds on every parameter change, so a figure typed against the old numbers
   // would silently claim to be «what the master left on the screen». Drop the overrides instead.
-  useEffect(() => setEdited({}), [waste, perimeter]);
+  useEffect(() => setEdited({}), [waste, perimeter, sections]);
 
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
-  const needsPerimeter = (data?.parameters ?? []).length > 0;
+  const parameters = useMemo(() => data?.parameters ?? [], [data]);
+  const needsPerimeter = parameters.some((p) => p.parameter === 'PERIMETER');
+
+  // One input per POSITION, not per material: a короб's board and its ribs share one розгортка, but
+  // a короб and a ніша in the same estimate are different boxes and are asked for separately.
+  const sectionPositions = useMemo(() => {
+    const byPosition = new Map<string, string>();
+    for (const p of parameters) {
+      if (p.parameter !== 'SECTION' || !p.estimateItemId) continue;
+      if (!byPosition.has(p.estimateItemId)) byPosition.set(p.estimateItemId, p.positionName ?? '');
+    }
+    return [...byPosition].map(([estimateItemId, name]) => ({ estimateItemId, name }));
+  }, [parameters]);
+
+  // Each box answers for itself: one left blank keeps asking rather than borrowing a neighbour's.
+  const applySections = () => {
+    const entries = Object.entries(sectionInputs)
+      .map(([itemId, raw]) => ({ itemId, value: raw.trim() ? parseDecimal(raw) : 0 }))
+      .filter((e) => e.value > 0)
+      .map((e) => `${e.itemId}:${e.value}`);
+    setSections(entries.length > 0 ? entries.join(',') : undefined);
+  };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
   // so the server recomputes, and the overrides typed against the old figures go with it.
@@ -132,13 +155,7 @@ export function MaterialCalculatorPage() {
         ) : (
           <>
             {data && (
-              <Coverage
-                total={data.coverage.total}
-                covered={data.coverage.covered}
-                gaps={data.coverage.gaps}
-                open={gapsOpen}
-                onToggle={() => setGapsOpen((v) => !v)}
-              />
+              <Coverage trades={data.coverage.trades} otherWorks={data.coverage.otherWorks} />
             )}
 
             {data && !data.estimateSigned && (
@@ -173,6 +190,40 @@ export function MaterialCalculatorPage() {
                     {t('materials.perimeterApply')}
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {sectionPositions.length > 0 && (
+              <div className="mb-4 rounded-card border border-border bg-surface p-3">
+                <p className="text-sm font-semibold text-primary">{t('materials.sectionTitle')}</p>
+                <p className="mt-1 text-xs text-muted">{t('materials.sectionHint')}</p>
+                <div className="mt-2 space-y-2">
+                  {sectionPositions.map((p) => (
+                    <div key={p.estimateItemId}>
+                      <label
+                        htmlFor={`section-${p.estimateItemId}`}
+                        className="mb-1 block text-xs font-medium text-muted"
+                      >
+                        {p.name}
+                      </label>
+                      <Input
+                        id={`section-${p.estimateItemId}`}
+                        inputMode="decimal"
+                        value={sectionInputs[p.estimateItemId] ?? ''}
+                        onChange={(e) =>
+                          setSectionInputs((prev) => ({
+                            ...prev,
+                            [p.estimateItemId]: e.target.value,
+                          }))
+                        }
+                        placeholder={t('materials.sectionLabel')}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button variant="secondary" fullWidth className="mt-2" onClick={applySections}>
+                  {t('materials.sectionApply')}
+                </Button>
               </div>
             )}
 
@@ -246,57 +297,27 @@ export function MaterialCalculatorPage() {
 }
 
 /**
- * The coverage report. It is amber whenever anything is missing, and the missing positions are
- * NAMED — «порахували 8 з 11» with the three hidden is the failure this screen exists to avoid.
+ * What the answer covers, in one line: «Порахували матеріали для: Гіпсокартон, Малярні роботи».
+ *
+ * Not amber, no toggle, no list. The master's ruling (2026-09-11) — «то думаю треба забрати і
+ * просто писати для якої категорії пораховано» — because the thing being confessed was not a
+ * defect: a demolition line has no material to buy, and 31 amber lines saying so made a working
+ * screen look broken.
  */
-function Coverage({
-  total,
-  covered,
-  gaps,
-  open,
-  onToggle,
-}: {
-  total: number;
-  covered: number;
-  gaps: CoverageGap[];
-  open: boolean;
-  onToggle: () => void;
-}) {
+function Coverage({ trades, otherWorks }: { trades: string[]; otherWorks: boolean }) {
   const { t } = useTranslation();
-  const clean = gaps.length === 0;
+  const labels = [
+    ...trades.map((code) => t('trades.' + code)),
+    ...(otherWorks ? [t('materials.coverageOther')] : []),
+  ];
 
   return (
-    <div
-      className={
-        clean
-          ? 'mb-4 rounded-card border border-border bg-surface p-3'
-          : 'mb-4 rounded-card border border-amber-300 bg-amber-50 p-3'
-      }
-    >
+    <div className="mb-4 rounded-card border border-border bg-surface p-3">
       <p className="text-sm font-semibold text-primary">
-        {t('materials.coverage', { covered, total })}
+        {labels.length > 0
+          ? t('materials.coverage', { trades: labels.join(', ') })
+          : t('materials.coverageNone')}
       </p>
-      {!clean && (
-        <>
-          <p className="mt-1 text-xs text-amber-800">{t('materials.coverageHint')}</p>
-          <button
-            type="button"
-            onClick={onToggle}
-            className="mt-2 min-h-11 text-sm font-medium text-brand-700"
-          >
-            {open ? t('materials.hideGaps') : t('materials.showGaps')}
-          </button>
-          {open && (
-            <ul className="mt-1 space-y-1">
-              {gaps.map((gap) => (
-                <li key={gap.estimateItemId} className="text-xs text-amber-900">
-                  · {gap.name} — {formatNumber(gap.quantity, 3)} {t('units.' + gap.unit)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -416,6 +437,12 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
 
   const quantity = `${formatNumber(source.quantity, 3)} ${t('units.' + source.unit)}`;
   const basis = source.basis === 'PERIMETER' ? ` (${t('materials.perimeterSource')})` : '';
+  // The section is shown as its own factor, so a mistyped розгортка is visibly wrong here rather
+  // than hidden inside a total — it is the one figure on this row the estimate could not supply.
+  const section =
+    source.basis === 'SECTION' && source.section != null
+      ? ` × ${t('materials.sectionSource', { value: formatNumber(source.section, 3) })}`
+      : '';
   const busy = save.isPending || restore.isPending;
 
   const submit = () => {
@@ -431,7 +458,8 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
     <div>
       <p className="text-xs text-muted">
         {source.name ?? ''}
-        {basis}: {quantity} × {formatNumber(source.qtyPerUnit, 3)} ={' '}
+        {basis}: {quantity}
+        {section} × {formatNumber(source.qtyPerUnit, 3)} ={' '}
         {formatNumber(source.amount, 3)}
         {source.ownNorm && (
           <span className="ml-1 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-medium text-brand-700">

@@ -20,7 +20,9 @@ const base = (estimateId: string) => `/api/estimates/${estimateId}/materials`;
 export const materialsApi = {
   calculate(
     estimateId: string,
-    params: { wastePercent?: number; perimeter?: number } = {},
+    // `sections` is per POSITION and rides as one compact scalar — «uuid:0.4,uuid:1.2» — because
+    // `client.ts` has no paramsSerializer, so a repeated param would go out as `sections[]=`.
+    params: { wastePercent?: number; perimeter?: number; sections?: string } = {},
   ): Promise<MaterialCalculationResponse> {
     return api
       .get<MaterialCalculationResponse>(base(estimateId), { params })
