@@ -5,6 +5,7 @@ import type {
   EstimateConsolidateRequest,
   EstimateCreateRequest,
   EstimateDuplicateRequest,
+  EstimateItemsMarkupRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
@@ -148,6 +149,19 @@ export const estimatesApi = {
   deleteItems(estimateId: string, itemIds: string[]): Promise<void> {
     return api
       .post(`/api/estimates/${estimateId}/items/delete`, { itemIds })
+      .then(() => undefined);
+  },
+
+  /**
+   * Raise (or lower) the price of the chosen lines IN this estimate — «Націнка на вибрані позиції».
+   *
+   * Not a loop over {@link updateItem}: eight positions is eight round trips and eight chances to
+   * leave the sheet half-repriced. PERCENT lines are skipped server-side — they rise with the base
+   * they measure, so marking them up too would land the markup twice.
+   */
+  markUpItems(estimateId: string, req: EstimateItemsMarkupRequest): Promise<void> {
+    return api
+      .post(`/api/estimates/${estimateId}/items/markup`, req)
       .then(() => undefined);
   },
 

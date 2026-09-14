@@ -42,6 +42,7 @@ import {
   useEstimate,
   useRemoveItem,
   useDeleteItems,
+  useMarkUpItems,
   useDuplicateEstimate,
   useUpdateItem,
   useUpdateEstimate,
@@ -130,10 +131,19 @@ export function EstimateEditorPage() {
   // Bulk selection: picking lines to delete, or to mark up in a copy. `null` = off, which is what
   // keeps the ordinary board's tap meaning exactly one thing.
   const [picked, setPicked] = useState<Set<string> | null>(null);
+  // What the selection is FOR. The bar keeps exactly ONE primary action — the count plus three
+  // buttons does not fit the ~343px the bar gets on a phone — so the intent is chosen in the menu,
+  // on the way in, rather than argued about at the end.
+  const [pickFor, setPickFor] = useState<'delete' | 'markup'>('delete');
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [markupOpen, setMarkupOpen] = useState(false);
+  const [itemMarkupOpen, setItemMarkupOpen] = useState(false);
   const deleteItems = useDeleteItems(id);
+  const markUpItems = useMarkUpItems(id);
   const duplicate = useDuplicateEstimate(id);
+  // Materials are bought at cost and passed through, and a «%» line rises with the base it measures
+  // — so neither may be picked for a markup. In delete mode everything is fair game.
+  const canPickForMarkup = (i: EstimateItemResponse) => i.type === 'WORK' && i.unit !== 'PERCENT';
 
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [dictationOpen, setDictationOpen] = useState(false);
@@ -405,7 +415,17 @@ export function EstimateEditorPage() {
                   <ActionMenuItem
                     icon="☑"
                     label={t('estimate.menuSelect')}
-                    onClick={() => { close(); setPicked(new Set()); }}
+                    onClick={() => { close(); setPickFor('delete'); setPicked(new Set()); }}
+                  />
+                )}
+                {/* The same picking mode, a different verb — «деколи роботи при малих обʼємах чи на
+                    висоті мають коштувати більше». Applied in place, so it is offered only on a
+                    sheet that can still change. */}
+                {!signed && est.items.some(canPickForMarkup) && (
+                  <ActionMenuItem
+                    icon="📈"
+                    label={t('estimate.menuMarkupItems')}
+                    onClick={() => { close(); setPickFor('markup'); setPicked(new Set()); }}
                   />
                 )}
                 {/* Duplicating is a whole-sheet decision — «зроби мені клієнтський варіант +15 %» —
@@ -507,6 +527,9 @@ export function EstimateEditorPage() {
                   onEdit={setEditing}
                   selection={picked === null ? undefined : {
                     selected: picked,
+                    // In markup mode a material or «%» row carries no tick at all: a checkbox that
+                    // does nothing is a worse answer than no checkbox.
+                    canSelect: pickFor === 'markup' ? canPickForMarkup : undefined,
                     onToggle: (itemId) => setPicked((prev) => {
                       const next = new Set(prev);
                       if (!next.delete(itemId)) next.add(itemId);
@@ -568,10 +591,12 @@ export function EstimateEditorPage() {
                       <button
                         type="button"
                         disabled={picked.size === 0}
-                        onClick={() => setBulkDeleteOpen(true)}
-                        className="min-h-[44px] rounded-xl bg-danger px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
+                        onClick={() => (pickFor === 'markup' ? setItemMarkupOpen(true) : setBulkDeleteOpen(true))}
+                        className={`min-h-[44px] rounded-xl px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40 ${
+                          pickFor === 'markup' ? 'bg-brand' : 'bg-danger'
+                        }`}
                       >
-                        {t('common.delete')}
+                        {pickFor === 'markup' ? t('estimate.markup') : t('common.delete')}
                       </button>
                       <button
                         type="button"
@@ -815,6 +840,26 @@ export function EstimateEditorPage() {
         onClose={() => setBulkDeleteOpen(false)}
       />
 
+      <ItemMarkupSheet
+        open={itemMarkupOpen}
+        items={picked ? est.items.filter((i) => picked.has(i.id)) : []}
+        loading={markUpItems.isPending}
+        onClose={() => setItemMarkupOpen(false)}
+        onConfirm={(percent, discount) => {
+          const itemIds = picked ? [...picked] : [];
+          markUpItems.mutate({ itemIds, percent, discount }, {
+            onSuccess: () => {
+              toast.success(t('estimate.markupItemsDone', { count: itemIds.length }));
+              setItemMarkupOpen(false);
+              // The selection has served its purpose. Leaving it up would invite a second tap on
+              // the same lines, and +10 % twice is +21 % — honest, but not what he meant.
+              setPicked(null);
+            },
+            onError: (err) => toast.error(toAppError(err).message),
+          });
+        }}
+      />
+
       <MarkupSheet
         open={markupOpen}
         count={est.items.filter((i) => i.type === 'WORK').length}
@@ -925,6 +970,96 @@ function MarkupSheet({
           onClick={() => onConfirm(percent, discount)}
         >
           {t('estimate.duplicateCreate')}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * «Націнка на позиції» — the same percent control as {@link MarkupSheet}, applied IN PLACE.
+ *
+ * <p>Two deliberate differences from its sibling. There is no online gate: this only edits prices the
+ * master already owns, so it queues offline, whereas a duplicate has to flip the source out of the
+ * economy and stamp provenance, which a device cannot compose. And the hint gives way to the one
+ * number that answers «а скільки це дасть» — what the picked lines total now, and after.</p>
+ *
+ * <p>That total is computed the way the SERVER computes it: round the UNIT price to whole hryvnia,
+ * then multiply by the quantity. Rounding the line totals instead would drift by a hryvnia per line,
+ * on exactly the many-position sheets this feature exists for.</p>
+ */
+function ItemMarkupSheet({
+  open, items, loading, onClose, onConfirm,
+}: {
+  open: boolean;
+  items: EstimateItemResponse[];
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: (percent: number, discount: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [discount, setDiscount] = useState(false);
+  const [value, setValue] = useState('15');
+  const percent = Number(value.replace(',', '.'));
+  const max = discount ? 100 : 1000;
+  const valid = Number.isFinite(percent) && percent >= 0 && percent <= max;
+  const factor = 1 + (discount ? -percent : percent) / 100;
+  const before = items.reduce((sum, i) => sum + i.lineTotal, 0);
+  const after = valid
+    ? items.reduce((sum, i) => sum + Math.round(i.unitPrice * factor) * i.quantity, 0)
+    : before;
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('estimate.markupItemsTitle')}>
+      <div className="space-y-4">
+        <div className="flex gap-1 rounded-xl bg-surface-sunken p-1">
+          {[false, true].map((d) => (
+            <button
+              key={String(d)}
+              type="button"
+              onClick={() => setDiscount(d)}
+              className={
+                'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ' +
+                (discount === d ? 'bg-surface text-primary shadow-card' : 'text-muted')
+              }
+            >
+              {d ? t('estimate.discount') : t('estimate.markup')}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-muted">{t('estimate.markupItemsHint')}</p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted">
+            {t(discount ? 'estimate.discountPercent' : 'estimate.markupPercent')}
+          </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="h-12 w-full rounded-xl border border-border bg-surface px-3.5 text-base text-primary"
+          />
+        </label>
+        {/* The before → after pair wraps rather than shrinking: on a 375 px screen two six-figure
+            sums plus an arrow do not fit one line, and a truncated price is worse than a second row. */}
+        <div className="rounded-xl bg-surface-sunken p-3">
+          <div className="flex items-center justify-between text-xs font-semibold text-muted">
+            <span>{t('estimate.markupItemsSum')}</span>
+            <span className="tabular-nums">{items.length}</span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-sm tabular-nums text-muted">{formatMoney(before)}</span>
+            <span className="text-sm text-muted">→</span>
+            <span className="text-base font-bold tabular-nums text-primary">{formatMoney(after)}</span>
+          </div>
+        </div>
+        <Button
+          fullWidth
+          loading={loading}
+          disabled={!valid || items.length === 0}
+          onClick={() => onConfirm(percent, discount)}
+        >
+          {t('estimate.markupItemsApply')}
         </Button>
       </div>
     </Modal>

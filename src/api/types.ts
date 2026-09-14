@@ -481,6 +481,23 @@ export interface EstimateDuplicateRequest {
   itemIds?: string[];
 }
 
+/**
+ * POST /api/estimates/{id}/items/markup — raise (or lower) the chosen lines IN PLACE.
+ *
+ * The small sibling of {@link EstimateDuplicateRequest}: same formula, no copy. Small volumes or
+ * work at height are worth more than the catalog says, and the alternative is re-typing each price.
+ *
+ * @param itemIds REQUIRED, unlike the duplicate's — there is no "all WORK lines" default, because a
+ *                mistyped percent applied to everything by omission is not undoable.
+ */
+export interface EstimateItemsMarkupRequest {
+  itemIds: string[];
+  /** The MAGNITUDE of the change, ≥ 0. `discount` decides the sign. */
+  percent: number;
+  /** false = markup (prices up), true = discount (prices down, capped at 100 %). */
+  discount?: boolean;
+}
+
 export interface EstimateResponse {
   id: string;
   projectId: string;

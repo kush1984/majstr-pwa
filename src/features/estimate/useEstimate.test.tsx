@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import {
   useAddItem, useRemoveItem, useCreateEstimate, useUpdateEstimate, useDeleteEstimate,
-  useAddItemFromCatalog, useAddItemsFromCatalogBatch, ESTIMATE_KEY,
+  useAddItemFromCatalog, useAddItemsFromCatalogBatch, useMarkUpItems, ESTIMATE_KEY,
 } from './useEstimate.ts';
 import { clearOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import { estimatesApi } from '@/api/estimates.ts';
@@ -227,5 +227,83 @@ describe('add from catalog — offline (how estimates are actually built)', () =
 
     expect(qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!.items).toHaveLength(0);
     expect(await listOutbox()).toHaveLength(1);
+  });
+});
+
+describe('markup on the picked lines — offline («Націнка на вибрані позиції»)', () => {
+  it('moves the UNIT price of every picked line, re-derives totals, queues ONE op', async () => {
+    const { qc, wrapper } = setup();
+    const { result } = renderHook(() => useMarkUpItems(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ itemIds: ['i1'], percent: 15, discount: false });
+    });
+
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    // Rounded to the whole hryvnia on the UNIT price, the way the server rounds it — round the
+    // line total instead and the two drift apart the moment a quantity is not 1.
+    expect(est.items[0].unitPrice).toBe(115);
+    expect(est.items[0].lineTotal).toBe(230); // 2 × 115, re-derived rather than carried
+    expect(est.total).toBe(230);
+
+    // ONE op for the whole selection, like the bulk delete: a replay that stopped half-way would
+    // leave him an estimate he has already stopped checking.
+    const ops = await listOutbox();
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      entity: 'estimateItemsMarkup', type: 'update', entityId: EID, deps: [EID],
+    });
+    expect((ops[0].payload as { req: { itemIds: string[] } }).req.itemIds).toEqual(['i1']);
+  });
+
+  it('applies a discount downwards, from the same unsigned magnitude', async () => {
+    const { qc, wrapper } = setup();
+    const { result } = renderHook(() => useMarkUpItems(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ itemIds: ['i1'], percent: 10, discount: true });
+    });
+
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    expect(est.items[0].unitPrice).toBe(90); // 100 × 0.9 — a discount is a markup with a minus
+    expect(est.items[0].lineTotal).toBe(180);
+  });
+
+  it('leaves a «%» line alone even when it is picked, and lets it lift with its base instead', async () => {
+    // A CONSOLIDATION-FROZEN percent line (V92): `percentBaseKind: null` defaults `kindOf` to
+    // MANUAL, which is the one shape that reads `unitPrice` AS its base — so it is the only place
+    // where marking a «%» line up is actually observable. Mark it up and the master would be
+    // charging 15 % more on top of a base that already grew: the double-apply the server's
+    // `Unit.PERCENT` filter exists to prevent.
+    const { qc, wrapper } = setup();
+    qc.setQueryData([...ESTIMATE_KEY, EID], {
+      id: EID, status: 'DRAFT',
+      items: [
+        {
+          id: 'i1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
+          quantity: 2, unitPrice: 100, lineTotal: 200, sortOrder: 0, measurementRefs: [],
+          quantityManual: false, percentBaseKind: null, percentBaseItemId: null,
+          baseDetached: false, baseOriginLabel: null, closedByActs: null,
+        },
+        {
+          id: 'p1', type: 'WORK', name: 'Доставка', category: null, unit: 'PERCENT',
+          quantity: 10, unitPrice: 500, lineTotal: 50, sortOrder: 1, measurementRefs: [],
+          quantityManual: false, percentBaseKind: null, percentBaseItemId: null,
+          baseDetached: false, baseOriginLabel: 'Роботи', closedByActs: null,
+        },
+      ],
+      worksSubtotal: 250, materialsSubtotal: 0, total: 250, balance: 250,
+    });
+    const { result } = renderHook(() => useMarkUpItems(EID), { wrapper });
+
+    await act(async () => {
+      // Both are picked — the board cannot tick a «%» row, but the request must hold the line anyway.
+      await result.current.mutateAsync({ itemIds: ['i1', 'p1'], percent: 15, discount: false });
+    });
+
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    expect(est.items[0].unitPrice).toBe(115);
+    expect(est.items[1].unitPrice).toBe(500); // untouched: 575 would be the double-apply
+    expect(est.items[1].lineTotal).toBe(50);
   });
 });

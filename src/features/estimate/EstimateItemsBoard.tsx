@@ -86,12 +86,7 @@ export function EstimateItemsBoard({
    * both out of the way, because a tap that might mean three different things is worse than three
    * modes that each mean one.
    */
-  selection?: {
-    selected: Set<string>;
-    onToggle: (id: string) => void;
-    /** Tick or clear a whole category at once — see the note where it is rendered. */
-    onToggleSection: (ids: string[], select: boolean) => void;
-  };
+  selection?: Selection;
 }) {
   const { t } = useTranslation();
   // Built once per render: a percentage row names the line it is measured against.
@@ -272,7 +267,15 @@ function label(category: string, t: (k: string) => string): string {
 
 interface Selection {
   selected: Set<string>;
+  /**
+   * Which rows may be picked at all. Absent = every row, which is what deleting wants. A markup
+   * applies only to WORK lines that are not «%», and a row outside that set carries NO tick rather
+   * than a disabled one — the same rule the row checkbox was built on: a checkbox that does nothing
+   * when you tap it is worse than no checkbox.
+   */
+  canSelect?: (item: EstimateItemResponse) => boolean;
   onToggle: (id: string) => void;
+  /** Tick or clear a whole category at once — see the note where it is rendered. */
   onToggleSection: (ids: string[], select: boolean) => void;
 }
 
@@ -311,8 +314,13 @@ function SectionBlock({
     id: sectionId(section),
     disabled: signed || !!selection,
   });
-  const ids = section.items.map((i) => i.id);
-  const allPicked = selection ? ids.every((id) => selection.selected.has(id)) : false;
+  // The section tick answers for the rows it can actually pick, not for every row it contains: in
+  // markup mode a mixed section's materials are not part of the question.
+  const canSelect = selection?.canSelect;
+  const ids = (canSelect ? section.items.filter(canSelect) : section.items).map((i) => i.id);
+  // `every` on an empty list is TRUE, which would paint a ticked box on a section that has nothing
+  // to tick — hence the length guard rather than a bare `every`.
+  const allPicked = selection ? ids.length > 0 && ids.every((id) => selection.selected.has(id)) : false;
   // What this stage costs. The master is asked it on site far more often than the grand total.
   const subtotal = section.items.reduce((sum, i) => sum + i.lineTotal, 0);
   const collapsed = collapse.isCollapsed(section.category);
@@ -333,6 +341,11 @@ function SectionBlock({
             scattered lines, he is dropping whole categories. Ticking «Басейни» turns thirty taps
             into one, and it is the difference between a usable big template and an unusable one. */}
         {selection ? (
+          ids.length === 0 ? (
+            // Nothing here is pickable in this mode. An empty gutter, not a missing one, so the
+            // header still lines up with the rows under it.
+            <span aria-hidden className="w-7 flex-shrink-0" />
+          ) : (
           <button
             type="button"
             onClick={() => selection.onToggleSection(ids, !allPicked)}
@@ -342,6 +355,7 @@ function SectionBlock({
           >
             <Tick on={allPicked} />
           </button>
+          )
         ) : (
           !signed && <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragSection')} />
         )}
@@ -425,6 +439,9 @@ function ItemRow({
     disabled: signed || !!selection,
   });
   const picked = selection ? selection.selected.has(item.id) : false;
+  // Pickable in THIS mode. Deleting asks about every row; a markup asks only about WORK lines that
+  // are not «%». Default true so the delete path keeps behaving exactly as it did.
+  const selectable = selection ? (selection.canSelect?.(item) ?? true) : false;
   // Just-edited gets the brighter (success) highlight; touched-earlier-this-session keeps the
   // fainter brand one; neither applies while the selection state owns the row's look.
   const isLastTouched = !picked && (lastTouched?.has(item.id) ?? false);
@@ -448,18 +465,24 @@ function ItemRow({
       className={`flex items-stretch gap-1 ${isDragging ? 'z-10 opacity-90' : ''}`}
     >
       {selection ? (
-        // A BUTTON, not a span. It was inert, and a checkbox that does nothing when you tap it is
-        // worse than no checkbox: the card beside it was the only target, so the feature read as
-        // "only whole categories can be picked". Both halves of the row toggle now.
-        <button
-          type="button"
-          onClick={() => selection.onToggle(item.id)}
-          aria-pressed={picked}
-          aria-label={item.name}
-          className="flex w-7 flex-shrink-0 items-center justify-center"
-        >
-          <Tick on={picked} />
-        </button>
+        selectable ? (
+          // A BUTTON, not a span. It was inert, and a checkbox that does nothing when you tap it is
+          // worse than no checkbox: the card beside it was the only target, so the feature read as
+          // "only whole categories can be picked". Both halves of the row toggle now.
+          <button
+            type="button"
+            onClick={() => selection.onToggle(item.id)}
+            aria-pressed={picked}
+            aria-label={item.name}
+            className="flex w-7 flex-shrink-0 items-center justify-center"
+          >
+            <Tick on={picked} />
+          </button>
+        ) : (
+          // Outside this mode's question (a material, or a «%» line that rises with its base). An
+          // empty gutter keeps it flush with the rows that DO offer a tick.
+          <span aria-hidden className="w-7 flex-shrink-0" />
+        )
       ) : (
         !signed && (
           <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
@@ -469,9 +492,9 @@ function ItemRow({
         type="button"
         // In selection mode the row IS the checkbox — the whole card, not a 20 px square, because
         // this is a thumb picking dozens of lines in a row.
-        onClick={() => (selection ? selection.onToggle(item.id) : !signed && onEdit(item))}
+        onClick={() => (selection ? selectable && selection.onToggle(item.id) : !signed && onEdit(item))}
         disabled={signed && !selection}
-        aria-pressed={selection ? picked : undefined}
+        aria-pressed={selection && selectable ? picked : undefined}
         title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
         className={cn(
           'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',

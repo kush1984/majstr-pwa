@@ -12,6 +12,7 @@ import type {
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
   EstimateItemResponse,
+  EstimateItemsMarkupRequest,
   EstimateItemsOrderRequest,
   EstimateResponse,
   EstimateSummary,
@@ -409,6 +410,46 @@ export function useDeleteItems(estimateId: string) {
         optimistic: () => {
           const gone = new Set(itemIds);
           patchEstimate(qc, estimateId, (items) => items.filter((i) => !gone.has(i.id)));
+        },
+      });
+    },
+  });
+}
+
+/**
+ * Raise (or lower) the price of the chosen lines IN this estimate — «Націнка на вибрані позиції».
+ *
+ * The everyday sibling of {@link useDuplicateEstimate}: same formula, no copy. «Деколи роботи при
+ * малих обʼємах чи на висоті мають коштувати більше» — and the alternative is opening eight
+ * positions and re-typing eight prices.
+ *
+ * <b>Offline-capable, unlike the duplicate</b>, and the difference is the whole reason this is
+ * cheap: a duplicate has to flip the source out of the economy and stamp provenance, which a device
+ * cannot compose. This just edits prices the master already owns. The optimistic patch rounds the
+ * same way the server does (whole hryvnia on the UNIT price), and `patchEstimate` re-runs the
+ * percent pass — so a «% від кошторису» line lifts on screen exactly as it will on the server.
+ */
+export function useMarkUpItems(estimateId: string) {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateEstimate(estimateId);
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (req: EstimateItemsMarkupRequest): Promise<void> => {
+      return offlineMutate<void>({
+        entity: 'estimateItemsMarkup', entityId: estimateId, type: 'update',
+        payload: { req }, deps: [estimateId],
+        online: async () => { await estimatesApi.markUpItems(estimateId, req); },
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          const factor = 1 + (req.discount ? -req.percent : req.percent) / 100;
+          const picked = new Set(req.itemIds);
+          patchEstimate(qc, estimateId, (items) => items.map((i) =>
+            // PERCENT lines are skipped here for the same reason the server skips them: they are a
+            // share of a base that is itself moving, so recomputeLines lifts them already. Marking
+            // them up here too would show the master a number the sync then takes back.
+            picked.has(i.id) && i.unit !== 'PERCENT'
+              ? { ...i, unitPrice: Math.round(i.unitPrice * factor) }
+              : i));
         },
       });
     },

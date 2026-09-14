@@ -16,7 +16,7 @@ import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/of
 import type {
   EstimateItemsOrderRequest,
   BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
-  EstimateItemFromCatalogRequest, EstimateItemRequest,
+  EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
   NoteRequest, ProjectRequest,
   ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
@@ -95,6 +95,15 @@ export function initOutbox(qc: QueryClient): () => void {
   registerOutboxHandler('estimateItemsBulkDelete', async (op) => {
     const p = op.payload as { itemIds: string[] };
     await estimatesApi.deleteItems(op.entityId, p.itemIds);
+  });
+
+  // A price change on several lines at once. Deliberately NOT coalesced and NOT idempotent: two
+  // queued markups are two decisions (+10 % then +5 % is what the master did, and the second was
+  // typed while looking at the result of the first), so replaying both is correct. This is also why
+  // the op carries the whole selection — a partial replay would leave a half-repriced sheet.
+  registerOutboxHandler('estimateItemsMarkup', async (op) => {
+    const p = op.payload as { req: EstimateItemsMarkupRequest };
+    await estimatesApi.markUpItems(op.entityId, p.req);
   });
 
   // The arrangement of an estimate's lines after a drag. entityId is the ESTIMATE — the op is
