@@ -158,6 +158,35 @@ describe('ActReceiptsSection', () => {
     expect(actsApi.recognizeStoredReceipt).not.toHaveBeenCalled();
   });
 
+  /**
+   * The queue can drain while the confirm dialog is open — the receipt DOES exist on the server by
+   * the time he taps «Видалити». `dropQueuedReceipt` answers `false` for exactly that, and returning
+   * on it left the master tapping a dialog that never closed, on the one receipt that had synced.
+   */
+  it('deletes on the server when the queued receipt drained while the dialog was open', async () => {
+    vi.mocked(dropQueuedReceipt).mockResolvedValue(false);
+    renderSection({ receipts: [receipt({ id: 'q1', hasPhoto: false })], queued: queuedMap('q1') });
+
+    fireEvent.click(screen.getByText('Видалити'));
+    const confirm = screen.getAllByText('Видалити');
+    fireEvent.click(confirm[confirm.length - 1]);
+
+    await waitFor(() => expect(actsApi.removeReceipt).toHaveBeenCalledWith('a1', 'q1'));
+  });
+
+  it('drops the queued create instead, while it is still queued', async () => {
+    vi.mocked(dropQueuedReceipt).mockResolvedValue(true);
+    renderSection({ receipts: [receipt({ id: 'q1', hasPhoto: false })], queued: queuedMap('q1') });
+
+    fireEvent.click(screen.getByText('Видалити'));
+    const confirm = screen.getAllByText('Видалити');
+    fireEvent.click(confirm[confirm.length - 1]);
+
+    // Dropping the queued create IS the delete — there is nothing on the server to ask about.
+    await waitFor(() => expect(dropQueuedReceipt).toHaveBeenCalledWith('q1'));
+    expect(actsApi.removeReceipt).not.toHaveBeenCalled();
+  });
+
   it('reading a receipt is free and asks for nothing but the footer', async () => {
     // The whole per-MODE gate went with the item transfer (2026-08-28): there is one read left, it
     // costs the master nothing, and it takes no mode argument left to get wrong.

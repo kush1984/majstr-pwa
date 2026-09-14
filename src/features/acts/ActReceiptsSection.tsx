@@ -415,19 +415,24 @@ export function ActReceiptsSection({
         message={t('acts.receiptDeleteConfirm')} confirmLabel={t('common.delete')} loading={remove.isPending}
         onConfirm={() => {
           if (!confirmDelete) return;
+          const id = confirmDelete.id;
+          const onServer = () => remove.mutate(id, {
+            onSuccess: () => setConfirmDelete(null),
+            onError: (err) => toast.error(toAppError(err).message),
+          });
           // Dropping the queued create IS the delete — there is nothing on the server to ask about.
-          if (queued.has(confirmDelete.id)) {
-            void dropQueuedReceipt(confirmDelete.id).then((dropped) => {
-              if (!dropped) return;
+          if (queued.has(id)) {
+            void dropQueuedReceipt(id).then((dropped) => {
+              // `false` = the queue drained while the dialog was open, so the row DOES exist now and
+              // the ordinary delete is the right one. Returning here instead left the master tapping
+              // «Видалити» on a dialog that never closed — on the one receipt that had synced.
+              if (!dropped) { onServer(); return; }
               onQueuedChanged();
               setConfirmDelete(null);
             });
             return;
           }
-          remove.mutate(confirmDelete.id, {
-            onSuccess: () => setConfirmDelete(null),
-            onError: (err) => toast.error(toAppError(err).message),
-          });
+          onServer();
         }}
         onClose={() => setConfirmDelete(null)} />
     </Section>

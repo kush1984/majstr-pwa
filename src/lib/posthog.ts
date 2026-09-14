@@ -207,9 +207,18 @@ export function identifyMaster(user: UserResponse): void {
  *
  * Without it the next person on the same device is appended to the previous master's person, and
  * their recording is filed under that master. A crew often shares one phone.
+ *
+ * <p>`reset()` alone only ends the identity: the SDK stays OPTED IN under a fresh anonymous id, so
+ * whoever picks the phone up next is recorded before they have agreed to anything. Capturing goes
+ * back to the state the SDK boots in (`opt_out_capturing_by_default`), and the next login re-opens
+ * it through the one consent door — `applyAnalyticsIdentity` opts a consented master back in, so
+ * this cannot strand analytics for the next person.</p>
  */
 export function resetAnalytics(): void {
-  withClient((ph) => ph.reset());
+  withClient((ph) => {
+    ph.reset();
+    ph.opt_out_capturing();
+  });
 }
 
 /** Send one of the events above. No-op when analytics is disabled; never throws. */

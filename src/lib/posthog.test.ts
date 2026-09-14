@@ -161,6 +161,21 @@ describe('logout', () => {
     // Without this the next person to log in is appended to the previous master's person, and
     // their session recording is filed under them.
     await vi.waitFor(() => expect(ph.reset).toHaveBeenCalledTimes(1));
+    // `reset()` alone only ends the IDENTITY: the SDK stays opted in under a fresh anonymous id,
+    // so the next person on the phone is recorded before agreeing to anything.
+    await vi.waitFor(() => expect(ph.opt_out_capturing).toHaveBeenCalled());
+  });
+
+  it('lets the next consented master back in — the opt-out is not a one-way door', async () => {
+    const mod = await load('phc_test');
+    mod.initPostHog();
+    mod.resetAnalytics();
+    await vi.waitFor(() => expect(ph.opt_out_capturing).toHaveBeenCalled());
+
+    // Consent is re-applied on every login through the one door, so logging out cannot strand
+    // analytics for whoever logs in next.
+    mod.applyAnalyticsIdentity(master());
+    await vi.waitFor(() => expect(ph.opt_in_capturing).toHaveBeenCalled());
   });
 });
 

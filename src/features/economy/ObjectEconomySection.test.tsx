@@ -333,6 +333,32 @@ describe('ObjectEconomySection', () => {
     expect(within(summary).queryByText(/Знижка/)).toBeNull();
   });
 
+  it('the materials card ⓘ explains itself instead of navigating away', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      materials: { reimbursable: 4200, receiptCount: 3, unpricedCount: 0 },
+    }));
+
+    renderSection('FREE');
+
+    // InfoPopover is itself a <button>. Nested inside the card's navigate button the ⓘ tap
+    // bubbled and the master landed on the receipts list, never having read the explanation.
+    fireEvent.click(await screen.findByRole('button', { name: 'Матеріали за чеками' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Матеріали за чеками' })).toBeTruthy();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('the materials card still opens the receipts list when the card itself is tapped', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      materials: { reimbursable: 4200, receiptCount: 3, unpricedCount: 0 },
+    }));
+
+    renderSection('FREE');
+
+    fireEvent.click(await screen.findByText(/Матеріали за чеками/));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+  });
+
   it('no summary panel when nothing is counted (even on PRO)', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       pro: { expenses: 0, profit: 0 },

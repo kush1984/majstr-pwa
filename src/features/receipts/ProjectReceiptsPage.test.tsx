@@ -4,14 +4,26 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ProjectReceiptsPage } from './ProjectReceiptsPage.tsx';
+import { toast } from '@/hooks/useToast.ts';
 import type { ProjectReceiptResponse, ProjectReceiptsResponse } from '@/api/types.ts';
 
-const holder = vi.hoisted(() => ({ list: null as ProjectReceiptsResponse | null }));
+const holder = vi.hoisted(() => ({
+  list: null as ProjectReceiptsResponse | null,
+  isError: false,
+  error: undefined as Error | undefined,
+}));
 const updateMutate = vi.hoisted(() => vi.fn());
 const updateAsync = vi.hoisted(() => vi.fn());
 const removeMutate = vi.hoisted(() => vi.fn());
+const refetch = vi.hoisted(() => vi.fn());
 vi.mock('./useProjectReceipts.ts', () => ({
-  useProjectReceipts: () => ({ data: holder.list, isLoading: false, isError: false }),
+  useProjectReceipts: () => ({
+    data: holder.list,
+    isLoading: false,
+    isError: holder.isError,
+    error: holder.error,
+    refetch,
+  }),
   useUpdateProjectReceipt: () => ({
     mutate: updateMutate,
     mutateAsync: updateAsync,
@@ -31,6 +43,29 @@ vi.mock('@/api/photos.ts', () => ({
     fetchBlob: vi.fn().mockResolvedValue(new Blob([''])),
     fetchBlobUrl: vi.fn().mockResolvedValue('blob:receipt'),
   },
+}));
+
+const readQr = vi.hoisted(() => vi.fn());
+const recognizeStored = vi.hoisted(() => vi.fn());
+vi.mock('@/api/projectReceipts.ts', () => ({
+  projectReceiptsApi: {
+    fileUrl: (projectId: string, receiptId: string) =>
+      `/api/projects/${projectId}/receipts/${receiptId}/file`,
+    readQr,
+    recognizeStored,
+  },
+}));
+
+// The canvas and jsqr are the decoder's own business (and its own test's) — here only the answer
+// matters: does this photo carry a fiscal payload or not.
+vi.mock('@/lib/qr.ts', async (orig) => ({
+  ...(await orig<typeof import('@/lib/qr.ts')>()),
+  decodeQrFromFile: vi.fn(() => Promise.resolve(null)),
+}));
+
+vi.mock('@/hooks/useToast.ts', async (orig) => ({
+  ...(await orig<typeof import('@/hooks/useToast.ts')>()),
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 function receipt(over: Partial<ProjectReceiptResponse> = {}): ProjectReceiptResponse {
@@ -76,10 +111,17 @@ function renderPage(from?: string) {
 
 beforeEach(() => {
   holder.list = null;
+  holder.isError = false;
+  holder.error = undefined;
   updateMutate.mockClear();
   updateAsync.mockClear();
   removeMutate.mockClear();
   batchRun.mockClear();
+  refetch.mockClear();
+  readQr.mockReset();
+  recognizeStored.mockReset();
+  vi.mocked(toast.info).mockClear();
+  vi.mocked(toast.error).mockClear();
 });
 
 // Restoring the flag re-renders whatever is still mounted — inside act(), or React warns.
@@ -180,6 +222,30 @@ describe('ProjectReceiptsPage', () => {
     expect(screen.getByText(/дублікат/)).toBeTruthy();
   });
 
+  it('says the receipts could not be loaded instead of claiming there are none', () => {
+    // «Чеків ще немає» on a screen whose whole point is proof the master is owed money reads as the
+    // receipts having been LOST. A failed fetch with nothing cached is an outage, and says so.
+    holder.isError = true;
+    holder.error = new Error('boom');
+    renderPage();
+
+    expect(screen.getByText('Сервіс тимчасово недоступний')).toBeTruthy();
+    expect(screen.queryByText('Чеків ще немає')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Спробувати знову' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('keeps the cached receipts on screen when a background refetch fails', () => {
+    seed([receipt()]);
+    holder.isError = true;
+    holder.error = new Error('boom');
+    renderPage();
+
+    expect(screen.getByText('Епіцентр')).toBeTruthy();
+    expect(screen.queryByText('Сервіс тимчасово недоступний')).toBeNull();
+  });
+
   it('goes back to the screen that opened it, not always to the object', () => {
     seed([receipt()]);
     const { router } = renderPage('/shopping/p1');
@@ -196,6 +262,56 @@ describe('ProjectReceiptsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
 
     expect(router.state.location.pathname).toBe('/projects/p1');
+  });
+
+  /**
+   * A read that found the shop and the date but not the total is PARTIAL, not a failure. It used to
+   * be thrown away whole, under «не вдалося розпізнати», leaving the master to retype off the paper
+   * what we had just read off it. Same split as the edit form's own reader.
+   */
+  it('keeps a label-only read instead of discarding it as a failure', async () => {
+    seed([receipt({ amount: 0, label: 'Чек №1', issuedAt: null, hasPhoto: true })]);
+    recognizeStored.mockResolvedValue({
+      recognized: true,
+      label: 'Епіцентр',
+      amount: null,
+      issuedAt: '2026-09-01',
+    });
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /Розпізнати/ }));
+
+    await vi.waitFor(() => expect(updateAsync).toHaveBeenCalled());
+    expect(updateAsync.mock.calls[0][0].req).toMatchObject({
+      label: 'Епіцентр',
+      // The paper never gave up a total, so the row keeps the one it had — 0 is a legal saved state.
+      amount: 0,
+      issuedAt: '2026-09-01',
+    });
+    // Said AFTER the save, so the card he is looking at already carries the label and the date.
+    expect(vi.mocked(toast.info).mock.calls.map(([m]) => m)).toContain(
+      'Розпізнано не все — перевірте і доповніть вручну.',
+    );
+  });
+
+  it('still says nothing could be read when nothing was', async () => {
+    seed([receipt({ amount: 0, label: 'Чек №1', hasPhoto: true })]);
+    recognizeStored.mockResolvedValue({
+      recognized: false,
+      label: null,
+      amount: null,
+      issuedAt: null,
+    });
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /Розпізнати/ }));
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(toast.info).mock.calls.map(([m]) => m)).toContain(
+        'Не вдалося розпізнати чек — впишіть суму вручну.',
+      ),
+    );
+    expect(updateAsync).not.toHaveBeenCalled();
   });
 
   it('teaches the default on an empty screen', () => {

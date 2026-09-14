@@ -220,10 +220,27 @@ async function sweep(data: ImageData, budgetMs: number): Promise<string | null> 
       if (Date.now() > until) return other;
       // jsqr is synchronous and a pass is hundreds of milliseconds — without handing the loop back
       // between candidates a batch's progress line never repaints and the phone reads as hung.
-      await Promise.resolve();
+      await yieldToBrowser();
     }
   }
   return other;
+}
+
+/**
+ * Give the browser a turn — a real one, long enough to paint.
+ *
+ * <p>`await Promise.resolve()` is NOT this, and that is the whole bug it replaces: a microtask is
+ * drained before the event loop ever gets back to rendering, so a 140-pass ladder yielded 140 times
+ * and repainted zero. The batch's «читаю 3 з 10» line sat frozen on the number it started at and the
+ * phone read as hung — which is exactly what the yield was put there to prevent.</p>
+ *
+ * <p>`scheduler.yield()` where it exists (Chrome 129+, so a good share of Android): it resumes ahead
+ * of ordinary timers, so the ladder pays less for each turn than the `setTimeout` clamp costs.</p>
+ */
+function yieldToBrowser(): Promise<void> {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (typeof scheduler?.yield === 'function') return scheduler.yield();
+  return new Promise((resolve) => setTimeout(resolve));
 }
 
 /** The whole frame first, then its tiles — lazily, so 30-odd full-size tiles never coexist in memory. */

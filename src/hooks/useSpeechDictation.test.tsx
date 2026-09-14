@@ -132,6 +132,80 @@ describe('useSpeechDictation', () => {
     }
   });
 
+  /** One round of «he said nothing»: the browser reports it, ends the session, the hook re-arms. */
+  function silentRound() {
+    const rec = created[created.length - 1];
+    act(() => rec.onerror?.({ error: 'no-speech' }));
+    act(() => rec.onend?.());
+    act(() => { vi.advanceTimersByTime(250); });
+  }
+
+  it('gives up after a run of silence instead of re-arming the microphone forever', () => {
+    // The auto-restart above has no floor of its own: silence re-arms into silence, so the mic
+    // stays hot and the screen stays awake until he notices. Some browsers also re-prompt for
+    // permission on every restart.
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSpeechDictation({ onFinal: vi.fn() }));
+      act(() => result.current.start());
+
+      silentRound();
+      silentRound();
+      silentRound();
+
+      expect(created).toHaveLength(3); // the third round did not re-arm a fourth recogniser
+      expect(result.current.listening).toBe(false);
+      expect(result.current.heardNothing).toBe(true);
+      // A nudge, not a block: unlike a real error, silence never takes the button away.
+      expect(result.current.available).toBe(true);
+      expect(result.current.blocked).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('and a word heard in between resets the run — it never cuts off a master mid-position', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSpeechDictation({ onFinal: vi.fn() }));
+      act(() => result.current.start());
+
+      silentRound();
+      silentRound();
+      // He was just thinking about what to say next.
+      act(() => created[created.length - 1].onresult?.({
+        resultIndex: 0,
+        results: { length: 1, 0: { isFinal: true, length: 1, 0: { transcript: 'штукатурка' } } },
+      }));
+      silentRound();
+      silentRound();
+
+      expect(result.current.heardNothing).toBe(false);
+      expect(created).toHaveLength(5); // still listening after four silent rounds in total
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a fresh tap clears the «heard nothing» line from the last one', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSpeechDictation({ onFinal: vi.fn() }));
+      act(() => result.current.start());
+      silentRound();
+      silentRound();
+      silentRound();
+      expect(result.current.heardNothing).toBe(true);
+
+      act(() => result.current.start());
+
+      expect(result.current.heardNothing).toBe(false);
+      expect(result.current.listening).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stop() clears the intent, so a following onend does NOT re-arm the recogniser', () => {
     vi.useFakeTimers();
     try {

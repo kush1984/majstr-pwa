@@ -44,6 +44,8 @@ captureUtmFromUrl(window.location.search);
 // persister snapshots them — that snapshot IS the offline read cache. Without a long gcTime the
 // cache would be thin exactly when the master goes offline.
 const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
+/** How often a running app re-asks the server whether a newer build has shipped. */
+const UPDATE_CHECK_MS = 1000 * 60 * 60;
 /** Offline-cache schema version — bump ONLY on an incompatible change to cached DTO shapes. */
 const CACHE_SCHEMA = 'v1';
 const queryClient = new QueryClient({
@@ -81,6 +83,24 @@ initOutbox(queryClient);
 if ('serviceWorker' in navigator) {
   const updateSW = registerSW({
     immediate: true,
+    onRegisteredSW(_url, registration) {
+      // The browser only looks for a new worker when the page is (re)loaded — and an installed PWA
+      // is never reloaded: the master keeps it open for weeks and switches away from it, he does
+      // not cold-start it. So the ONE check at registration was the only one that ever ran, and a
+      // shipped fix could wait for as long as he never force-quit the app. Ask again on a timer,
+      // and every time he brings it back to the foreground — which is when he is about to use it.
+      if (!registration) return;
+      const check = () => {
+        void registration.update().catch(() => {
+          // No connection, or the server is down. The next check asks again; there is nothing to
+          // tell the master, and an unhandled rejection here would reach Sentry as noise.
+        });
+      };
+      window.setInterval(check, UPDATE_CHECK_MS);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check();
+      });
+    },
     onNeedRefresh() {
       // A new version is waiting — tell the UI. Clicking «Оновити» activates it + reloads.
       // updateSW() resolves after the reload it triggers — nothing to await here.

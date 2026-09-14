@@ -1,19 +1,18 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { onlineManager } from '@tanstack/react-query';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
-import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
-import { formatMoneyExact } from '@/lib/format.ts';
+import { formatDate, formatMoneyExact } from '@/lib/format.ts';
 import { routes } from '@/lib/config.ts';
 import { decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { photosApi } from '@/api/photos.ts';
@@ -114,12 +113,12 @@ export function ProjectReceiptsPage() {
     return projectReceiptsApi.recognizeStored(projectId, receiptId);
   };
 
-  /** The «✨ Розпізнати» button on an unpriced card: fill the sum, nothing else. */
+  /** The «✨ Розпізнати» button on an unpriced card: fill in whatever the paper gave up. */
   const readCard = async (r: ProjectReceiptResponse) => {
     setReadingId(r.id);
     try {
       const read = await recognizeStored(r.id);
-      if (!read?.recognized || read.amount == null) {
+      if (!read?.recognized) {
         toast.info(t('receipts.recognizeFailed'));
         return;
       }
@@ -127,7 +126,10 @@ export function ProjectReceiptsPage() {
         receiptId: r.id,
         req: {
           label: read.label?.trim() || r.label,
-          amount: read.amount,
+          // A read that found the shop and the date but not the total is PARTIAL, not a failure —
+          // it used to be thrown away whole, under «не вдалося розпізнати», leaving the master to
+          // retype off the paper what we had just read off it. Same split as the form's own reader.
+          amount: read.amount ?? r.amount,
           issuedAt: read.issuedAt ?? r.issuedAt,
           // `reimbursable` deliberately omitted — three-valued on the server, and reading a sum off
           // the paper says nothing about whose money it was.
@@ -135,6 +137,8 @@ export function ProjectReceiptsPage() {
           fiscalId: read.fiscalId,
         },
       });
+      // Said AFTER the save, so the card he is looking at already carries the label and the date.
+      if (read.amount == null) toast.info(t('receipts.recognizePartial'));
     } catch (err) {
       toast.error(toAppError(err).message);
     } finally {
@@ -183,7 +187,10 @@ export function ProjectReceiptsPage() {
     );
   }
 
-  const notCached = list.isError && !onlineManager.isOnline();
+  // Same rule as the shopping list: no data AND a failed fetch. Online that is an outage worth a
+  // retry, not the «жодного чека» empty state — which, on a screen whose whole point is proof the
+  // master is owed money, reads as the receipts having been lost.
+  const failed = list.isError && !list.data;
   const totals = list.data;
   const unpriced = totals?.unpricedCount ?? 0;
 
@@ -211,8 +218,12 @@ export function ProjectReceiptsPage() {
           </div>
         </div>
 
-        {notCached ? (
-          <OfflineNotCached what={t('receipts.title')} />
+        {failed ? (
+          <ErrorState
+            error={list.error}
+            what={t('receipts.title')}
+            onRetry={() => void list.refetch()}
+          />
         ) : (
           <>
             {/* The receivable leads, because it is the answer to the master's own question: this
@@ -461,7 +472,7 @@ function ReceiptCard({
               </span>
             )}
           </div>
-          {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{r.issuedAt}</p>}
+          {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>}
           {/* A WARNING, never a refusal (V129): the fiscal identity is only known after a QR read,
               so the same paper can legitimately be photographed twice before either copy is read. */}
           {r.duplicate && (

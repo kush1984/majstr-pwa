@@ -345,9 +345,12 @@ export function ProjectDetailPage() {
           <IconTile tone="brand" size={32}>
             📁
           </IconTile>
-          <span className="min-w-0 truncate">{p.name}</span>
+          {/* An object is named and addressed after the CLIENT («Квартира Петренка», the street
+              he lives on), so the header is personal data in a replay even though no field on it
+              is called a name. Same treatment as the client block below. */}
+          <span className="ph-mask min-w-0 truncate">{p.name}</span>
         </div>
-        <div className="mb-3 text-xs text-muted">📍 {p.address}</div>
+        <div className="ph-mask mb-3 text-xs text-muted">📍 {p.address}</div>
         <Badge variant={OBJECT_STAGE_VARIANT[p.stage]}>{t('status.stage.' + p.stage)}</Badge>
         {p.clientFullName && (
           <div className="ph-mask mt-3 flex items-center gap-2 border-t border-border pt-3">

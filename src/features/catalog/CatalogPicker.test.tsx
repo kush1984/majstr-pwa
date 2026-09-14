@@ -136,6 +136,26 @@ describe('CatalogPicker — picking', () => {
     ]);
   });
 
+  it('keeps a tick made under another filter — the basket is not the current view', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([
+      anItem({ id: 'w', name: 'Фарбування стін', type: 'WORK', category: 'Малярні роботи' }),
+      anItem({ id: 'm', name: 'Фарба інтерʼєрна', type: 'MATERIAL', category: 'Малярні роботи' }),
+    ]);
+    const { onPick } = renderPicker();
+
+    fireEvent.click(await screen.findByText('Роботи'));
+    fireEvent.click(await screen.findByText('Фарбування стін'));
+
+    // Switching the filter does not untick anything — and the button goes on promising 2.
+    fireEvent.click(screen.getByText('Матеріали'));
+    fireEvent.click(await screen.findByText('Фарба інтерʼєрна'));
+    fireEvent.click(screen.getByRole('button', { name: /Додати 2/ }));
+
+    // Filtered by the CURRENT view, the work silently never arrived.
+    await waitFor(() => expect(onPick).toHaveBeenCalled());
+    expect(vi.mocked(onPick).mock.calls[0][0].map((i) => i.id)).toEqual(['w', 'm']);
+  });
+
   it('greys out a position that is already there and refuses the tap', async () => {
     vi.mocked(catalogApi.list).mockResolvedValue(bigCatalog());
     const { onPick } = renderPicker({ disabledNames: ['  ґрунтування '] });

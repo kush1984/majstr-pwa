@@ -38,11 +38,24 @@ const dateFmt = new Intl.DateTimeFormat('uk-UA', {
   month: 'long',
 });
 
-/** ISO instant/date → "18 листопада". Returns '' for nullish input. */
+const dateWithYearFmt = new Intl.DateTimeFormat('uk-UA', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+/**
+ * ISO instant/date → "18 листопада", and "18 листопада 2025 р." once it falls outside the current
+ * year. Returns '' for nullish input.
+ *
+ * <p>The year is not decoration: «Підписано 18 листопада» on an estimate signed last November reads
+ * as three weeks ago, and these dates sit on documents a master keeps for years.</p>
+ */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : dateFmt.format(d);
+  if (Number.isNaN(d.getTime())) return '';
+  return (d.getFullYear() === new Date().getFullYear() ? dateFmt : dateWithYearFmt).format(d);
 }
 
 const dateTimeFmt = new Intl.DateTimeFormat('uk-UA', {

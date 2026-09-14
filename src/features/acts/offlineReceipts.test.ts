@@ -7,7 +7,7 @@ import { initOutbox } from '@/lib/outbox/init.ts';
 import { actsApi } from '@/api/acts.ts';
 import {
   ACT_RECEIPT_ENTITY, addActReceipt, dropQueuedReceipt, mergeQueuedReceipts, patchQueuedReceipt,
-  queuedReceiptRow, type ActReceiptOpPayload, type QueuedActReceipt,
+  patchQueuedReceiptFromRead, queuedReceiptRow, type ActReceiptOpPayload, type QueuedActReceipt,
 } from './offlineReceipts.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
 
@@ -40,18 +40,20 @@ describe('addActReceipt', () => {
   it('uploads straight away when there is a connection and queues nothing', async () => {
     vi.mocked(actsApi.addReceipt).mockResolvedValue({ id: 'r1' } as WorkActReceiptResponse);
 
-    const row = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo() });
+    const { row, queued } = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo() });
 
     expect(row.id).toBe('r1');
+    expect(queued).toBe(false);
     expect(await outboxCount()).toBe(0);
   });
 
   it('queues the photo when the phone is offline, and hands back a row to show right away', async () => {
     onlineManager.setOnline(false);
 
-    const row = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo(), saveToPhotos: true });
+    const { row, queued } = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo(), saveToPhotos: true });
 
     expect(actsApi.addReceipt).not.toHaveBeenCalled();
+    expect(queued).toBe(true);
     // Real to the master immediately: it has his photo, it counts as unpriced, and it is his to fix.
     expect(row).toMatchObject({ id: 'u1', amount: 0, returnedAmount: 0, hasPhoto: true, label: '' });
 
@@ -72,9 +74,12 @@ describe('addActReceipt', () => {
     // cannot carry a photo. Losing the receipt there is the same loss as losing it offline.
     vi.mocked(actsApi.addReceipt).mockRejectedValue(new axios.AxiosError('Network Error'));
 
-    const row = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo() });
+    const { row, queued } = await addActReceipt('a1', { id: 'u1', amount: 0, file: photo() });
 
     expect(row.id).toBe('u1');
+    // The caller MUST be told: the device still thinks it is online, so nothing else on the return
+    // says this id is a client uuid the server has never seen.
+    expect(queued).toBe(true);
     expect(await outboxCount()).toBe(1);
   });
 
@@ -131,6 +136,30 @@ describe('correcting a receipt that has not synced yet', () => {
   it('deleting it drops the op — there is nothing on the server to ask about', async () => {
     expect(await dropQueuedReceipt('u1')).toBe(true);
     expect(await outboxCount()).toBe(0);
+  });
+
+  it('fills what the master left blank — a queued row is created unnamed and priced 0', async () => {
+    expect(await patchQueuedReceiptFromRead('u1', {
+      label: 'Нова Пошта', amount: 250.5, issuedAt: '2026-09-01',
+    })).toBe(true);
+
+    const op = await queuedOp();
+    expect(op.payload).toMatchObject({ label: 'Нова Пошта', amount: 250.5, issuedAt: '2026-09-01' });
+  });
+
+  it('but a READER never overwrites what the master has already typed', async () => {
+    // The batch reads photo 5 while he is pricing photo 1 by hand. His figure is a fact and the
+    // reader's is a guess, so the guess loses — field by field, not all or nothing.
+    await patchQueuedReceipt('u1', { label: 'Епіцентр', amount: 990, issuedAt: null });
+
+    expect(await patchQueuedReceiptFromRead('u1', {
+      label: 'Нова Пошта', amount: 12, issuedAt: '2026-09-02',
+    })).toBe(true);
+
+    const op = await queuedOp();
+    expect(op.payload).toMatchObject({ label: 'Епіцентр', amount: 990 });
+    // The date he never typed is still the reader's to fill in.
+    expect(op.payload.issuedAt).toBe('2026-09-02');
   });
 
   it('says so when the queue drained first, so the caller can fall back to the server row', async () => {

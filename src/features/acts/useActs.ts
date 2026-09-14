@@ -9,7 +9,8 @@ import type {
 } from '@/api/types.ts';
 
 const actsKey = (projectId: string) => ['acts', projectId] as const;
-const actKey = (id: string) => ['act', id] as const;
+/** Exported for the receipt batch, which READS the act back mid-run to see the master's edits. */
+export const actKey = (id: string) => ['act', id] as const;
 const progressKey = (projectId: string) => ['act-progress', projectId] as const;
 
 export function useActs(projectId: string) {

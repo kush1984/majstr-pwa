@@ -56,3 +56,23 @@ describe('service-worker update contract (makes the banner reachable)', () => {
     expect(sw).toContain('self.clients.claim()');
   });
 });
+
+/**
+ * ...and none of the above ever fires if nobody ASKS whether a new build exists. The browser looks
+ * only on a (re)load, which an installed PWA does not do — it is kept open for weeks. Same crude
+ * source assertions for the same reason: the failure mode is silence, and every mocked test in this
+ * file stayed green while the banner was unreachable.
+ */
+describe('asking for a new build (a worker only WAITS once someone checks)', () => {
+  const main = read('../main.tsx');
+
+  it('re-asks on a timer, not just once at registration', () => {
+    expect(main).toContain('onRegisteredSW');
+    expect(main).toMatch(/setInterval\(check/);
+  });
+
+  it('and again whenever the master brings the app back to the foreground', () => {
+    expect(main).toContain("'visibilitychange'");
+    expect(main).toContain("document.visibilityState === 'visible'");
+  });
+});

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -16,6 +16,7 @@ import type {
   CalculatedMaterialLine,
   MaterialLineRequest,
   MaterialSourceLine,
+  MissingParameter,
 } from '@/api/types.ts';
 
 /**
@@ -42,6 +43,35 @@ import type {
  */
 const WASTE_STEPS = [5, 10, 15];
 
+/**
+ * A metre figure the master typed, or null when what he typed is not one.
+ *
+ * <p>«abc» parses to NaN, and NaN used to be applied and sent — the server answers 400, so the
+ * screen blamed the connection for a typo and offered nothing to fix. The upper bound is a sanity
+ * check rather than a rule of building: no room on this screen is a kilometre around, and a stray
+ * extra digit is the mistake it actually catches.</p>
+ */
+const MAX_METRES = 1000;
+function metres(raw: string): number | null {
+  const value = parseDecimal(raw);
+  return Number.isFinite(value) && value > 0 && value <= MAX_METRES ? value : null;
+}
+
+/**
+ * A quantity the master typed over ours.
+ *
+ * <p>Blank is not an error — it is how he says «не це», and the row drops out of the list. Anything
+ * that is not a positive number IS one, and used to be dropped just as silently: `parseDecimal('abc')`
+ * is NaN, the payload filter removed it, and the rest went off to the shopping list. He found out at
+ * the merchant, by the material not being on it.</p>
+ */
+function badQuantity(raw: string): boolean {
+  if (raw.trim() === '') return false;
+  const value = parseDecimal(raw);
+  // 0 is not a typo — it is the second way he says «не це», and the row drops out of the payload.
+  return !Number.isFinite(value) || value < 0;
+}
+
 export function MaterialCalculatorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -51,7 +81,9 @@ export function MaterialCalculatorPage() {
   const [waste, setWaste] = useState(10);
   const [perimeterInput, setPerimeterInput] = useState('');
   const [perimeter, setPerimeter] = useState<number | undefined>(undefined);
+  const [perimeterError, setPerimeterError] = useState(false);
   const [sectionInputs, setSectionInputs] = useState<Record<string, string>>({});
+  const [sectionErrors, setSectionErrors] = useState<Record<string, boolean>>({});
   const [sections, setSections] = useState<string | undefined>(undefined);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -60,6 +92,10 @@ export function MaterialCalculatorPage() {
     queryKey: ['materials', id, waste, perimeter ?? null, sections ?? null],
     queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter, sections }),
     enabled: Boolean(id),
+    // Every parameter change is a NEW key, so the whole screen used to collapse into a full-page
+    // spinner — controls, figures and all — on each tap of the waste steps. Keeping the last answer
+    // on screen turns that into a quiet recalculation of numbers he can watch move.
+    placeholderData: keepPreviousData,
   });
 
   // The server re-rounds on every parameter change, so a figure typed against the old numbers
@@ -68,7 +104,15 @@ export function MaterialCalculatorPage() {
 
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
-  const parameters = useMemo(() => data?.parameters ?? [], [data]);
+
+  // What the last SUCCESSFUL answer asked for. The parameters ride the query KEY, so a refused
+  // request is a different query holding no data at all — and the perimeter/section cards would
+  // disappear at exactly the moment the master needs them to correct the figure that was refused.
+  const [askedFor, setAskedFor] = useState<MissingParameter[]>([]);
+  useEffect(() => {
+    if (data) setAskedFor(data.parameters);
+  }, [data]);
+  const parameters = useMemo(() => data?.parameters ?? askedFor, [data, askedFor]);
   const needsPerimeter = parameters.some((p) => p.parameter === 'PERIMETER');
 
   // One input per POSITION, not per material: a короб's board and its ribs share one розгортка, but
@@ -82,12 +126,37 @@ export function MaterialCalculatorPage() {
     return [...byPosition].map(([estimateItemId, name]) => ({ estimateItemId, name }));
   }, [parameters]);
 
+  const applyPerimeter = () => {
+    const raw = perimeterInput.trim();
+    if (raw === '') {
+      setPerimeterError(false);
+      setPerimeter(undefined);
+      return;
+    }
+    const value = metres(raw);
+    if (value == null) {
+      setPerimeterError(true);
+      return;
+    }
+    setPerimeterError(false);
+    setPerimeter(value);
+  };
+
   // Each box answers for itself: one left blank keeps asking rather than borrowing a neighbour's.
+  // An UNREADABLE box is not a blank one, though the old filter treated them alike and dropped it
+  // — the card just kept asking, with nothing on screen saying why. Nothing is sent until every
+  // figure actually typed is a figure.
   const applySections = () => {
-    const entries = Object.entries(sectionInputs)
-      .map(([itemId, raw]) => ({ itemId, value: raw.trim() ? parseDecimal(raw) : 0 }))
-      .filter((e) => e.value > 0)
-      .map((e) => `${e.itemId}:${e.value}`);
+    const errors: Record<string, boolean> = {};
+    const entries: string[] = [];
+    for (const [itemId, raw] of Object.entries(sectionInputs)) {
+      if (raw.trim() === '') continue;
+      const value = metres(raw);
+      if (value == null) errors[itemId] = true;
+      else entries.push(`${itemId}:${value}`);
+    }
+    setSectionErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSections(entries.length > 0 ? entries.join(',') : undefined);
   };
 
@@ -121,6 +190,17 @@ export function MaterialCalculatorPage() {
   });
 
   const nothingPicked = payload().length === 0;
+  // Held rather than dropped: the button says nothing can be sent until the typo is fixed, and the
+  // row itself says which one.
+  const badRows = useMemo(
+    () =>
+      new Set(
+        Object.entries(edited)
+          .filter(([, raw]) => badQuantity(raw))
+          .map(([materialId]) => materialId),
+      ),
+    [edited],
+  );
 
   if (calc.isLoading) {
     return (
@@ -150,128 +230,150 @@ export function MaterialCalculatorPage() {
           </div>
         </div>
 
-        {calc.isError ? (
-          <EmptyState icon="🧮" title={t('materials.errorTitle')} text={t('materials.loadError')} />
-        ) : (
-          <>
-            {data && (
-              <Coverage trades={data.coverage.trades} otherWorks={data.coverage.otherWorks} />
-            )}
+        {/* The figures below are the PREVIOUS answer until the new one lands — say so, or a master
+            reading a number that is about to move has no way to know it is about to move. */}
+        {calc.isFetching && !calc.isLoading && (
+          <p className="mb-3 text-xs text-muted">{t('materials.recalculating')}</p>
+        )}
 
-            {data && !data.estimateSigned && (
-              <p className="mb-4 rounded-card border border-border bg-surface px-3 py-2 text-xs text-muted">
-                {t('materials.unsignedEstimate')}
+        {calc.isError && (
+          <EmptyState icon="🧮" title={t('materials.errorTitle')} text={t('materials.loadError')} />
+        )}
+
+        {!calc.isError && data && (
+          <Coverage trades={data.coverage.trades} otherWorks={data.coverage.otherWorks} />
+        )}
+
+        {!calc.isError && data && !data.estimateSigned && (
+          <p className="mb-4 rounded-card border border-border bg-surface px-3 py-2 text-xs text-muted">
+            {t('materials.unsignedEstimate')}
+          </p>
+        )}
+
+        {/*
+          The parameter and waste cards stand OUTSIDE the error branch. The parameters ride the
+          query KEY, so a figure the server refuses is an ERROR query holding no data at all — and
+          replacing the whole body with «Не вдалося порахувати» took away the very field the master
+          had to correct. An error replaces the ANSWER, never the controls that produce it.
+        */}
+        {needsPerimeter && (
+          <div className="mb-4 rounded-card border border-border bg-surface p-3">
+            <p className="text-sm font-semibold text-primary">{t('materials.perimeterTitle')}</p>
+            <p className="mt-1 text-xs text-muted">{t('materials.perimeterHint')}</p>
+            <div className="mt-2 flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <label htmlFor="perimeter" className="mb-1 block text-xs font-medium text-muted">
+                  {t('materials.perimeterLabel')}
+                </label>
+                <Input
+                  id="perimeter"
+                  inputMode="decimal"
+                  value={perimeterInput}
+                  onChange={(e) => setPerimeterInput(e.target.value)}
+                  placeholder="0"
+                  aria-invalid={perimeterError || undefined}
+                  aria-describedby={perimeterError ? 'perimeter-error' : undefined}
+                />
+              </div>
+              <Button variant="secondary" onClick={applyPerimeter}>
+                {t('materials.perimeterApply')}
+              </Button>
+            </div>
+            {perimeterError && (
+              <p id="perimeter-error" className="mt-1 text-xs text-danger">
+                {t('materials.badNumber')}
               </p>
             )}
+          </div>
+        )}
 
-            {needsPerimeter && (
-              <div className="mb-4 rounded-card border border-border bg-surface p-3">
-                <p className="text-sm font-semibold text-primary">{t('materials.perimeterTitle')}</p>
-                <p className="mt-1 text-xs text-muted">{t('materials.perimeterHint')}</p>
-                <div className="mt-2 flex items-end gap-2">
-                  <div className="min-w-0 flex-1">
-                    <label htmlFor="perimeter" className="mb-1 block text-xs font-medium text-muted">
-                      {t('materials.perimeterLabel')}
-                    </label>
-                    <Input
-                      id="perimeter"
-                      inputMode="decimal"
-                      value={perimeterInput}
-                      onChange={(e) => setPerimeterInput(e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      setPerimeter(perimeterInput.trim() ? parseDecimal(perimeterInput) : undefined)
-                    }
+        {sectionPositions.length > 0 && (
+          <div className="mb-4 rounded-card border border-border bg-surface p-3">
+            <p className="text-sm font-semibold text-primary">{t('materials.sectionTitle')}</p>
+            <p className="mt-1 text-xs text-muted">{t('materials.sectionHint')}</p>
+            <div className="mt-2 space-y-2">
+              {sectionPositions.map((p) => (
+                <div key={p.estimateItemId}>
+                  <label
+                    htmlFor={`section-${p.estimateItemId}`}
+                    className="mb-1 block text-xs font-medium text-muted"
                   >
-                    {t('materials.perimeterApply')}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {sectionPositions.length > 0 && (
-              <div className="mb-4 rounded-card border border-border bg-surface p-3">
-                <p className="text-sm font-semibold text-primary">{t('materials.sectionTitle')}</p>
-                <p className="mt-1 text-xs text-muted">{t('materials.sectionHint')}</p>
-                <div className="mt-2 space-y-2">
-                  {sectionPositions.map((p) => (
-                    <div key={p.estimateItemId}>
-                      <label
-                        htmlFor={`section-${p.estimateItemId}`}
-                        className="mb-1 block text-xs font-medium text-muted"
-                      >
-                        {p.name}
-                      </label>
-                      <Input
-                        id={`section-${p.estimateItemId}`}
-                        inputMode="decimal"
-                        value={sectionInputs[p.estimateItemId] ?? ''}
-                        onChange={(e) =>
-                          setSectionInputs((prev) => ({
-                            ...prev,
-                            [p.estimateItemId]: e.target.value,
-                          }))
-                        }
-                        placeholder={t('materials.sectionLabel')}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <Button variant="secondary" fullWidth className="mt-2" onClick={applySections}>
-                  {t('materials.sectionApply')}
-                </Button>
-              </div>
-            )}
-
-            <div className="mb-4 rounded-card border border-border bg-surface p-3">
-              <p className="text-sm font-semibold text-primary">{t('materials.wasteTitle')}</p>
-              <div className="mt-2 flex gap-2">
-                {WASTE_STEPS.map((step) => (
-                  <button
-                    key={step}
-                    type="button"
-                    onClick={() => setWaste(step)}
-                    aria-pressed={waste === step}
-                    className={
-                      waste === step
-                        ? 'min-h-11 flex-1 rounded-xl bg-brand-600 text-sm font-semibold text-white'
-                        : 'min-h-11 flex-1 rounded-xl bg-surface-sunken text-sm font-medium text-primary'
+                    {p.name}
+                  </label>
+                  <Input
+                    id={`section-${p.estimateItemId}`}
+                    inputMode="decimal"
+                    value={sectionInputs[p.estimateItemId] ?? ''}
+                    onChange={(e) =>
+                      setSectionInputs((prev) => ({
+                        ...prev,
+                        [p.estimateItemId]: e.target.value,
+                      }))
                     }
-                  >
-                    {t('materials.wasteStep', { percent: step })}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {materials.length === 0 ? (
-              <EmptyState
-                icon="🧮"
-                title={t('materials.emptyTitle')}
-                text={t('materials.emptyText')}
-              />
-            ) : (
-              <div className="overflow-hidden rounded-card border border-border bg-surface">
-                {materials.map((line) => (
-                  <MaterialRow
-                    key={line.materialId}
-                    line={line}
-                    value={edited[line.materialId] ?? String(line.quantity)}
-                    onChange={(v) => setEdited((prev) => ({ ...prev, [line.materialId]: v }))}
-                    open={openRow === line.materialId}
-                    onToggle={() =>
-                      setOpenRow((cur) => (cur === line.materialId ? null : line.materialId))
+                    placeholder={t('materials.sectionLabel')}
+                    aria-invalid={sectionErrors[p.estimateItemId] || undefined}
+                    aria-describedby={
+                      sectionErrors[p.estimateItemId]
+                        ? `section-${p.estimateItemId}-error`
+                        : undefined
                     }
-                    onNormChange={afterNormChange}
                   />
-                ))}
-              </div>
-            )}
-          </>
+                  {sectionErrors[p.estimateItemId] && (
+                    <p id={`section-${p.estimateItemId}-error`} className="mt-1 text-xs text-danger">
+                      {t('materials.badNumber')}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button variant="secondary" fullWidth className="mt-2" onClick={applySections}>
+              {t('materials.sectionApply')}
+            </Button>
+          </div>
+        )}
+
+        <div className="mb-4 rounded-card border border-border bg-surface p-3">
+          <p className="text-sm font-semibold text-primary">{t('materials.wasteTitle')}</p>
+          <div className="mt-2 flex gap-2">
+            {WASTE_STEPS.map((step) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => setWaste(step)}
+                aria-pressed={waste === step}
+                className={
+                  waste === step
+                    ? 'min-h-11 flex-1 rounded-xl bg-brand-600 text-sm font-semibold text-white'
+                    : 'min-h-11 flex-1 rounded-xl bg-surface-sunken text-sm font-medium text-primary'
+                }
+              >
+                {t('materials.wasteStep', { percent: step })}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!calc.isError && materials.length === 0 && (
+          <EmptyState icon="🧮" title={t('materials.emptyTitle')} text={t('materials.emptyText')} />
+        )}
+
+        {materials.length > 0 && (
+          <div className="overflow-hidden rounded-card border border-border bg-surface">
+            {materials.map((line) => (
+              <MaterialRow
+                key={line.materialId}
+                line={line}
+                value={edited[line.materialId] ?? String(line.quantity)}
+                onChange={(v) => setEdited((prev) => ({ ...prev, [line.materialId]: v }))}
+                invalid={badRows.has(line.materialId)}
+                open={openRow === line.materialId}
+                onToggle={() =>
+                  setOpenRow((cur) => (cur === line.materialId ? null : line.materialId))
+                }
+                onNormChange={afterNormChange}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -284,7 +386,7 @@ export function MaterialCalculatorPage() {
             <Button
               fullWidth
               loading={toShoppingList.isPending}
-              disabled={toShoppingList.isPending || nothingPicked}
+              disabled={toShoppingList.isPending || nothingPicked || badRows.size > 0}
               onClick={() => toShoppingList.mutate()}
             >
               🛒 {t('materials.toShoppingList')}
@@ -330,6 +432,7 @@ function MaterialRow({
   line,
   value,
   onChange,
+  invalid,
   open,
   onToggle,
   onNormChange,
@@ -337,25 +440,41 @@ function MaterialRow({
   line: CalculatedMaterialLine;
   value: string;
   onChange: (v: string) => void;
+  invalid: boolean;
   open: boolean;
   onToggle: () => void;
   onNormChange: () => void;
 }) {
   const { t } = useTranslation();
 
+  // The packages follow the number ON THE ROW, not the one the server last sent. «5 × мішок» under a
+  // quantity the master had corrected to 200 кг was our arithmetic contradicting his, on the same
+  // line — and the packages are the thing he actually carries to the till.
+  const typed = parseDecimal(value);
+  const packages =
+    line.packageSize != null && line.packageSize > 0 && typed > 0
+      ? Math.ceil(typed / line.packageSize)
+      : null;
+  const errorId = `qty-${line.materialId}-error`;
+
   return (
     <div className="border-b border-border px-3 py-3 last:border-b-0">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-primary">{line.name}</p>
-          {line.packages != null && line.packageName != null && (
+          {packages != null && line.packageName != null && (
             <p className="mt-0.5 text-xs text-muted">
               {t('materials.packages', {
-                qty: line.packages,
+                qty: packages,
                 packageName: line.packageName,
                 size: formatNumber(line.packageSize, 3),
                 unit: t('units.' + line.unit),
               })}
+            </p>
+          )}
+          {invalid && (
+            <p id={errorId} className="mt-1 text-xs text-danger">
+              {t('materials.quantityInvalid')}
             </p>
           )}
         </div>
@@ -365,6 +484,8 @@ function MaterialRow({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             aria-label={t('materials.quantityOf', { name: line.name })}
+            aria-invalid={invalid || undefined}
+            aria-describedby={invalid ? errorId : undefined}
             className="text-right"
           />
           <span className="text-xs text-muted">{t('units.' + line.unit)}</span>

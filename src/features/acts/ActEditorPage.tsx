@@ -390,10 +390,12 @@ export function ActEditorPage() {
     }
     newActUuid.current ??= newUuid(); // X-Entity-Uuid — a retried create must not double-number
     const created = await create.mutateAsync({ req: headerRequest(), id: newActUuid.current });
-    // «Новий акт» creates nothing — THIS is where an act is born, and it is the only place, so
-    // «Зберегти» and «Підписати» both count once each through the door they already share.
-    track('act_created');
     await actsApi.replaceItems(created.id, { items: buildItems() });
+    // «Новий акт» creates nothing — THIS is where an act is born, and it is the only place, so
+    // «Зберегти» and «Підписати» both count once each through the door they already share. Counted
+    // only once the LINES have landed as well: fired before them, a failed `replaceItems` left
+    // PostHog holding an act the master never got, against a backend that records the real one.
+    track('act_created');
     invalidateAct(created.id);
     return created.id;
   };
@@ -573,7 +575,9 @@ export function ActEditorPage() {
         return (
         <Section key={estimateId} title={group.name}
           aside={groupTotal > 0 ? formatMoney(groupTotal) : undefined}>
-          <div className="space-y-2">
+          {/* Same reason as the estimate board: a replay must not read the positions, the
+              quantities being accepted, or the money on them. */}
+          <div className="ph-mask space-y-2">
             {categories.map(([cat, lines]) => {
               const fillable = lines.filter((l) => l.remaining > 0);
               const allTicked = fillable.length > 0

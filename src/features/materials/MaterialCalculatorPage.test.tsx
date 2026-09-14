@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
@@ -194,6 +194,41 @@ describe('MaterialCalculatorPage', () => {
     );
   });
 
+  it('refuses a perimeter that is not a number instead of sending it', async () => {
+    calculate.mockResolvedValue(
+      answer({ parameters: [{ parameter: 'PERIMETER', materialName: 'Профіль UD 27×28' }] }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібен периметр')).toBeTruthy();
+    calculate.mockClear();
+    fireEvent.change(screen.getByLabelText('Периметр, м.п.'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    // «abc» parsed to NaN and was applied and sent; the server's 400 came back as «Не вдалося
+    // порахувати», so the screen blamed the connection for a typo and offered nothing to fix.
+    expect(screen.getByText('Впишіть число більше 0 і не більше 1000')).toBeTruthy();
+    expect(calculate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the fields on screen when the server refuses the figure', async () => {
+    calculate.mockResolvedValue(
+      answer({ parameters: [{ parameter: 'PERIMETER', materialName: 'Профіль UD 27×28' }] }),
+    );
+    renderPage();
+    expect(await screen.findByText('Потрібен периметр')).toBeTruthy();
+
+    calculate.mockRejectedValue(new Error('400'));
+    fireEvent.change(screen.getByLabelText('Периметр, м.п.'), { target: { value: '16' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    // The parameters ride the query KEY, so a refused figure is an ERROR query holding no data —
+    // and the old layout replaced the WHOLE body, taking away the field he had to correct.
+    expect(await screen.findByText('Не вдалося порахувати')).toBeTruthy();
+    expect(screen.getByLabelText('Периметр, м.п.')).toBeTruthy();
+    expect(screen.getByText('Запас')).toBeTruthy();
+  });
+
   it('does not ask for a perimeter when the only missing figure is a section', async () => {
     calculate.mockResolvedValue(
       answer({
@@ -341,5 +376,68 @@ describe('MaterialCalculatorPage', () => {
     // «Прибираємо» (V129): the server endpoint is gone, so a button here would be a live 404 —
     // and a 0 ₴ material line inside a signed document is worse than no line at all.
     expect(screen.queryByText(/Додати в кошторис/)).toBeFalsy();
+  });
+
+  /**
+   * The silent half of the same bug P-05 fixed for the perimeter: `parseDecimal('abc')` is NaN, the
+   * payload filter dropped the row, and the rest went off to the shopping list. The master found out
+   * at the merchant, by the material not being on it.
+   */
+  it('holds a mistyped quantity on screen instead of dropping the material from the list', async () => {
+    renderPage();
+    fireEvent.change(await screen.findByLabelText(/Кількість: Лист ГКЛ/), {
+      target: { value: 'abc' },
+    });
+
+    expect(screen.getByText('Впишіть кількість більше нуля або залиште порожнім')).toBeTruthy();
+    const send = screen.getByText(/У список покупок/).closest('button');
+    expect(send?.disabled).toBe(true);
+    if (send) fireEvent.click(send);
+    expect(toShoppingList).not.toHaveBeenCalled();
+  });
+
+  it('still takes 0 as «не це» rather than as a typo', async () => {
+    renderPage();
+    fireEvent.change(await screen.findByLabelText(/Кількість: Лист ГКЛ/), { target: { value: '0' } });
+
+    expect(screen.queryByText(/Впишіть кількість/)).toBeFalsy();
+  });
+
+  it('re-counts the packages from the master’s own number, not the one we proposed', async () => {
+    renderPage();
+    // 21 м² at 3 м² a sheet is the 7 the server sent.
+    expect(await screen.findByText(/7 × лист/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Кількість: Лист ГКЛ/), { target: { value: '24' } });
+
+    // «7 × лист» under a quantity he had corrected to 24 was our arithmetic contradicting his, on
+    // the same line — and the packages are what he actually carries to the till.
+    expect(screen.getByText(/8 × лист/)).toBeTruthy();
+    expect(screen.queryByText(/7 × лист/)).toBeFalsy();
+  });
+
+  it('keeps the last answer on screen while a new allowance is being calculated', async () => {
+    renderPage();
+    expect(await screen.findByText('Лист ГКЛ 1200×2500')).toBeTruthy();
+
+    const pending: { resolve: (value: MaterialCalculationResponse) => void } = {
+      resolve: () => undefined,
+    };
+    calculate.mockReturnValueOnce(
+      new Promise<MaterialCalculationResponse>((res) => {
+        pending.resolve = res;
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '15 %' }));
+
+    // Every parameter change is a new query key, so the whole screen — controls, figures and all —
+    // used to collapse into a full-page spinner on each tap of the waste steps.
+    expect(await screen.findByText('Перераховуємо…')).toBeTruthy();
+    expect(screen.getByText('Лист ГКЛ 1200×2500')).toBeTruthy();
+    expect(screen.getByText('Запас')).toBeTruthy();
+
+    await act(async () => {
+      pending.resolve(answer({ wastePercent: 15 }));
+    });
   });
 });

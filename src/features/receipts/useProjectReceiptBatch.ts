@@ -1,11 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
-import { onlineManager } from '@tanstack/react-query';
+import { onlineManager, useQueryClient } from '@tanstack/react-query';
 import { projectReceiptsApi } from '@/api/projectReceipts.ts';
 import { toAppError } from '@/api/errors.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { newUuid } from '@/lib/uuid.ts';
-import { useProjectReceiptsWriter } from './useProjectReceipts.ts';
-import type { ProjectReceiptResponse, ReceiptRecognizeResponse } from '@/api/types.ts';
+import { projectReceiptsKey, useProjectReceiptsWriter } from './useProjectReceipts.ts';
+import type {
+  ProjectReceiptResponse,
+  ProjectReceiptsResponse,
+  ReceiptRecognizeResponse,
+} from '@/api/types.ts';
 
 /** What the master chose once for the whole batch, before a single byte was uploaded. */
 export interface ProjectReceiptBatchChoice {
@@ -50,6 +54,7 @@ export interface ProjectReceiptBatchOutcome {
  */
 export function useProjectReceiptBatch(projectId: string) {
   const invalidate = useProjectReceiptsWriter(projectId);
+  const qc = useQueryClient();
   const [progress, setProgress] = useState<ProjectReceiptBatchProgress | null>(null);
   const cancelled = useRef(false);
 
@@ -131,14 +136,25 @@ export function useProjectReceiptBatch(projectId: string) {
           const amount = read?.amount ?? 0;
           if (read && amount > 0) {
             try {
-              await projectReceiptsApi.update(projectId, entry.receipt.id, {
+              // The whole pile is on screen and editable while it is being read: he prices «Чек №1»
+              // by hand while «Чек №5» is still with the model. A PATCH carries the row's whole
+              // text state, so every field sent over an answer he has already given erases it —
+              // and «already given» is simply «no longer what the server saved a moment ago», the
+              // row having been created as «Чек №N» priced 0 with no date.
+              const before = entry.receipt;
+              const now =
+                qc.getQueryData<ProjectReceiptsResponse>(projectReceiptsKey(projectId))
+                  ?.items.find((r) => r.id === before.id) ?? before;
+              await projectReceiptsApi.update(projectId, before.id, {
                 // The server already named it «Чек №N»; a reader's guess replaces that only when
                 // it actually read a name off the paper.
-                label: read.label?.trim() || entry.receipt.label,
-                amount,
-                issuedAt: read.issuedAt ?? entry.receipt.issuedAt,
+                label: now.label !== before.label ? now.label : (read.label?.trim() || before.label),
+                amount: now.amount !== before.amount ? now.amount : amount,
+                issuedAt:
+                  now.issuedAt !== before.issuedAt ? now.issuedAt : (read.issuedAt ?? before.issuedAt),
                 // Not sent: `reimbursable` is three-valued, and a read says nothing about whose
-                // money this was. Omitting it leaves the default — «клієнт відшкодовує» — alone.
+                // money this was. Omitting it leaves the default — «клієнт відшкодовує» — alone,
+                // which is also why a mid-read change of it needs no preserving here.
                 fiscalFn: read.fiscalFn,
                 fiscalId: read.fiscalId,
               });
@@ -157,7 +173,7 @@ export function useProjectReceiptBatch(projectId: string) {
       setProgress(null);
       return { saved: saved.length, offline: false, failed, unread, error };
     },
-    [invalidate, projectId, readOne],
+    [invalidate, projectId, qc, readOne],
   );
 
   const cancel = useCallback(() => {

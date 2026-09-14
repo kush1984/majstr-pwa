@@ -20,6 +20,17 @@ import { track } from '@/lib/posthog.ts';
 import { UNITS } from '@/api/types.ts';
 import type { DictationItem, ItemType, Trade, Unit } from '@/api/types.ts';
 
+/**
+ * Hard cap on the dictated text, mirroring `DictationParseRequest`'s `@Size(max = 4000)`.
+ *
+ * <p>Without it the only thing that says «too long» is a 400 AFTER he has spoken a whole flat into
+ * the field — and the failure path drops him back here with the text intact and no idea which part
+ * to cut. The cap is generous: a flat read out loud in one go is well under it.</p>
+ */
+const MAX_TEXT = 4000;
+/** Show the counter only as it starts to matter — a number under every field is just nagging. */
+const COUNTER_FROM = Math.round(MAX_TEXT * 0.9);
+
 /** Wording differs (case/whitespace/punctuation aside) — the two sentences worth teaching a synonym for. */
 function wordingDiffers(spoken: string, matched: string): boolean {
   const norm = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -364,6 +375,13 @@ export function DictationSheet({
                     : t('dictation.micNoService')}
             </p>
           )}
+          {mic.heardNothing && !mic.blocked && (
+            // The recogniser gave up on a run of silence rather than re-arming into it forever.
+            // Not a failure and not permanent — in the mic's own palette, not the warning amber.
+            <p role="status" className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+              {t('dictation.micHeardNothing')}
+            </p>
+          )}
           <p className="text-xs text-muted">
             {mic.available ? t('dictation.hintOrType') : t('dictation.hint')}
           </p>
@@ -371,10 +389,22 @@ export function DictationSheet({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={mic.available ? 5 : 7}
+            maxLength={MAX_TEXT}
             aria-label={t('dictation.fieldLabel')}
             placeholder={t('dictation.placeholder')}
             className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
+          {text.length >= COUNTER_FROM && (
+            <p
+              aria-live="polite"
+              className={cn(
+                'text-right text-xs',
+                text.length >= MAX_TEXT ? 'text-amber-700' : 'text-muted',
+              )}
+            >
+              {t('dictation.charCount', { used: text.length, max: MAX_TEXT })}
+            </p>
+          )}
           <p className="text-xs text-muted">{t('dictation.catalogHint')}</p>
           <Button fullWidth disabled={!text.trim() || !online} onClick={() => void runParse()}>
             {t('dictation.recognize')}

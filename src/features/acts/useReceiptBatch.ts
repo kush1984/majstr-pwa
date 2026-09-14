@@ -1,12 +1,30 @@
 import { useCallback, useRef, useState } from 'react';
-import { onlineManager } from '@tanstack/react-query';
+import { onlineManager, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
 import { toAppError } from '@/api/errors.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { newUuid } from '@/lib/uuid.ts';
-import { addActReceipt } from './offlineReceipts.ts';
-import { useActWriter } from './useActs.ts';
-import type { ActReceiptRecognizeResponse, WorkActReceiptResponse } from '@/api/types.ts';
+import { addActReceipt, patchQueuedReceiptFromRead } from './offlineReceipts.ts';
+import { actKey, useActWriter } from './useActs.ts';
+import type {
+  ActReceiptRecognizeResponse,
+  WorkActReceiptResponse,
+  WorkActResponse,
+} from '@/api/types.ts';
+
+/** One photo that made it to a row, and how — the queued ones are not addressable by network. */
+interface SavedReceipt {
+  receipt: WorkActReceiptResponse;
+  file: File;
+  queued: boolean;
+}
+
+/** The three things both rungs read off a receipt, normalised: a blank label is no label. */
+interface ReceiptRead {
+  label: string | null;
+  amount: number;
+  issuedAt: string | null;
+}
 
 /** What the master chose once for the whole batch, before a single byte was uploaded. */
 export interface ReceiptBatchChoice {
@@ -52,6 +70,7 @@ export interface ReceiptBatchOutcome {
  */
 export function useReceiptBatch(actId: string, projectId: string) {
   const invalidate = useActWriter(actId, projectId);
+  const qc = useQueryClient();
   const [progress, setProgress] = useState<ReceiptBatchProgress | null>(null);
   const cancelled = useRef(false);
 
@@ -61,6 +80,7 @@ export function useReceiptBatch(actId: string, projectId: string) {
       receipt: WorkActReceiptResponse,
       file: File,
       choice: ReceiptBatchChoice,
+      queued: boolean,
     ): Promise<ActReceiptRecognizeResponse | null> => {
       try {
         // Budgeted at a fraction of the single-photo sweep: jsqr is synchronous, and ten full
@@ -74,6 +94,10 @@ export function useReceiptBatch(actId: string, projectId: string) {
         // A photo with no readable fiscal code is the common case, not a failure. Fall through.
       }
       if (!choice.withAi) return null;
+      // A queued receipt has no stored photo to read: its id is a client uuid the server has never
+      // seen, so this call is a 404. The catch below swallows it into «nothing was read», which
+      // looks exactly like a model that found nothing — which is how it went unnoticed.
+      if (queued) return null;
       try {
         const read = await actsApi.recognizeStoredReceipt(actId, receipt.id);
         return read.recognized ? read : null;
@@ -86,13 +110,47 @@ export function useReceiptBatch(actId: string, projectId: string) {
     [actId],
   );
 
+  /**
+   * Put what was read onto the row — without flattening what the master typed while it was reading.
+   *
+   * <p>Phase 2 lasts as long as the pile takes, and every card is on screen and editable
+   * throughout: he prices «Чек №1» by hand while «Чек №5» is still with the model. The PATCH
+   * carries the row's WHOLE state, so each field sent over an answer he has already given is an
+   * overwrite — including {@code returnedAmount}, which was erased back to 0 by being left out.</p>
+   *
+   * <p>«Already answered» is simply «no longer what we saved a moment ago»: the server creates the
+   * row as «Чек №N» priced 0 with no date, so a field that has moved since was moved BY HIM. Same
+   * rule the single-photo read in ActReceiptsSection follows.</p>
+   */
+  const applyRead = useCallback(
+    async (entry: SavedReceipt, read: ReceiptRead) => {
+      // Never uploaded, so there is no server row to PATCH — the queued create IS the row. False
+      // means the queue drained meanwhile and the replay landed it under that same uuid, so the
+      // ordinary PATCH below now addresses something real.
+      if (entry.queued && (await patchQueuedReceiptFromRead(entry.receipt.id, read))) return;
+
+      const before = entry.receipt;
+      const now =
+        qc.getQueryData<WorkActResponse>(actKey(actId))?.receipts.find((r) => r.id === before.id)
+        ?? before;
+      await actsApi.updateReceipt(actId, before.id, {
+        label: now.label !== before.label ? now.label : (read.label ?? before.label),
+        amount: now.amount !== before.amount ? now.amount : read.amount,
+        issuedAt:
+          now.issuedAt !== before.issuedAt ? now.issuedAt : (read.issuedAt ?? before.issuedAt),
+        returnedAmount: now.returnedAmount,
+      });
+    },
+    [actId, qc],
+  );
+
   const run = useCallback(
     async (files: File[], choice: ReceiptBatchChoice): Promise<ReceiptBatchOutcome> => {
       cancelled.current = false;
       // Read once, before the loop: whether this batch was uploaded or queued has to be ONE answer
       // for the whole pile, or the closing toast describes a state that never existed.
       const online = onlineManager.isOnline();
-      const saved: { receipt: WorkActReceiptResponse; file: File }[] = [];
+      const saved: SavedReceipt[] = [];
       let failed = 0;
       let error: string | null = null;
 
@@ -102,13 +160,15 @@ export function useReceiptBatch(actId: string, projectId: string) {
         try {
           // A per-file client UUID: a retry over a weak link is exactly where this batch lives, and
           // a duplicated receipt is duplicated money — in the act AND in the ADDENDUM it rolls into.
-          const receipt = await addActReceipt(actId, {
+          // `queued` is per FILE, not per batch: the link can die on photo 4 of 5, and the two
+          // kinds of row are corrected through completely different doors.
+          const { row, queued } = await addActReceipt(actId, {
             id: newUuid(),
             amount: 0,
             file,
             saveToPhotos: choice.saveToPhotos,
           });
-          saved.push({ receipt, file });
+          saved.push({ receipt: row, file, queued });
         } catch (err) {
           failed += 1;
           error ??= toAppError(err).message;
@@ -131,19 +191,13 @@ export function useReceiptBatch(actId: string, projectId: string) {
             unread += saved.length - i;
             break;
           }
-          const read = await readOne(entry.receipt, entry.file, choice);
+          const read = await readOne(entry.receipt, entry.file, choice, entry.queued);
           const amount = read?.amount ?? 0;
           if (read && amount > 0) {
             try {
-              await actsApi.updateReceipt(actId, entry.receipt.id, {
-                // The server already named it «Чек №N»; a reader's guess replaces that only when
-                // it actually read a name off the paper.
-                label: read.label?.trim() || entry.receipt.label,
-                amount,
-                // No returnedAmount: these rows were created seconds ago, so there is nothing to
-                // preserve. Every OTHER caller must send it — the request carries the whole row.
-                issuedAt: read.issuedAt ?? entry.receipt.issuedAt,
-              });
+              // The server already named it «Чек №N»; a reader's guess replaces that only when it
+              // actually read a name off the paper.
+              await applyRead(entry, { label: read.label?.trim() || null, amount, issuedAt: read.issuedAt });
             } catch (err) {
               unread += 1;
               error ??= toAppError(err).message;
@@ -159,7 +213,7 @@ export function useReceiptBatch(actId: string, projectId: string) {
       setProgress(null);
       return { saved: saved.length, offline: !online, failed, unread, error };
     },
-    [actId, invalidate, readOne],
+    [actId, applyRead, invalidate, readOne],
   );
 
   const cancel = useCallback(() => {

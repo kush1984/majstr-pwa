@@ -46,6 +46,20 @@ export interface QueuedActReceipt {
   file: File;
 }
 
+/** The saved receipt, and WHICH of the two ways it was saved. */
+export interface AddedActReceipt {
+  row: WorkActReceiptResponse;
+  /**
+   * The photo went into the outbox instead of over the wire.
+   *
+   * <p>Then `row.id` is a client uuid THE SERVER HAS NEVER SEEN, and every network call addressed
+   * to it — reading the stored photo, PATCHing the sum onto it — is a 404. The caller cannot infer
+   * this from the connection: {@link addActReceipt} falls back to the queue on a network error too,
+   * so a batch that began online can queue its fourth photo and upload its fifth.</p>
+   */
+  queued: boolean;
+}
+
 /**
  * Save one receipt photo — over the network when there is one, into the outbox when there is not.
  *
@@ -60,10 +74,10 @@ export interface QueuedActReceipt {
 export async function addActReceipt(
   actId: string,
   req: { id: string; amount: number; file: File; saveToPhotos?: boolean },
-): Promise<WorkActReceiptResponse> {
+): Promise<AddedActReceipt> {
   if (onlineManager.isOnline()) {
     try {
-      return await actsApi.addReceipt(actId, req);
+      return { row: await actsApi.addReceipt(actId, req), queued: false };
     } catch (e) {
       if (!isNetworkError(e)) throw e; // a real refusal (signed act, bad file) must surface
     }
@@ -84,7 +98,7 @@ export async function addActReceipt(
     payload,
     deps: [],
   });
-  return queuedReceiptRow(req.id, payload);
+  return { row: queuedReceiptRow(req.id, payload), queued: true };
 }
 
 /**
@@ -120,6 +134,31 @@ export function patchQueuedReceipt(
     amount: fields.amount,
     issuedAt: fields.issuedAt,
   }));
+}
+
+/**
+ * Write what a READER made of a queued receipt into it, without flattening the master's own typing.
+ *
+ * <p>Separate from {@link patchQueuedReceipt}, which overwrites all three fields on purpose — that
+ * one carries what the master just typed into the dialog, including a label he deliberately
+ * cleared. This one carries a guess, and a guess loses to a figure: the batch reads photo 5 while
+ * the master is pricing photo 1, so by the time the reader answers, the row it is answering about
+ * may already say what he wants it to say.</p>
+ */
+export function patchQueuedReceiptFromRead(
+  id: string,
+  read: { label: string | null; amount: number; issuedAt: string | null },
+): Promise<boolean> {
+  return patchPendingCreate(ACT_RECEIPT_ENTITY, id, (raw) => {
+    const payload = raw as ActReceiptOpPayload;
+    return {
+      ...payload,
+      label: payload.label?.trim() ? payload.label : (read.label ?? payload.label),
+      // A queued receipt is created at 0 — «not priced yet» — so anything above it is his.
+      amount: payload.amount > 0 ? payload.amount : read.amount,
+      issuedAt: payload.issuedAt ?? read.issuedAt,
+    };
+  });
 }
 
 /** Delete a receipt that has not synced yet — dropping the op IS deleting the row. */

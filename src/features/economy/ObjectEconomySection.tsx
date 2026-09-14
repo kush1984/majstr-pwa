@@ -7,7 +7,7 @@ import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
-import { formatMoney, formatNumber } from '@/lib/format.ts';
+import { formatMoney, formatMoneyExact, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -276,32 +276,41 @@ function MaterialsAxis({ materials, objectId }: {
   const navigate = useNavigate();
   if (materials.receiptCount === 0) return null;
   return (
-    <button
-      type="button"
-      onClick={() =>
-        navigate(routes.receipts(objectId), { state: { from: routes.project(objectId) } })
-      }
-      className="w-full rounded-card border border-border bg-surface p-3 text-left"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 text-xs text-muted">
-          🧾 {t('receipts.axisTitle')}
-          <InfoPopover text={t('receipts.axisInfo')} label={t('receipts.axisTitle')} />
-        </span>
-        <span className="font-mono text-sm font-semibold tabular-nums text-primary">
-          {formatMoney(materials.reimbursable)}
-        </span>
-      </div>
-      <p className="mt-1 text-[11px] text-muted">
-        {t('receipts.axisCount', { count: materials.receiptCount })}
-        {materials.unpricedCount > 0 && (
-          <span className="text-warning">
-            {' · '}
-            {t('receipts.axisUnpriced', { count: materials.unpricedCount })}
+    // The card is a DIV with the navigate button inside it, and the InfoPopover a SIBLING of that
+    // button — the same shape the estimate panel above uses (see its comment). InfoPopover is itself
+    // a button, so nested it swallowed the ⓘ tap and navigated to the receipts list instead.
+    <div className="w-full rounded-card border border-border bg-surface p-3 text-left">
+      <button
+        type="button"
+        onClick={() =>
+          navigate(routes.receipts(objectId), { state: { from: routes.project(objectId) } })
+        }
+        className="block w-full text-left"
+      >
+        {/* Phrasing content only: a <div>/<p> inside a <button> is invalid markup. */}
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted">🧾 {t('receipts.axisTitle')}</span>
+          {/* Exact, unlike the estimate axes above: this figure is the sum of the very receipts the
+              card opens, and that list prints kopecks. Rounded here, the same receivable read
+              «13 ₴» on the object and «12,50 ₴» one tap later. */}
+          <span className="font-mono text-sm font-semibold tabular-nums text-primary">
+            {formatMoneyExact(materials.reimbursable)}
           </span>
-        )}
+        </span>
+      </button>
+      <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted">
+        <span>
+          {t('receipts.axisCount', { count: materials.receiptCount })}
+          {materials.unpricedCount > 0 && (
+            <span className="text-warning">
+              {' · '}
+              {t('receipts.axisUnpriced', { count: materials.unpricedCount })}
+            </span>
+          )}
+        </span>
+        <InfoPopover text={t('receipts.axisInfo')} label={t('receipts.axisTitle')} />
       </p>
-    </button>
+    </div>
   );
 }
 

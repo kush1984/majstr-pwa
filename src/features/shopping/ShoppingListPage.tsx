@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { onlineManager } from '@tanstack/react-query';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
@@ -9,11 +8,13 @@ import { Modal } from '@/components/Modal.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
-import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { formatNumber } from '@/lib/format.ts';
+// Handles the comma AND the space a phone keyboard puts in «1 200» — `Number()` answers NaN to that.
+import { parseDecimal } from '@/lib/decimal.ts';
 import { sharePdf } from '@/lib/sharePdf.ts';
 import { routes } from '@/lib/config.ts';
 import { shoppingApi } from '@/api/shopping.ts';
@@ -71,9 +72,11 @@ export function ShoppingListPage() {
   const back = (location.state as { from?: string } | null)?.from ?? routes.project(projectId);
   const archived = Boolean(list.data?.archivedAt);
 
+  // WHICH WAY to tick is the hook's call, read off the cache at write time — the screen only says
+  // which row was tapped, because what it is rendering can be a moment behind the list.
   const toggle = (item: ShoppingListItemResponse) => {
     if (archived) return;
-    actions.update.mutate({ itemId: item.id, req: { bought: !item.bought } });
+    actions.toggle.mutate(item.id);
   };
 
   // The answer to a parked recalculation figure. Either way the offer goes; «взяти нове» also
@@ -106,7 +109,10 @@ export function ShoppingListPage() {
     );
   }
 
-  const notCached = list.isError && !onlineManager.isOnline();
+  // A failed fetch with nothing cached. `ErrorState` splits it further — offline it is a caching
+  // gap with advice, online a real outage with a retry. Online it used to fall through to the empty
+  // state, which told a master whose list is full that he has nothing to buy.
+  const failed = list.isError && !list.data;
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -146,8 +152,12 @@ export function ShoppingListPage() {
           </p>
         )}
 
-        {notCached ? (
-          <OfflineNotCached what={t('shopping.title')} />
+        {failed ? (
+          <ErrorState
+            error={list.error}
+            what={t('shopping.title')}
+            onRetry={() => void list.refetch()}
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon="🛒"
@@ -355,7 +365,7 @@ function AddItemModal({
   const [quantity, setQuantity] = useState('1');
 
   const submit = () => {
-    const qty = Number(quantity.replace(',', '.'));
+    const qty = parseDecimal(quantity);
     if (!name.trim()) {
       toast.error(t('shopping.enterName'));
       return;
@@ -418,15 +428,19 @@ function EditItemModal({
   const [loaded, setLoaded] = useState<string | null>(null);
 
   // Seed the form from the row the master tapped, once per row — re-seeding a controlled input on
-  // every render would make it impossible to type.
-  if (item && loaded !== item.id) {
-    setLoaded(item.id);
-    setQuantity(String(item.quantity));
-    setNote(item.note ?? '');
+  // every render would make it impossible to type. The modal is never unmounted, so CLOSING (item
+  // → null) has to re-key it too: keyed on the row id alone, an abandoned edit stayed in the
+  // fields and the next open of the SAME row showed the typed figure instead of the real one.
+  // Same shape as ReceiptForm in ProjectReceiptsPage.
+  const key = item?.id ?? null;
+  if (key !== loaded) {
+    setLoaded(key);
+    setQuantity(item ? String(item.quantity) : '');
+    setNote(item?.note ?? '');
   }
 
   const save = () => {
-    const qty = Number(quantity.replace(',', '.'));
+    const qty = parseDecimal(quantity);
     if (!Number.isFinite(qty) || qty <= 0) {
       toast.error(t('shopping.enterQuantity'));
       return;

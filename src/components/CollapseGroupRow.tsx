@@ -18,6 +18,9 @@ export function CollapseGroupRow({
     <button
       type="button"
       onClick={onToggle}
+      // The chevron is aria-hidden, so without this a screen reader announced a bare green line
+      // with no hint that it folds anything, let alone which way it currently sits.
+      aria-expanded={expanded}
       className="flex min-h-11 w-full items-center gap-2 border-b border-border py-2 text-left text-[13px] font-semibold text-success last:border-b-0"
     >
       <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-success" aria-hidden />

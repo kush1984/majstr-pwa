@@ -195,6 +195,23 @@ describe('decodeQrFromFile', () => {
     expect(jsQR).toHaveBeenCalledTimes(1);
   });
 
+  it('hands the main thread back between passes, so a batch can repaint while it reads', async () => {
+    installImage(400, 400);
+    installCanvas(400);
+    vi.mocked(jsQR).mockReturnValue(null); // nothing anywhere: the whole ladder runs
+
+    const order: string[] = [];
+    const ladder = decodeQrFromFile(photo).then(() => order.push('ladder'));
+    // A repaint is a MACROTASK. Queued here, it can only run before the ladder finishes if the
+    // ladder actually yields to the event loop — `await Promise.resolve()` yields a MICROtask,
+    // which the loop drains without ever painting, so «читаю 3 з 10» froze on the first number
+    // and the phone read as hung for the whole sweep.
+    setTimeout(() => order.push('paint'), 0);
+
+    await ladder;
+    expect(order[0]).toBe('paint');
+  });
+
   it('reports the only code on the paper when none of them is fiscal', async () => {
     installImage(400, 400);
     installCanvas(400);

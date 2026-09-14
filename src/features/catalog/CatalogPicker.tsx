@@ -140,7 +140,11 @@ export function CatalogPicker({
   // Catalog order, NOT the order the rows happened to be tapped: nothing on screen numbers the
   // taps, so tap order is an arrangement the master cannot see. Picking five positions across two
   // categories lands them grouped the way he keeps them.
-  const addSelected = () => run(filtered.filter((i) => selected.has(i.id)), true);
+  //
+  // Added from the WHOLE catalog, not from `filtered`: a tick survives a filter change (the basket
+  // count says so, and nothing on screen unticks it), so filtering by it dropped positions the
+  // master had already chosen — silently, with the button still promising them.
+  const addSelected = () => run((data ?? []).filter((i) => selected.has(i.id)), true);
 
   return (
     <div>

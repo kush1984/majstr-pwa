@@ -70,6 +70,21 @@ beforeEach(() => {
 });
 
 describe('DictationSheet', () => {
+  it('caps the field at what the server accepts, and counts him down to it', () => {
+    renderSheet();
+    const field = screen.getByLabelText<HTMLTextAreaElement>('Текст із позиціями');
+    // Mirrors DictationParseRequest's @Size(max = 4000). Without it the first thing that says
+    // «too long» is a 400, after he has already spoken the whole flat into the field.
+    expect(field.maxLength).toBe(4000);
+
+    // Quiet until it starts to matter.
+    fireEvent.change(field, { target: { value: 'а'.repeat(100) } });
+    expect(screen.queryByText(/\/ 4000 символів/)).toBeNull();
+
+    fireEvent.change(field, { target: { value: 'а'.repeat(3900) } });
+    expect(screen.getByText('3900 / 4000 символів')).toBeTruthy();
+  });
+
   it('turns the spoken text into an editable review and appends only what is ticked', async () => {
     vi.mocked(dictationApi.parse).mockResolvedValue({
       items: [item(), item({ name: 'Монтаж плінтуса', spokenName: 'монтаж плінтуса',

@@ -6,14 +6,28 @@ import '@/lib/i18n.ts';
 import { ShoppingListPage } from './ShoppingListPage.tsx';
 import type { ShoppingListItemResponse, ShoppingListResponse } from '@/api/types.ts';
 
-const holder = vi.hoisted(() => ({ list: null as ShoppingListResponse | null }));
+const holder = vi.hoisted(() => ({
+  list: null as ShoppingListResponse | null,
+  isError: false,
+  error: undefined as Error | undefined,
+}));
 const updateMutate = vi.hoisted(() => vi.fn());
+const toggleMutate = vi.hoisted(() => vi.fn());
 const clearMutate = vi.hoisted(() => vi.fn());
+const refetch = vi.hoisted(() => vi.fn());
 vi.mock('./useShoppingList.ts', () => ({
-  useShoppingList: () => ({ data: holder.list, isLoading: false, isError: false }),
+  useShoppingList: () => ({
+    data: holder.list,
+    isLoading: false,
+    isError: holder.isError,
+    error: holder.error,
+    refetch,
+  }),
   useShoppingActions: () => ({
     add: { mutate: vi.fn() },
     update: { mutate: updateMutate },
+    // WHICH WAY to tick is the hook's, off the cache — the page only names the row.
+    toggle: { mutate: toggleMutate },
     remove: { mutate: vi.fn() },
     clearBought: { mutate: clearMutate },
   }),
@@ -80,8 +94,12 @@ function renderPage(from?: string) {
 
 beforeEach(() => {
   holder.list = null;
+  holder.isError = false;
+  holder.error = undefined;
   updateMutate.mockClear();
+  toggleMutate.mockClear();
   clearMutate.mockClear();
+  refetch.mockClear();
   fetchPdfBlob.mockReset();
   fetchPdfBlob.mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }));
   sharePdf.mockReset();
@@ -124,8 +142,10 @@ describe('ShoppingListPage', () => {
     seed([item({ id: 'a' })]);
     renderPage();
 
+    // The row id, and nothing else: sending `!item.bought` off the render closure is what made a
+    // tick on a list that had moved underneath the screen write the value back the other way.
     fireEvent.click(screen.getByRole('button', { name: 'Профіль CD' }));
-    expect(updateMutate).toHaveBeenCalledWith({ itemId: 'a', req: { bought: true } });
+    expect(toggleMutate).toHaveBeenCalledWith('a');
   });
 
   it('does NOT offer a receipt step — the button is parked until masters ask for it', () => {
@@ -161,7 +181,7 @@ describe('ShoppingListPage', () => {
     expect(button.hasAttribute('disabled')).toBe(true);
     // Everything else on the screen still writes — only this one row is online-only.
     fireEvent.click(screen.getByRole('button', { name: 'Профіль CD' }));
-    expect(updateMutate).toHaveBeenCalled();
+    expect(toggleMutate).toHaveBeenCalled();
   });
 
   it('locks every write on a finished object', () => {
@@ -173,7 +193,7 @@ describe('ShoppingListPage', () => {
 
     expect(screen.getByText(/список в архіві/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Профіль CD' }));
-    expect(updateMutate).not.toHaveBeenCalled();
+    expect(toggleMutate).not.toHaveBeenCalled();
     expect(screen.queryByText('Прибрати куплені')).toBeNull();
   });
 
@@ -214,6 +234,27 @@ describe('ShoppingListPage', () => {
     expect(screen.getByText(/Кошторис змінився після покупки/)).toBeTruthy();
   });
 
+  it('drops an abandoned edit — reopening the row shows the real quantity, not the typed one', () => {
+    seed([item({ id: 'a', quantity: 12 })]);
+    renderPage();
+
+    // The row BODY opens the editor. The tick beside it carries aria-label={item.name}, so a
+    // name-based button lookup here would tick the row instead of opening it.
+    fireEvent.click(screen.getByText('Профіль CD'));
+    const qty = () => document.querySelector('#sl-edit-qty') as HTMLInputElement;
+    expect(qty().value).toBe('12');
+
+    fireEvent.change(qty(), { target: { value: '7' } });
+    // Backdrop and ✕ share this label; either one abandons the edit.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[0]);
+
+    fireEvent.click(screen.getByText('Профіль CD'));
+    // The modal is never unmounted. Keyed on the row id alone the draft survived the cancel, so the
+    // next open of the SAME row showed 7 — and a save would have written a figure he never chose.
+    expect(qty().value).toBe('12');
+    expect(updateMutate).not.toHaveBeenCalled();
+  });
+
   it('warns that an unsigned estimate can still move the quantities, without blocking anything', () => {
     seed([item({ id: 'a' })], null, true);
     renderPage();
@@ -221,6 +262,32 @@ describe('ShoppingListPage', () => {
     expect(screen.getByText(/Кошторис ще не підписаний/)).toBeTruthy();
     // A hint, not a gate: ticking «куплено» still works.
     fireEvent.click(screen.getByRole('button', { name: 'Профіль CD' }));
-    expect(updateMutate).toHaveBeenCalledWith({ itemId: 'a', req: { bought: true } });
+    expect(toggleMutate).toHaveBeenCalledWith('a');
+  });
+
+  it('says the list could not be loaded instead of claiming it is empty', () => {
+    // Online, with nothing cached, a failed fetch used to fall through to «Список порожній» — the
+    // one screen a master opens INSIDE the shop telling him there is nothing to buy.
+    holder.isError = true;
+    holder.error = new Error('boom');
+    renderPage();
+
+    expect(screen.getByText('Сервіс тимчасово недоступний')).toBeTruthy();
+    expect(screen.queryByText('Список порожній')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Спробувати знову' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('keeps showing the cached list when a background refetch fails', () => {
+    // TanStack keeps `data` beside `status: 'error'`, so a guard on `isError` alone would blank a
+    // list he is reading the moment the signal wobbles.
+    seed([item({ id: 'a' })]);
+    holder.isError = true;
+    holder.error = new Error('boom');
+    renderPage();
+
+    expect(screen.getByText('Профіль CD')).toBeTruthy();
+    expect(screen.queryByText('Сервіс тимчасово недоступний')).toBeNull();
   });
 });

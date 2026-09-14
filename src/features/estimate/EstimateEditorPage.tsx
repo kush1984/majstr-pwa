@@ -481,7 +481,10 @@ export function EstimateEditorPage() {
 
         {/* Items + summary (two columns on desktop) */}
         <div className="lg:grid lg:grid-cols-[1.7fr_1fr] lg:items-start lg:gap-5">
-          <div>
+          {/* ph-mask hangs HERE, not inside the board: EstimateItemsBoard returns a fragment, so it
+              has no root of its own. What a replay must not read is the estimate itself — the
+              positions, the quantities and every price on them. */}
+          <div className="ph-mask">
             {est.items.length === 0 ? (
               <EmptyState
                 icon="🧾"
@@ -602,7 +605,9 @@ export function EstimateEditorPage() {
                 signedAt={est.signedAt}
                 onShare={guard(() => void onShare())}
                 onCreateAct={() => void navigate(routes.newAct(projectId))}
-                onMaterials={() => void navigate(routes.materials(est.id))}
+                // The calculator asks the server for every figure it shows and caches nothing, so
+                // offline it opens on a spinner that never resolves. Say so at the door instead.
+                onMaterials={guard(() => void navigate(routes.materials(est.id)))}
                 showMaterials={materialsOffered}
                 onPdf={guard(() => void onPdf())}
               />
@@ -940,6 +945,7 @@ function MarkupSheet({
 function MobileSummarySheet({ est }: { est: EstimateResponse }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { guard } = useOnlineGuard();
   const [expanded, setExpanded] = useState(false);
   const dragStartY = useRef<number | null>(null);
 
@@ -1010,7 +1016,7 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
               {noMaterials && materialsOffered && (
                 <button
                   type="button"
-                  onClick={() => void navigate(routes.materials(est.id))}
+                  onClick={guard(() => void navigate(routes.materials(est.id)))}
                   className="mt-2 min-h-11 w-full rounded-xl bg-white/10 px-3 text-sm font-medium text-white"
                 >
                   🧮 {t('estimate.summaryCountMaterials')}
