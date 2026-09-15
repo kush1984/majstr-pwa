@@ -1517,6 +1517,8 @@
   "profile": {
     "title": "Profile",
     "help": "Help",
+    "telegram": "Telegram channel",
+    "telegramSub": "Release news and app discussion",
     "supportEmail": "Email support",
     "supportPhone": "Call support",
     "appVersion": "App version",

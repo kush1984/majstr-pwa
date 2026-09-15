@@ -327,6 +327,13 @@ export function ProfilePage() {
       </h2>
       <div className="overflow-hidden rounded-card border border-border bg-surface">
         <ContactRow
+          icon="✈️"
+          title={t('profile.telegram')}
+          sub={t('profile.telegramSub')}
+          href={config.telegramUrl}
+          external
+        />
+        <ContactRow
           icon="✉️"
           title={t('profile.supportEmail')}
           sub={config.supportEmail}
@@ -538,15 +545,19 @@ function ContactRow({
   title,
   sub,
   href,
+  external = false,
 }: {
   icon: string;
   title: string;
   sub: string;
   href: string;
+  /** Leaves the app (Telegram) — opens in a new tab so the PWA keeps its state. */
+  external?: boolean;
 }) {
   return (
     <a
       href={href}
+      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
       className="flex w-full items-center gap-3 border-b border-border p-3.5 text-left last:border-b-0"
     >
       <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">
