@@ -189,6 +189,10 @@ export function ActReceiptsSection({
           // would silently erase a return the master already typed.
           returnedAmount: r.returnedAmount,
           issuedAt: read.issuedAt ?? r.issuedAt,
+          // Only the QR rung fills these, and only they let the server see that this same paper is
+          // already filed against the object (B-04). Null leaves whatever identity the row has.
+          fiscalFn: read.fiscalFn,
+          fiscalId: read.fiscalId,
         },
       });
     } catch (err) {
@@ -316,6 +320,18 @@ export function ActReceiptsSection({
                     <p className="mt-0.5 text-xs text-muted">{t('acts.receiptItemizedBadge')}</p>
                   )}
                   {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{r.issuedAt}</p>}
+                  {/* The same paper filed on the object too (B-04). A warning both ways: the
+                      object's list points here, this points back — and nothing is blocked, because
+                      a shop can legitimately reprint a slip and only the master is holding it. */}
+                  {r.duplicateOf != null && (
+                    <p className="mt-0.5 text-xs text-warning">
+                      {r.duplicateOf.kind === 'OBJECT'
+                        ? t('acts.receiptDuplicateOfObject', { label: r.duplicateOf.label })
+                        : t('acts.receiptDuplicateOfAct', {
+                            number: r.duplicateOf.actNumber ?? '', label: r.duplicateOf.label,
+                          })}
+                    </p>
+                  )}
                   {pending && <p className="mt-0.5 text-xs text-warning">{t('acts.receiptQueuedBadge')}</p>}
                   {(needsAmount || !r.issuedAt) && !signed && (
                     <p className="mt-1 text-xs text-warning">

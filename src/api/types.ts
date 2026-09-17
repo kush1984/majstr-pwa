@@ -1525,16 +1525,21 @@ export interface WorkActReceiptResponse {
    *  — some frozen into a SIGNED act — still show the amount as reference only, excluded from
    *  «Разом за чеками»/payable. */
   itemized: boolean;
+  /** The same paper filed against the object as well, or absent (B-04). A warning in both
+   *  directions: the object's list points here, this points back. */
+  duplicateOf?: ReceiptDuplicateRef | null;
   sortOrder: number;
 }
 
-/** What the model read off a receipt photo. recognized=false = soft fallback to manual entry. */
-export interface ActReceiptRecognizeResponse {
-  recognized: boolean;
-  label: string | null;
-  amount: number | null;
-  issuedAt: string | null;
-}
+/**
+ * What a read returned for an ACT receipt. recognized=false = soft fallback to manual entry.
+ *
+ * Deliberately an ALIAS and not a second interface: the server answers both receipt surfaces with
+ * one record, and the act's copy having silently lacked the fiscal identity is precisely how B-04
+ * went unnoticed — an act receipt could never be identified, so the one duplicate that costs money
+ * (the same slip at the till AND on an act) was the one nothing could see.
+ */
+export type ActReceiptRecognizeResponse = ReceiptRecognizeResponse;
 
 /** What a read returned for an OBJECT receipt, whichever rung read it (V129). Same three footer
  *  fields as the act's, plus the paper's fiscal identity — which is printed in the QR only, so a
@@ -1562,10 +1567,32 @@ export interface ProjectReceiptResponse {
   /** true (the default) = the client owes this money back, and it touches no expense. false =
    *  «це моя витрата», posted as a MATERIALS/RECEIPT object expense. */
   reimbursable: boolean;
-  /** Shares its fiscal identity with a receipt already filed here — a warning to check, never a
-   *  refused save: the photo was already taken by the time we can know. */
-  duplicate: boolean;
+  /** WHERE the same paper is already filed, or absent — a warning to check, never a refused save:
+   *  the photo was already taken by the time we can know. It names the twin rather than just
+   *  flagging one (B-04), which is the difference between a warning a master acts on and one he
+   *  learns to ignore. */
+  duplicateOf?: ReceiptDuplicateRef | null;
+  /** The SIGNED act that billed this very paper to the client (B-04). While it is set the receipt
+   *  is OUT of «клієнт відшкодовує» — that money moved into «За договором» under a signed document,
+   *  and a debt shown in two places gets asked for twice. The row stays, saying where it went. */
+  billedOnActId?: string | null;
+  billedOnActNumber?: string | null;
   sortOrder: number;
+}
+
+/** Which of the two receipt tables a cross-reference points at (B-04). They are deliberately kept
+ *  apart — the till photo belongs to the object, the re-billed paper is frozen into a signed act's
+ *  doc_hash — so a «same paper» warning has to say WHERE the twin is. */
+export type ReceiptKind = 'OBJECT' | 'ACT';
+
+/** The twin of a receipt: computed on every read, never stored, and never a block — a shop can
+ *  legitimately reprint a slip, and only the master is holding the paper. */
+export interface ReceiptDuplicateRef {
+  kind: ReceiptKind;
+  id: string;
+  label: string;
+  /** The act's display number when `kind` is 'ACT'; absent otherwise. */
+  actNumber?: string | null;
 }
 
 export interface ProjectReceiptsResponse {
@@ -1652,6 +1679,13 @@ export interface WorkActReceiptRequest {
   /** Omitted or null = no return. The server caps it at `amount` (WORK_ACT_RECEIPT_RETURN_TOO_BIG). */
   returnedAmount?: number | null;
   issuedAt?: string | null;
+  /** The paper's printed identity off its QR (B-04), the same pair `ProjectReceiptRequest` carries.
+   *  It arrives on a PATCH rather than at upload because the photo is saved before anything is read
+   *  off it. NOT three-valued: sending it writes it, omitting it leaves the identity alone — the
+   *  identity belongs to the photo, not to the numbers beside it. Send it and the server can notice
+   *  the same slip is already filed against the object, and stop it being counted twice at sign. */
+  fiscalFn?: string | null;
+  fiscalId?: string | null;
 }
 
 export interface WorkActItemLine {

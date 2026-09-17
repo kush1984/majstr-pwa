@@ -34,7 +34,9 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium',
+        // min-h-11 = 44 px, the floor for a thumb. Padding alone left the button a couple of pixels
+        // short of it, which is where a tap starts sliding off the edge of the control.
+        'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium',
         'transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
         'disabled:cursor-not-allowed',
         variants[variant],

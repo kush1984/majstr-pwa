@@ -7,6 +7,11 @@
 const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
+  // A touch device has no hover but fakes one: the last-tapped control keeps its `hover:` styling
+  // until something else is tapped. On a phone — ~95 % of use — that leaves a row looking pressed
+  // when it is not, which is exactly the signal the master reads to decide whether his tap landed.
+  // This wraps every `hover:` utility in `@media (hover: hover)`; `active:` is what a touch drives.
+  future: { hoverOnlyWhenSupported: true },
   darkMode: 'class', // readiness only — no dark palette implemented yet
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {

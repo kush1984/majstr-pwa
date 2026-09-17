@@ -88,7 +88,7 @@ describe('useReceiptBatch', () => {
     const slow = deferred<ActReceiptRecognizeResponse>();
     vi.mocked(actsApi.recognizeStoredReceipt)
       .mockReturnValueOnce(slow.promise)
-      .mockResolvedValueOnce({ recognized: true, label: 'АТБ', amount: 50, issuedAt: '2026-09-02' });
+      .mockResolvedValueOnce({ recognized: true, label: 'АТБ', amount: 50, issuedAt: '2026-09-02', fiscalFn: null, fiscalId: null });
 
     const { result, seed } = renderBatch();
     seed([r1, r2]);
@@ -104,7 +104,7 @@ describe('useReceiptBatch', () => {
       // Card 1 is on screen and reads «Чек №1 · 0 ₴», so he types what the paper says and records
       // the part he took back — all while the model is still busy with it.
       seed([{ ...r1, label: 'Епіцентр', amount: 990, returnedAmount: 40 }, r2]);
-      slow.resolve({ recognized: true, label: 'Нова Пошта', amount: 12, issuedAt: '2026-09-01' });
+      slow.resolve({ recognized: true, label: 'Нова Пошта', amount: 12, issuedAt: '2026-09-01', fiscalFn: null, fiscalId: null });
       await outcome;
     });
 
@@ -139,10 +139,10 @@ describe('useReceiptBatch', () => {
       Promise.resolve(file.name === 'c.jpg' ? 'fiscal-payload' : null),
     );
     vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
-      recognized: true, label: 'Епіцентр', amount: 250.5, issuedAt: '2026-09-01',
+      recognized: true, label: 'Епіцентр', amount: 250.5, issuedAt: '2026-09-01', fiscalFn: null, fiscalId: null,
     });
     vi.mocked(actsApi.recognizeStoredReceipt).mockResolvedValue({
-      recognized: true, label: 'АТБ', amount: 100, issuedAt: null,
+      recognized: true, label: 'АТБ', amount: 100, issuedAt: null, fiscalFn: null, fiscalId: null,
     });
 
     const { result } = renderBatch();

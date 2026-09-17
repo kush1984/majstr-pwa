@@ -19,11 +19,21 @@ interface SavedReceipt {
   queued: boolean;
 }
 
-/** The three things both rungs read off a receipt, normalised: a blank label is no label. */
+/**
+ * What both rungs read off a receipt, normalised: a blank label is no label.
+ *
+ * `fiscalFn`/`fiscalId` come from the QR rung ONLY — a vision read never produces them and a
+ * hand-written товарний чек has none. Carrying them is what lets the server notice this slip is
+ * already filed against the object (B-04) and, at sign time, stop it being billed and costed twice.
+ * The object side has sent them since V129; the act side not doing so is exactly why the
+ * cross-check had nothing to compare on one whole half of every pair.
+ */
 interface ReceiptRead {
   label: string | null;
   amount: number;
   issuedAt: string | null;
+  fiscalFn: string | null;
+  fiscalId: string | null;
 }
 
 /** What the master chose once for the whole batch, before a single byte was uploaded. */
@@ -139,6 +149,10 @@ export function useReceiptBatch(actId: string, projectId: string) {
         issuedAt:
           now.issuedAt !== before.issuedAt ? now.issuedAt : (read.issuedAt ?? before.issuedAt),
         returnedAmount: now.returnedAmount,
+        // Not three-valued, unlike everything above: the identity belongs to the PHOTO, so there is
+        // no «he changed it meanwhile» to preserve, and a null simply leaves it alone.
+        fiscalFn: read.fiscalFn,
+        fiscalId: read.fiscalId,
       });
     },
     [actId, qc],
@@ -197,7 +211,10 @@ export function useReceiptBatch(actId: string, projectId: string) {
             try {
               // The server already named it «Чек №N»; a reader's guess replaces that only when it
               // actually read a name off the paper.
-              await applyRead(entry, { label: read.label?.trim() || null, amount, issuedAt: read.issuedAt });
+              await applyRead(entry, {
+                label: read.label?.trim() || null, amount, issuedAt: read.issuedAt,
+                fiscalFn: read.fiscalFn, fiscalId: read.fiscalId,
+              });
             } catch (err) {
               unread += 1;
               error ??= toAppError(err).message;

@@ -76,7 +76,6 @@ function receipt(over: Partial<ProjectReceiptResponse> = {}): ProjectReceiptResp
     issuedAt: '2026-09-01',
     hasPhoto: false,
     reimbursable: true,
-    duplicate: false,
     sortOrder: 0,
     ...over,
   };
@@ -216,10 +215,42 @@ describe('ProjectReceiptsPage', () => {
   });
 
   it('flags a duplicate as a warning, never as a refused save', () => {
-    seed([receipt({ duplicate: true })]);
+    seed([receipt({
+      duplicateOf: { kind: 'OBJECT', id: 'r0', label: 'Епіцентр (перший)' },
+    })]);
     renderPage();
 
+    // It NAMES the twin (B-04): «схоже на дублікат» about a list of forty receipts is a warning a
+    // master learns to ignore, and there is nothing in it to act on.
     expect(screen.getByText(/дублікат/)).toBeTruthy();
+    expect(screen.getByText(/Епіцентр \(перший\)/)).toBeTruthy();
+  });
+
+  /**
+   * The pair B-04 exists for: the same slip photographed at the till AND attached to an act. Before
+   * it, the act table carried no printed identity at all, so this was the one duplicate nothing
+   * could see — and the only one that bills the client twice.
+   */
+  it('says WHICH act already holds the same paper', () => {
+    seed([receipt({
+      duplicateOf: { kind: 'ACT', id: 'ar1', label: 'Цвяхи', actNumber: '7' },
+    })]);
+    renderPage();
+
+    expect(screen.getByText(/уже в акті № 7/)).toBeTruthy();
+  });
+
+  /**
+   * A signed act took this money into «За договором», so the object's receivable lets go of it —
+   * and the row says so rather than vanishing, or the master is left looking for a receipt he
+   * definitely photographed.
+   */
+  it('says which act billed a receipt that has left the receivable', () => {
+    seed([receipt({ billedOnActId: 'a1', billedOnActNumber: '7' })], { reimbursableTotal: 0 });
+    renderPage();
+
+    expect(screen.getByText(/Списано актом № 7/)).toBeTruthy();
+    expect(screen.getByText('Епіцентр')).toBeTruthy();
   });
 
   it('says the receipts could not be loaded instead of claiming there are none', () => {

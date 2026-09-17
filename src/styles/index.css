@@ -73,3 +73,72 @@
     font-size: 16px;
   }
 }
+
+/*
+ * Touch reliability — mobile is ~95 % of use, so a tap that does not land is a broken feature.
+ *
+ * Two browser behaviours were eating taps on a phone, and both look like "the button is dead":
+ *
+ * 1. A press that lands on TEXT inside a control starts a native text selection (and on a longer
+ *    hold the callout menu). Once selection begins the `click` is never dispatched — so a
+ *    glove-slow press on a shopping-list tick or a portal «Підписати» silently did nothing, and
+ *    the master tapped again, and again. `user-select: none` on controls is the fix; inputs and
+ *    ordinary copy keep their selection.
+ * 2. Double-tap-to-zoom keeps the browser waiting to see whether a second tap is coming, and a
+ *    quick retry after a missed tap then registers as a zoom rather than two clicks.
+ *    `touch-action: manipulation` opts each control out of that wait without disabling pinch-zoom
+ *    on the page.
+ *
+ * Everything lives in `@layer base`, so a Tailwind utility (`touch-none` on a drag grip,
+ * `select-text` on a copyable value) still wins where a surface needs the other behaviour.
+ */
+@layer base {
+  button,
+  a,
+  label,
+  summary,
+  select,
+  [role='button'],
+  [role='checkbox'],
+  [role='menuitem'],
+  [role='switch'],
+  [role='tab'],
+  input[type='button'],
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='submit'] {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+  }
+
+  /* `a` is left out on purpose: a link inside a paragraph is still text the reader may copy. */
+  button,
+  label,
+  summary,
+  [role='button'],
+  [role='checkbox'],
+  [role='menuitem'],
+  [role='switch'],
+  [role='tab'] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /*
+   * Pressed feedback, so a tap visibly lands. It is deliberately NOT wrapped in
+   * `@media (hover: none)` — Tailwind hoists rules out of `@layer base` and drops a nested at-rule
+   * on the way, silently, so the wrapper would compile to nothing. The touch half of that concern
+   * — a phone keeping a `hover:` style standing after a tap and passing it off as pressed state —
+   * is handled where it belongs instead: `future.hoverOnlyWhenSupported` in `tailwind.config.js`.
+   */
+  button:active:not(:disabled),
+  a:active,
+  label:active,
+  [role='button']:active,
+  [role='checkbox']:active,
+  [role='menuitem']:active,
+  [role='switch']:active,
+  [role='tab']:active {
+    opacity: 0.65;
+  }
+}

@@ -474,9 +474,24 @@ function ReceiptCard({
           </div>
           {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>}
           {/* A WARNING, never a refusal (V129): the fiscal identity is only known after a QR read,
-              so the same paper can legitimately be photographed twice before either copy is read. */}
-          {r.duplicate && (
-            <p className="mt-0.5 text-xs text-warning">{t('receipts.duplicateBadge')}</p>
+              so the same paper can legitimately be photographed twice before either copy is read.
+              Since B-04 it NAMES where the twin is — «такий чек тут уже є» about a list of forty
+              receipts is something a master learns to ignore. */}
+          {r.duplicateOf != null && (
+            <p className="mt-0.5 text-xs text-warning">
+              {r.duplicateOf.kind === 'ACT'
+                ? t('receipts.duplicateOfAct', {
+                    number: r.duplicateOf.actNumber ?? '', label: r.duplicateOf.label,
+                  })
+                : t('receipts.duplicateOfObject', { label: r.duplicateOf.label })}
+            </p>
+          )}
+          {/* Not a warning — an answer. This money is no longer a receivable here because a signed
+              act moved it into «За договором», and the row says which act took it. */}
+          {r.billedOnActId != null && (
+            <p className="mt-0.5 text-xs text-muted">
+              {t('receipts.billedOnAct', { number: r.billedOnActNumber ?? '' })}
+            </p>
           )}
 
           {/* The default state is stated, not implied: «клієнт відшкодовує» is the answer to the

@@ -10,7 +10,7 @@ import { useOnline } from '@/lib/useOnline.ts';
 import { dropQueuedReceipt, patchQueuedReceipt, type QueuedActReceipt } from './offlineReceipts.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
 
-const unread = { recognized: false, label: null, amount: null, issuedAt: null };
+const unread = { recognized: false, label: null, amount: null, issuedAt: null, fiscalFn: null, fiscalId: null };
 
 vi.mock('@/api/acts.ts', () => ({
   actsApi: {
@@ -144,7 +144,7 @@ describe('ActReceiptsSection', () => {
     // No model runs on that path, so there is nothing for the tick (or a plan) to gate.
     vi.mocked(decodeQrFromFile).mockResolvedValue(FISCAL);
     vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
-      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15',
+      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15', fiscalFn: null, fiscalId: null,
     });
     renderSection({ receipts: [] });
 
@@ -156,6 +156,40 @@ describe('ActReceiptsSection', () => {
       amount: 690, issuedAt: '2026-08-15',
     });
     expect(actsApi.recognizeStoredReceipt).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The identity has to reach the SERVER, or the whole cross-table check has nothing to compare on
+   * the act half of every pair (B-04). That was the bug: this path read a fiscal QR, got `fn`/`id`
+   * back, and dropped them — so an act receipt could never be identified and the one duplicate that
+   * bills a client twice stayed invisible.
+   */
+  it('sends the printed identity the QR returned, so the same paper can be recognised across tables', async () => {
+    vi.mocked(decodeQrFromFile).mockResolvedValue(FISCAL);
+    vi.mocked(actsApi.readReceiptQr).mockResolvedValue({
+      recognized: true, label: 'Епіцентр', amount: 690, issuedAt: '2026-08-15',
+      fiscalFn: '4000123456', fiscalId: '17',
+    });
+    renderSection({ receipts: [] });
+
+    pickAndStart(1, () => fireEvent.click(screen.getByText('Прочитати суми автоматично')));
+
+    await waitFor(() => expect(actsApi.updateReceipt).toHaveBeenCalled());
+    expect(vi.mocked(actsApi.updateReceipt).mock.calls[0][2]).toMatchObject({
+      fiscalFn: '4000123456', fiscalId: '17',
+    });
+  });
+
+  /** A warning both ways, and never a block — a shop can legitimately reprint a slip. */
+  it('says WHERE the same paper is already filed', () => {
+    renderSection({
+      receipts: [receipt({
+        duplicateOf: { kind: 'OBJECT', id: 'pr1', label: 'Епіцентр (з каси)' },
+      })],
+    });
+
+    expect(screen.getByText(/уже є в чеках обʼєкта/)).toBeTruthy();
+    expect(screen.getByText(/Епіцентр \(з каси\)/)).toBeTruthy();
   });
 
   /**
@@ -191,7 +225,7 @@ describe('ActReceiptsSection', () => {
     // The whole per-MODE gate went with the item transfer (2026-08-28): there is one read left, it
     // costs the master nothing, and it takes no mode argument left to get wrong.
     vi.mocked(actsApi.recognizeStoredReceipt).mockResolvedValue({
-      recognized: true, label: 'Епіцентр', amount: 483.5, issuedAt: null,
+      recognized: true, label: 'Епіцентр', amount: 483.5, issuedAt: null, fiscalFn: null, fiscalId: null,
     });
     renderSection({ receipts: [] });
 
@@ -216,7 +250,7 @@ describe('ActReceiptsSection', () => {
     expect(screen.getByText('без суми')).toBeTruthy();
 
     vi.mocked(actsApi.recognizeStoredReceipt).mockResolvedValue({
-      recognized: true, label: null, amount: 483.5, issuedAt: '2026-08-18',
+      recognized: true, label: null, amount: 483.5, issuedAt: '2026-08-18', fiscalFn: null, fiscalId: null,
     });
     fireEvent.click(screen.getByText('✨ Розпізнати'));
 
@@ -332,7 +366,7 @@ describe('ActReceiptsSection', () => {
     // The request carries the whole row, so a reader that only knows label/date/total would erase
     // the one field it can never see on the paper.
     vi.mocked(actsApi.recognizeStoredReceipt).mockResolvedValue({
-      recognized: true, label: 'Епіцентр', amount: 2000, issuedAt: '2026-08-05',
+      recognized: true, label: 'Епіцентр', amount: 2000, issuedAt: '2026-08-05', fiscalFn: null, fiscalId: null,
     });
     renderSection({
       receipts: [receipt({ id: 'r1', label: 'Цвяхи', amount: 0, returnedAmount: 300, hasPhoto: false })],

@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect, useMemo, useRef, useState,
+  type KeyboardEvent, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -9,6 +12,28 @@ import { cn } from '@/lib/cn.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
 
 const MAX_SUGGESTIONS = 10;
+
+/**
+ * Run a suggestion's action on the MOUSE press, before the input's blur can close the list — and
+ * leave a finger alone, which is the whole point.
+ *
+ * <p>The row used to do this with `onMouseDown` + `preventDefault()` for every pointer. On a phone
+ * `mousedown` is not a press at all: it is a compatibility event the browser synthesises AFTER the
+ * touch has already ended, and one it drops entirely whenever it decides the gesture was something
+ * else. Cancelling it also cancelled the `click` that would otherwise have been the fallback, so a
+ * tap the browser had not classified the way we hoped simply did nothing — and the master tapped
+ * again. Worse, acting on the first pointer event of a touch would fire while he was still
+ * DRAGGING the list to read it.</p>
+ *
+ * <p>So the mouse keeps the pre-blur path it needs, and touch/pen fall through to the plain
+ * `onClick` beside this — which a browser fires only for a real tap, never for a scroll. The list
+ * survives the gap because `onBlur` closes it on a 150 ms timer rather than immediately.</p>
+ */
+const beforeBlur = (run: () => void) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+  if (e.pointerType !== 'mouse') return;
+  e.preventDefault();
+  run();
+};
 
 /**
  * Type-ahead over the contractor's OWN catalog for the add-item name field.
@@ -147,11 +172,8 @@ export function CatalogAutocomplete({
               <li key={item.id} role="option" aria-selected={active === i}>
                 <button
                   type="button"
-                  // onMouseDown (not onClick) so it fires before the input's blur.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pick(item);
-                  }}
+                  onPointerDown={beforeBlur(() => pick(item))}
+                  onClick={() => pick(item)}
                   onMouseEnter={() => setActive(i)}
                   className={cn(
                     'flex w-full items-center gap-2 px-3 py-2.5 text-left',
@@ -186,10 +208,8 @@ export function CatalogAutocomplete({
             <li role="option" aria-selected={active === suggestions.length}>
               <button
                 type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setOpen(false);
-                }}
+                onPointerDown={beforeBlur(() => setOpen(false))}
+                onClick={() => setOpen(false)}
                 onMouseEnter={() => setActive(suggestions.length)}
                 className={cn(
                   'flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-sm',

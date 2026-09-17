@@ -37,6 +37,17 @@ one-line fix.
   over desktop dialogs).
 - If a change touches the UI but can't be mobile-verified in the moment, say so
   explicitly instead of assuming desktop is enough.
+- **A tap is lost to the BROWSER, not to a handler.** A press landing on a control's
+  own TEXT starts a native selection and the `click` is then never dispatched — a
+  gloved, slow press does nothing at all. The touch block at the bottom of
+  `src/styles/index.css` (`user-select: none` + `-webkit-touch-callout: none` +
+  `touch-action: manipulation`) is what stops that; `src/styles/touch.test.ts` pins
+  it by reading the file as text, and the backend's portal page carries the same
+  block — **change one, change the other**. Two rules follow: hover is desktop-only
+  (`future.hoverOnlyWhenSupported`), because a phone fakes hover and a control left
+  looking pressed is how the master decides his tap missed; and **Tailwind silently
+  drops an at-rule nested inside `@layer base`**, so never wrap a base rule in
+  `@media`. `C:\Work\majstr-backend\docs\iteration-touch-targets.md` has the detail.
 
 ## Architecture
 
