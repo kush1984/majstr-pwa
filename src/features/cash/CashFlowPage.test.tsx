@@ -53,11 +53,11 @@ function flow(over: Partial<CashFlowResponse> = {}): CashFlowResponse {
   };
 }
 
-function renderPage(from?: string) {
+function renderPage(state?: { from?: string; period?: 'WEEK' | 'MONTH' | 'YEAR' }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[{ pathname: '/finance', state: from ? { from } : null }]}>
+      <MemoryRouter initialEntries={[{ pathname: '/finance', state: state ?? null }]}>
         {children}
       </MemoryRouter>
     </QueryClientProvider>
@@ -271,7 +271,7 @@ describe('CashFlowPage', () => {
   it('goes back to the door it was opened from', async () => {
     vi.mocked(cashApi.flow).mockResolvedValue(flow());
 
-    renderPage('/profile');
+    renderPage({ from: '/profile' });
     fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
 
     expect(navigateMock).toHaveBeenCalledWith('/profile');
@@ -280,7 +280,7 @@ describe('CashFlowPage', () => {
   it('goes back to the dashboard when that is where it came from', async () => {
     vi.mocked(cashApi.flow).mockResolvedValue(flow());
 
-    renderPage('/');
+    renderPage({ from: '/' });
     fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
 
     expect(navigateMock).toHaveBeenCalledWith('/');
@@ -294,6 +294,21 @@ describe('CashFlowPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Назад' }));
 
     expect(navigateMock).toHaveBeenCalledWith('/profile');
+  });
+
+  /**
+   * The home strip sums a MONTH while this screen otherwise opens on the week, so the tap carries
+   * the window with it — landing on a smaller number than the one he just tapped is the one thing
+   * a money screen may not do.
+   */
+  it('opens on the month when the home strip sent it there', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow());
+
+    renderPage({ from: '/', period: 'MONTH' });
+
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Місяць' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Тиждень' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   /** «за цей тиждень» is the question he opens the screen with (master's call). */

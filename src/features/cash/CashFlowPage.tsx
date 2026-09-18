@@ -35,8 +35,11 @@ export function CashFlowPage() {
   const navigate = useNavigate();
   const location = useLocation();
   // The WEEK by default (master's call): «за цей тиждень» is the question he actually opens this
-  // screen with, and it matches what the home strip already showed him.
-  const [period, setPeriod] = useState<CashPeriod>(() => cashPeriod('WEEK'));
+  // screen with. The home strip is the one exception — it shows the MONTH, so it says so in the
+  // navigation state and the screen lands on exactly the window he tapped.
+  const [period, setPeriod] = useState<CashPeriod>(
+    () => cashPeriod((location.state as { period?: CashPeriodKind } | null)?.period ?? 'WEEK'),
+  );
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CashEntryResponse | null>(null);
 

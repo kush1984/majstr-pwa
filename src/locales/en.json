@@ -919,7 +919,7 @@
   "cash": {
     "title": "My money",
     "subtitle": "All objects together",
-    "thisWeek": "This week",
+    "thisMonth": "This month",
     "profileSub": "Income and spending across all objects",
     "periodWEEK": "Week",
     "periodMONTH": "Month",

@@ -12,13 +12,14 @@ import { useCashSummary } from './useCash.ts';
  * one more full card and the bottom of that screen stops being read. One row is ~44 px against a
  * card's ~120, which is also exactly a thumb target.</p>
  *
- * <p>It renders nothing when nothing moved this week — the same rule the shopping card follows
+ * <p>It renders nothing when nothing moved this month — the same rule the shopping card follows
  * when there is nothing left to buy. A master who has never opened this feature sees no trace of
  * it on his home screen.</p>
  *
- * <p><b>The WEEK, because that is the period the screen opens on.</b> A strip summing a month over
- * a screen showing a week means tapping «+42 000» lands on 8 000 — two surfaces describing the same
- * money and disagreeing, which is the one thing a money screen may not do.</p>
+ * <p><b>The MONTH</b> (master's call — a week here was too small a window to be worth a glance),
+ * while the screen itself opens on the WEEK. That would be two surfaces disagreeing about one
+ * figure, so the tap carries `period: 'MONTH'`: it lands on exactly the window it showed. Every
+ * other door — the Профіль row, a reload — keeps the week.</p>
  */
 export function CashHomeStrip() {
   const { t } = useTranslation();
@@ -29,11 +30,11 @@ export function CashHomeStrip() {
   return (
     <button
       type="button"
-      onClick={() => navigate(routes.cash, { state: { from: routes.home } })}
+      onClick={() => navigate(routes.cash, { state: { from: routes.home, period: 'MONTH' } })}
       className="mb-6 flex min-h-11 w-full items-center gap-3 rounded-card border border-border bg-surface px-3.5 py-2.5 text-left"
     >
       <span className="text-base leading-none" aria-hidden>💰</span>
-      <span className="truncate text-sm font-semibold text-primary">{t('cash.thisWeek')}</span>
+      <span className="truncate text-sm font-semibold text-primary">{t('cash.thisMonth')}</span>
       <span className="ml-auto flex flex-shrink-0 items-baseline gap-2 font-mono text-sm tabular-nums">
         <span className="text-success">+{formatMoney(summary.data.income)}</span>
         <span className="text-muted">−{formatMoney(summary.data.expense)}</span>
