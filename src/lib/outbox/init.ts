@@ -10,12 +10,14 @@ import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { shoppingApi } from '@/api/shopping.ts';
 import { economyApi } from '@/api/economy.ts';
+import { cashApi } from '@/api/cash.ts';
 import { actsApi } from '@/api/acts.ts';
 import { fromQueuedFile } from './queuedFile.ts';
 import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
 import type {
   EstimateItemsOrderRequest,
-  BatchCatalogItemEntry, CatalogItemRequest, ClientRequest, EstimateCreateRequest,
+  BatchCatalogItemEntry, CashEntryKind, CashEntryRequest, CatalogItemRequest, ClientRequest,
+  EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
   NoteRequest, ProjectRequest,
@@ -197,6 +199,23 @@ export function initOutbox(qc: QueryClient): () => void {
   // on the next recalculation and the material gets bought twice.
   registerOutboxHandler('shoppingClear', async (op) => {
     await shoppingApi.clearBought(op.entityId);
+  });
+
+  // «Мої гроші» (V135). ONE entity for both destinations: the server decides from `projectId`
+  // whether the row belongs to an object's journal or to his own book, so a queued entry replays
+  // the same way either way. The create replays under its own uuid — a retried van-side entry must
+  // not bill the same money twice.
+  registerOutboxHandler('cashEntry', async (op) => {
+    const p = op.payload as { req?: CashEntryRequest; kind?: CashEntryKind };
+    if (op.type === 'create') {
+      await cashApi.add(p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await cashApi.update(op.entityId, p.req!);
+    } else {
+      // A DELETE carries no body, so the kind rides the op: an older queued op knew only his own
+      // rows, which is exactly what the default means.
+      await cashApi.remove(op.entityId, p.kind ?? 'PERSONAL');
+    }
   });
 
   // Object expenses (PRO) — entityId is the EXPENSE id; the object id rides the payload.

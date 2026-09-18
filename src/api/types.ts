@@ -1945,3 +1945,108 @@ export interface MaterialApplyRequest {
 export interface MaterialAvailabilityResponse {
   available: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// «Мої гроші» (V135) — the master's OWN money, across every object and beside them
+// ---------------------------------------------------------------------------
+
+export type CashDirection = 'INCOME' | 'EXPENSE';
+
+/**
+ * Which table a row of the cash feed lives in. EVERY kind is editable and deletable from this
+ * screen — a second door to one record, never a second copy: the write goes through the object's
+ * own endpoints, so its rules still hold.
+ */
+export type CashEntryKind = 'PERSONAL' | 'OBJECT_PAYMENT' | 'OBJECT_EXPENSE';
+
+/**
+ * The first three mirror the object journal's buckets (MATERIALS / LABOR / OTHER) so the union
+ * groups honestly; the rest are what an object never knows about — the van, the tools, the tax
+ * office. Always optional: a master at the wheel will not pick one.
+ */
+export type CashCategory =
+  | 'MATERIALS' | 'CREW' | 'FUEL' | 'TOOLS' | 'TAXES'
+  | 'ADVANCE' | 'WORK' | 'OTHER';
+
+/** Which buttons each direction offers. The server accepts any of them on either. */
+export const CASH_EXPENSE_CATEGORIES: CashCategory[] =
+  ['MATERIALS', 'CREW', 'FUEL', 'TOOLS', 'TAXES', 'OTHER'];
+export const CASH_INCOME_CATEGORIES: CashCategory[] = ['ADVANCE', 'WORK', 'OTHER'];
+
+export interface CashEntryResponse {
+  id: string;
+  kind: CashEntryKind;
+  direction: CashDirection;
+  amount: number;
+  category?: CashCategory | null;
+  note?: string | null;
+  /** The authoritative day. */
+  happenedOn: string;
+  /** Time within the day — absent on object rows, which carry a bare date. */
+  happenedAt?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+  /** Income the client paid back for material: in the movement, out of «Заробив». */
+  materialRefund: boolean;
+  /** The text belongs to something else, so an edit would be a silent no-op: a PLANNED receipt
+   *  is named by its payment stage. The sheet shows it read-only. */
+  noteLocked: boolean;
+}
+
+export interface CashMonthTotal {
+  /** First day of the month, so the client can re-query exactly that period. */
+  month: string;
+  income: number;
+  expense: number;
+  earned: number;
+}
+
+export interface CashFlowResponse {
+  from: string;
+  to: string;
+  income: number;
+  expense: number;
+  /** income − refunds − expense: material the client merely paid back is not earnings. */
+  earned: number;
+  refunds: number;
+  /** Empty for the YEAR view, which answers `months` instead. */
+  entries: CashEntryResponse[];
+  months: CashMonthTotal[];
+  /** The LIST was cut at the server's cap; the totals above still cover everything. */
+  truncated: boolean;
+}
+
+/**
+ * This WEEK — the same period the screen opens on, so tapping the strip cannot land on a different
+ * number than it showed. `from`/`to` ride along so neither side re-derives the window.
+ */
+export interface CashSummaryResponse {
+  from: string;
+  to: string;
+  income: number;
+  expense: number;
+  earned: number;
+  /** false = nothing moved this week, and the home strip does not render at all. */
+  hasEntries: boolean;
+}
+
+/**
+ * Adding NEVER asks about an object: money that belongs to one is already in that object's journal
+ * and arrives on the read path by itself. What lands here is what no object knows about — fuel,
+ * tools, taxes, income for work that closed without an act.
+ *
+ * The same body edits a row of ANY kind; `kind` says which table it lives in. Fields that table has
+ * no place for are ignored rather than refused — a payment has no category, and its direction is
+ * decided by it being a payment at all.
+ */
+export interface CashEntryRequest {
+  direction: CashDirection;
+  amount: number;
+  category?: CashCategory | null;
+  note?: string | null;
+  /** Absent = today, resolved server-side in Europe/Kyiv. The TIME is never sent. */
+  happenedOn?: string | null;
+  materialRefund: boolean;
+  /** Required on an edit; a create is always PERSONAL. */
+  kind?: CashEntryKind | null;
+}

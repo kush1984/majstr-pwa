@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
@@ -27,7 +28,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { initials } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
-import { config } from '@/lib/config.ts';
+import { config, routes } from '@/lib/config.ts';
 import type { Plan, UserResponse } from '@/api/types.ts';
 
 /** Mirrors the backend cap (spring.servlet.multipart.max-file-size: 2MB) so we
@@ -45,6 +46,7 @@ const PROJECT_LIMIT: Record<Plan, number | null> = {
 export function ProfilePage() {
   // TODO(i18n): language switcher + hotkey — G2
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { data: me } = useMe();
   const logout = useLogout();
   const { pending: pendingSync } = useSyncStatus();
@@ -274,6 +276,14 @@ export function ProfilePage() {
           title={t('profile.editProfile')}
           sub={t('profile.editProfileSub')}
           onClick={() => setEditOpen(true)}
+        />
+        {/* Second door to «Мої гроші» — it is «his own», so this is where he goes looking for it
+            when the home strip is hidden (a month in which nothing has moved yet). */}
+        <MenuRow
+          icon="💰"
+          title={t('cash.title')}
+          sub={t('cash.profileSub')}
+          onClick={() => navigate(routes.cash, { state: { from: routes.profile } })}
         />
         <LogoRow me={me} />
         <PushRow />

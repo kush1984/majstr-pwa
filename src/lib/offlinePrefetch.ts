@@ -9,6 +9,7 @@ import { estimatesApi } from '@/api/estimates.ts';
 import { measurementsApi } from '@/api/measurements.ts';
 import { notesApi } from '@/api/notes.ts';
 import { shoppingApi } from '@/api/shopping.ts';
+import { cashApi } from '@/api/cash.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
 import { messagesApi } from '@/api/messages.ts';
 import { photosApi } from '@/api/photos.ts';
@@ -22,6 +23,7 @@ import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
 import { NOTES_KEY } from '@/features/notes/useNotes.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
+import { CASH_KEY, CASH_SUMMARY_KEY, cashPeriod } from '@/features/cash/useCash.ts';
 import { messagesKey } from '@/features/messages/useMessages.ts';
 import { PHOTOS_KEY } from '@/features/photos/usePhotos.ts';
 import { economyKeys } from '@/features/economy/useEconomy.ts';
@@ -100,6 +102,16 @@ export async function prefetchForOffline(
     () => qc.prefetchQuery({ queryKey: ESTIMATE_TEMPLATE_KEY, queryFn: () => estimateTemplatesApi.list() }),
     () => qc.prefetchQuery({ queryKey: ['dashboard', 'metrics'], queryFn: () => dashboardApi.metrics() }),
     () => qc.prefetchQuery({ queryKey: SHOPPING_SUMMARY_KEY, queryFn: () => shoppingApi.summary() }),
+    // «Мої гроші» — the home strip, and the month the screen opens on. Typing «пальне 1200» in a
+    // van with no signal is most of the point, and the screen has to have something to add it to.
+    () => qc.prefetchQuery({ queryKey: CASH_SUMMARY_KEY, queryFn: () => cashApi.summary() }),
+    () => {
+      const month = cashPeriod('MONTH');
+      return qc.prefetchQuery({
+        queryKey: CASH_KEY(month.from, month.to, month.monthly),
+        queryFn: () => cashApi.flow({ from: month.from, to: month.to }),
+      });
+    },
   ];
   total = core.length + 1; // + the projects list below
   report();

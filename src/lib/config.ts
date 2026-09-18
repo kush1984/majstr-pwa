@@ -73,6 +73,10 @@ export const routes = {
   newObject: '/projects/new',
   estimateImport: '/estimates/import',
   billingReturn: '/billing/return',
+  // «Мої гроші» (V135) — his OWN cash movement, not any object's. Full-screen and reached from a
+  // one-line strip on the home screen, deliberately NOT a sixth item in the bottom nav: five
+  // icons already share a 375px phone.
+  cash: '/finance',
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
   act: (id: string) => `/acts/${id}`,
