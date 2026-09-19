@@ -268,3 +268,72 @@ describe('PaymentsBlock — the progress strip (green-strip iteration)', () => {
     expect(fill.className).not.toContain('bg-gradient-to-r');
   });
 });
+
+/**
+ * The refusal has to be ON the form. Both sheets validate before they call anything, and both used
+ * to report that through a toast alone — raised from inside a bottom sheet that covered it. From
+ * the master's side «Зберегти» simply did nothing: «я пробую додати аванс, вводжу суму і тисну
+ * зберегти, а воно просто не зберігає».
+ */
+describe('PaymentsBlock — a refused save says so on the field', () => {
+  it('a planned payment with an amount but no purpose names the empty field and calls nothing', () => {
+    renderBlock(summary());
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Запланований'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '5000' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    expect(paymentsApi.add).not.toHaveBeenCalled();
+    expect(within(dialog).getByText('Вкажіть призначення')).toBeTruthy();
+    // And it clears as soon as he fills it in — a red field that stays red reads as broken.
+    fireEvent.change(within(dialog).getByPlaceholderText('напр. Аванс, Фінал'), { target: { value: 'Аванс' } });
+    expect(within(dialog).queryByText('Вкажіть призначення')).toBeNull();
+  });
+
+  it('a planned payment with a purpose but no amount names the empty amount', () => {
+    renderBlock(summary());
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Запланований'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('напр. Аванс, Фінал'), { target: { value: 'Аванс' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    expect(paymentsApi.add).not.toHaveBeenCalled();
+    expect(within(dialog).getByText('Вкажіть суму')).toBeTruthy();
+  });
+
+  it('an advance on an object with no stages yet names the empty «Назва» — the first refusal a master meets', () => {
+    renderBlock(summary());
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '3000' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    expect(paymentsApi.addReceipt).not.toHaveBeenCalled();
+    expect(within(dialog).getByText('Вкажіть назву')).toBeTruthy();
+  });
+
+  it('a name colliding with a planned stage says THAT, not "вкажіть назву"', () => {
+    renderBlock(summary([plannedRow({ purpose: 'Аванс' })]));
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByText('Своє'));
+    fireEvent.change(within(dialog).getByPlaceholderText('напр. Завдаток, продаж інструменту'), { target: { value: 'аванс' } });
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '1000' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    expect(paymentsApi.addReceipt).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/вже використовується/)).toBeTruthy();
+  });
+});

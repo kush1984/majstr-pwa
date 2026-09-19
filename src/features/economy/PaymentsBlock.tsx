@@ -394,6 +394,11 @@ function PaymentSheet({
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [nextStage, setNextStage] = useState('');
+  // Which field refused, shown ON the field. A toast alone is not enough here: it is raised from
+  // inside a bottom sheet that covers it, and even once it is visible (see ToastViewport's z-index)
+  // the master's eye is on the form, not on a strip that fades. «Вводжу суму, тисну Зберегти, а
+  // воно не зберігає» was this — the empty «Призначення» above the amount, refusing silently.
+  const [errors, setErrors] = useState<{ purpose?: boolean; amount?: boolean }>({});
 
   useEffect(() => {
     if (!open) return;
@@ -402,16 +407,23 @@ function PaymentSheet({
     setDueDate(editing?.dueDate ?? '');
     setNextStage(editing?.nextStage ?? '');
     setSurplusPrompt(null);
+    setErrors({});
   }, [open, editing]);
 
   const dueWarning = dueDateWarning(dueDate, !editing, t);
 
   const submit = async () => {
     const amountValue = Number(amount.replace(',', '.'));
-    if (!purpose.trim() || !Number.isFinite(amountValue) || amountValue < 0) {
+    const invalid = {
+      purpose: !purpose.trim(),
+      amount: !amount.trim() || !Number.isFinite(amountValue) || amountValue < 0,
+    };
+    if (invalid.purpose || invalid.amount) {
+      setErrors(invalid);
       toast.error(t('economy.paymentInvalid'));
       return;
     }
+    setErrors({});
     const req: ProjectPaymentRequest = {
       purpose: purpose.trim(),
       amount: amountValue,
@@ -471,7 +483,15 @@ function PaymentSheet({
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.purpose')}</span>
-            <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={t('economy.purposePlaceholder')} />
+            <Input
+              value={purpose}
+              onChange={(e) => { setPurpose(e.target.value); setErrors((p) => ({ ...p, purpose: false })); }}
+              placeholder={t('economy.purposePlaceholder')}
+              invalid={errors.purpose}
+            />
+            {errors.purpose && (
+              <span className="mt-1 block text-xs text-red-600">{t('economy.purposeRequired')}</span>
+            )}
           </label>
 
           <label className="block">
@@ -480,10 +500,14 @@ function PaymentSheet({
               autoFocus={!editing}
               inputMode="decimal"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => { setAmount(e.target.value); setErrors((p) => ({ ...p, amount: false })); }}
               placeholder="0 ₴"
               className="text-lg font-bold"
+              invalid={errors.amount}
             />
+            {errors.amount && (
+              <span className="mt-1 block text-xs text-red-600">{t('economy.amountMissing')}</span>
+            )}
           </label>
 
           <label className="block">
@@ -626,6 +650,10 @@ function ReceivePaymentSheet({
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [overflow, setOverflow] = useState<{ diff: number; nextPurpose: string | null } | null>(null);
+  // Same reason as PaymentSheet's: on an object with no plan stage yet this sheet opens on «Інше»
+  // with an EMPTY name, and an advance is exactly the money that arrives before any stage exists —
+  // so the one refusal the master meets first was the one he could not see.
+  const [errors, setErrors] = useState<{ label?: string; amount?: boolean }>({});
 
   useEffect(() => {
     if (!open) return;
@@ -636,6 +664,7 @@ function ReceivePaymentSheet({
     setAmount(stage ? String(stage.remaining) : '');
     setDate(today());
     setOverflow(null);
+    setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, preselectedStageId]);
 
@@ -651,10 +680,12 @@ function ReceivePaymentSheet({
   const doSubmit = async (resolution?: OverflowChoice) => {
     const amountValue = Number(amount.replace(',', '.'));
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setErrors((p) => ({ ...p, amount: true }));
       toast.error(t('economy.receivedAmountInvalid'));
       return;
     }
     if (!stageId && !label.trim()) {
+      setErrors((p) => ({ ...p, label: t('economy.labelRequiredField') }));
       toast.error(t('economy.labelRequired'));
       return;
     }
@@ -663,10 +694,12 @@ function ReceivePaymentSheet({
         (p) => p.purpose.trim().toLowerCase() === label.trim().toLowerCase(),
       );
       if (conflict) {
+        setErrors((p) => ({ ...p, label: t('economy.labelConflict') }));
         toast.error(t('economy.labelConflict'));
         return;
       }
     }
+    setErrors({});
     const req = {
       planPaymentId: stageId,
       label: stageId ? null : label.trim(),
@@ -738,7 +771,15 @@ function ReceivePaymentSheet({
           {stageId === null && (
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.customLabelName')}</span>
-              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('economy.customLabelPlaceholder')} />
+              <Input
+                value={label}
+                onChange={(e) => { setLabel(e.target.value); setErrors((p) => ({ ...p, label: undefined })); }}
+                placeholder={t('economy.customLabelPlaceholder')}
+                invalid={Boolean(errors.label)}
+              />
+              {errors.label && (
+                <span className="mt-1 block text-xs text-red-600">{errors.label}</span>
+              )}
             </label>
           )}
 
@@ -748,10 +789,14 @@ function ReceivePaymentSheet({
               autoFocus
               inputMode="decimal"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => { setAmount(e.target.value); setErrors((p) => ({ ...p, amount: false })); }}
               placeholder="0 ₴"
               className="text-lg font-bold"
+              invalid={errors.amount}
             />
+            {errors.amount && (
+              <span className="mt-1 block text-xs text-red-600">{t('economy.receivedAmountInvalid')}</span>
+            )}
           </label>
 
           <label className="block">
