@@ -125,6 +125,21 @@
   }
 
   /*
+   * ...and back out again for anything typed into. `user-select` INHERITS, and every sheet in this
+   * app wraps its field in a bare <label> (so does `FormField`), so the rule above hands `none`
+   * straight to the <input> inside it. On iOS Safari that is a known caret blocker — the field
+   * focuses and the keyboard opens, but placing the caret or selecting what is already typed
+   * fights back. The tapped control keeps its `none`; only the field inside it opts out. Button-ish
+   * inputs are excluded: their value IS a control label, exactly the text a press must not select.
+   */
+  input:not([type='button']):not([type='checkbox']):not([type='radio']):not([type='submit']),
+  textarea,
+  [contenteditable]:not([contenteditable='false']) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /*
    * Pressed feedback, so a tap visibly lands. It is deliberately NOT wrapped in
    * `@media (hover: none)` — Tailwind hoists rules out of `@layer base` and drops a nested at-rule
    * on the way, silently, so the wrapper would compile to nothing. The touch half of that concern

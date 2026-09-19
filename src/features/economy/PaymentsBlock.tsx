@@ -1093,6 +1093,16 @@ export function PaymentsBlock({
     setSheetOpen(true);
   };
 
+  // With nothing SIGNED, `contractedTotal` is 0 and the strip would read «0 ₴ з 0 ₴ · 0 %» — a
+  // denominator of zero can't say anything, and splitting it into stages is arithmetic on nothing.
+  // So both stand down. What must NOT stand down with them is «+ Платіж»: an advance is money that
+  // arrives BEFORE the estimate is signed, which is precisely when there is no contract to compare
+  // it with. The whole section used to be replaced by a flat «ще немає підписаних кошторисів», so
+  // the one entry point for the one payment that comes first was missing from the screen — and an
+  // object left with only unplanned receipts hid the money already recorded on it.
+  const contracted = summary.contractedTotal > 0;
+  const hasRows = summary.payments.length > 0 || summary.unplannedReceipts.length > 0;
+
   const openReceive = (preselect: string | null) => {
     setReceivePreselect(preselect);
     setReceiveOpen(true);
@@ -1103,9 +1113,11 @@ export function PaymentsBlock({
       <div className="flex items-center justify-between">
         <h3 className="text-[13px] font-semibold text-muted">{t('economy.paymentsTitle')}</h3>
         <div className="flex gap-3">
-          <button type="button" onClick={() => setSplitOpen(true)} className="text-[13px] font-semibold text-brand">
-            {t('economy.splitAction')}
-          </button>
+          {contracted && (
+            <button type="button" onClick={() => setSplitOpen(true)} className="text-[13px] font-semibold text-brand">
+              {t('economy.splitAction')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAddChoiceOpen(true)}
@@ -1116,7 +1128,19 @@ export function PaymentsBlock({
         </div>
       </div>
 
-      <PaymentStrip received={summary.received} total={summary.contractedTotal} />
+      {/* A percent needs a denominator; the sum does not. With nothing signed the strip would read
+          «0 ₴ з 0 ₴ · 0 %», but the money already received still has to be stated — the collapsed
+          list says «✓ Отримано · 2» and no figure, so dropping both would hide it entirely. */}
+      {contracted ? (
+        <PaymentStrip received={summary.received} total={summary.contractedTotal} />
+      ) : summary.received > 0 ? (
+        <p className="mt-2 font-mono text-xs tabular-nums text-muted">
+          {t('economy.received')} {formatMoney(summary.received)}
+        </p>
+      ) : null}
+      {!hasRows && (
+        <p className="mt-2 text-center text-sm text-muted">{t('economy.paymentsNoneYet')}</p>
+      )}
 
       <PaymentsList
         summary={summary}

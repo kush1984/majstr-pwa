@@ -625,7 +625,7 @@
     "title": "Object economy",
     "teaser": "Payment schedule and object summary — in PRO",
     "openPro": "Open PRO →",
-    "paymentsEmpty": "No signed estimates yet",
+    "paymentsNoneYet": "Nothing recorded yet. An advance can be entered before an estimate is signed.",
     "income": "Income",
     "expenses": "Expenses",
     "profit": "Profit",

@@ -117,7 +117,9 @@ describe('ProjectsPage — the archived reveal follows the data', () => {
     await setList([LIVE]);
 
     await waitFor(() => expect(location).toBe('/projects'));
-    expect(screen.queryByText('Обʼєкт p1')).not.toBeNull();
+    // Two commits, not one: the effect navigates, and the list re-renders under the new filter one
+    // tick later. Asserting the list synchronously after the URL flipped raced that second commit.
+    await waitFor(() => expect(screen.queryByText('Обʼєкт p1')).not.toBeNull());
   });
 
   it('holds a ?stage=COMPLETED deep link while the list is still loading', async () => {

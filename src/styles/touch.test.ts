@@ -28,6 +28,17 @@ describe('touch-reliability base layer', () => {
     expect(css).toContain('-webkit-touch-callout: none');
   });
 
+  /**
+   * The rule above lists `label`, and `user-select` INHERITS — so the block that makes a button
+   * reliable also reaches every <input> a sheet wraps in its own <label>, which is how this whole
+   * app is built. On iOS Safari that is a known caret blocker. The opt-out is part of the fix, not
+   * a detail of it: without it the economy sheets are typed into through an inherited `none`.
+   */
+  it('lets a field opt back in — the none must not inherit into an input', () => {
+    expect(css).toMatch(/input:not\(\[type='button'\]\)[^{]*\{[^}]*user-select: text/);
+    expect(css).toMatch(/textarea,?\s*[^{]*\{[^}]*user-select: text/);
+  });
+
   it('covers the elements that are actually tapped, not only <button>', () => {
     for (const selector of ["[role='button']", "[role='checkbox']", "[role='menuitem']", 'summary', 'label']) {
       expect(css, `selector ${selector} must be in the touch block`).toContain(selector);

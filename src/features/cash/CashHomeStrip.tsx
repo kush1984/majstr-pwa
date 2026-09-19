@@ -5,7 +5,7 @@ import { formatMoney } from '@/lib/format.ts';
 import { useCashSummary } from './useCash.ts';
 
 /**
- * «Цей тиждень: +42 000 −18 500 ›» — the master's own money on the home screen.
+ * «Цей місяць: +42 000 −18 500 ›» — the master's own money on the home screen.
  *
  * <p><b>A strip, not a card, and that is the whole design.</b> The dashboard already carries a
  * greeting, trade chips, three metric tiles, the shopping card, recent objects and quick actions;

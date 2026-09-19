@@ -51,6 +51,14 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
   };
 }
 
+/** The payments card, addressed through its own heading — the section holds several cards and
+ *  «· 0 %» is a legitimate reading in the acts and materials axes above it. */
+function paymentsCard(heading: HTMLElement): HTMLElement {
+  const card = heading.closest('section');
+  if (!card) throw new Error('payments heading is not inside a <section>');
+  return card;
+}
+
 function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEstimatePanelResponse {
   return {
     id: 'e1', name: 'Кухня', works: 10000, materials: 5000, markup: 0, discount: 0,
@@ -158,7 +166,7 @@ describe('ObjectEconomySection', () => {
     expect(screen.queryByText(/у PRO$/)).toBeNull();
   });
 
-  it('economy-contracted-signed-only-fix: no SIGNED acts + no payments → neutral empty state, not 0/0/0', async () => {
+  it('nothing signed yet: the block stands down its zero figures but KEEPS «+ Платіж» — an advance comes first', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
@@ -168,13 +176,21 @@ describe('ObjectEconomySection', () => {
     renderSection('PRO');
 
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
-    expect(await screen.findByText('Ще немає підписаних кошторисів')).toBeTruthy();
-    // No summary panel (nothing counted) and no 0/0/0 payments card.
+    // The one entry point for the first payment a master ever records has to be on the screen:
+    // an advance arrives BEFORE the estimate is signed. Replacing the section with a flat
+    // «ще немає підписаних кошторисів» took it away, and the save simply had nowhere to start.
+    expect(await screen.findByText('Платежі')).toBeTruthy();
+    expect(screen.getByText('+ Платіж')).toBeTruthy();
+    expect(screen.getByText(/Ще нічого не записано/)).toBeTruthy();
+    // The 0/0/0 noise that fix was right about still stays away: no percent against a zero
+    // denominator, no splitting a contract that doesn't exist, no summary panel. Scoped to the
+    // payments card — the acts and materials axes above legitimately print their own «· 0 %».
+    expect(within(paymentsCard(screen.getByText('Платежі'))).queryByText(/%/)).toBeNull();
+    expect(screen.queryByText('Розбити на частки')).toBeNull();
     expect(screen.queryByText('Загалом по підписаних')).toBeNull();
-    expect(screen.queryByText('Платежі')).toBeNull(); // PaymentsBlock's own header
   });
 
-  it('economy-contracted-signed-only-fix: manually-created payments still show even with no SIGNED acts', async () => {
+  it('manually-created payments still show even with no SIGNED acts', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
@@ -183,9 +199,31 @@ describe('ObjectEconomySection', () => {
 
     renderSection('PRO');
 
-    // The master already logged a payment by hand — show it as-is, not the empty state.
+    // The master already logged a payment by hand — show it as-is, and no empty-state line.
     expect(await screen.findByText('Аванс')).toBeTruthy();
-    expect(screen.queryByText('Ще немає підписаних кошторисів')).toBeNull();
+    expect(screen.queryByText(/Ще нічого не записано/)).toBeNull();
+  });
+
+  it('an object carrying only unplanned receipts keeps them — and says how much landed', async () => {
+    // These used to vanish outright: the old guard asked about PLAN rows and signed panels only,
+    // so money already recorded against the object was simply not on the screen.
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [],
+      pro: { expenses: 0, profit: 0 },
+      payments: {
+        contractedTotal: 0, received: 4000, remaining: 0, payments: [],
+        unplannedReceipts: [{ id: 'u1', planPaymentId: null, label: 'Завдаток', displayLabel: 'Завдаток', amount: 4000, receivedAt: '2026-09-01' }],
+      },
+    }));
+
+    renderSection('PRO');
+
+    // A percent needs a denominator, but the sum does not — the collapsed row only says «· 1».
+    const card = paymentsCard(await screen.findByText('Платежі'));
+    expect(within(card).getByText(new RegExp(money(4000)))).toBeTruthy();
+    expect(within(card).queryByText(/%/)).toBeNull();
+    fireEvent.click(screen.getByText(/Отримано · 1/));
+    expect(screen.getByText('Завдаток')).toBeTruthy();
   });
 
   it('an ADDENDUM rollup panel wears its badge — not an estimate the master forgot creating', async () => {

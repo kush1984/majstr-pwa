@@ -337,3 +337,31 @@ describe('PaymentsBlock — a refused save says so on the field', () => {
     expect(within(dialog).getByText(/вже використовується/)).toBeTruthy();
   });
 });
+
+describe('PaymentsBlock — an object with nothing signed', () => {
+  const nothing: PaymentsSummaryResponse = {
+    contractedTotal: 0, received: 0, remaining: 0, payments: [], unplannedReceipts: [],
+  };
+
+  it('keeps «+ Платіж» and drops only the figures that need a contract', () => {
+    renderBlock(nothing);
+
+    expect(screen.getByText('+ Платіж')).toBeTruthy();
+    expect(screen.getByText(/Ще нічого не записано/)).toBeTruthy();
+    // A percent over a zero denominator says nothing, and there is no contract to split.
+    expect(screen.queryByText(/%/)).toBeNull();
+    expect(screen.queryByText('Розбити на частки')).toBeNull();
+  });
+
+  it('still states money that landed before any estimate was signed', () => {
+    renderBlock({
+      ...nothing,
+      received: 4000,
+      unplannedReceipts: [receipt({ id: 'u1', planPaymentId: null, label: 'Завдаток', displayLabel: 'Завдаток', amount: 4000 })],
+    });
+
+    // The collapsed history row only carries a count, so without this line the figure is nowhere.
+    expect(screen.getByText(/4\s?000/)).toBeTruthy();
+    expect(screen.queryByText(/Ще нічого не записано/)).toBeNull();
+  });
+});

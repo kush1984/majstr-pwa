@@ -421,17 +421,16 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
           <>
             <EstimatesSummaryPanel panels={panels} />
 
-            {/* economy-contracted-signed-only-fix: with contracted now correctly 0 for an object
-                with nothing SIGNED yet, a PaymentsBlock full of 0/0/0 is noise rather than
-                information — show a neutral empty state instead, UNLESS the master already
-                created payment rows by hand (those stay visible as-is, per the prompt). */}
-            {eco?.payments && (panels.length > 0 || eco.payments.payments.length > 0) ? (
+            {/* economy-contracted-signed-only-fix once replaced this whole section with a flat
+                «ще немає підписаних кошторисів» when nothing was signed. The 0/0/0 noise it was
+                removing is real, but it took «+ Платіж» down with it — and an ADVANCE is money
+                that arrives before anything is signed, so the first payment a master records had
+                no entry point at all. It also keyed off PLAN rows alone, so an object carrying
+                only unplanned receipts hid money already recorded. The block now stands down its
+                own zero-denominator parts instead (see PaymentsBlock). */}
+            {eco?.payments && (
               <PaymentsBlock objectId={objectId} summary={eco.payments} objectCreatedAt={objectCreatedAt} />
-            ) : eco?.payments ? (
-              <p className="rounded-card border border-dashed border-border bg-surface p-3 text-center text-sm text-muted">
-                {t('economy.paymentsEmpty')}
-              </p>
-            ) : null}
+            )}
 
             {/* economy-hide-internals: Прибуток/Витрати + the expense journal are parked (see
                 INTERNALS_ENABLED above) — today's profit formula reads as an honest "заробіток"
