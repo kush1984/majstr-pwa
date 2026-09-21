@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Modal } from '@/components/Modal.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { Button } from '@/components/Button.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
@@ -54,6 +55,7 @@ import {
   useRemoveTemplateItem,
   useRenameTemplate,
   useReorderTemplateItems,
+  useCreateTemplate,
   useRestoreDefaults,
   useSetTemplateTrade,
   useUpdateTemplateItem,
@@ -77,6 +79,7 @@ export function TemplatesPage() {
   const deleteTemplate = useDeleteTemplate();
   const restoreDefaults = useRestoreDefaults();
 
+  const [creating, setCreating] = useState(false);
   const [preview, setPreview] = useState<EstimateTemplateSummary | null>(null);
   const [editing, setEditing] = useState<EstimateTemplateSummary | null>(null);
   const [deleting, setDeleting] = useState<EstimateTemplateSummary | null>(null);
@@ -143,7 +146,7 @@ export function TemplatesPage() {
               {t('templates.myTemplates')}
             </h2>
             {!hasOwnTemplates ? (
-              <EmptyState icon="📋" title={t('templates.myTemplates')} text={t('templates.emptyMy')} />
+              <EmptyState icon="📋" title={t('templates.myTemplates')} text={t('templates.emptyMyPage')} />
             ) : (
               <TemplateBranches
                 scope="own"
@@ -201,6 +204,21 @@ export function TemplatesPage() {
           </>
         )}
       </Modal>
+
+      {/* Direct-action, not a speed-dial: there is one thing to create here, and a «＋» that
+          opens a menu is read as «add» anyway (see Fab). */}
+      <Fab ariaLabel={t('templates.createTitle')} onClick={() => setCreating(true)} />
+
+      <CreateModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(made) => {
+          setCreating(false);
+          // Straight into the editor: a template with no positions is not yet a template, and the
+          // master came here to write a sequence, not to name an empty row.
+          setEditing(made);
+        }}
+      />
 
       {editing && <EditModal template={editing} onClose={() => setEditing(null)} />}
 
@@ -387,6 +405,63 @@ function TradeMove({
   );
 }
 
+/**
+ * «Новий шаблон» — the name, and nothing else.
+ *
+ * <p>Until this round the only way to own a bundle was «Зберегти як шаблон» from an estimate, so a
+ * master who knows his sequence had to invent an object to write it on first. The sheet asks for
+ * the name alone (a trade is re-filed from the row's ⋮, a description is folded away in the editor)
+ * and hands straight over to the editor, where the positions go in.</p>
+ */
+function CreateModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (created: EstimateTemplateSummary) => void;
+}) {
+  const { t } = useTranslation();
+  const create = useCreateTemplate();
+  const [name, setName] = useState('');
+
+  // Every opening starts blank — a half-typed name from a sheet that was dismissed is not a draft.
+  useEffect(() => { if (open) setName(''); }, [open]);
+
+  const trimmed = name.trim();
+  const submit = async () => {
+    if (trimmed === '' || create.isPending) return;
+    try {
+      onCreated(await create.mutateAsync({ name: trimmed }));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={t('templates.createTitle')}>
+      <Input
+        autoFocus
+        value={name}
+        maxLength={255}
+        placeholder={t('templates.namePlaceholder')}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+      />
+      <Button
+        className="mt-3 w-full"
+        data-testid="template-create-submit"
+        loading={create.isPending}
+        disabled={trimmed === ''}
+        onClick={() => void submit()}
+      >
+        {t('templates.createSubmit')}
+      </Button>
+    </Modal>
+  );
+}
+
 /** What the bundle promises the client, above its composition — the master has to be able to read
  *  the paragraph he is about to put his name to, not just the (i) on the row. */
 function TemplateDescription({ text }: { text: string | null | undefined }) {
@@ -399,7 +474,6 @@ function TemplateDescription({ text }: { text: string | null | undefined }) {
         {t('templates.promiseTitle')}
       </p>
       <p className="whitespace-pre-line text-xs leading-snug text-primary">{description}</p>
-      <p className="mt-1.5 text-[11px] text-muted">{t('templates.promiseHint')}</p>
     </div>
   );
 }
@@ -521,6 +595,7 @@ function EditModal({
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [editingItem, setEditingItem] = useState<DraftItem | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [showPromise, setShowPromise] = useState(false);
   // A bundle runs past what the list shows, and a position is appended at the BOTTOM — out of sight
   // exactly when the master wants to check it landed. Set on every add/edit, consumed by the effect
   // below once the row it names actually exists.
@@ -560,7 +635,6 @@ function EditModal({
     }).map((i) => i.id));
   }, [items, baseline.items]);
   const canSave = dirty && trimmed.length > 0;
-  const stillDefault = activeId === template.id && template.isDefault;
 
   /** Re-point at the copy the server just made out of a ready-made bundle. */
   const follow = (next: { id: string } | undefined) => {
@@ -701,41 +775,43 @@ function EditModal({
           {t('common.save')}
         </Button>
       </div>
-      <p className="mb-3 mt-1.5 text-[11px] text-muted">
-        {dirty ? t('templates.unsavedHint') : t('templates.saveHint')}
-      </p>
 
-      {/* What the bundle PROMISES the client (V121). A finish level is a chain of works, so the
-          level is this bundle — and the sentence that says which paints may go on top and what the
-          tolerances are belongs here, once, rather than on every position it contains. It is
-          copied onto the estimate at apply time and printed under the client's table. */}
+      {/* What the bundle PROMISES the client (V121) — a finish level is a chain of works, so the
+          sentence about tolerances belongs to the bundle rather than to every position in it.
+          FOLDED AWAY by default (master, 2026-09-21): on a phone a 4-row textarea and its
+          explanations pushed the positions — the reason this sheet is open — off the screen. It is
+          typed once and read rarely, so it costs one tap and the list starts at the top. */}
       <div className="mb-3">
-        <label
-          htmlFor="template-description"
-          className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-brand"
+        <button
+          type="button"
+          data-testid="template-description-toggle"
+          aria-expanded={showPromise}
+          onClick={() => setShowPromise((v) => !v)}
+          className="flex w-full items-center gap-1.5 py-1 text-left text-[11px] font-bold uppercase tracking-wide text-brand"
         >
+          <span aria-hidden>{showPromise ? '▾' : '▸'}</span>
           {t('templates.promiseTitle')}
-        </label>
-        {/* text-base, not text-sm: iOS Safari force-zooms the page on focus of anything
-            under 16px, and this is a field the master types a paragraph into. */}
-        <textarea
-          id="template-description"
-          data-testid="template-description"
-          rows={4}
-          maxLength={1000}
-          placeholder={t('templates.promisePlaceholder')}
-          value={draft.description}
-          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-          className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
-        />
-        <p className="mt-1 text-[11px] text-muted">{t('templates.promiseHint')}</p>
+          {!showPromise && promise !== '' && (
+            <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-muted">
+              {promise}
+            </span>
+          )}
+        </button>
+        {showPromise && (
+          // text-base, not text-sm: iOS Safari force-zooms the page on focus of anything under
+          // 16px, and this is a field the master types a paragraph into.
+          <textarea
+            id="template-description"
+            data-testid="template-description"
+            rows={4}
+            maxLength={1000}
+            placeholder={t('templates.promisePlaceholder')}
+            value={draft.description}
+            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+            className="mt-1 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
+          />
+        )}
       </div>
-
-      {stillDefault && (
-        <p className="mb-3 rounded-xl bg-brand-soft px-3 py-2 text-xs text-primary">
-          {t('templates.defaultForkHint')}
-        </p>
-      )}
 
       {/* Composition — the order IS the sequence of works, so it is draggable. */}
       <div className="mb-3">
@@ -753,16 +829,13 @@ function EditModal({
         ) : items.length === 0 ? (
           <p className="py-3 text-center text-xs text-muted">{t('templates.emptyComposition')}</p>
         ) : (
-          <>
-            <p className="mb-1.5 text-[11px] text-muted">{t('templates.sequenceHint')}</p>
-            <Composition
-              items={items}
-              unsaved={unsaved}
-              onEdit={setEditingItem}
-              onRemove={(item) => setRemoving({ id: item.id, name: item.name })}
-              onReorder={onReorder}
-            />
-          </>
+          <Composition
+            items={items}
+            unsaved={unsaved}
+            onEdit={setEditingItem}
+            onRemove={(item) => setRemoving({ id: item.id, name: item.name })}
+            onReorder={onReorder}
+          />
         )}
       </div>
 

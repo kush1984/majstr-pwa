@@ -431,7 +431,6 @@ function TemplatePreview({
           <p className="whitespace-pre-line text-xs leading-snug text-primary">
             {template.description?.trim()}
           </p>
-          <p className="mt-1.5 text-[11px] text-muted">{t('templates.promiseHint')}</p>
         </div>
       )}
       <p className="mb-3 text-xs text-muted">{t('templates.pricesHint')}</p>

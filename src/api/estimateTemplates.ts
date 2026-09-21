@@ -31,6 +31,16 @@ export const estimateTemplatesApi = {
     return api.get<EstimateTemplateSummary[]>('/api/estimate-templates').then((r) => r.data);
   },
 
+  /**
+   * Create an empty template of my own. The other door into «Мої шаблони»: a bundle used to be
+   * born only from an existing estimate ({@link saveFromEstimate}), which is backwards for a
+   * master who knows his sequence and has no object to write it on. Positions are added
+   * afterwards through the ordinary item endpoints, so this answers with `itemCount: 0`.
+   */
+  create(req: SaveAsTemplateRequest): Promise<EstimateTemplateSummary> {
+    return api.post<EstimateTemplateSummary>('/api/estimate-templates', req).then((r) => r.data);
+  },
+
   /** A template's composition (its positions) — for the preview. */
   get(id: string): Promise<EstimateTemplateDetail> {
     return api.get<EstimateTemplateDetail>(`/api/estimate-templates/${id}`).then((r) => r.data);

@@ -216,7 +216,7 @@ describe('TemplatePickerSheet', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'абракадабра' } });
 
     await waitFor(() => expect(screen.queryAllByText(/Нічого не знайдено/).length).toBe(2));
-    expect(screen.queryByText(/не зберегли жодного шаблону/)).toBeNull();
+    expect(screen.queryByText(/не створили жодного шаблону/)).toBeNull();
     expect(screen.queryByText(/Немає доступних шаблонів/)).toBeNull();
   });
 
@@ -232,7 +232,7 @@ describe('TemplatePickerSheet', () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([def]);
     renderPicker(vi.fn());
 
-    expect(await screen.findByText(/не зберегли жодного шаблону/i)).toBeTruthy();
+    expect(await screen.findByText(/не створили жодного шаблону/i)).toBeTruthy();
   });
 });
 

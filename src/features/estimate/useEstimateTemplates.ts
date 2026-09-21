@@ -49,6 +49,21 @@ function useInvalidateTemplates() {
   return () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); };
 }
 
+/**
+ * Create an empty template of my own — the FAB on «Мої шаблони».
+ *
+ * Online-only, like {@link useSaveAsTemplate}: a template created offline would need its own
+ * outbox entity AND a local id for the positions that follow to attach to, and the sheet that
+ * opens next reads the composition from the server anyway.
+ */
+export function useCreateTemplate() {
+  const invalidate = useInvalidateTemplates();
+  return useMutation({
+    mutationFn: (req: { name: string }) => estimateTemplatesApi.create(req),
+    onSuccess: invalidate,
+  });
+}
+
 /** Save the current estimate as my own reusable template. */
 export function useSaveAsTemplate(estimateId: string) {
   const invalidate = useInvalidateTemplates();

@@ -19,6 +19,7 @@ import { asButton } from '@/test/dom.ts';
 vi.mock('@/api/estimateTemplates.ts', () => ({
   estimateTemplatesApi: {
     list: vi.fn(),
+    create: vi.fn(),
     get: vi.fn(),
     rename: vi.fn(),
     setTrade: vi.fn(),
@@ -449,6 +450,7 @@ describe('TemplatesPage — the paragraph the client reads', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
 
+    fireEvent.click(await screen.findByTestId('template-description-toggle'));
     const field = await screen.findByTestId('template-description');
     // Nothing is written while he types — this editor is explicit-save like the act editor.
     fireEvent.change(field, { target: { value: Q4 } });
@@ -468,12 +470,88 @@ describe('TemplatesPage — the paragraph the client reads', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
-    await screen.findByTestId('template-description');
+    await screen.findByTestId('template-description-toggle');
 
     fireEvent.change(screen.getByDisplayValue('Моя ванна'), { target: { value: 'Ванна Q4' } });
     fireEvent.click(screen.getByTestId('template-save'));
 
     await waitFor(() => expect(estimateTemplatesApi.rename)
       .toHaveBeenCalledWith('own1', { name: 'Ванна Q4', description: undefined }));
+  });
+});
+
+describe('TemplatesPage — the editor is the positions, not the prose', () => {
+  const Q4 = 'Q4 — суцільне шпаклювання, під глянець і бокове світло.';
+
+  it('keeps the description FOLDED on open — on a phone it pushed the list off the screen', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([{ ...own, description: Q4 }]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...ownDetail, description: Q4 });
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+
+    // The position — what the sheet is open for — is there from the first frame.
+    expect(await screen.findByText('Розетка')).toBeTruthy();
+    expect(screen.queryByTestId('template-description')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('template-description-toggle'));
+    await screen.findByTestId('template-description');
+    expect(screen.getByDisplayValue(Q4)).toBeTruthy();
+  });
+
+  it('drops the explanations that were repeating the controls', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await screen.findByText('Розетка');
+
+    // A disabled «Зберегти» says «нічого зберігати» on its own, and the grips say the order is
+    // draggable. Both sentences sat between the master and his positions.
+    expect(screen.queryByText(/Зміни зберігаються тільки/)).toBeNull();
+    expect(screen.queryByText(/Перетягуйте позиції/)).toBeNull();
+  });
+});
+
+describe('TemplatesPage — create a template from scratch', () => {
+  const made: EstimateTemplateSummary = {
+    id: 'new1', name: 'Санвузол під ключ', trade: null, customTradeId: null,
+    customTradeName: null, isDefault: false, itemCount: 0,
+  };
+
+  it('the FAB asks for a name and hands straight over to the editor for the positions', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.create).mockResolvedValue(made);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...made, description: null, items: [] });
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Новий шаблон' }));
+
+    const name = await screen.findByPlaceholderText('Напр. Санвузол під ключ');
+    fireEvent.change(name, { target: { value: '  Санвузол під ключ  ' } });
+    fireEvent.click(screen.getByTestId('template-create-submit'));
+
+    await waitFor(() => expect(estimateTemplatesApi.create)
+      .toHaveBeenCalledWith({ name: 'Санвузол під ключ' }));
+    // A named empty row is not yet a template — the editor opens on it so positions can go in.
+    expect(await screen.findByTestId('template-save')).toBeTruthy();
+    expect(screen.getByDisplayValue('Санвузол під ключ')).toBeTruthy();
+  });
+
+  it('refuses a blank name instead of creating «  »', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([]);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Новий шаблон' }));
+    const name = await screen.findByPlaceholderText('Напр. Санвузол під ключ');
+    fireEvent.change(name, { target: { value: '   ' } });
+
+    expect(asButton(screen.getByTestId('template-create-submit')).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('template-create-submit'));
+    expect(estimateTemplatesApi.create).not.toHaveBeenCalled();
   });
 });
