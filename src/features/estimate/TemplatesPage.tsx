@@ -410,8 +410,8 @@ function TradeMove({
  *
  * <p>Until this round the only way to own a bundle was «Зберегти як шаблон» from an estimate, so a
  * master who knows his sequence had to invent an object to write it on first. The sheet asks for
- * the name alone (a trade is re-filed from the row's ⋮, a description is folded away in the editor)
- * and hands straight over to the editor, where the positions go in.</p>
+ * the name alone (a trade is re-filed from the row's ⋮) and hands straight over to the
+ * editor, where the positions go in.</p>
  */
 function CreateModal({
   open,
@@ -462,8 +462,8 @@ function CreateModal({
   );
 }
 
-/** What the bundle promises the client, above its composition — the master has to be able to read
- *  the paragraph he is about to put his name to, not just the (i) on the row. */
+/** What a bundle IS, above its composition — read-only, and the only thing that tells Q2 from Q4
+ *  when the name alone will not. Master-facing: no client surface has rendered it since V122. */
 function TemplateDescription({ text }: { text: string | null | undefined }) {
   const { t } = useTranslation();
   const description = text?.trim() ?? '';
@@ -471,7 +471,7 @@ function TemplateDescription({ text }: { text: string | null | undefined }) {
   return (
     <div className="mb-3 rounded-xl bg-surface-sunken px-3 py-2.5">
       <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
-        {t('templates.promiseTitle')}
+        {t('templates.aboutTitle')}
       </p>
       <p className="whitespace-pre-line text-xs leading-snug text-primary">{description}</p>
     </div>
@@ -533,12 +533,11 @@ function Preview({ templateId }: { templateId: string }) {
 
 /** One position while it is being edited. `isNew` marks a draft-only row that has no server id yet. */
 type DraftItem = EstimateTemplateItemView & { isNew?: boolean };
-/** The whole editable state of a template: its name, what it promises the client, and its
- *  sequence of positions. */
-type Draft = { name: string; description: string; items: DraftItem[] };
+/** The whole editable state of a template: its name and its sequence of positions. The
+ *  description is NOT here — it is read-only now, see the editor's comment where it used to be. */
+type Draft = { name: string; items: DraftItem[] };
 
-const toDraft = (d: EstimateTemplateDetail): Draft =>
-  ({ name: d.name, description: d.description ?? '', items: d.items ?? [] });
+const toDraft = (d: EstimateTemplateDetail): Draft => ({ name: d.name, items: d.items ?? [] });
 const reqOf = (i: DraftItem): TemplateItemRequest => ({ name: i.name, type: i.type, unit: i.unit });
 const sameItem = (a: DraftItem, b: DraftItem) =>
   a.name === b.name && a.type === b.type && a.unit === b.unit;
@@ -586,7 +585,7 @@ function EditModal({
 
   // The draft IS the editor. Seeded from the composition once it arrives; the name is editable from
   // the first frame because the summary always carries it, even offline with no cached detail.
-  const seed: Draft = { name: template.name, description: template.description ?? '', items: [] };
+  const seed: Draft = { name: template.name, items: [] };
   const [draft, setDraft] = useState<Draft>(seed);
   const [baseline, setBaseline] = useState<Draft>(seed);
   const [seeded, setSeeded] = useState(false);
@@ -595,7 +594,6 @@ function EditModal({
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [editingItem, setEditingItem] = useState<DraftItem | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
-  const [showPromise, setShowPromise] = useState(false);
   // A bundle runs past what the list shows, and a position is appended at the BOTTOM — out of sight
   // exactly when the master wants to check it landed. Set on every add/edit, consumed by the effect
   // below once the row it names actually exists.
@@ -609,18 +607,15 @@ function EditModal({
     // only a draft-only row can exist pre-seed, everything else IS what just loaded.
     setDraft((d) => ({
       name: d.name === baseline.name ? loaded.name : d.name,
-      description: d.description === baseline.description ? loaded.description : d.description,
       items: [...loaded.items, ...d.items.filter((i) => i.isNew)],
     }));
     setBaseline(loaded);
     setSeeded(true);
-  }, [data, seeded, baseline.name, baseline.description]);
+  }, [data, seeded, baseline.name]);
 
   const items = draft.items;
   const trimmed = draft.name.trim();
-  const promise = draft.description.trim();
-  const promiseChanged = promise !== baseline.description.trim();
-  const dirty = trimmed !== baseline.name || promiseChanged || !sameItems(items, baseline.items);
+  const dirty = trimmed !== baseline.name || !sameItems(items, baseline.items);
   /**
    * Rows that differ from what is on the server — added this session, or edited and not yet written.
    * Derived, not tracked: with an explicit save the highlight means «ще не збережено», so it lights
@@ -678,19 +673,15 @@ function EditModal({
     if (!canSave || saving) return false;
     setSaving(true);
     let name = baseline.name;
-    let described = baseline.description;
     let working = [...items];
     let latest = data;
     try {
-      if (trimmed !== baseline.name || promiseChanged) {
-        // One call carries both — the endpoint is the template's metadata, and `description` is
-        // sent ONLY when it actually changed: absent means «leave it as it is», so a plain rename
-        // can never drop the paragraph the client reads (V121).
-        follow(await rename.mutateAsync({
-          id: activeId, name: trimmed, description: promiseChanged ? promise : undefined,
-        }));
+      if (trimmed !== baseline.name) {
+        // `description` is never sent: absent means «leave it as it is» on a three-valued field
+        // (V121), so a rename cannot drop the paragraph a DEFAULT bundle ships with — which is
+        // exactly what a rename would otherwise do the first time it forks that default.
+        follow(await rename.mutateAsync({ id: activeId, name: trimmed }));
         name = trimmed;
-        if (promiseChanged) described = promise;
       }
       for (const gone of baseline.items.filter((b) => !working.some((i) => i.id === b.id))) {
         latest = (await removeItem.mutateAsync(gone.id)) ?? latest;
@@ -725,14 +716,14 @@ function EditModal({
       toast.success(t('templates.saved'));
       // Every op landed, so the server now matches the draft — re-seed from what we WROTE, not
       // from `latest`: the answer to the last op predates the ones after it.
-      setDraft({ name: trimmed, description: promise, items: working });
-      setBaseline({ name: trimmed, description: promise, items: working });
+      setDraft({ name: trimmed, items: working });
+      setBaseline({ name: trimmed, items: working });
       return true;
     } catch (err) {
       toast.error(toAppError(err).message);
       // `latest` is the answer to the last op that SUCCEEDED, so it describes the server exactly.
-      setDraft({ name: draft.name, description: draft.description, items: working });
-      setBaseline({ name, description: described, items: latest?.items ?? baseline.items });
+      setDraft({ name: draft.name, items: working });
+      setBaseline({ name, items: latest?.items ?? baseline.items });
       return false;
     } finally {
       setSaving(false);
@@ -776,42 +767,13 @@ function EditModal({
         </Button>
       </div>
 
-      {/* What the bundle PROMISES the client (V121) — a finish level is a chain of works, so the
-          sentence about tolerances belongs to the bundle rather than to every position in it.
-          FOLDED AWAY by default (master, 2026-09-21): on a phone a 4-row textarea and its
-          explanations pushed the positions — the reason this sheet is open — off the screen. It is
-          typed once and read rarely, so it costs one tap and the list starts at the top. */}
-      <div className="mb-3">
-        <button
-          type="button"
-          data-testid="template-description-toggle"
-          aria-expanded={showPromise}
-          onClick={() => setShowPromise((v) => !v)}
-          className="flex w-full items-center gap-1.5 py-1 text-left text-[11px] font-bold uppercase tracking-wide text-brand"
-        >
-          <span aria-hidden>{showPromise ? '▾' : '▸'}</span>
-          {t('templates.promiseTitle')}
-          {!showPromise && promise !== '' && (
-            <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-muted">
-              {promise}
-            </span>
-          )}
-        </button>
-        {showPromise && (
-          // text-base, not text-sm: iOS Safari force-zooms the page on focus of anything under
-          // 16px, and this is a field the master types a paragraph into.
-          <textarea
-            id="template-description"
-            data-testid="template-description"
-            rows={4}
-            maxLength={1000}
-            placeholder={t('templates.promisePlaceholder')}
-            value={draft.description}
-            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-            className="mt-1 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-base text-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
-          />
-        )}
-      </div>
+      {/* NO description field here (master, 2026-09-21): «хіба ми десь в порталі чи ПДФ щось
+         показуємо?» — we do not. V122 took both client surfaces and PWA v1.43.1 took the
+         master's own card, so `estimates.quality_note` has been a snapshot written to nowhere
+         ever since; a paragraph nobody can read is not worth the screen it was eating. The
+         DEFAULT bundles keep theirs — the migrations write them, and it is what tells Q2 from
+         Q4 when picking — so `TemplateDescription` still renders it READ-ONLY in the preview.
+         Bringing the field back is a render change; the column and both snapshots stay. */}
 
       {/* Composition — the order IS the sequence of works, so it is draggable. */}
       <div className="mb-3">

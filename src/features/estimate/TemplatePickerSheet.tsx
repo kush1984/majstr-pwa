@@ -426,7 +426,7 @@ function TemplatePreview({
       {(template.description?.trim() ?? '') !== '' && (
         <div className="mb-3 rounded-xl bg-surface-sunken px-3 py-2.5">
           <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">
-            {t('templates.promiseTitle')}
+            {t('templates.aboutTitle')}
           </p>
           <p className="whitespace-pre-line text-xs leading-snug text-primary">
             {template.description?.trim()}

@@ -421,11 +421,11 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
 });
 
 /**
- * V121 — a finish level is a bundle, and the bundle explains itself to the client: «Q4» means
- * nothing to the person signing, so the paragraph the master writes here is copied onto every
- * estimate the bundle composes and printed under the client's table.
+ * V121's paragraph, with its audience corrected (master, 2026-09-21). No client surface has
+ * rendered it since V122 — not the PDF, not the portal, not any public DTO — so it is READ-ONLY
+ * now and master-facing: the only thing that tells «Q2» from «Q4» at the moment of picking.
  */
-describe('TemplatesPage — the paragraph the client reads', () => {
+describe('TemplatesPage — the bundle explains itself, read-only', () => {
   const Q4 = 'Q4 — суцільне шпаклювання, під глянець і бокове світло.';
   const described: EstimateTemplateSummary = { ...own, description: Q4 };
   const describedDetail: EstimateTemplateDetail = { ...ownDetail, description: Q4 };
@@ -441,28 +441,21 @@ describe('TemplatesPage — the paragraph the client reads', () => {
     expect(await screen.findByText(Q4)).toBeTruthy();
   });
 
-  it('writes it with «Зберегти», in the same call as the name', async () => {
-    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
-    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+  it('the editor offers no way to type one — there is nowhere for it to be read', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([described]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(describedDetail);
     vi.mocked(catalogApi.list).mockResolvedValue([]);
-    vi.mocked(estimateTemplatesApi.rename).mockResolvedValue(described);
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
 
-    fireEvent.click(await screen.findByTestId('template-description-toggle'));
-    const field = await screen.findByTestId('template-description');
-    // Nothing is written while he types — this editor is explicit-save like the act editor.
-    fireEvent.change(field, { target: { value: Q4 } });
-    expect(estimateTemplatesApi.rename).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId('template-save'));
-    await waitFor(() => expect(estimateTemplatesApi.rename)
-      .toHaveBeenCalledWith('own1', { name: 'Моя ванна', description: Q4 }));
-    expect(estimateTemplatesApi.rename).toHaveBeenCalledTimes(1);
+    // The positions — what the sheet is open for — start at the top of it.
+    expect(await screen.findByText('Розетка')).toBeTruthy();
+    expect(screen.queryByTestId('template-description')).toBeNull();
+    expect(screen.queryByTestId('template-description-toggle')).toBeNull();
   });
 
-  it('a rename alone sends no description — «absent» is what leaves it alone', async () => {
+  it('a rename never sends a description, so a default bundle keeps its own on forking', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([described]);
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(describedDetail);
     vi.mocked(catalogApi.list).mockResolvedValue([]);
@@ -470,34 +463,27 @@ describe('TemplatesPage — the paragraph the client reads', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
-    await screen.findByTestId('template-description-toggle');
+    await screen.findByText('Розетка');
 
     fireEvent.change(screen.getByDisplayValue('Моя ванна'), { target: { value: 'Ванна Q4' } });
     fireEvent.click(screen.getByTestId('template-save'));
 
     await waitFor(() => expect(estimateTemplatesApi.rename)
-      .toHaveBeenCalledWith('own1', { name: 'Ванна Q4', description: undefined }));
+      .toHaveBeenCalledWith('own1', { name: 'Ванна Q4' }));
   });
 });
 
 describe('TemplatesPage — the editor is the positions, not the prose', () => {
   const Q4 = 'Q4 — суцільне шпаклювання, під глянець і бокове світло.';
 
-  it('keeps the description FOLDED on open — on a phone it pushed the list off the screen', async () => {
+  it('still SHOWS the paragraph, read-only, where it decides a pick', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([{ ...own, description: Q4 }]);
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...ownDetail, description: Q4 });
-    vi.mocked(catalogApi.list).mockResolvedValue([]);
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
-
-    // The position — what the sheet is open for — is there from the first frame.
-    expect(await screen.findByText('Розетка')).toBeTruthy();
-    expect(screen.queryByTestId('template-description')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('template-description-toggle'));
-    await screen.findByTestId('template-description');
-    expect(screen.getByDisplayValue(Q4)).toBeTruthy();
+    // A row tap opens the read-only preview — this is where «Q4» stops being a bare name.
+    fireEvent.click(await screen.findByRole('button', { name: 'Моя ванна' }));
+    expect(await screen.findByText(Q4)).toBeTruthy();
   });
 
   it('drops the explanations that were repeating the controls', async () => {
