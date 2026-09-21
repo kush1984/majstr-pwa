@@ -4,7 +4,6 @@ import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
-import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { formatMoney, formatAmount } from '@/lib/format.ts';
@@ -82,27 +81,6 @@ function receivedDateWarning(iso: string, objectCreatedAt: string | undefined, t
 function dueDateWarning(iso: string, isCreate: boolean, t: (k: string) => string): string | null {
   if (!iso || !isCreate) return null;
   return iso < today() ? t('economy.dateWarningPastDue') : null;
-}
-
-/** Header line ("Отримано X з Y ₴ · Z%" + one (i)) plus a thin progress bar underneath — no
- *  separate За договором/Отримано/Залишок tiles, this single line says the same thing in less
- *  space. Same design + wording as the client portal's compact payments card, and the bar itself
- *  is the shared {@link ProgressStrip} so the two can't drift apart. */
-function PaymentStrip({ received, total }: { received: number; total: number }) {
-  const { t } = useTranslation();
-  // Uncapped on purpose: an overpayment reads «112 %» here, not a rounded-down «100 %».
-  const pct = progressPct(received, total);
-  return (
-    <div className="mt-2">
-      <p className="flex flex-wrap items-center gap-1 text-xs text-muted">
-        <span className="font-mono tabular-nums">
-          {t('economy.received')} {formatMoney(received)} {t('economy.paymentsOf')} {formatMoney(total)} · {pct}%
-        </span>
-        <InfoPopover text={t('economy.receivedInfo')} label={t('economy.paymentsTitle')} />
-      </p>
-      <ProgressStrip value={received} total={total} />
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,10 +274,20 @@ function PaymentsList({
   // ON DELETE SET NULL) or one logged before any estimate had a contracted total to compare
   // against. Hiding the breakdown here read as "where did this money even come from?" (reported
   // 2026-08-14) the moment contractedTotal didn't obviously explain it.
+  //
+  // No open stage is NOT the same as being paid up. An object with no plan at all — one advance
+  // and nothing scheduled — satisfied `upcoming.length === 0` vacuously and announced «Усе
+  // сплачено ✓» over 46 % of the contract (master, 2026-09-21), which reads as «the client owes
+  // nothing». The claim is about MONEY, so it is made against money: everything contracted has
+  // landed. Below that the list still renders, unheadlined — the journal is the point of this
+  // card and it must show who paid and when either way.
+  const allPaid = summary.contractedTotal > 0 && summary.received >= summary.contractedTotal;
   if (upcoming.length === 0) {
     return (
       <div className="mt-3 border-t border-border pt-1">
-        <p className="py-2 text-center text-sm font-semibold text-success">{t('economy.paymentsAllDone')}</p>
+        {allPaid && (
+          <p className="py-2 text-center text-sm font-semibold text-success">{t('economy.paymentsAllDone')}</p>
+        )}
         <ReceivedSection
           received={received}
           expanded={receivedExpanded}
@@ -1128,16 +1116,22 @@ export function PaymentsBlock({
         </div>
       </div>
 
-      {/* A percent needs a denominator; the sum does not. With nothing signed the strip would read
-          «0 ₴ з 0 ₴ · 0 %», but the money already received still has to be stated — the collapsed
-          list says «✓ Отримано · 2» and no figure, so dropping both would hide it entirely. */}
-      {contracted ? (
-        <PaymentStrip received={summary.received} total={summary.contractedTotal} />
-      ) : summary.received > 0 ? (
+      {/* NO progress strip here. It drew «Отримано X з Y ₴ · Z %» from the same two figures the
+          works axis directly above already draws — both read `sumIncomeCounted` for the
+          denominator and the Σ of the object's receipts for the numerator, so they could never
+          say anything different — which put three bars on one screen, two of them identical
+          (master, 2026-09-21: «щось мені здається тут багато тих полосок»). The axis keeps its
+          copy, because the balance line under it is the difference of exactly those two numbers.
+          THIS card answers a different question: who paid, when, how much.
+
+          The bare sum stays for the unsigned case. A percent needs a denominator, and with
+          nothing signed there is none — but the collapsed list says «✓ Отримано · 2» with no
+          figure, so without this line the money already on the object is nowhere on the card. */}
+      {!contracted && summary.received > 0 && (
         <p className="mt-2 font-mono text-xs tabular-nums text-muted">
           {t('economy.received')} {formatMoney(summary.received)}
         </p>
-      ) : null}
+      )}
       {!hasRows && (
         <p className="mt-2 text-center text-sm text-muted">{t('economy.paymentsNoneYet')}</p>
       )}

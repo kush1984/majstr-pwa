@@ -1,8 +1,13 @@
 /**
- * The one progress strip of the object economy. «Отримано» (payments), «Прийнято актами» and
- * «Отримано» on the works axis all draw THIS bar — and so does the client portal's payments card,
- * which is plain HTML with its own copy of the rule (`static/portal/index.html`, `.paybar-fill`).
- * Four places, one design: change the rule here and the portal's CSS in the same commit.
+ * The one progress strip of the object economy. «Прийнято актами» and «Отримано» on the works
+ * axis both draw THIS bar — and so does the client portal's payments card, which is plain HTML
+ * with its own copy of the rule (`static/portal/index.html`, `.paybar-fill`). Three places, one
+ * design: change the rule here and the portal's CSS in the same commit.
+ *
+ * The «Платежі» card had a fourth copy until 2026-09-21. It drew the same two figures as the axis
+ * line right above it — the backend computes both from `sumIncomeCounted` and the Σ of the
+ * object's receipts — so the two bars could never disagree, and the master counted three bars on
+ * one screen. A journal does not need the summary's percentage; it needs who paid and when.
  *
  * **Colour is a POSITION, never a verdict.** The brand→success gradient always spans the whole
  * TRACK (that is what `backgroundSize` is doing), and the fill is a window onto it — so a strip at

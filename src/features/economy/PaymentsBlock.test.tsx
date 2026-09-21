@@ -199,7 +199,7 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
   });
 
   it('when everything is received, shows "Усе сплачено" but keeps the breakdown reachable, never just a bare headline', () => {
-    const row = plannedRow({ purpose: 'Аванс', received: 5000, remaining: 0, status: 'RECEIVED', receipts: [receipt({ amount: 5000 })] });
+    const row = plannedRow({ purpose: 'Аванс', received: 20000, remaining: 0, status: 'RECEIVED', receipts: [receipt({ amount: 20000 })] });
     renderBlock(summary([row]));
 
     expect(screen.getByText('Усе сплачено ✓')).toBeTruthy();
@@ -208,6 +208,17 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
     expect(screen.queryByText('Аванс')).toBeNull(); // collapsed by default
     fireEvent.click(screen.getByText(/Отримано · 1/));
     expect(screen.getByText('Аванс')).toBeTruthy();
+  });
+  it('does not call an unplanned object «Усе сплачено» — the claim is about money, not stages', () => {
+    // The master had one 5 000 ₴ advance on a 20 000 ₴ contract and no plan stages at all, so
+    // `upcoming.length === 0` was true VACUOUSLY and the card announced «Усе сплачено ✓» over
+    // 25 % of the contract — which reads as «the client owes nothing» (reported 2026-09-21).
+    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 5000, label: 'Завдаток', displayLabel: 'Завдаток' })]));
+
+    expect(screen.queryByText('Усе сплачено ✓')).toBeNull();
+    // The journal is the point of this card — it stays, headline or not.
+    fireEvent.click(screen.getByText(/Отримано · 1/));
+    expect(screen.getByText('Завдаток')).toBeTruthy();
   });
 
   it('more than 5 payments collapses to a "Наступний платіж" card plus an expand toggle', () => {
@@ -251,21 +262,36 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
   });
 });
 
-describe('PaymentsBlock — the progress strip (green-strip iteration)', () => {
-  it('prints the TRUE percent on an overpayment, not a rounded-down 100 %', () => {
-    // The strip used to cap the label at 100 %, so 25 000 ₴ received against a 20 000 ₴ contract
-    // read exactly like a contract paid to the last hryvnia. The bar clamps; the number does not.
-    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 25000 })]));
+/**
+ * This card used to carry its own «Отримано X з Y ₴ · Z %» strip. The works axis rendered
+ * immediately above it draws the SAME two figures against the same denominator — the backend
+ * computes both from `sumIncomeCounted` and the Σ of the object's receipts — so the screen showed
+ * three bars, two of which could never disagree («щось мені здається тут багато тих полосок»,
+ * 2026-09-21). The axis keeps its copy: the balance line beneath it is the difference of exactly
+ * those two numbers. This card is the journal — who paid, when, how much.
+ *
+ * The strip is gone, not moved, so the assertions that pinned its behaviour are gone too: both
+ * were about the SHARED component and are already covered by `components/ProgressStrip.test.tsx`.
+ */
+describe('PaymentsBlock — the journal does not repeat the axis', () => {
+  it('draws no progress bar of its own, whatever the numbers', () => {
+    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 9000 })]));
 
-    expect(screen.getByText(/125%/)).toBeTruthy();
+    expect(screen.queryByTestId('progress-fill')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
   });
 
-  it('fills solid green once the contract is fully received', () => {
-    renderBlock(summary([], [receipt({ id: 'r1', planPaymentId: null, amount: 20000 })]));
+  it('still states the sum when nothing is signed — there is no axis figure to lean on', () => {
+    // With no signed estimate the denominator is 0, so no percentage is possible anywhere. The
+    // collapsed list says «✓ Отримано · 1» and no figure, so this line is the only place the
+    // money on the object appears at all.
+    renderBlock({
+      contractedTotal: 0, received: 4000, remaining: 0, payments: [],
+      unplannedReceipts: [receipt({ id: 'r1', planPaymentId: null, amount: 4000 })],
+    });
 
-    const fill = screen.getByTestId('progress-fill');
-    expect(fill.className).toContain('bg-success');
-    expect(fill.className).not.toContain('bg-gradient-to-r');
+    expect(screen.getByText(/Отримано 4 000/)).toBeTruthy();
+    expect(screen.queryByTestId('progress-fill')).toBeNull();
   });
 });
 
