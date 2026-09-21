@@ -1,0 +1,410 @@
+{
+  "AddCatalogItemsBatchRequest": {
+    "items": "array"
+  },
+  "AddTemplatesRequest": {
+    "trades": "array"
+  },
+  "AdminCatalogTemplateRequest": {
+    "category": "string?",
+    "name": "string",
+    "suggestedPrice": "number",
+    "trade": "string",
+    "type": "string",
+    "unit": "string"
+  },
+  "AdminEstimateTemplateRequest": {
+    "name": "string",
+    "trade": "string?"
+  },
+  "ApplyTemplatesRequest": {
+    "estimate": "object?",
+    "templates": "array"
+  },
+  "CashEntryRequest": {
+    "amount": "number",
+    "category": "string?",
+    "direction": "string",
+    "happenedOn": "string?",
+    "kind": "string?",
+    "materialRefund": "boolean?",
+    "note": "string?"
+  },
+  "CatalogBulkDeleteRequest": {
+    "ids": "array"
+  },
+  "CatalogImportCommitRequest": {
+    "defaultPolicy": "string",
+    "items": "array",
+    "trade": "string?"
+  },
+  "CatalogItemRequest": {
+    "category": "string?",
+    "customTradeId": "string?",
+    "defaultPrice": "number",
+    "name": "string",
+    "trade": "string?",
+    "type": "string",
+    "unit": "string"
+  },
+  "CatalogItemsOrderRequest": {
+    "items": "array"
+  },
+  "CheckoutRequest": {
+    "autoRenew": "boolean?",
+    "period": "string?"
+  },
+  "ClientRequest": {
+    "address": "string?",
+    "clientType": "string?",
+    "email": "string?",
+    "fullName": "string",
+    "legalAddress": "string?",
+    "legalName": "string?",
+    "phone": "string",
+    "signatoryName": "string?",
+    "signatoryTitle": "string?",
+    "taxId": "string?"
+  },
+  "CountInEconomyRequest": {
+    "countInEconomy": "boolean"
+  },
+  "CustomTradeRequest": {
+    "name": "string"
+  },
+  "DictationCommitRequest": {
+    "items": "array"
+  },
+  "DictationParseRequest": {
+    "text": "string"
+  },
+  "DictationSynonymRequest": {
+    "catalogItemId": "string",
+    "spokenText": "string"
+  },
+  "EconomyUpdateRequest": {
+    "estimateIds": "array",
+    "paymentsVisible": "boolean"
+  },
+  "EstimateConsolidateRequest": {
+    "estimateIds": "array",
+    "name": "string?"
+  },
+  "EstimateCreateRequest": {
+    "name": "string?",
+    "notes": "string?",
+    "validUntil": "string?"
+  },
+  "EstimateDuplicateRequest": {
+    "discount": "boolean?",
+    "itemIds": "array?",
+    "markupPercent": "number",
+    "name": "string?"
+  },
+  "EstimateImportCommitRequest": {
+    "depositAmount": "number?",
+    "estimateName": "string?",
+    "items": "array",
+    "projectId": "string"
+  },
+  "EstimateItemFromCatalogRequest": {
+    "quantity": "number",
+    "sortOrder": "number?"
+  },
+  "EstimateItemRequest": {
+    "category": "string?",
+    "measurementRefs": "array?",
+    "name": "string",
+    "percentBaseItemId": "string?",
+    "percentBaseKind": "string?",
+    "quantity": "number",
+    "quantityManual": "boolean?",
+    "sortOrder": "number?",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
+  },
+  "EstimateItemsDeleteRequest": {
+    "itemIds": "array"
+  },
+  "EstimateItemsMarkupRequest": {
+    "discount": "boolean?",
+    "itemIds": "array",
+    "percent": "number"
+  },
+  "EstimateItemsOrderRequest": {
+    "items": "array"
+  },
+  "EstimateUpdateRequest": {
+    "name": "string?",
+    "notes": "string?",
+    "status": "string",
+    "validUntil": "string?"
+  },
+  "ExpenseRequest": {
+    "amount": "number",
+    "category": "string",
+    "note": "string?",
+    "source": "string?",
+    "spentAt": "string?"
+  },
+  "FiscalQrRequest": {
+    "payload": "string"
+  },
+  "ForgotPasswordRequest": {
+    "email": "string"
+  },
+  "LoginRequest": {
+    "email": "string",
+    "password": "string"
+  },
+  "MaterialApplyRequest": {
+    "materials": "array"
+  },
+  "MaterialLineRequest": {
+    "materialId": "string",
+    "quantity": "number"
+  },
+  "MaterialNormUpdateRequest": {
+    "qtyPerUnit": "number"
+  },
+  "MaterialPrefsRequest": {
+    "prefs": "object"
+  },
+  "MeasurementItemRequest": {
+    "name": "string",
+    "payload": "object",
+    "sortOrder": "number?",
+    "type": "string"
+  },
+  "MeasurementRoomRequest": {
+    "floor": "string?",
+    "name": "string",
+    "sortOrder": "number?"
+  },
+  "MessageLinkRequest": {
+    "authorName": "string",
+    "authorPhone": "string?",
+    "message": "string"
+  },
+  "NoteRequest": {
+    "body": "string",
+    "phone": "string?",
+    "title": "string?"
+  },
+  "PaymentReceiptEditRequest": {
+    "amount": "number",
+    "label": "string?",
+    "materialRefund": "boolean?",
+    "receivedAt": "string"
+  },
+  "PaymentReceiptRequest": {
+    "amount": "number",
+    "label": "string?",
+    "materialRefund": "boolean?",
+    "planPaymentId": "string?",
+    "receivedAt": "string",
+    "resolution": "string?"
+  },
+  "PaymentSplitRequest": {
+    "customPercents": "array?",
+    "preset": "string"
+  },
+  "PaymentSurplusTransferRequest": {
+    "fromPaymentId": "string",
+    "toPaymentId": "string"
+  },
+  "PhotoFolderRequest": {
+    "folder": "string?"
+  },
+  "PhotoVisibilityRequest": {
+    "visibility": "string"
+  },
+  "PlanUpdateRequest": {
+    "plan": "string"
+  },
+  "PortalUpdateRequest": {
+    "estimateIds": "array"
+  },
+  "ProfileUpdateRequest": {
+    "actNumberFormat": "string?",
+    "bankName": "string?",
+    "companyName": "string",
+    "docCity": "string?",
+    "email": "string?",
+    "fullName": "string",
+    "iban": "string?",
+    "legalAddress": "string?",
+    "legalName": "string?",
+    "phone": "string",
+    "taxGroup": "number?",
+    "taxId": "string?",
+    "taxRate": "number?",
+    "trades": "array",
+    "vatId": "string?",
+    "vatPayer": "boolean?"
+  },
+  "ProjectImportCommitRequest": {
+    "rooms": "array"
+  },
+  "ProjectPaymentRequest": {
+    "amount": "number",
+    "dueDate": "string?",
+    "nextStage": "string?",
+    "purpose": "string"
+  },
+  "ProjectReceiptRequest": {
+    "amount": "number",
+    "fiscalFn": "string?",
+    "fiscalId": "string?",
+    "issuedAt": "string?",
+    "label": "string",
+    "reimbursable": "boolean?"
+  },
+  "ProjectRequest": {
+    "address": "string",
+    "clientId": "string?",
+    "description": "string?",
+    "name": "string"
+  },
+  "ProjectStatusUpdateRequest": {
+    "status": "string"
+  },
+  "ProjectTriageRequest": {
+    "sheets": "array"
+  },
+  "PushSubscribeRequest": {
+    "auth": "string",
+    "endpoint": "string",
+    "p256dh": "string",
+    "userAgent": "string?"
+  },
+  "PushUnsubscribeRequest": {
+    "endpoint": "string"
+  },
+  "QuestionRequest": {
+    "authorName": "string?",
+    "authorPhone": "string?",
+    "message": "string"
+  },
+  "ReceiptItemsCommitRequest": {
+    "items": "array"
+  },
+  "ReferralSourceUpdateRequest": {
+    "source": "string?"
+  },
+  "RefreshTokenRequest": {
+    "refreshToken": "string"
+  },
+  "RegisterRequest": {
+    "companyName": "string",
+    "consent": "boolean?",
+    "customTrades": "array?",
+    "email": "string",
+    "fullName": "string",
+    "password": "string",
+    "phone": "string",
+    "promoCode": "string?",
+    "ref": "string?",
+    "trades": "array",
+    "utmCampaign": "string?",
+    "utmMedium": "string?",
+    "utmSource": "string?"
+  },
+  "ResetPasswordRequest": {
+    "newPassword": "string",
+    "token": "string"
+  },
+  "SaveAsTemplateRequest": {
+    "customTradeId": "string?",
+    "description": "string?",
+    "name": "string",
+    "trade": "string?"
+  },
+  "ShoppingListItemRequest": {
+    "materialId": "string?",
+    "name": "string",
+    "note": "string?",
+    "quantity": "number",
+    "unit": "string"
+  },
+  "ShoppingListItemUpdateRequest": {
+    "bought": "boolean?",
+    "note": "string?",
+    "quantity": "number?",
+    "suggestion": "string?"
+  },
+  "SignRequest": {
+    "clientName": "string",
+    "clientPhone": "string"
+  },
+  "SketchCommitRequest": {
+    "rooms": "array"
+  },
+  "TemplateItemRequest": {
+    "name": "string",
+    "type": "string",
+    "unit": "string"
+  },
+  "TemplateItemsOrderRequest": {
+    "itemIds": "array"
+  },
+  "TemplateTradeRequest": {
+    "customTradeId": "string?",
+    "trade": "string?"
+  },
+  "UpgradeClickRequest": {
+    "trigger": "string?"
+  },
+  "UpgradeInterestRequest": {
+    "reason": "string?"
+  },
+  "VerifyEmailRequest": {
+    "token": "string"
+  },
+  "WorkActCreateRequest": {
+    "advanceOffset": "number?",
+    "contractRef": "string?",
+    "issuedAt": "string",
+    "kind": "string",
+    "note": "string?",
+    "periodFrom": "string",
+    "periodTo": "string",
+    "place": "string?",
+    "showCumulative": "boolean?",
+    "showMaterials": "boolean?",
+    "title": "string?"
+  },
+  "WorkActItemsRequest": {
+    "items": "array"
+  },
+  "WorkActReceiptRequest": {
+    "amount": "number",
+    "fiscalFn": "string?",
+    "fiscalId": "string?",
+    "issuedAt": "string?",
+    "label": "string",
+    "returnedAmount": "number?"
+  },
+  "WorkActSignOfflineRequest": {
+    "signerName": "string"
+  },
+  "WorkActStatusRequest": {
+    "status": "string"
+  },
+  "WorkActUpdateRequest": {
+    "advanceOffset": "number?",
+    "contractRef": "string?",
+    "issuedAt": "string",
+    "kind": "string",
+    "note": "string?",
+    "periodFrom": "string",
+    "periodTo": "string",
+    "place": "string?",
+    "receiptsToExpenses": "boolean?",
+    "showCumulative": "boolean?",
+    "showMaterials": "boolean?",
+    "showReceiptPhotos": "boolean?",
+    "title": "string?"
+  }
+}
