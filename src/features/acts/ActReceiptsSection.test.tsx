@@ -61,7 +61,7 @@ function renderSection(over: Partial<Parameters<typeof ActReceiptsSection>[0]> =
   );
   return render(
     <ActReceiptsSection actId="a1" projectId="p1" receipts={[receipt({ hasPhoto: false })]} signed={false}
-      queued={new Map()} onQueuedChanged={() => {}}
+      sent={false} queued={new Map()} onQueuedChanged={() => {}}
       toExpenses onToExpensesChange={() => {}}
       showPhotosInPdf onShowPhotosInPdfChange={() => {}} {...over} />,
     { wrapper },
@@ -239,6 +239,24 @@ describe('ActReceiptsSection', () => {
     expect(vi.mocked(actsApi.updateReceipt).mock.calls[0][2]).toMatchObject({ amount: 483.5 });
   });
 
+  /**
+   * Once the act is SENT the client can tap «Підтвердити приймання» at any second, and an unpriced
+   * receipt refuses that signature — so the warning must name THAT, not «не можна надіслати».
+   * The error the client sees is the master's to fix, and nothing on the client's screen says so
+   * (review B-28).
+   */
+  it('on a SENT act it says the CLIENT cannot sign, not that it cannot be sent', () => {
+    renderSection({
+      sent: true,
+      receipts: [receipt({ id: 'r1', amount: 0, issuedAt: null, hasPhoto: false })],
+    });
+
+    expect(screen.getByText(/Акт уже в клієнта/)).toBeTruthy();
+    // The generic sentence — «акт не можна надіслати чи підписати» — is not what is happening
+    // once it HAS been sent, and it used to be the only thing this screen said.
+    expect(screen.queryByText(/не можна надіслати чи підписати/)).toBeNull();
+  });
+
   it('a receipt with no amount is flagged, counted and offered a re-read', async () => {
     // The master's demand verbatim: every receipt with incomplete info must say so under itself.
     renderSection({
@@ -396,7 +414,7 @@ describe('ActReceiptsSection', () => {
     expect(screen.getByText(/Вибрати з галереї/)).toBeTruthy();
 
     rerender(
-      <ActReceiptsSection actId="a1" projectId="p1" receipts={[receipt()]} signed
+      <ActReceiptsSection actId="a1" projectId="p1" receipts={[receipt()]} signed sent={false}
         queued={new Map()} onQueuedChanged={() => {}}
         toExpenses onToExpensesChange={() => {}}
         showPhotosInPdf onShowPhotosInPdfChange={() => {}} />,

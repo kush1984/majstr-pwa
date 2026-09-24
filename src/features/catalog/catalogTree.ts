@@ -1,8 +1,23 @@
-import type { CatalogItemResponse } from '@/api/types.ts';
+import type { CatalogItemResponse, Trade } from '@/api/types.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { toSections, type Section } from '@/features/estimate/estimateArrange.ts';
 import { customTradeKey, type TradeKey } from './tradeKey.ts';
 import { catalogSectionRank } from './sharedCategory.ts';
+
+/**
+ * A catalog row as it appears inside ONE branch, carrying the branch it is shown in.
+ *
+ * <p>This is the only evidence of which work a shared position is. The row is stored once, under
+ * whichever trade claimed the name first (V118), and shown under every trade that ships it — so
+ * the STORED trade answers «where does this live», never «what did he just pick». Sending the
+ * branch along is what stops a position tapped in «Малярні роботи» from arriving in the estimate
+ * as a drywall line, with a drywall folder heading above it.</p>
+ */
+export type BranchRow = CatalogItemResponse & {
+  /** The system trade of the branch, or null in a custom-trade one (which the server cannot be
+   *  told about: `Trade` is an enum and a master-invented trade is not in it). */
+  filedUnder: Trade | null;
+};
 
 /** One trade and everything the master's catalog holds under it, already grouped into folders. */
 export interface TradeBranch {
@@ -10,7 +25,7 @@ export interface TradeBranch {
   /** The master's own name for a `custom:<id>` trade; null for a system one, whose label the
    *  caller translates from the key (the tree stays free of i18n). */
   customName: string | null;
-  sections: Section<CatalogItemResponse>[];
+  sections: Section<BranchRow>[];
   /** Positions in THIS branch. Not a share of the catalog total — a position two trades both
    *  ship is counted in both, because it genuinely belongs to both. */
   count: number;
@@ -51,11 +66,13 @@ export function toTradeTree(items: readonly CatalogItemResponse[]): TradeBranch[
   const stored = new Set<TradeKey>();
   for (const item of items) stored.add(tradeKeyOf(item));
 
-  const rows = new Map<TradeKey, CatalogItemResponse[]>();
+  const rows = new Map<TradeKey, BranchRow[]>();
   const push = (key: TradeKey, item: CatalogItemResponse) => {
+    // The branch a row is shown in is a fact about THIS copy of it, not about the row.
+    const row: BranchRow = { ...item, filedUnder: systemTradeOf(key) };
     const list = rows.get(key);
-    if (list) list.push(item);
-    else rows.set(key, [item]);
+    if (list) list.push(row);
+    else rows.set(key, [row]);
   };
 
   for (const item of items) {
@@ -87,6 +104,12 @@ export function toTradeTree(items: readonly CatalogItemResponse[]): TradeBranch[
       || systemIndex(a.key) - systemIndex(b.key)
       || (a.customName ?? '').localeCompare(b.customName ?? '', 'uk'))
     .map(({ key, customName, sections, count }) => ({ key, customName, sections, count }));
+}
+
+/** The system trade a branch key names, or null for `custom:<id>` — which has no enum value to
+ *  send and needs none: a custom-trade row is the master's own filing already. */
+function systemTradeOf(key: TradeKey): Trade | null {
+  return (TRADE_VALUES as readonly string[]).includes(key) ? (key as Trade) : null;
 }
 
 /** Where a system trade sits in the library's own trade order; custom trades sort after them all. */

@@ -5,6 +5,8 @@ import type {
   MaterialCalculationResponse,
   MaterialNormResponse,
   MaterialNormUpdateRequest,
+  MaterialPrefsRequest,
+  MaterialPrefsResponse,
   ShoppingListResponse,
 } from './types.ts';
 
@@ -20,9 +22,16 @@ const base = (estimateId: string) => `/api/estimates/${estimateId}/materials`;
 export const materialsApi = {
   calculate(
     estimateId: string,
-    // `sections` is per POSITION and rides as one compact scalar — «uuid:0.4,uuid:1.2» — because
-    // `client.ts` has no paramsSerializer, so a repeated param would go out as `sections[]=`.
-    params: { wastePercent?: number; perimeter?: number; sections?: string } = {},
+    // `sections` (metres) and `thicknesses` (MILLIMETRES) are per POSITION and each rides as one
+    // compact scalar — «uuid:0.4,uuid:1.2» — because `client.ts` has no paramsSerializer, so a
+    // repeated param would go out as `sections[]=`. Two params and not one map: a single position
+    // can be asked both questions, and a shared map would answer one with the other's number.
+    params: {
+      wastePercent?: number;
+      perimeter?: number;
+      sections?: string;
+      thicknesses?: string;
+    } = {},
   ): Promise<MaterialCalculationResponse> {
     return api
       .get<MaterialCalculationResponse>(base(estimateId), { params })
@@ -45,5 +54,13 @@ export const materialsApi = {
   },
   restoreNorm(normId: string): Promise<void> {
     return api.delete(`/api/material-norms/${normId}`).then(() => undefined);
+  },
+  /** The master's habits — how many coats he paints, how wide he leaves a joint (V137). */
+  prefs(): Promise<MaterialPrefsResponse> {
+    return api.get<MaterialPrefsResponse>('/api/me/material-prefs').then((r) => r.data);
+  },
+  /** Upsert; a BLANK value forgets a habit, so clearing a field has to send it, not omit it. */
+  savePrefs(req: MaterialPrefsRequest): Promise<MaterialPrefsResponse> {
+    return api.put<MaterialPrefsResponse>('/api/me/material-prefs', req).then((r) => r.data);
   },
 };

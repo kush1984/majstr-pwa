@@ -10,8 +10,10 @@ const calculate = vi.hoisted(() => vi.fn());
 const toShoppingList = vi.hoisted(() => vi.fn());
 const saveNorm = vi.hoisted(() => vi.fn());
 const restoreNorm = vi.hoisted(() => vi.fn());
+const prefs = vi.hoisted(() => vi.fn());
+const savePrefs = vi.hoisted(() => vi.fn());
 vi.mock('@/api/materials.ts', () => ({
-  materialsApi: { calculate, toShoppingList, saveNorm, restoreNorm },
+  materialsApi: { calculate, toShoppingList, saveNorm, restoreNorm, prefs, savePrefs },
 }));
 
 function line(over: Partial<CalculatedMaterialLine> = {}): CalculatedMaterialLine {
@@ -75,10 +77,14 @@ beforeEach(() => {
   toShoppingList.mockReset();
   saveNorm.mockReset();
   restoreNorm.mockReset();
+  prefs.mockReset();
+  savePrefs.mockReset();
   calculate.mockResolvedValue(answer());
   saveNorm.mockResolvedValue({ id: 'n2', materialId: 'm1', qtyPerUnit: 1.2, ownNorm: true });
   restoreNorm.mockResolvedValue(undefined);
   toShoppingList.mockResolvedValue({ projectId: 'p1' });
+  prefs.mockResolvedValue({ prefs: {} });
+  savePrefs.mockResolvedValue({ prefs: {} });
 });
 
 describe('MaterialCalculatorPage', () => {
@@ -130,6 +136,21 @@ describe('MaterialCalculatorPage', () => {
     expect(await screen.findByText(/Норм для цього кошторису ще немає/)).toBeTruthy();
   });
 
+  /**
+   * An estimate applied from a bundle carries every quantity at zero, and «ми не знаємо норм для
+   * цих робіт» would be a plainly false thing to tell him about work we DO norm — he would go
+   * looking for a bug that is not there. The empty screen has two sentences behind it.
+   */
+  it('asks for quantities instead of claiming it knows no norms', async () => {
+    calculate.mockResolvedValue(
+      answer({ materials: [], coverage: { trades: [], otherWorks: false }, quantitiesMissing: true }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Впишіть кількості')).toBeTruthy();
+    expect(screen.queryByText('Нема що рахувати')).toBeFalsy();
+  });
+
   it('asks for the perimeter rather than guessing it from the area', async () => {
     calculate.mockResolvedValue(
       answer({ parameters: [{ parameter: 'PERIMETER', materialName: 'Профіль UD 27×28' }] }),
@@ -145,6 +166,7 @@ describe('MaterialCalculatorPage', () => {
         wastePercent: 10,
         perimeter: 16,
         sections: undefined,
+        thicknesses: undefined,
       }),
     );
   });
@@ -177,7 +199,7 @@ describe('MaterialCalculatorPage', () => {
     );
     renderPage();
 
-    expect(await screen.findByText('Потрібен переріз')).toBeTruthy();
+    expect(await screen.findByText('Потрібна розгортка')).toBeTruthy();
     // One input per POSITION: the board and the ribs of one короб share a single розгортка.
     fireEvent.change(screen.getByLabelText('Монтаж короба (прямого)'), {
       target: { value: '0,4' },
@@ -190,6 +212,7 @@ describe('MaterialCalculatorPage', () => {
         wastePercent: 10,
         perimeter: undefined,
         sections: 'e1:0.4,e2:1.2',
+        thicknesses: undefined,
       }),
     );
   });
@@ -244,7 +267,7 @@ describe('MaterialCalculatorPage', () => {
     );
     renderPage();
 
-    expect(await screen.findByText('Потрібен переріз')).toBeTruthy();
+    expect(await screen.findByText('Потрібна розгортка')).toBeTruthy();
     expect(screen.queryByText('Потрібен периметр')).toBeFalsy();
   });
 
@@ -261,7 +284,7 @@ describe('MaterialCalculatorPage', () => {
           normId: 'n1',
           ownNorm: false,
           basis: 'SECTION',
-          section: 0.4,
+          param: 0.4,
           amount: 10.56,
         },
       ],
@@ -270,8 +293,8 @@ describe('MaterialCalculatorPage', () => {
     renderPage();
     fireEvent.click(await screen.findByText('Показати розрахунок'));
 
-    // «12 м.п. × переріз 0,4 м × 2,2 = 10,56» — a mistyped розгортка is visible, not hidden.
-    expect(screen.getByText(/переріз 0,4 м.*×.*2,2.*=.*10,56/)).toBeTruthy();
+    // «12 м.п. × розгортка 0,4 м × 2,2 = 10,56» — a mistyped розгортка is visible, not hidden.
+    expect(screen.getByText(/розгортка 0,4 м.*×.*2,2.*=.*10,56/)).toBeTruthy();
   });
 
   it('re-asks the server for a new allowance instead of scaling the answer on screen', async () => {
@@ -284,6 +307,7 @@ describe('MaterialCalculatorPage', () => {
         wastePercent: 15,
         perimeter: undefined,
         sections: undefined,
+        thicknesses: undefined,
       }),
     );
   });
@@ -439,5 +463,140 @@ describe('MaterialCalculatorPage', () => {
     await act(async () => {
       pending.resolve(answer({ wastePercent: 15 }));
     });
+  });
+
+  /**
+   * V137's whole point: «штукатурка до 2 см» names a LIMIT, and 15 мм against 20 мм is a third of
+   * the plaster. The suggestion is pre-filled so the common case is one tap — and named out loud,
+   * because a number that appeared by itself in a field reads as one the master typed.
+   */
+  it('pre-fills the thickness it suggests and says the figure is ours', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'THICKNESS',
+            materialName: 'Суміш штукатурна',
+            estimateItemId: 'e1',
+            positionName: 'Штукатурення стін',
+            suggested: 15,
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібна товщина шару')).toBeTruthy();
+    expect(await screen.findByDisplayValue('15')).toBeTruthy();
+    expect(screen.getByText(/Підставили типову товщину/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: 'e1:15',
+      }),
+    );
+  });
+
+  it('never puts its own suggestion back over the thickness the master typed', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'THICKNESS',
+            materialName: 'Суміш штукатурна',
+            estimateItemId: 'e1',
+            positionName: 'Штукатурення стін',
+            suggested: 15,
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    const field = await screen.findByLabelText('Штукатурення стін');
+    fireEvent.change(field, { target: { value: '25' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    // The answer still carries `suggested: 15`, and it arrives AFTER he typed: refilling the field
+    // would silently buy plaster for a wall he told us is thicker.
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: 'e1:25',
+      }),
+    );
+    expect(await screen.findByDisplayValue('25')).toBeTruthy();
+  });
+
+  it('shows the thickness as its own factor, in millimetres', async () => {
+    const plaster = line({
+      name: 'Суміш штукатурна',
+      unit: 'M2',
+      sources: [
+        {
+          estimateItemId: 'e1',
+          name: 'Штукатурення стін',
+          unit: 'M2',
+          quantity: 30,
+          qtyPerUnit: 0.85,
+          normId: 'n1',
+          ownNorm: false,
+          basis: 'THICKNESS',
+          param: 15,
+          amount: 382.5,
+        },
+      ],
+    });
+    calculate.mockResolvedValue(answer({ materials: [plaster] }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+
+    // «30 м² × товщина 15 мм × 0,85 = 382,5» — the coefficient is per m² PER MM, so the millimetres
+    // have to be visible or the line reads as arithmetic that is off by an order of magnitude.
+    expect(screen.getByText(/товщина 15 мм.*×.*0,85.*=.*382,5/)).toBeTruthy();
+  });
+
+  /**
+   * The defect V137 found: `PAINT_COVERAGE` and `PAINT_COATS` existed in the schema from V126 and
+   * NOTHING read or offered them, so a master painting three coats got two coats' worth of paint on
+   * every estimate — silently.
+   */
+  it('asks the painter about his paint, and remembers it for every object', async () => {
+    calculate.mockResolvedValue(answer({ coverage: { trades: ['PAINTER'], otherWorks: false } }));
+    prefs.mockResolvedValue({ prefs: { PAINT_COATS: '3' } });
+    savePrefs.mockResolvedValue({ prefs: { PAINT_COATS: '3', PAINT_COVERAGE: '8' } });
+    renderPage();
+    fireEvent.click(await screen.findByText('Мої звички'));
+
+    expect(await screen.findByDisplayValue('3')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Фарба: м² з літра за один шар'), {
+      target: { value: '8' },
+    });
+    fireEvent.click(screen.getByText('Зберегти звички'));
+
+    // Every shown field is sent, blanks included — a blank FORGETS the habit server-side.
+    await waitFor(() =>
+      expect(savePrefs).toHaveBeenCalledWith({ prefs: { PAINT_COVERAGE: '8', PAINT_COATS: '3' } }),
+    );
+    // A habit rescales the coefficients, and rounding up to a package does not commute with
+    // scaling — so the answer is recomputed, same as the waste toggle and a corrected norm.
+    await waitFor(() => expect(calculate).toHaveBeenCalledTimes(2));
+  });
+
+  it('never hands a drywaller a question about paint', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByText('Мої звички'));
+
+    expect(await screen.findByLabelText(/Гіпсокартон: формат листа/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Фарба/)).toBeFalsy();
+    expect(screen.queryByLabelText(/Плитка/)).toBeFalsy();
   });
 });

@@ -7,6 +7,7 @@ import { CatalogPicker } from './CatalogPicker.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
+import type { BranchRow } from './catalogTree.ts';
 import { aUser } from '@/test/factories.ts';
 
 vi.mock('@/api/catalog.ts', () => ({
@@ -48,8 +49,8 @@ function renderPicker(props: Partial<Parameters<typeof CatalogPicker>[0]> = {}) 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  const onPick: (items: CatalogItemResponse[]) => Promise<void> =
-    props.onPick ?? vi.fn<(items: CatalogItemResponse[]) => Promise<void>>().mockResolvedValue(undefined);
+  const onPick: (items: BranchRow[]) => Promise<void> =
+    props.onPick ?? vi.fn<(items: BranchRow[]) => Promise<void>>().mockResolvedValue(undefined);
   render(<CatalogPicker {...props} onPick={onPick} />, { wrapper });
   return { onPick };
 }
@@ -268,5 +269,62 @@ describe('CatalogPicker — trade is the top level', () => {
     fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
     await waitFor(() => expect(onPick).toHaveBeenCalled());
     expect(vi.mocked(onPick).mock.calls[0][0].map((i) => i.id)).toEqual(['hatch']);
+  });
+});
+
+describe('CatalogPicker — the pick remembers which branch it came from', () => {
+  /**
+   * A position two trades both ship is stored once, under whichever claimed the name first (V118),
+   * and shown under both. Tapping the copy inside «Малярні роботи» has to say PAINTER, or the
+   * estimate line arrives filed under the other trade and drags its folder heading in with it —
+   * «якісь не зрозумілі категорії з плитки, гіпсокартону».
+   */
+  it('answers with the branch tapped, not with where the row is stored', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([
+      anItem({
+        id: 'shared',
+        name: 'Шпаклювання фінішне',
+        trade: 'DRYWALL',
+        category: 'Оздоблення під фарбування',
+        sharedTrades: [{ trade: 'PAINTER', category: 'Шпаклювання та шліфування' }],
+      }),
+      anItem({ id: 'p', name: 'Фарбування стін', trade: 'PAINTER', category: 'Фарбування' }),
+      anItem({ id: 'd', name: 'Монтаж каркаса', trade: 'DRYWALL', category: 'Каркас і обшивка' }),
+    ]);
+    const { onPick } = renderPicker();
+
+    const copies = await screen.findAllByText('Шпаклювання фінішне');
+    expect(copies).toHaveLength(2);
+    // The branches come out in the library's own order, painter's folder first here.
+    fireEvent.click(copies[0]);
+    fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
+
+    await waitFor(() => expect(onPick).toHaveBeenCalled());
+    const picked = vi.mocked(onPick).mock.calls[0][0];
+    expect(picked).toHaveLength(1);
+    expect(picked[0].id).toBe('shared');
+    expect(picked[0].filedUnder).toBe('PAINTER');
+  });
+
+  it('the other copy of the same row answers with the other branch', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([
+      anItem({
+        id: 'shared',
+        name: 'Шпаклювання фінішне',
+        trade: 'DRYWALL',
+        category: 'Оздоблення під фарбування',
+        sharedTrades: [{ trade: 'PAINTER', category: 'Шпаклювання та шліфування' }],
+      }),
+      anItem({ id: 'p', name: 'Фарбування стін', trade: 'PAINTER', category: 'Фарбування' }),
+      anItem({ id: 'd', name: 'Монтаж каркаса', trade: 'DRYWALL', category: 'Каркас і обшивка' }),
+    ]);
+    const { onPick } = renderPicker();
+
+    const copies = await screen.findAllByText('Шпаклювання фінішне');
+    fireEvent.click(copies[1]);
+    fireEvent.click(screen.getByRole('button', { name: /Додати 1/ }));
+
+    await waitFor(() => expect(onPick).toHaveBeenCalled());
+    expect(vi.mocked(onPick).mock.calls[0][0][0].filedUnder).toBe('DRYWALL');
   });
 });

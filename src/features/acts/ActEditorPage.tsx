@@ -96,6 +96,7 @@ export function ActEditorPage() {
   const newActUuid = useRef<string | null>(null);
 
   const signed = act.data?.status === 'SIGNED';
+  const sent = act.data?.status === 'SENT';
 
   // ---- header form + entered quantities (seeded once when data arrives) ----
   const [kind, setKind] = useState<WorkActKind>('INTERIM');
@@ -724,6 +725,7 @@ export function ActEditorPage() {
         </Section>
       ) : (
         <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+          sent={sent}
           queued={queued} onQueuedChanged={refreshQueued}
           toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
           showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />

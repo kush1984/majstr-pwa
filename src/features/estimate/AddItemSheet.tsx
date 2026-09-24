@@ -71,6 +71,10 @@ export function AddItemSheet({
                   catalogItemId: item.id,
                   quantity: 1,
                   sortOrder: nextSortOrder + i,
+                  // The branch he tapped it in. A position two trades both ship is stored once,
+                  // under whichever claimed the name first, so without this the line arrives filed
+                  // under the other trade — and carries its folder heading into the estimate.
+                  trade: item.filedUnder ?? undefined,
                 }));
                 await batch.mutateAsync(items);
                 onAdded?.(items.map((x) => x.id));

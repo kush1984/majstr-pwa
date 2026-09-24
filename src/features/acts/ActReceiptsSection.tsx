@@ -72,6 +72,7 @@ export function ActReceiptsSection({
   projectId,
   receipts,
   signed,
+  sent,
   queued,
   onQueuedChanged,
   toExpenses,
@@ -85,6 +86,9 @@ export function ActReceiptsSection({
    *  subtotal and the editor's «До сплати» can never disagree about what exists. */
   receipts: WorkActReceiptResponse[];
   signed: boolean;
+  /** The act is already with the client, who can tap «Підтвердити» at any second — which an
+   *  unpriced receipt refuses (B-28). A warning that names the consequence differs here. */
+  sent: boolean;
   /** The queued ones by id: they carry their photo as bytes and are corrected in the queue itself. */
   queued: Map<string, QueuedActReceipt>;
   /** An in-place queue edit changes no op COUNT, so the page has to be told to re-read. */
@@ -255,7 +259,7 @@ export function ActReceiptsSection({
 
       {unpriced > 0 && (
         <p className="mb-2 rounded-card border border-warning/40 bg-warning/10 p-2.5 text-xs text-secondary">
-          {t('acts.receiptsUnpricedSummary', { count: unpriced })}
+          {t(sent ? 'acts.receiptsUnpricedSent' : 'acts.receiptsUnpricedSummary', { count: unpriced })}
         </p>
       )}
 

@@ -109,7 +109,8 @@
   },
   "EstimateItemFromCatalogRequest": {
     "quantity": "number",
-    "sortOrder": "number?"
+    "sortOrder": "number?",
+    "trade": "string?"
   },
   "EstimateItemRequest": {
     "category": "string?",

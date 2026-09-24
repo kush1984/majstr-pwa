@@ -570,6 +570,11 @@ export interface EstimateItemRequest {
 export interface EstimateItemFromCatalogRequest {
   quantity: number;
   sortOrder?: number;
+  /** The trade whose FOLDER this position was tapped in. A position two trades both ship is
+   *  stored once (V118) and shown under both, so the row alone cannot say which work the line
+   *  is — the branch of the tree is the evidence. The server honours it only if the shipped
+   *  library files that exact name under that trade, and ignores it otherwise. */
+  trade?: Trade;
 }
 
 // ---------------------------------------------------------------------------
@@ -652,6 +657,10 @@ export interface BatchCatalogItemEntry {
    *  `X-Entity-Uuid` header, which cannot carry N ids. Makes a replayed offline batch
    *  idempotent PER LINE instead of duplicating the whole selection. */
   id?: string;
+  /** The branch of the picker tree this row was ticked in — see
+   *  {@link EstimateItemFromCatalogRequest.trade}. Per entry, because one multi-select can
+   *  span several branches. */
+  trade?: Trade;
 }
 
 // ---------------------------------------------------------------------------
@@ -1827,10 +1836,10 @@ export interface MaterialPrefsRequest {
 // ---------------------------------------------------------------------------
 
 /**
- * What `qtyPerUnit` multiplies: the line's own quantity, the room's perimeter, or — for a короб —
- * the length times the section the master typed (V131).
+ * What `qtyPerUnit` multiplies: the line's own quantity, the room's perimeter, the length times the
+ * section the master typed (V131), or the area times the layer thickness he typed (V137).
  */
-export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION';
+export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION' | 'THICKNESS';
 
 /**
  * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
@@ -1848,8 +1857,13 @@ export interface MaterialSourceLine {
   /** The coefficient is the master's own, not the shipped one. */
   ownNorm: boolean;
   basis: NormBasis;
-  /** The third factor of a SECTION row — «12 м.п. × переріз 0,4 м × 2,2» — absent elsewhere. */
-  section?: number | null;
+  /**
+   * The third factor of the two per-position bases, and `basis` says what unit it is in: METRES for
+   * a SECTION («12 м.п. × переріз 0,4 м × 2,2»), MILLIMETRES for a THICKNESS («20 м² × 15 мм ×
+   * 0,95»). Absent everywhere else. It is not called `section` any more (V137) — a field named
+   * after one of its two meanings is how a millimetre gets rendered as a metre.
+   */
+  param?: number | null;
   amount: number;
 }
 
@@ -1884,18 +1898,26 @@ export interface MaterialCoverage {
 }
 
 /**
- * A figure the estimate cannot supply and we refuse to guess: the room's `PERIMETER`, or a box's
- * `SECTION`. The perimeter is one number for the whole estimate, so it carries no position; a
- * section belongs to ONE position (two boxes in one estimate genuinely differ), so it names it and
- * the screen asks once per position rather than once per material.
+ * A figure the estimate cannot supply and we refuse to guess: the room's `PERIMETER`, a box's
+ * `SECTION`, or a layer's `THICKNESS` in millimetres (V137). The perimeter is one number for the
+ * whole estimate, so it carries no position; the other two belong to ONE position (two boxes in one
+ * estimate genuinely differ, and «штукатурка до 2 см» is a bound and not a thickness), so each
+ * names it and the screen asks once per position rather than once per material.
  */
 export interface MissingParameter {
-  /** `PERIMETER` or `SECTION`; open as a string so a third parameter is not a breaking change. */
+  /** `PERIMETER`, `SECTION` or `THICKNESS`; a string so a fourth is not a breaking change. */
   parameter: string;
   materialName: string;
-  /** Set for `SECTION`, absent for `PERIMETER`. */
+  /** Set for `SECTION` and `THICKNESS`, absent for `PERIMETER`. */
   estimateItemId?: string | null;
   positionName?: string | null;
+  /**
+   * The figure the norm suggests, in the parameter's own unit (V137). It is PRE-FILLED into the
+   * field and never applied silently: a number the master can see and overwrite is an answer, a
+   * number applied behind his back is a guess wearing our name. A `SECTION` carries none — a
+   * короб's розгортка has no honest default.
+   */
+  suggested?: number | null;
 }
 
 export interface MaterialCalculationResponse {
@@ -1906,6 +1928,10 @@ export interface MaterialCalculationResponse {
   perimeter?: number | null;
   /** The estimate behind these figures is signed, so the quantities have stopped moving. */
   estimateSigned: boolean;
+  /** There IS work here we could answer for — nothing carries a quantity yet. The ordinary state
+   *  of an estimate straight out of a bundle, and a different sentence from «we know no norms
+   *  for this work». Optional: an older backend does not send it. */
+  quantitiesMissing?: boolean;
 }
 
 /** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */

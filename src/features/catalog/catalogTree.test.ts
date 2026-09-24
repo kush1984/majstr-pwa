@@ -124,3 +124,43 @@ describe('toTradeTree — trade is a level, and it says which folder belongs to 
     ]);
   });
 });
+
+describe('toTradeTree — every row remembers the branch it is shown in', () => {
+  const rowsOf = (tree: ReturnType<typeof toTradeTree>) =>
+    tree.flatMap((b) => b.sections.flatMap((s) => s.items.map((i) => [b.key, i.id, i.filedUnder])));
+
+  /**
+   * A shared position is stored once, under whichever trade claimed the name first (V118), and is
+   * shown under every trade that ships it. Which COPY was tapped is the only evidence of which
+   * work the master meant — the server files the estimate line by it, so the two copies must not
+   * answer the same thing.
+   */
+  it('a shared position answers with the branch, not with where it is stored', () => {
+    const tree = toTradeTree([
+      item({
+        id: 'shared',
+        trade: 'DRYWALL',
+        category: 'Оздоблення під фарбування',
+        categoryOrder: 30,
+        sharedTrades: [{ trade: 'PAINTER', category: 'Шпаклювання та шліфування', categoryOrder: 15 }],
+      }),
+      item({ id: 'anchor', trade: 'PAINTER', category: 'Фарбування', categoryOrder: 20 }),
+    ]);
+
+    expect(rowsOf(tree)).toEqual(
+      expect.arrayContaining([
+        ['DRYWALL', 'shared', 'DRYWALL'],
+        ['PAINTER', 'shared', 'PAINTER'],
+      ]),
+    );
+  });
+
+  /** A custom trade has no enum value to send, and needs none — the row is his own filing. */
+  it('a custom-trade branch answers null', () => {
+    const tree = toTradeTree([
+      item({ id: 'c', trade: 'OTHER', customTradeId: 'ct1', customTradeName: 'Каміни' }),
+    ]);
+
+    expect(rowsOf(tree)).toEqual([['custom:ct1', 'c', null]]);
+  });
+});

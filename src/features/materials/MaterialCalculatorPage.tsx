@@ -19,6 +19,13 @@ import type {
   MissingParameter,
 } from '@/api/types.ts';
 
+/** One position waiting for a figure only the master knows, and the number we would suggest. */
+interface AskedPosition {
+  estimateItemId: string;
+  name: string;
+  suggested?: number | null;
+}
+
 /**
  * «Скільки матеріалу купити» — the estimate's works read as a buying list (V127).
  *
@@ -44,17 +51,39 @@ import type {
 const WASTE_STEPS = [5, 10, 15];
 
 /**
- * A metre figure the master typed, or null when what he typed is not one.
+ * A figure the master typed, or null when what he typed is not one — metres for a perimeter or a
+ * розгортка, millimetres for a layer thickness.
  *
  * <p>«abc» parses to NaN, and NaN used to be applied and sent — the server answers 400, so the
  * screen blamed the connection for a typo and offered nothing to fix. The upper bound is a sanity
- * check rather than a rule of building: no room on this screen is a kilometre around, and a stray
- * extra digit is the mistake it actually catches.</p>
+ * check rather than a rule of building: no room on this screen is a kilometre around and no layer
+ * is a metre thick, and a stray extra digit is the mistake it actually catches. One bound serves
+ * both units because it is that stray digit it is looking for, not a building code.</p>
  */
-const MAX_METRES = 1000;
-function metres(raw: string): number | null {
+const MAX_FIGURE = 1000;
+function figure(raw: string): number | null {
   const value = parseDecimal(raw);
-  return Number.isFinite(value) && value > 0 && value <= MAX_METRES ? value : null;
+  return Number.isFinite(value) && value > 0 && value <= MAX_FIGURE ? value : null;
+}
+
+/**
+ * The positions still waiting on one kind of figure, one entry per POSITION rather than per
+ * material: a короб's board and its ribs share one розгортка, and every layer of one plastered wall
+ * is the same thickness — but a короб and a ніша in the same estimate are different boxes, and
+ * «штукатурка стін» and «стяжка підлоги» are different thicknesses, so each is asked separately.
+ */
+function askedPositions(parameters: MissingParameter[], kind: string): AskedPosition[] {
+  const byPosition = new Map<string, AskedPosition>();
+  for (const p of parameters) {
+    if (p.parameter !== kind || !p.estimateItemId) continue;
+    if (byPosition.has(p.estimateItemId)) continue;
+    byPosition.set(p.estimateItemId, {
+      estimateItemId: p.estimateItemId,
+      name: p.positionName ?? '',
+      suggested: p.suggested,
+    });
+  }
+  return [...byPosition.values()];
 }
 
 /**
@@ -85,12 +114,16 @@ export function MaterialCalculatorPage() {
   const [sectionInputs, setSectionInputs] = useState<Record<string, string>>({});
   const [sectionErrors, setSectionErrors] = useState<Record<string, boolean>>({});
   const [sections, setSections] = useState<string | undefined>(undefined);
+  const [thicknessInputs, setThicknessInputs] = useState<Record<string, string>>({});
+  const [thicknessErrors, setThicknessErrors] = useState<Record<string, boolean>>({});
+  const [thicknesses, setThicknesses] = useState<string | undefined>(undefined);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
 
   const calc = useQuery({
-    queryKey: ['materials', id, waste, perimeter ?? null, sections ?? null],
-    queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter, sections }),
+    queryKey: ['materials', id, waste, perimeter ?? null, sections ?? null, thicknesses ?? null],
+    queryFn: () =>
+      materialsApi.calculate(id, { wastePercent: waste, perimeter, sections, thicknesses }),
     enabled: Boolean(id),
     // Every parameter change is a NEW key, so the whole screen used to collapse into a full-page
     // spinner — controls, figures and all — on each tap of the waste steps. Keeping the last answer
@@ -100,7 +133,7 @@ export function MaterialCalculatorPage() {
 
   // The server re-rounds on every parameter change, so a figure typed against the old numbers
   // would silently claim to be «what the master left on the screen». Drop the overrides instead.
-  useEffect(() => setEdited({}), [waste, perimeter, sections]);
+  useEffect(() => setEdited({}), [waste, perimeter, sections, thicknesses]);
 
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
@@ -115,16 +148,29 @@ export function MaterialCalculatorPage() {
   const parameters = useMemo(() => data?.parameters ?? askedFor, [data, askedFor]);
   const needsPerimeter = parameters.some((p) => p.parameter === 'PERIMETER');
 
-  // One input per POSITION, not per material: a короб's board and its ribs share one розгортка, but
-  // a короб and a ніша in the same estimate are different boxes and are asked for separately.
-  const sectionPositions = useMemo(() => {
-    const byPosition = new Map<string, string>();
-    for (const p of parameters) {
-      if (p.parameter !== 'SECTION' || !p.estimateItemId) continue;
-      if (!byPosition.has(p.estimateItemId)) byPosition.set(p.estimateItemId, p.positionName ?? '');
-    }
-    return [...byPosition].map(([estimateItemId, name]) => ({ estimateItemId, name }));
-  }, [parameters]);
+  const sectionPositions = useMemo(() => askedPositions(parameters, 'SECTION'), [parameters]);
+  const thicknessPositions = useMemo(() => askedPositions(parameters, 'THICKNESS'), [parameters]);
+
+  /*
+   * The suggestion is PRE-FILLED and not applied (V137). «Штукатурка стін (до 2 см)» names a bound
+   * and not a thickness, and 15 мм against 20 мм is a third of the plaster — so the field opens
+   * with our number visible, sitting under his thumb, and he taps «Порахувати» to make it his. A
+   * default applied behind his back would be a guess wearing his name on a shopping list.
+   *
+   * A field he has touched is never refilled, an emptied one included: «» is an answer.
+   */
+  useEffect(() => {
+    setThicknessInputs((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const p of thicknessPositions) {
+        if (p.suggested == null || prev[p.estimateItemId] !== undefined) continue;
+        next[p.estimateItemId] = String(p.suggested);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [thicknessPositions]);
 
   const applyPerimeter = () => {
     const raw = perimeterInput.trim();
@@ -133,7 +179,7 @@ export function MaterialCalculatorPage() {
       setPerimeter(undefined);
       return;
     }
-    const value = metres(raw);
+    const value = figure(raw);
     if (value == null) {
       setPerimeterError(true);
       return;
@@ -142,22 +188,26 @@ export function MaterialCalculatorPage() {
     setPerimeter(value);
   };
 
-  // Each box answers for itself: one left blank keeps asking rather than borrowing a neighbour's.
-  // An UNREADABLE box is not a blank one, though the old filter treated them alike and dropped it
-  // — the card just kept asking, with nothing on screen saying why. Nothing is sent until every
-  // figure actually typed is a figure.
-  const applySections = () => {
+  // Each position answers for itself: one left blank keeps asking rather than borrowing a
+  // neighbour's. An UNREADABLE field is not a blank one, though the old filter treated them alike
+  // and dropped it — the card just kept asking, with nothing on screen saying why. Nothing is sent
+  // until every figure actually typed is a figure.
+  const applyPerPosition = (
+    inputs: Record<string, string>,
+    setErrors: (errors: Record<string, boolean>) => void,
+    setValue: (value: string | undefined) => void,
+  ) => {
     const errors: Record<string, boolean> = {};
     const entries: string[] = [];
-    for (const [itemId, raw] of Object.entries(sectionInputs)) {
+    for (const [itemId, raw] of Object.entries(inputs)) {
       if (raw.trim() === '') continue;
-      const value = metres(raw);
+      const value = figure(raw);
       if (value == null) errors[itemId] = true;
       else entries.push(`${itemId}:${value}`);
     }
-    setSectionErrors(errors);
+    setErrors(errors);
     if (Object.keys(errors).length > 0) return;
-    setSections(entries.length > 0 ? entries.join(',') : undefined);
+    setValue(entries.length > 0 ? entries.join(',') : undefined);
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -287,50 +337,35 @@ export function MaterialCalculatorPage() {
           </div>
         )}
 
-        {sectionPositions.length > 0 && (
-          <div className="mb-4 rounded-card border border-border bg-surface p-3">
-            <p className="text-sm font-semibold text-primary">{t('materials.sectionTitle')}</p>
-            <p className="mt-1 text-xs text-muted">{t('materials.sectionHint')}</p>
-            <div className="mt-2 space-y-2">
-              {sectionPositions.map((p) => (
-                <div key={p.estimateItemId}>
-                  <label
-                    htmlFor={`section-${p.estimateItemId}`}
-                    className="mb-1 block text-xs font-medium text-muted"
-                  >
-                    {p.name}
-                  </label>
-                  <Input
-                    id={`section-${p.estimateItemId}`}
-                    inputMode="decimal"
-                    value={sectionInputs[p.estimateItemId] ?? ''}
-                    onChange={(e) =>
-                      setSectionInputs((prev) => ({
-                        ...prev,
-                        [p.estimateItemId]: e.target.value,
-                      }))
-                    }
-                    placeholder={t('materials.sectionLabel')}
-                    aria-invalid={sectionErrors[p.estimateItemId] || undefined}
-                    aria-describedby={
-                      sectionErrors[p.estimateItemId]
-                        ? `section-${p.estimateItemId}-error`
-                        : undefined
-                    }
-                  />
-                  {sectionErrors[p.estimateItemId] && (
-                    <p id={`section-${p.estimateItemId}-error`} className="mt-1 text-xs text-danger">
-                      {t('materials.badNumber')}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-            <Button variant="secondary" fullWidth className="mt-2" onClick={applySections}>
-              {t('materials.sectionApply')}
-            </Button>
-          </div>
-        )}
+        <PerPositionAsk
+          idPrefix="section"
+          positions={sectionPositions}
+          inputs={sectionInputs}
+          errors={sectionErrors}
+          onInput={(itemId, value) => setSectionInputs((prev) => ({ ...prev, [itemId]: value }))}
+          onApply={() => applyPerPosition(sectionInputs, setSectionErrors, setSections)}
+          title={t('materials.sectionTitle')}
+          hint={t('materials.sectionHint')}
+          placeholder={t('materials.sectionLabel')}
+          apply={t('materials.sectionApply')}
+          note={t('materials.sectionSuggested')}
+        />
+
+        <PerPositionAsk
+          idPrefix="thickness"
+          positions={thicknessPositions}
+          inputs={thicknessInputs}
+          errors={thicknessErrors}
+          onInput={(itemId, value) => setThicknessInputs((prev) => ({ ...prev, [itemId]: value }))}
+          onApply={() => applyPerPosition(thicknessInputs, setThicknessErrors, setThicknesses)}
+          title={t('materials.thicknessTitle')}
+          hint={t('materials.thicknessHint')}
+          placeholder={t('materials.thicknessLabel')}
+          apply={t('materials.thicknessApply')}
+          note={t('materials.thicknessSuggested')}
+        />
+
+        {!calc.isError && data && <Habits trades={data.coverage.trades} onSaved={afterNormChange} />}
 
         <div className="mb-4 rounded-card border border-border bg-surface p-3">
           <p className="text-sm font-semibold text-primary">{t('materials.wasteTitle')}</p>
@@ -353,8 +388,19 @@ export function MaterialCalculatorPage() {
           </div>
         </div>
 
+        {/* Two very different sentences behind one empty screen. An estimate straight out of a
+            bundle has every quantity at zero, and telling him we know no norms for his work would
+            be plainly false — he would go looking for a bug that is not there. */}
         {!calc.isError && materials.length === 0 && (
-          <EmptyState icon="🧮" title={t('materials.emptyTitle')} text={t('materials.emptyText')} />
+          calc.data?.quantitiesMissing ? (
+            <EmptyState
+              icon="✏️"
+              title={t('materials.needQuantitiesTitle')}
+              text={t('materials.needQuantitiesText')}
+            />
+          ) : (
+            <EmptyState icon="🧮" title={t('materials.emptyTitle')} text={t('materials.emptyText')} />
+          )
         )}
 
         {materials.length > 0 && (
@@ -392,6 +438,198 @@ export function MaterialCalculatorPage() {
               🛒 {t('materials.toShoppingList')}
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One card asking the same question of several positions — a розгортка in metres (V131), a layer
+ * thickness in millimetres (V137). One card and not two components, because the two asks differ
+ * only in their wording and their unit, and a screen that asks both must ask them the same way.
+ *
+ * The card renders nothing when nothing is waiting on it, so the common estimate sees neither.
+ */
+function PerPositionAsk({
+  idPrefix,
+  positions,
+  inputs,
+  errors,
+  onInput,
+  onApply,
+  title,
+  hint,
+  placeholder,
+  apply,
+  note,
+}: {
+  idPrefix: string;
+  positions: AskedPosition[];
+  inputs: Record<string, string>;
+  errors: Record<string, boolean>;
+  onInput: (estimateItemId: string, value: string) => void;
+  onApply: () => void;
+  title: string;
+  hint: string;
+  placeholder: string;
+  apply: string;
+  note?: string;
+}) {
+  const { t } = useTranslation();
+  if (positions.length === 0) return null;
+  const suggested = positions.some((p) => p.suggested != null);
+
+  return (
+    <div className="mb-4 rounded-card border border-border bg-surface p-3">
+      <p className="text-sm font-semibold text-primary">{title}</p>
+      <p className="mt-1 text-xs text-muted">{hint}</p>
+      <div className="mt-2 space-y-2">
+        {positions.map((p) => {
+          const fieldId = `${idPrefix}-${p.estimateItemId}`;
+          return (
+            <div key={p.estimateItemId}>
+              <label htmlFor={fieldId} className="mb-1 block text-xs font-medium text-muted">
+                {p.name}
+              </label>
+              <Input
+                id={fieldId}
+                inputMode="decimal"
+                value={inputs[p.estimateItemId] ?? ''}
+                onChange={(e) => onInput(p.estimateItemId, e.target.value)}
+                placeholder={placeholder}
+                aria-invalid={errors[p.estimateItemId] || undefined}
+                aria-describedby={errors[p.estimateItemId] ? `${fieldId}-error` : undefined}
+              />
+              {errors[p.estimateItemId] && (
+                <p id={`${fieldId}-error`} className="mt-1 text-xs text-danger">
+                  {t('materials.badNumber')}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Our number is in the field, so the screen says out loud that it is ours. */}
+      {note && suggested && <p className="mt-2 text-[11px] text-muted">{note}</p>}
+      <Button variant="secondary" fullWidth className="mt-2" onClick={onApply}>
+        {apply}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * «Мої звички» — the two answers that are true of the MASTER and not of the object (V137).
+ *
+ * Paint coverage × coats rescales every paint figure; the joint width rescales the grout. They are
+ * habits, so they are asked once and remembered — and they were the real defect V137 found: the
+ * keys existed in the schema since V126 and NOTHING read them, so a master painting three coats got
+ * two coats' worth of paint on every estimate, silently, with a settings row that looked answered.
+ *
+ * Folded shut by default and shown only for the trades ON THIS ESTIMATE: a drywaller must not be
+ * handed a paint question, and a screen he has to scroll past four irrelevant fields to reach is a
+ * screen he stops opening.
+ */
+function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+
+  const prefs = useQuery({
+    queryKey: ['material-prefs'],
+    queryFn: () => materialsApi.prefs(),
+    enabled: open,
+  });
+
+  const stored = prefs.data?.prefs;
+  useEffect(() => {
+    if (stored) setDraft({ ...stored });
+  }, [stored]);
+
+  const save = useMutation({
+    // Every field this card shows is sent, blanks included: a blank FORGETS the habit server-side,
+    // so omitting a cleared field would quietly keep the number he just deleted.
+    mutationFn: (values: Record<string, string>) => materialsApi.savePrefs({ prefs: values }),
+    onSuccess: (answer) => {
+      setDraft({ ...answer.prefs });
+      void qc.setQueryData(['material-prefs'], answer);
+      toast.success(t('materials.habitsSaved'));
+      onSaved();
+    },
+    onError: () => toast.error(t('materials.habitsFailed')),
+  });
+
+  const fields = [
+    ...(trades.includes('PAINTER')
+      ? [
+          { key: 'PAINT_COVERAGE', label: t('materials.habitCoverage') },
+          { key: 'PAINT_COATS', label: t('materials.habitCoats') },
+        ]
+      : []),
+    ...(trades.includes('TILING') ? [{ key: 'TILE_JOINT_MM', label: t('materials.habitJoint') }] : []),
+    ...(trades.includes('DRYWALL') ? [{ key: 'GKL_SHEET', label: t('materials.habitSheet') }] : []),
+  ];
+  if (fields.length === 0) return null;
+
+  const value = (key: string) => draft?.[key] ?? '';
+
+  return (
+    <div className="mb-4 rounded-card border border-border bg-surface p-3">
+      <button
+        type="button"
+        onClick={() => setOpen((cur) => !cur)}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="text-sm font-semibold text-primary">{t('materials.habitsTitle')}</span>
+        <span className="text-xs text-muted">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="mt-2">
+          <p className="text-xs text-muted">{t('materials.habitsHint')}</p>
+          {prefs.isLoading ? (
+            <div className="py-3">
+              <Spinner />
+            </div>
+          ) : (
+            <>
+              <div className="mt-2 space-y-2">
+                {fields.map((f) => (
+                  <div key={f.key}>
+                    <label
+                      htmlFor={`habit-${f.key}`}
+                      className="mb-1 block text-xs font-medium text-muted"
+                    >
+                      {f.label}
+                    </label>
+                    <Input
+                      id={`habit-${f.key}`}
+                      inputMode={f.key === 'GKL_SHEET' ? 'text' : 'decimal'}
+                      value={value(f.key)}
+                      onChange={(e) =>
+                        setDraft((prev) => ({ ...(prev ?? {}), [f.key]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="secondary"
+                fullWidth
+                className="mt-2"
+                loading={save.isPending}
+                disabled={save.isPending}
+                onClick={() =>
+                  save.mutate(Object.fromEntries(fields.map((f) => [f.key, value(f.key)])))
+                }
+              >
+                {t('materials.habitsSave')}
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -558,12 +796,18 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
 
   const quantity = `${formatNumber(source.quantity, 3)} ${t('units.' + source.unit)}`;
   const basis = source.basis === 'PERIMETER' ? ` (${t('materials.perimeterSource')})` : '';
-  // The section is shown as its own factor, so a mistyped розгортка is visibly wrong here rather
-  // than hidden inside a total — it is the one figure on this row the estimate could not supply.
-  const section =
-    source.basis === 'SECTION' && source.section != null
-      ? ` × ${t('materials.sectionSource', { value: formatNumber(source.section, 3) })}`
-      : '';
+  // The master's own figure is shown as its own factor, so a mistyped розгортка or a thickness left
+  // at our suggestion is visibly wrong here rather than hidden inside a total — it is the one
+  // number on this row the estimate could not supply. `basis` decides the unit: a millimetre
+  // rendered as a metre is the mistake the server-side rename of this field was guarding against.
+  const param =
+    source.param == null
+      ? ''
+      : source.basis === 'SECTION'
+        ? ` × ${t('materials.sectionSource', { value: formatNumber(source.param, 3) })}`
+        : source.basis === 'THICKNESS'
+          ? ` × ${t('materials.thicknessSource', { value: formatNumber(source.param, 3) })}`
+          : '';
   const busy = save.isPending || restore.isPending;
 
   const submit = () => {
@@ -580,7 +824,7 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
       <p className="text-xs text-muted">
         {source.name ?? ''}
         {basis}: {quantity}
-        {section} × {formatNumber(source.qtyPerUnit, 3)} ={' '}
+        {param} × {formatNumber(source.qtyPerUnit, 3)} ={' '}
         {formatNumber(source.amount, 3)}
         {source.ownNorm && (
           <span className="ml-1 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-medium text-brand-700">

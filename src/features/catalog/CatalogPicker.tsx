@@ -12,8 +12,8 @@ import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { useCatalog } from './useCatalog.ts';
 import { TradeLevel } from './TradeLevel.tsx';
-import { toTradeTree, type TradeBranch } from './catalogTree.ts';
-import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
+import { toTradeTree, type BranchRow, type TradeBranch } from './catalogTree.ts';
+import type { CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
 
 type TypeFilter = ItemType | 'ALL';
 
@@ -77,7 +77,7 @@ export function CatalogPicker({
   /** Perform the write. The caller maps catalog items to its own payload (an estimate line, a
    *  template item, an additional work); everything around it — busy state, the error toast, the
    *  success toast, clearing the basket — lives here so the callers cannot drift on it. */
-  onPick: (items: CatalogItemResponse[]) => Promise<void>;
+  onPick: (items: BranchRow[]) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -115,15 +115,26 @@ export function CatalogPicker({
   const toggleOpen = (key: string, fallback: boolean) =>
     setOpenState((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
-  const toggle = (id: string) =>
+  // Which BRANCH each ticked row was ticked in, beside the tick itself. A shared position appears
+  // under every trade that ships it, so the row alone cannot say which work the master meant —
+  // and the server files the estimate line by that answer. Kept separate from `selected` so the
+  // sub-components keep asking a plain Set the plain question.
+  const [branchOf, setBranchOf] = useState<Map<string, Trade | null>>(new Map());
+
+  const toggle = (item: BranchRow) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
       return next;
     });
+    // Remembered on tick and never cleared on untick: the row is gone from the basket anyway, and
+    // a stale entry answers about a row nothing will read. Re-ticking in another branch overwrites
+    // it, which is the only case where the answer changes.
+    setBranchOf((was) => new Map(was).set(item.id, item.filedUnder));
+  };
 
-  const run = async (items: CatalogItemResponse[], announce: boolean) => {
+  const run = async (items: BranchRow[], announce: boolean) => {
     if (items.length === 0 || busy) return;
     setBusy(true);
     try {
@@ -144,7 +155,12 @@ export function CatalogPicker({
   // Added from the WHOLE catalog, not from `filtered`: a tick survives a filter change (the basket
   // count says so, and nothing on screen unticks it), so filtering by it dropped positions the
   // master had already chosen — silently, with the button still promising them.
-  const addSelected = () => run((data ?? []).filter((i) => selected.has(i.id)), true);
+  const addSelected = () => run(
+    (data ?? [])
+      .filter((i) => selected.has(i.id))
+      .map((i) => ({ ...i, filedUnder: branchOf.get(i.id) ?? null })),
+    true,
+  );
 
   return (
     <div>
@@ -191,7 +207,7 @@ export function CatalogPicker({
               blocked={blocked}
               single={single}
               busy={busy}
-              onRow={(item) => (single ? void run([item], false) : toggle(item.id))}
+              onRow={(item) => (single ? void run([item], false) : toggle(item))}
             />
           ))
         )}
@@ -240,7 +256,7 @@ function TradeBranchNode({
   blocked: ReadonlySet<string>;
   single?: boolean;
   busy: boolean;
-  onRow: (item: CatalogItemResponse) => void;
+  onRow: (item: BranchRow) => void;
 }) {
   const picked = branch.sections.reduce(
     (n, s) => n + s.items.filter((i) => selected.has(i.id)).length,
@@ -297,7 +313,7 @@ function CategoryFolder({
   onRow,
 }: {
   category: string;
-  items: CatalogItemResponse[];
+  items: BranchRow[];
   open: boolean;
   /** Absent while searching — the header stays as a label, see the picker's doc. */
   onToggle?: () => void;
@@ -305,7 +321,7 @@ function CategoryFolder({
   blocked: ReadonlySet<string>;
   single?: boolean;
   busy: boolean;
-  onRow: (item: CatalogItemResponse) => void;
+  onRow: (item: BranchRow) => void;
 }) {
   const { t } = useTranslation();
   const name = category === '' ? t('catalog.noCategory') : category;

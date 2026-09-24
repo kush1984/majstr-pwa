@@ -4,6 +4,7 @@ import { newUuid } from '@/lib/uuid.ts';
 import { track } from '@/lib/posthog.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
+import { MATERIALS_AVAILABILITY_KEY } from '@/features/materials/useMaterialsAvailability.ts';
 import type {
   BatchCatalogItemEntry,
   CatalogItemResponse,
@@ -133,6 +134,11 @@ export function useInvalidateEstimate(estimateId: string) {
     // object economy is derived from estimate totals + deposits — refresh it too
     // (deposit or item edits must recompute contracted / received / cash live).
     void qc.invalidateQueries({ queryKey: ['object-economy'] });
+    // Whether «Матеріали» is offered depends on WHICH positions the estimate holds, so adding or
+    // removing one can change the answer. Nothing invalidated this before: a «no» cached while the
+    // estimate was still empty outlived every line the master then added, and the button stayed
+    // away until the page was left and reopened a minute later.
+    void qc.invalidateQueries({ queryKey: MATERIALS_AVAILABILITY_KEY(estimateId) });
   };
 }
 
@@ -284,7 +290,7 @@ export function useAddItemsFromCatalogBatch(estimateId: string) {
 function patchEstimateWithCatalogLines(
   qc: QueryClient,
   estimateId: string,
-  entries: { id: string; catalogItemId: string; quantity: number; sortOrder?: number }[],
+  entries: (BatchCatalogItemEntry & { id: string })[],
 ): void {
   const catalog = qc.getQueryData<CatalogItemResponse[]>([...CATALOG_KEY, 'list', 'all']) ?? [];
   patchEstimate(qc, estimateId, (items) => {
@@ -293,11 +299,16 @@ function patchEstimateWithCatalogLines(
       // Not in the cached catalog (never prefetched, or added on another device) — skip the
       // preview rather than invent a line; the server still adds it correctly on replay.
       if (!src) return [];
+      // The folder of the BRANCH it was picked in, which is what the server will file it under.
+      // Reading `src.category` alone showed the other trade's heading for the moment between the
+      // tap and the refetch — the very heading this round exists to stop appearing.
+      const branch = e.trade ? src.sharedTrades?.find((s) => s.trade === e.trade) : undefined;
       return [{
         id: e.id,
         type: src.type,
         name: src.name,
-        category: src.category,
+        category: branch?.category ?? src.category,
+        trade: e.trade ?? src.trade,
         unit: src.unit,
         quantity: e.quantity,
         unitPrice: src.defaultPrice,
