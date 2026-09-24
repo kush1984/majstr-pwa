@@ -148,11 +148,10 @@ export async function prefetchForOffline(
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: economyKeys.economy(p.id), queryFn: () => economyApi.economy(p.id) }));
     if (opts.isPro) {
-      // Measurements + the expense journal stay PRO-gated — prefetching them on FREE would just 403.
+      // Measurements stay PRO-gated — prefetching them on FREE would just 403. The expense journal
+      // used to be warmed here too; nothing in the app reads it any more (crew-margin iteration).
       perProject.push(() =>
         qc.prefetchQuery({ queryKey: MEASUREMENTS_KEY(p.id), queryFn: () => measurementsApi.tree(p.id) }));
-      perProject.push(() =>
-        qc.prefetchQuery({ queryKey: economyKeys.expenses(p.id), queryFn: () => economyApi.listExpenses(p.id) }));
     }
   }
   total += perProject.length;

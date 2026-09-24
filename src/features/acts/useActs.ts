@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
+import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
 import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
@@ -15,6 +16,7 @@ const progressKey = (projectId: string) => ['act-progress', projectId] as const;
 
 export function useActs(projectId: string) {
   return useQuery({
+    ...CLIENT_DRIVEN_QUERY,
     queryKey: actsKey(projectId),
     queryFn: () => actsApi.list(projectId),
     enabled: Boolean(projectId),

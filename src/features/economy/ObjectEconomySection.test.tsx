@@ -147,7 +147,7 @@ describe('ObjectEconomySection', () => {
     expect(screen.queryByText(/у PRO$/)).toBeNull(); // no lock teaser
   });
 
-  it('PRO: shows the summary panel and payments, but Прибуток/Витрати stays parked', async () => {
+  it('PRO: shows the summary panel and payments, and «Заробіток» is gone for good', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({ pro: { expenses: 3500, profit: 10500 } }));
 
     renderSection('PRO');
@@ -164,6 +164,85 @@ describe('ObjectEconomySection', () => {
     expect(economyApi.listExpenses).not.toHaveBeenCalled();
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
+  });
+
+  /**
+   * The percent beside the amount is the one the master TYPED, not one derived from the wrong
+   * base. «Знижка 15 %» on works of 31 829 ₴ used to print as «14,776%», because the client
+   * divided 4 774 by works+materials while the line is measured against works alone.
+   */
+  it('prints the discount percent the master typed, not one derived from the wrong base', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({
+        works: 31829, materials: 483, discount: -4774, markup: 0,
+        discountRate: -15, total: 27538,
+      })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+
+    renderSection('PRO');
+
+    expect(await screen.findByText(/Знижка 15/)).toBeTruthy();
+    expect(screen.queryByText(/14,77/)).toBeNull();
+  });
+
+  /** Several «% від кошторису» lines at different percents: the amount alone, never a blend. */
+  it('shows the amount alone when the server sends no rate', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({ works: 31829, materials: 483, discount: -4774, markup: 0, total: 27538 })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+
+    renderSection('PRO');
+
+    // The panel and the «Загалом по підписаних» summary both render a recap line; neither may
+    // invent a percent.
+    const lines = await screen.findAllByText(/Знижка/);
+    expect(lines).not.toHaveLength(0);
+    lines.forEach((line) => expect(line.textContent).not.toMatch(/%/));
+  });
+
+  it('a marked-up copy shows «Бригаді / Твоя націнка», and it is not a profit figure', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({
+        crewMargin: { crewTotal: 20000, margin: 4000, marginAccepted: 0, unpricedCount: 0, unpricedTotal: 0 },
+      })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+
+    renderSection('PRO');
+
+    expect(await screen.findByText('Бригаді')).toBeTruthy();
+    expect(screen.getByText('Твоя націнка')).toBeTruthy();
+    // The caption is the whole point: it is a difference between two prices, not an earning.
+    expect(screen.getByText(/Матеріали, пальне й інше сюди не входять/)).toBeTruthy();
+    // Nothing accepted yet — the act line stays off rather than showing a zero.
+    expect(screen.queryByText('з прийнятого актами')).toBeNull();
+  });
+
+  it('names the lines that carry no crew price instead of inflating the margin', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({
+        crewMargin: { crewTotal: 20000, margin: 4000, marginAccepted: 1600, unpricedCount: 2, unpricedTotal: 5000 },
+      })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+
+    renderSection('PRO');
+
+    expect(await screen.findByText('з прийнятого актами')).toBeTruthy();
+    expect(screen.getByText(/додано без ціни бригади/)).toBeTruthy();
+  });
+
+  it('an ordinary estimate shows no crew figures at all', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({ estimates: [panel()], pro: { expenses: 0, profit: 0 } }));
+
+    renderSection('PRO');
+
+    await screen.findByText('Загалом по підписаних');
+    expect(screen.queryByText('Бригаді')).toBeNull();
+    expect(screen.queryByText('Твоя націнка')).toBeNull();
   });
 
   it('nothing signed yet: the block stands down its zero figures but KEEPS «+ Платіж» — an advance comes first', async () => {
@@ -275,11 +354,11 @@ describe('ObjectEconomySection', () => {
     expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('e1'));
   });
 
-  it('the act card shows a discount/markup recap with a derived percent', async () => {
-    // works/materials are gross (pre-adjustment) — base = works 8000 + materials 2000 = 10000;
-    // 1500/10000 = 15%. total = works + materials + markup + discount = 8000+2000+0-1500 = 8500.
+  it('the act card shows a discount/markup recap at the percent the server sent', async () => {
+    // The percent is no longer derived here: a «% від кошторису» line is measured against its own
+    // TYPE subtotal, and dividing by works+materials is what printed «14,776%» for a 15 % discount.
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      estimates: [panel({ works: 8000, materials: 2000, markup: 0, discount: -1500, total: 8500 })],
+      estimates: [panel({ works: 8000, materials: 2000, markup: 0, discount: -1500, discountRate: -15, total: 8500 })],
     }));
 
     renderSection('FREE');

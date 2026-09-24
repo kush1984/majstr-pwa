@@ -10,11 +10,11 @@ import { formatMoneyExact, formatDate } from '@/lib/format.ts';
 import type { CashEntryResponse, CashMonthTotal } from '@/api/types.ts';
 import { AddCashSheet } from './AddCashSheet.tsx';
 import {
-  cashPeriod, monthPeriod, useCashActions, useCashFlow,
+  cashPeriod, customPeriod, monthPeriod, useCashActions, useCashFlow,
   type CashPeriod, type CashPeriodKind,
 } from './useCash.ts';
 
-const TABS: CashPeriodKind[] = ['WEEK', 'MONTH', 'YEAR'];
+const TABS: CashPeriodKind[] = ['WEEK', 'MONTH', 'YEAR', 'CUSTOM'];
 
 /**
  * «Мої гроші» — the master's own cash movement, across every object and beside them.
@@ -39,6 +39,11 @@ export function CashFlowPage() {
   // navigation state and the screen lands on exactly the window he tapped.
   const [period, setPeriod] = useState<CashPeriod>(
     () => cashPeriod((location.state as { period?: CashPeriodKind } | null)?.period ?? 'WEEK'),
+  );
+  // The custom range lives beside the period, not inside it: the two fields stay filled while he
+  // switches to «Місяць» and back, so a second look at the same window is one tap, not four.
+  const [range, setRange] = useState<{ from: string; to: string }>(
+    () => ({ from: period.from, to: period.to }),
   );
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CashEntryResponse | null>(null);
@@ -98,7 +103,7 @@ export function CashFlowPage() {
             <button
               key={tab}
               type="button"
-              onClick={() => setPeriod(cashPeriod(tab))}
+              onClick={() => setPeriod(tab === 'CUSTOM' ? customPeriod(range.from, range.to) : cashPeriod(tab))}
               aria-pressed={period.kind === tab}
               className={
                 'min-h-11 flex-1 rounded-xl px-3 text-sm font-semibold ' +
@@ -111,6 +116,41 @@ export function CashFlowPage() {
             </button>
           ))}
         </div>
+
+        {/* Only while «Період» is the answer — two empty fields above every other view would be
+            four taps of furniture on a screen opened to read three numbers. */}
+        {period.kind === 'CUSTOM' && (
+          <div className="mb-4 flex items-end gap-2">
+            <label className="flex-1">
+              <span className="mb-1 block text-xs text-muted">{t('cash.rangeFrom')}</span>
+              <input
+                type="date"
+                value={range.from}
+                max={range.to}
+                onChange={(e) => {
+                  const next = { ...range, from: e.target.value };
+                  setRange(next);
+                  if (next.from) setPeriod(customPeriod(next.from, next.to));
+                }}
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-primary"
+              />
+            </label>
+            <label className="flex-1">
+              <span className="mb-1 block text-xs text-muted">{t('cash.rangeTo')}</span>
+              <input
+                type="date"
+                value={range.to}
+                min={range.from}
+                onChange={(e) => {
+                  const next = { ...range, to: e.target.value };
+                  setRange(next);
+                  if (next.to) setPeriod(customPeriod(next.from, next.to));
+                }}
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-primary"
+              />
+            </label>
+          </div>
+        )}
 
         {flow.isLoading ? (
           <div className="flex justify-center py-12"><Spinner /></div>

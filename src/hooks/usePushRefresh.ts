@@ -24,6 +24,11 @@ export function usePushRefresh() {
       void qc.invalidateQueries({ queryKey: ['projects'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['project-messages'] });
+      // A signature or a payment lands on these four, and on none of the three above.
+      void qc.invalidateQueries({ queryKey: ['estimate'] });
+      void qc.invalidateQueries({ queryKey: ['project-estimates'] });
+      void qc.invalidateQueries({ queryKey: ['object-economy'] });
+      void qc.invalidateQueries({ queryKey: ['acts'] });
     };
 
     navigator.serviceWorker.addEventListener('message', onMessage);

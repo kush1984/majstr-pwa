@@ -21,6 +21,7 @@ import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
+import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
 import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
@@ -102,6 +103,7 @@ export function ProjectDetailPage() {
   const { objectAction, chooseAction: setObjectAction, confirm: confirmObjectAction, isPending: objectActionPending } = useObjectStatusAction(id);
 
   const estimates = useQuery({
+    ...CLIENT_DRIVEN_QUERY,
     queryKey: ['project-estimates', id],
     queryFn: () => estimatesApi.listForProject(id),
     enabled: Boolean(id),

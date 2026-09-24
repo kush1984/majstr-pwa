@@ -38,6 +38,8 @@ import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { estimateName } from './estimateName.ts';
+import { crewMarginOf } from './crewMargin.ts';
+import { track } from '@/lib/posthog.ts';
 import {
   useEstimate,
   useRemoveItem,
@@ -1148,6 +1150,7 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
               <TypeBreakdown items={est.items} type="WORK" subtotal={est.worksSubtotal} label={t('estimate.works')} />
               <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
               <AdjustNote items={est.items} />
+              <CrewMarginLine est={est} />
               {noMaterials && materialsOffered && (
                 <button
                   type="button"
@@ -1171,6 +1174,37 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
  * BASE (the type's subtotal minus that adjustment), so base + adjustment reconciles to the subtotal the
  * total is built from — which is exactly what removes the «14 801 vs 16 577» confusion.
  */
+/**
+ * «Бригаді 60 000 ₴ · Твоя націнка +9 000 ₴» under the total, in the dark summary — on a marked-up
+ * copy only, and on nothing else.
+ *
+ * <p>It is here so the бригадир sees what the copy leaves him BEFORE he sends it, not after the
+ * client has signed it. Recomputed on the device ({@link crewMarginOf}) rather than read off the
+ * server's figure: the editor is offline-first, and a margin that lags five edits behind the prices
+ * on screen is worse than none.</p>
+ *
+ * <p>White/60 like the rest of the secondary lines here — a difference between two prices, not an
+ * earning to celebrate in green.</p>
+ */
+export function CrewMarginLine({ est }: { est: EstimateResponse }) {
+  const { t } = useTranslation();
+  const margin = crewMarginOf(est);
+  // Once per estimate, not once per keystroke: the question is whether he reaches the figure at
+  // all, and every edit recomputes it.
+  const shown = margin != null;
+  useEffect(() => {
+    if (shown) track('crew_margin_viewed', { scope: 'editor' });
+  }, [shown]);
+  if (!margin) return null;
+  return (
+    <p className="mt-1 text-[11px] text-white/60" data-testid="crew-margin-line">
+      {t('economy.crewTotal')} {formatMoney(margin.crewTotal)}
+      {' · '}
+      {t('economy.crewMargin')} {margin.margin > 0 ? '+' : ''}{formatMoney(margin.margin)}
+    </p>
+  );
+}
+
 export function TypeBreakdown({ items, type, subtotal, label }: {
   items: EstimateItemResponse[];
   type: 'WORK' | 'MATERIAL';
@@ -1305,6 +1339,7 @@ function SummaryCard({
         {formatMoney(est.total)}
       </div>
       <AdjustNote items={est.items} />
+      <CrewMarginLine est={est} />
     </div>
   );
 }

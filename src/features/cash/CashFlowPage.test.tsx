@@ -212,6 +212,39 @@ describe('CashFlowPage', () => {
     ).toBe(true));
   });
 
+  /**
+   * «Період» — two dates the master picks himself, for the window none of the three buttons is:
+   * a job that ran from the 12th to the 3rd, a quarter, last September.
+   */
+  it('asks the server for the dates the master picked', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({}));
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Період' }));
+
+    fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('До'), { target: { value: '2026-08-31' } });
+
+    await waitFor(() => expect(vi.mocked(cashApi.flow).mock.calls.some(
+      ([p]) => p?.from === '2026-08-01' && p?.to === '2026-08-31',
+    )).toBe(true));
+    // A window he chose is a list, never the year view's month totals.
+    expect(vi.mocked(cashApi.flow).mock.calls.every(([p]) => p?.monthly !== true)).toBe(true);
+  });
+
+  /** Two date fields on a phone are tapped in whatever order — reversed bounds are not an error. */
+  it('swaps a reversed range instead of asking for nothing', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({}));
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Період' }));
+    fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-09-30' } });
+
+    await waitFor(() => expect(vi.mocked(cashApi.flow).mock.calls.some(
+      ([p]) => p?.from != null && p.to != null && p.from <= p.to,
+    )).toBe(true));
+  });
+
   /** Totals cover everything even when the list does not — a screen that quietly hides money is
    *  worse than one that admits it. */
   it('says when the list was cut', async () => {

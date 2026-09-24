@@ -4,6 +4,7 @@ import { newUuid } from '@/lib/uuid.ts';
 import { track } from '@/lib/posthog.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
+import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
 import { MATERIALS_AVAILABILITY_KEY } from '@/features/materials/useMaterialsAvailability.ts';
 import type {
   BatchCatalogItemEntry,
@@ -42,7 +43,7 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * <p>This computes for DISPLAY only. `lineTotal` is written by the server and never sent back;
  * offline the master sees the right numbers until the sync re-derives them.</p>
  */
-function recomputeLines(source: EstimateItemResponse[]): EstimateItemResponse[] {
+export function recomputeLines(source: EstimateItemResponse[]): EstimateItemResponse[] {
   const items = source.map((i) => ({ ...i }));
   const amountById = new Map<string, number>();
 
@@ -109,6 +110,7 @@ function patchEstimate(qc: QueryClient, estimateId: string, edit: (items: Estima
 
 export function useEstimate(id: string) {
   return useQuery({
+    ...CLIENT_DRIVEN_QUERY,
     queryKey: [...ESTIMATE_KEY, id],
     queryFn: () => estimatesApi.get(id),
     enabled: Boolean(id),

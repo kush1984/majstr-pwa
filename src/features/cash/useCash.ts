@@ -9,7 +9,7 @@ import type {
 } from '@/api/types.ts';
 
 /** Which window of time the screen is showing. */
-export type CashPeriodKind = 'WEEK' | 'MONTH' | 'YEAR';
+export type CashPeriodKind = 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 export interface CashPeriod {
   kind: CashPeriodKind;
@@ -53,6 +53,19 @@ export function cashPeriod(kind: CashPeriodKind, anchor: Date = new Date()): Cas
     to.setMonth(11, 31);
   }
   return { kind, from: iso(from), to: iso(to), monthly: kind === 'YEAR' };
+}
+
+/**
+ * Two dates the master picked himself — «за який період» when none of the three buttons is it:
+ * a job that ran from the 12th to the 3rd, a quarter, last year's September.
+ *
+ * <p>A flat list, never the YEAR view's month totals: he chose the window, so he wants what is
+ * inside it. Reversed bounds are not an error worth a message — the server swaps them anyway, and
+ * so does this, because two date fields on a phone are tapped in whatever order.</p>
+ */
+export function customPeriod(from: string, to: string): CashPeriod {
+  const [start, end] = from <= to ? [from, to] : [to, from];
+  return { kind: 'CUSTOM', from: start, to: end, monthly: false };
 }
 
 /** One month by its first day — what a YEAR row drills into. */

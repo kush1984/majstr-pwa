@@ -463,6 +463,11 @@ export interface EstimateItemResponse {
    * total).
    */
   closedByActs: number | null;
+  /** What this line cost in the estimate it was duplicated FROM — the crew's own price, or on a
+   *  PERCENT line the crew's own percent. Absent on an ordinary estimate and on a line added to a
+   *  copy afterwards. <b>Owner-only</b>: it travels so the editor can recompute «Бригаді / Твоя
+   *  націнка» offline, and it must never be rendered in portal mode. */
+  sourceUnitPrice?: number | null;
 }
 
 /**
@@ -525,6 +530,29 @@ export interface EstimateResponse {
   /** For a consolidated estimate: the ids of its source estimates (empty otherwise). Their
    *  receipts are offered too when building this estimate's PDF. */
   sourceEstimateIds?: string[];
+  /** «Бригаді / Твоя націнка» while the copy is still a draft — absent on anything but a
+   *  markup duplicate. Owner-only: never render it in portal mode. */
+  crewMargin?: CrewMarginResponse | null;
+}
+
+/**
+ * The бригадир's own half of the money on a marked-up copy.
+ *
+ * <p><b>Owner-only.</b> Crew prices are the one number the client must never see — no portal view,
+ * no PDF, no share link carries this or `EstimateItemResponse.sourceUnitPrice`, and the backend's
+ * `PublicEstimateIsolationTest` fails the build if a public DTO ever grows either name.</p>
+ */
+export interface CrewMarginResponse {
+  /** What the same sheet comes to at the crew's own prices. */
+  crewTotal: number;
+  /** Client total − crew total. May be negative: a position can be sold below the crew's price. */
+  margin: number;
+  /** The part of that margin already accepted by SIGNED acts. */
+  marginAccepted: number;
+  /** Lines added to the copy afterwards, which carry no crew price — they contribute ZERO to the
+   *  margin, and the screen names them instead of quietly inflating it. */
+  unpricedCount: number;
+  unpricedTotal: number;
 }
 
 export interface EstimateCreateRequest {
@@ -712,6 +740,14 @@ export interface SignedEstimatePanelResponse {
   /** REGULAR vs ADDENDUM — an auto-created «Додаткові роботи до акта № N» rollup gets a badge so
    *  it doesn't read as an estimate the master forgot creating. */
   kind: EstimateKind;
+  /** The percent the markup/discount was actually written at — absent when several «% від
+   *  кошторису» lines disagree, and then only the amount is shown. Sent by the server because such
+   *  a line is measured against its OWN TYPE's subtotal: dividing the amount by works+materials on
+   *  the client printed «14,776%» for a discount typed as 15. The discount stays NEGATIVE. */
+  markupRate?: number | null;
+  discountRate?: number | null;
+  /** «Бригаді / Твоя націнка» — present only on a marked-up copy, absent otherwise. */
+  crewMargin?: CrewMarginResponse | null;
 }
 
 /** PRO-only internals — null on `ObjectEconomyResponse` for FREE. Deliberately two numbers

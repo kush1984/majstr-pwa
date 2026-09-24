@@ -95,6 +95,19 @@ interface EventMap {
    *  exists") is deferred until there is evidence masters teach enough of them to need managing —
    *  this is that evidence, at no extra event. */
   dictation_committed: { itemCount: number; savedToCatalog: number; synonymsTaught: number };
+
+  /**
+   * The бригадир looked at «Бригаді / Твоя націнка» — on the economy panel or in the editor.
+   *
+   * <p>Legitimate under the rule that killed the checkout and signature events: the
+   * backend records the MONEY (the copy, its markup, its lines) but records nothing about whether
+   * anyone ever LOOKED at the figure derived from it, and that is the only question here — do
+   * бригадири reach this screen at all, or was the feature built for a use nobody has.</p>
+   *
+   * <p><b>No sums, ever.</b> Money does not go to analytics; the scope property says which of the two
+   * surfaces it was, and nothing else travels.</p>
+   */
+  crew_margin_viewed: { scope: 'economy' | 'editor' };
 }
 
 type EventName = keyof EventMap;

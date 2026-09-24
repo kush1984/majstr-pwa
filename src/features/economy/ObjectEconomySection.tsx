@@ -1,14 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@/components/Spinner.tsx';
-import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
+import { track } from '@/lib/posthog.ts';
 import { formatMoney, formatMoneyExact, formatNumber } from '@/lib/format.ts';
-import { cn } from '@/lib/cn.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
@@ -16,23 +15,25 @@ import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { estimateName } from '@/features/estimate/estimateName.ts';
-import { useEconomy, useExpenses, useDeleteExpense, useToggleEstimateCounted } from './useEconomy.ts';
+import { useEconomy, useToggleEstimateCounted } from './useEconomy.ts';
 import { useActs } from '@/features/acts/useActs.ts';
 import { actCreateBlock, useNewAct } from '@/features/acts/useNewAct.ts';
-import { ExpenseSheet } from './ExpenseSheet.tsx';
 import { PaymentsBlock } from './PaymentsBlock.tsx';
-import type { ExpenseCategory, ExpenseResponse, ObjectEconomyActsResponse, ObjectEconomyMaterialsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
+import type { CrewMarginResponse, ObjectEconomyActsResponse, ObjectEconomyMaterialsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
 
-// Прибуток/Витрати (+ the expense journal) is deliberately hidden from the UI for now
-// (economy-hide-internals iteration, after a live trial): today's formula — `profit = contracted
-// − Σ all expenses` — reads as an honest "заробіток" but isn't one, since it never accounts for
-// what the master actually pays a crew unless he remembers to log it as a LABOR expense. Backend
-// (`internals` on `ObjectEconomyResponse`, the expense-journal CRUD) stays fully live — only this
-// component stops rendering it and stops fetching the expense list, so re-enabling is a one-line
-// flip. Same pattern as REOPEN_ENABLED / the old UNFORESEEN_EXPENSES_ENABLED.
-const INTERNALS_ENABLED: boolean = false;
-
-const CAT_ICON: Record<ExpenseCategory, string> = { MATERIALS: '🧱', LABOR: '🔨', OTHER: '•' };
+// «Прибуток/Витрати» and the expense journal were parked here behind a flag in August and are now
+// GONE for good (crew-margin iteration). The reason they never came back is not the formula's
+// arithmetic but its inputs: there is no screen anywhere in the app where a master adds an expense
+// AGAINST AN OBJECT — `object_expenses` fills only from an act's receipts and from a till receipt
+// flipped to «моя витрата», and crew pay goes into «Мої гроші» as a CREW entry with no object at
+// all. Switched on, «Прибуток» would have read ≈ «За договором» for everyone, and would have been
+// wrong in the opposite direction for the one бригадир who records everything.
+//
+// The object keeps money (contract / acts / received) and facts the master typed himself (the
+// margin over the crew's prices). The question «скільки я заробив» is answered in «Мої гроші»,
+// where it counts everything and where the master asked for it.
+//
+// The journal's backend CRUD is untouched: «Мої гроші» edits an object's rows through it.
 
 /** A small reference figure (label + amount) in the economy breakdown. */
 function EcoRef({ label, value }: { label: string; value: number }) {
@@ -44,10 +45,6 @@ function EcoRef({ label, value }: { label: string; value: number }) {
   );
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
-}
-
 function fmtSignedDate(iso: string): string {
   return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
@@ -56,21 +53,67 @@ function fmtSignedDate(iso: string): string {
  *  black summary panel's `TypeBreakdown` (markup prefixed with «+», discount keeps its natural
  *  minus), so the figures match 1-to-1 wherever this renders.
  *
- *  `base` (optional — the pre-adjustment subtotal, `works + materials`; both already gross since
- *  `SignedEstimatePanelResponse` backs the adjustment OUT of them, same as `TypeBreakdown`) turns
- *  on a percent, computed the same way `TypeBreakdown` derives its own («amount / base × 100»,
- *  economy-polish iteration). Omitted on the multi-estimate summary panel below: markup/discount
- *  there can come from several estimates at different percentages, and a single blended % would
- *  be a number nobody's estimate actually carries — sum-only is honest, a fabricated % isn't. */
-function AdjustLine({ markup, discount, base }: { markup: number; discount: number; base?: number }) {
+ *  The percent comes from the SERVER (`markupRate`/`discountRate`) and is not derived here. It
+ *  used to be `amount / (works + materials)`, which is the wrong base: a «% від кошторису» line is
+ *  measured against its OWN TYPE's subtotal, so a discount the master typed as 15 % printed as
+ *  «14,776%». Absent (several lines at different percents, or an older backend) — the amount alone,
+ *  which is what the multi-estimate summary panel has always shown and is honest either way. */
+function AdjustLine({ markup, discount, markupRate, discountRate }: {
+  markup: number; discount: number; markupRate?: number | null; discountRate?: number | null;
+}) {
   const { t } = useTranslation();
   if (markup <= 0 && discount >= 0) return null;
-  const pct = (amount: number) => (base && base > 0 ? `${formatNumber((amount / base) * 100, 2)}% ` : '');
+  const pct = (rate?: number | null) => (rate == null ? '' : `${formatNumber(Math.abs(rate), 2)}% `);
   const parts = [
-    markup > 0 ? `${t('estimate.summaryMarkup')} ${pct(markup)}+${formatMoney(markup)}` : null,
-    discount < 0 ? `${t('estimate.summaryDiscount')} ${pct(-discount)}${formatMoney(discount)}` : null,
+    markup > 0 ? `${t('estimate.summaryMarkup')} ${pct(markupRate)}+${formatMoney(markup)}` : null,
+    discount < 0 ? `${t('estimate.summaryDiscount')} ${pct(discountRate)}${formatMoney(discount)}` : null,
   ].filter(Boolean);
   return <p className="mt-1 text-[11px] text-muted">{parts.join(' · ')}</p>;
+}
+
+/**
+ * «Бригаді / Твоя націнка» on a marked-up copy — the бригадир's own half of the money.
+ *
+ * <p>Neutral, never the green of a profit figure. It is a difference between two prices, not an
+ * earning: materials, fuel and everything else the master pays for are no part of it, which the
+ * caption says out loud rather than leaving him to assume. A NEGATIVE margin is rendered in the
+ * danger colour and with no alarm beyond that — selling a position below the crew's price can be a
+ * deliberate decision, and a screen that scolds him for it would be wrong.</p>
+ */
+function CrewMarginBlock({ margin }: { margin: CrewMarginResponse }) {
+  const { t } = useTranslation();
+  useEffect(() => track('crew_margin_viewed', { scope: 'economy' }), []);
+  return (
+    <div className="mt-2 border-t border-border pt-2">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs text-muted">{t('economy.crewTotal')}</span>
+        <span className="text-sm font-semibold text-primary">{formatMoney(margin.crewTotal)}</span>
+      </div>
+      <div className="mt-1 flex items-baseline justify-between">
+        <span className="text-xs text-muted">{t('economy.crewMargin')}</span>
+        <span className={`text-sm font-bold ${margin.margin < 0 ? 'text-danger' : 'text-primary'}`}>
+          {margin.margin > 0 ? '+' : ''}{formatMoney(margin.margin)}
+        </span>
+      </div>
+      {margin.marginAccepted !== 0 && (
+        <div className="mt-0.5 flex items-baseline justify-between pl-3">
+          <span className="text-[11px] text-muted">{t('economy.crewMarginAccepted')}</span>
+          <span className="text-xs font-semibold text-muted">
+            {margin.marginAccepted > 0 ? '+' : ''}{formatMoney(margin.marginAccepted)}
+          </span>
+        </div>
+      )}
+      <p className="mt-1.5 text-[11px] leading-snug text-muted">{t('economy.crewMarginHint')}</p>
+      {margin.unpricedCount > 0 && (
+        <p className="mt-1 text-[11px] leading-snug text-muted">
+          {t('economy.crewMarginUnpriced', {
+            count: margin.unpricedCount,
+            sum: formatMoney(margin.unpricedTotal),
+          })}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** One SIGNED-estimate panel: lock icon, signed date, works/materials/total. (Acts iteration
@@ -131,8 +174,10 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
           <AdjustLine
             markup={panel.markup}
             discount={panel.discount}
-            base={panel.works + panel.materials}
+            markupRate={panel.markupRate}
+            discountRate={panel.discountRate}
           />
+          {panel.crewMargin && <CrewMarginBlock margin={panel.crewMargin} />}
         </button>
         {/* An ADDENDUM rollup («Додаткові роботи до акта № N») offers NEITHER action, so it gets no
             ⋮ at all — both were dead ends on it. «Згенерувати акт»: WorkActService.progress skips
@@ -333,14 +378,8 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
   const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [editing, setEditing] = useState<ExpenseResponse | null>(null);
-  const [deleting, setDeleting] = useState<ExpenseResponse | null>(null);
 
   const economy = useEconomy(objectId);
-  // No point fetching the expense journal while it's not rendered (INTERNALS_ENABLED).
-  const expenses = useExpenses(objectId, isPro && INTERNALS_ENABLED);
-  const del = useDeleteExpense(objectId);
 
   // Act creation reachable from a signed-estimate panel (acts iteration). One shared block reason
   // and one shared create-then-open flow with the Acts tab.
@@ -350,18 +389,10 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
   const newAct = useNewAct(objectId, objectCreatedAt);
 
   const openTeaser = () => {
+    // Historical id, kept on purpose: renaming it would break the analytics series that has been
+    // recording PRO interest from this screen since the profit card existed.
     void upgradeApi.click('OBJECT_PROFIT');
     setUpgradeOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleting) return;
-    try {
-      await del.mutateAsync(deleting.id);
-      setDeleting(null);
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    }
   };
 
   if (economy.isPending) {
@@ -374,8 +405,6 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
 
   const eco = economy.data;
   const panels = eco?.estimates ?? [];
-  const internals = eco?.internals ?? null;
-  const list = expenses.data ?? [];
 
   // Session-replay masking: everything inside is redacted in the recording (lib/posthog.ts).
   return (
@@ -417,7 +446,12 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
           </span>
         </button>
       ) : (
-        internals && (
+        // The PRO block's own render condition. It used to be `internals`, which the backend nulls
+        // for FREE together with `payments` — a fine signal while the profit card was the thing it
+        // guarded, and a confusing one now that nothing in here reads `internals` at all. Same
+        // nullability, same server-side gate, no backend change: `payments` is what this block
+        // actually renders.
+        eco?.payments && (
           <>
             <EstimatesSummaryPanel panels={panels} />
 
@@ -432,90 +466,10 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
               <PaymentsBlock objectId={objectId} summary={eco.payments} objectCreatedAt={objectCreatedAt} />
             )}
 
-            {/* economy-hide-internals: Прибуток/Витрати + the expense journal are parked (see
-                INTERNALS_ENABLED above) — today's profit formula reads as an honest "заробіток"
-                but isn't one yet. */}
-            {INTERNALS_ENABLED && (
-              <>
-                {/* Ink-tinted, not a plain white card — the "internal kitchen" (profit/expenses)
-                    is deliberately a different tone from the client-facing acts/summary/payments
-                    above, so the eye reads it as a separate tier without needing a divider line
-                    to say so. */}
-                <div className="rounded-card border border-ink/10 bg-ink/5 p-3 shadow-card">
-                  <div className="mb-2 flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(null);
-                        setSheetOpen(true);
-                      }}
-                      className="text-[13px] font-semibold text-brand"
-                    >
-                      {t('economy.addExpenseShort')}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <div className="rounded-xl bg-surface-sunken p-2">
-                      <div className={cn('text-base font-extrabold', internals.profit < 0 ? 'text-danger' : 'text-brand')}>
-                        {formatMoney(internals.profit)}
-                      </div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-primary">{t('economy.profit')}</div>
-                    </div>
-                    <div className="rounded-xl bg-surface-sunken p-2">
-                      <div className="text-base font-extrabold text-primary">{formatMoney(internals.expenses)}</div>
-                      <div className="mt-0.5 text-[11px] font-semibold text-primary">{t('economy.expenses')}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  {list.map((e) => (
-                    <div key={e.id} className="flex items-stretch rounded-xl border border-border bg-surface">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(e);
-                          setSheetOpen(true);
-                        }}
-                        className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left"
-                      >
-                        <span className="text-lg">{CAT_ICON[e.category]}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-semibold text-primary">{formatMoney(e.amount)}</span>
-                          <span className="block truncate text-xs text-muted">
-                            {fmtDate(e.spentAt)}
-                            {e.note ? ` · ${e.note}` : ''}
-                          </span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={t('common.delete')}
-                        onClick={() => setDeleting(e)}
-                        className="flex items-center border-l border-border px-3 text-muted"
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
           </>
         )
       )}
 
-      <ExpenseSheet open={sheetOpen} onClose={() => setSheetOpen(false)} objectId={objectId} editing={editing} />
-      <ConfirmDialog
-        open={deleting !== null}
-        title={t('economy.deleteTitle')}
-        message={t('economy.deleteMessage')}
-        confirmLabel={t('common.delete')}
-        loading={del.isPending}
-        onConfirm={confirmDelete}
-        onClose={() => setDeleting(null)}
-      />
       <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </section>
   );
