@@ -149,6 +149,10 @@ describe('MaterialCalculatorPage', () => {
 
     expect(await screen.findByText('Впишіть кількості')).toBeTruthy();
     expect(screen.queryByText('Нема що рахувати')).toBeFalsy();
+    // ...and the coverage line is gone with it. Caught on production: it answers «what did the
+    // calculation cover», so with nothing calculated its empty form («норм ще немає») stood
+    // directly above an empty state saying we DO know the norms.
+    expect(screen.queryByText(/Норм для цього кошторису ще немає/)).toBeFalsy();
   });
 
   it('asks for the perimeter rather than guessing it from the area', async () => {

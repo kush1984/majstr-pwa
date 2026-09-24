@@ -290,7 +290,11 @@ export function MaterialCalculatorPage() {
           <EmptyState icon="🧮" title={t('materials.errorTitle')} text={t('materials.loadError')} />
         )}
 
-        {!calc.isError && data && (
+        {/* Coverage answers «what did the calculation cover», so with no quantities there was no
+            calculation for it to answer about — and its empty form («норм ще немає») would stand
+            directly above the empty state saying we DO know the norms. Two sentences contradicting
+            each other on one screen is worse than either alone. */}
+        {!calc.isError && data && !data.quantitiesMissing && (
           <Coverage trades={data.coverage.trades} otherWorks={data.coverage.otherWorks} />
         )}
 
