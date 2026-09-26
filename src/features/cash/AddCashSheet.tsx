@@ -29,8 +29,9 @@ const today = () => {
  * and no direction to change — it is income by being a payment — and a PLANNED one is named by its
  * stage, so its text is read-only rather than a field that silently discards what he types.</p>
  *
- * <p>«Повернення за матеріал» shows on income of either kind: it keeps the money in the movement and
- * takes it out of «Заробив», because material the client paid back is not earnings.</p>
+ * <p>«Повернення за матеріал» shows on income of either kind. Since review B-33 it LABELS the row
+ * and nothing more — the material it repays is itself a feed row, so «Заробив» nets out on its
+ * own — but the label is what explains the gap between «Прийшло» and «Заробив».</p>
  *
  * <p>There is deliberately no TIME field. It is stamped server-side, and its only job is ordering
  * rows inside a day — a time picker on every entry is friction for nothing else.</p>
@@ -47,7 +48,10 @@ export function AddCashSheet({
 }) {
   const { t } = useTranslation();
   const kind = entry?.kind ?? 'PERSONAL';
-  const isPayment = kind === 'OBJECT_PAYMENT';
+  // Same rule as the direction toggle: offer only what that row's table actually has. Neither a
+  // plan payment nor a till receipt has a category — a `project_receipt` is a photographed slip
+  // with a label and a sum — so a chip row there would invent a field and discard the answer.
+  const hasCategory = kind === 'PERSONAL' || kind === 'OBJECT_EXPENSE';
 
   const [direction, setDirection] = useState<CashDirection>('INCOME');
   const [amount, setAmount] = useState('');
@@ -104,6 +108,15 @@ export function AddCashSheet({
           </p>
         )}
 
+        {/* «Хто за це платить» is answered on the object's receipts screen, in front of the photo,
+            and this sheet deliberately does not send it — a month's feed must not flip a receipt
+            between «клієнт відшкодовує» and «моя витрата» in passing. */}
+        {kind === 'OBJECT_RECEIPT' && (
+          <p className="rounded-xl border border-border bg-surface-sunken px-3 py-2 text-xs text-muted">
+            {t('cash.tillReceiptHint')}
+          </p>
+        )}
+
         {/* The first decision, and the biggest control on the sheet — but only where there IS a
             decision: an object's payment is income by being a payment, and its expense an expense.
             Moving a row between those two would mean moving it between tables. */}
@@ -146,7 +159,7 @@ export function AddCashSheet({
         {/* Optional on purpose: a master at the wheel will not pick one, and the note carries it.
             Hidden for an object PAYMENT, which has no category at all — offering one would invent
             a field the object's table does not have. */}
-        {!isPayment && (
+        {hasCategory && (
         <div>
           <p className="mb-1.5 text-sm font-medium text-secondary">{t('cash.category')}</p>
           <div className="flex flex-wrap gap-2">

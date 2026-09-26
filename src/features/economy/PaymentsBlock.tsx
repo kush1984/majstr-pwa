@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { formatMoney, formatAmount } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
+import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import {
@@ -237,11 +238,13 @@ function NextPaymentCard({ stage, onEditStage }: { stage: ProjectPaymentResponse
 function PaymentsList({
   summary,
   objectId,
+  materialsOutstanding,
   onEditStage,
   onEditReceipt,
 }: {
   summary: PaymentsSummaryResponse;
   objectId: string;
+  materialsOutstanding: number;
   onEditStage: (stage: ProjectPaymentResponse) => void;
   onEditReceipt: (receipt: PaymentReceiptResponse) => void;
 }) {
@@ -281,12 +284,28 @@ function PaymentsList({
   // nothing». The claim is about MONEY, so it is made against money: everything contracted has
   // landed. Below that the list still renders, unheadlined — the journal is the point of this
   // card and it must show who paid and when either way.
-  const allPaid = summary.contractedTotal > 0 && summary.received >= summary.contractedTotal;
+  //
+  // And the claim is about the WORK's money, so it is made against `workPaid` and not against
+  // «Прийшло» (review B-65). A client who handed back 2 000 ₴ for material the master had bought
+  // moved `received` without buying a single hryvnia of work — the card counted it anyway and
+  // announced «Усе сплачено ✓» over a contract with 2 000 ₴ still owed on it. The server computes
+  // `remaining` from `workPaid`; this only has to stop re-deriving it from the gross.
+  //
+  // The second half of «сплачено» is the material still on the master's own money. Saying the
+  // object is settled while he is 4 000 ₴ out of pocket for it is the same lie from the other end,
+  // so the headline waits for both axes.
+  const workSettled = summary.contractedTotal > 0 && summary.remaining <= 0;
+  const allPaid = workSettled && materialsOutstanding <= 0;
   if (upcoming.length === 0) {
     return (
       <div className="mt-3 border-t border-border pt-1">
         {allPaid && (
           <p className="py-2 text-center text-sm font-semibold text-success">{t('economy.paymentsAllDone')}</p>
+        )}
+        {workSettled && !allPaid && (
+          <p className="py-2 text-center text-sm font-semibold text-warning">
+            {t('economy.paymentsWorkDoneMaterialLeft', { amount: formatMoney(materialsOutstanding) })}
+          </p>
         )}
         <ReceivedSection
           received={received}
@@ -401,12 +420,11 @@ function PaymentSheet({
   const dueWarning = dueDateWarning(dueDate, !editing, t);
 
   const submit = async () => {
-    const amountValue = Number(amount.replace(',', '.'));
-    const invalid = {
-      purpose: !purpose.trim(),
-      amount: !amount.trim() || !Number.isFinite(amountValue) || amountValue < 0,
-    };
-    if (invalid.purpose || invalid.amount) {
+    // A planned stage may legitimately be 0 (a placeholder the master fills later), so zero is
+    // allowed and only an unreadable field is refused — never quietly rounded down to nothing.
+    const amountValue = parseMoney(amount, { allowZero: true });
+    const invalid = { purpose: !purpose.trim(), amount: amountValue === null };
+    if (invalid.purpose || amountValue === null) {
       setErrors(invalid);
       toast.error(t('economy.paymentInvalid'));
       return;
@@ -618,6 +636,7 @@ function ReceivePaymentSheet({
   onClose,
   objectId,
   summary,
+  materialsOutstanding,
   preselectedStageId,
   objectCreatedAt,
 }: {
@@ -625,6 +644,8 @@ function ReceivePaymentSheet({
   onClose: () => void;
   objectId: string;
   summary: PaymentsSummaryResponse;
+  /** Nothing to reimburse = no tick offered. The question only exists where the answer can be yes. */
+  materialsOutstanding: number;
   preselectedStageId: string | null;
   objectCreatedAt: string | undefined;
 }) {
@@ -637,6 +658,7 @@ function ReceivePaymentSheet({
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
+  const [refund, setRefund] = useState(false);
   const [overflow, setOverflow] = useState<{ diff: number; nextPurpose: string | null } | null>(null);
   // Same reason as PaymentSheet's: on an object with no plan stage yet this sheet opens on «Інше»
   // with an EMPTY name, and an advance is exactly the money that arrives before any stage exists —
@@ -651,6 +673,7 @@ function ReceivePaymentSheet({
     const stage = initial ? openStages.find((s) => s.id === initial) : null;
     setAmount(stage ? String(stage.remaining) : '');
     setDate(today());
+    setRefund(false);
     setOverflow(null);
     setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -666,8 +689,9 @@ function ReceivePaymentSheet({
   };
 
   const doSubmit = async (resolution?: OverflowChoice) => {
-    const amountValue = Number(amount.replace(',', '.'));
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    // Money actually received: 0 is not a receipt, and «1 200» is one.
+    const amountValue = parseMoney(amount);
+    if (amountValue === null) {
       setErrors((p) => ({ ...p, amount: true }));
       toast.error(t('economy.receivedAmountInvalid'));
       return;
@@ -693,6 +717,7 @@ function ReceivePaymentSheet({
       label: stageId ? null : label.trim(),
       amount: amountValue,
       receivedAt: date,
+      materialRefund: refund,
       resolution: resolution ?? null,
     };
     try {
@@ -709,8 +734,8 @@ function ReceivePaymentSheet({
   };
 
   const submit = async () => {
-    const amountValue = Number(amount.replace(',', '.'));
-    if (selectedStage && Number.isFinite(amountValue)) {
+    const amountValue = parseMoney(amount);
+    if (selectedStage && amountValue !== null) {
       const diff = amountValue - selectedStage.remaining;
       if (diff > 0.004) {
         const next = nextOpenStageAfter(selectedStage);
@@ -793,6 +818,27 @@ function ReceivePaymentSheet({
             {dateWarning && <span className="mt-1 block text-xs text-amber">{dateWarning}</span>}
           </label>
 
+          {/* The one place the master could say «це він повернув за матеріал» used to be «Мої
+              гроші» — the screen he opens least, and the object's card was the one drawing the
+              wrong conclusion from the answer. Offered only where there IS a receivable: on an
+              object with no till receipts the question has no true answer and is pure noise. */}
+          {materialsOutstanding > 0 && (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={refund}
+                onChange={(e) => setRefund(e.target.checked)}
+                className="h-5 w-5 rounded border-gray-300 text-brand-600 focus:ring-brand-300"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-primary">{t('economy.receiptIsRefund')}</span>
+                <span className="block text-xs text-muted">
+                  {t('economy.receiptIsRefundHint', { amount: formatMoney(materialsOutstanding) })}
+                </span>
+              </span>
+            </label>
+          )}
+
           <Button fullWidth loading={loading} onClick={submit}>
             {t('common.save')}
           </Button>
@@ -805,7 +851,7 @@ function ReceivePaymentSheet({
           onClose={() => setOverflow(null)}
           diff={overflow.diff}
           nextPurpose={overflow.nextPurpose}
-          receivedTotal={(selectedStage?.received ?? 0) + Number(amount.replace(',', '.') || 0)}
+          receivedTotal={(selectedStage?.received ?? 0) + (parseMoney(amount) ?? 0)}
           loading={loading}
           onChoose={(choice) => void doSubmit(choice)}
         />
@@ -814,17 +860,20 @@ function ReceivePaymentSheet({
   );
 }
 
-/** Edit/delete one already-recorded receipt — amount/date/label only. */
+/** Edit/delete one already-recorded receipt — amount/date/label, and whether it was a refund. */
 function EditReceiptSheet({
   open,
   onClose,
   objectId,
   receipt,
+  materialsOutstanding,
 }: {
   open: boolean;
   onClose: () => void;
   objectId: string;
   receipt: PaymentReceiptResponse | null;
+  /** A ticked receipt keeps its control whatever is outstanding — it is what made it outstanding. */
+  materialsOutstanding: number;
 }) {
   const { t } = useTranslation();
   const edit = useEditReceipt(objectId);
@@ -832,6 +881,7 @@ function EditReceiptSheet({
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [label, setLabel] = useState('');
+  const [refund, setRefund] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
@@ -839,19 +889,25 @@ function EditReceiptSheet({
     setAmount(String(receipt.amount));
     setDate(receipt.receivedAt);
     setLabel(receipt.label ?? '');
+    setRefund(receipt.materialRefund);
   }, [open, receipt]);
 
   const submit = async () => {
     if (!receipt) return;
-    const value = Number(amount.replace(',', '.'));
-    if (!Number.isFinite(value) || value <= 0) {
+    const value = parseMoney(amount);
+    if (value === null) {
       toast.error(t('economy.receivedAmountInvalid'));
       return;
     }
     try {
       await edit.mutateAsync({
         id: receipt.id,
-        req: { amount: value, receivedAt: date, label: receipt.planPaymentId ? null : label.trim() },
+        req: {
+          amount: value,
+          receivedAt: date,
+          label: receipt.planPaymentId ? null : label.trim(),
+          materialRefund: refund,
+        },
       });
       onClose();
     } catch (err) {
@@ -888,6 +944,19 @@ function EditReceiptSheet({
             <span className="mb-1 block text-xs font-semibold text-muted">{t('economy.date')}</span>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
+          {/* A wrongly ticked receipt must be untickable, so a row that already carries the tick
+              keeps the control even once the receivable it settled is down to nothing. */}
+          {(materialsOutstanding > 0 || refund) && (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={refund}
+                onChange={(e) => setRefund(e.target.checked)}
+                className="h-5 w-5 rounded border-gray-300 text-brand-600 focus:ring-brand-300"
+              />
+              <span className="min-w-0 flex-1 text-sm text-primary">{t('economy.receiptIsRefund')}</span>
+            </label>
+          )}
           <Button fullWidth loading={edit.isPending} onClick={submit}>
             {t('common.save')}
           </Button>
@@ -959,10 +1028,12 @@ function SplitSheet({ open, onClose, objectId }: { open: boolean; onClose: () =>
   const preview = usePreviewSplit(objectId);
   const commit = useCommitSplit(objectId);
 
+  // The separator IS the comma, so a share is written «30 40 30» or «33.3, 33.3, 33.4» — a dot
+  // decimal here, and an unreadable share drops out rather than counting as 0 %.
   const customPercents = customText
     .split(',')
-    .map((s) => Number(s.trim().replace(',', '.')))
-    .filter((n) => Number.isFinite(n) && n > 0);
+    .map((s) => parseQuantity(s, { max: 100 }))
+    .filter((n): n is number => n !== null);
 
   const onPreview = async () => {
     setRows(null);
@@ -1059,10 +1130,14 @@ function SplitSheet({ open, onClose, objectId }: { open: boolean; onClose: () =>
 export function PaymentsBlock({
   objectId,
   summary,
+  materialsOutstanding = 0,
   objectCreatedAt,
 }: {
   objectId: string;
   summary: PaymentsSummaryResponse;
+  /** What the client still owes for material (the materials axis). «Усе сплачено» is a claim
+   *  about the object, and the object is not settled while this is above zero. */
+  materialsOutstanding?: number;
   /** For the soft "not before the object existed" check on a received date — optional, the
    *  check is simply skipped when the caller doesn't have it handy. */
   objectCreatedAt?: string;
@@ -1136,9 +1211,26 @@ export function PaymentsBlock({
         <p className="mt-2 text-center text-sm text-muted">{t('economy.paymentsNoneYet')}</p>
       )}
 
+      {/* Both halves of B-65 are SAID. «Прийшло» counts every hryvnia that arrived, but a payment
+          ticked «повернення за матеріал» bought no work, so the gap between it and what the
+          contract is measured against needs a name — unexplained, it reads as an arithmetic bug.
+          An overpayment is named for the opposite reason: `remaining` is floored at zero, so
+          without this line the money over the contract simply vanished off the screen. */}
+      {summary.refundApplied > 0 && (
+        <p className="mt-2 text-[11px] text-muted">
+          {t('economy.refundApplied', { amount: formatMoney(summary.refundApplied) })}
+        </p>
+      )}
+      {summary.overpaid > 0 && (
+        <p className="mt-1 text-[11px] font-semibold text-warning">
+          {t('economy.overpaid', { amount: formatMoney(summary.overpaid) })}
+        </p>
+      )}
+
       <PaymentsList
         summary={summary}
         objectId={objectId}
+        materialsOutstanding={materialsOutstanding}
         onEditStage={openEdit}
         onEditReceipt={setEditingReceipt}
       />
@@ -1162,10 +1254,12 @@ export function PaymentsBlock({
         onClose={() => setReceiveOpen(false)}
         objectId={objectId}
         summary={summary}
+        materialsOutstanding={materialsOutstanding}
         preselectedStageId={receivePreselect}
         objectCreatedAt={objectCreatedAt}
       />
       <EditReceiptSheet
+        materialsOutstanding={materialsOutstanding}
         open={editingReceipt !== null}
         onClose={() => setEditingReceipt(null)}
         objectId={objectId}

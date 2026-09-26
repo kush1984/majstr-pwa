@@ -291,17 +291,14 @@ function Row({ entry, onOpen }: { entry: CashEntryResponse; onOpen: () => void }
   const income = entry.direction === 'INCOME';
   const label = entry.note?.trim()
     || (entry.category ? t('cashCategory.' + entry.category) : t(income ? 'cash.income' : 'cash.expense'));
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex min-h-14 w-full items-center gap-3 border-b border-border px-3.5 py-2 text-left last:border-b-0"
-    >
+  const body = (
+    <>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-primary">{label}</span>
         <span className="block truncate text-xs text-muted">
           {entry.projectName ?? t('cash.noObject')}
           {entry.materialRefund && ` · ${t('cash.refundBadge')}`}
+          {entry.readOnly && ` · ${t('cash.lockedBadge')}`}
         </span>
       </span>
       <span
@@ -312,6 +309,20 @@ function Row({ entry, onOpen }: { entry: CashEntryResponse; onOpen: () => void }
       >
         {income ? '+' : '−'}{formatMoneyExact(entry.amount)}
       </span>
+    </>
+  );
+  const className =
+    'flex min-h-14 w-full items-center gap-3 border-b border-border px-3.5 py-2 text-left last:border-b-0';
+  // A receipt frozen inside a signed act's `doc_hash` cannot be retyped from here — the server
+  // answers 409 and it is right to. So the row is still SHOWN (the money left his pocket and the
+  // month must add up) but carries no tap at all: an affordance that can only fail reads as the
+  // app being broken, which is how the master described the ones we used to offer.
+  if (entry.readOnly) {
+    return <div className={className}>{body}</div>;
+  }
+  return (
+    <button type="button" onClick={onOpen} className={className}>
+      {body}
     </button>
   );
 }

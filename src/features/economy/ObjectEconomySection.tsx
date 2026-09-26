@@ -338,14 +338,23 @@ function MaterialsAxis({ materials, objectId }: {
           {/* Exact, unlike the estimate axes above: this figure is the sum of the very receipts the
               card opens, and that list prints kopecks. Rounded here, the same receivable read
               «13 ₴» on the object and «12,50 ₴» one tap later. */}
+          {/* What is still OWED, not what was spent (B-65): a client who has already handed the
+              money back was being asked for it again on the very screen that had just counted his
+              payment. `reimbursable` stays the gross figure and is shown below when it differs. */}
           <span className="font-mono text-sm font-semibold tabular-nums text-primary">
-            {formatMoneyExact(materials.reimbursable)}
+            {formatMoneyExact(materials.outstanding)}
           </span>
         </span>
       </button>
       <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted">
         <span>
           {t('receipts.axisCount', { count: materials.receiptCount })}
+          {materials.refundApplied > 0 && (
+            <span className="text-success">
+              {' · '}
+              {t('receipts.axisRefunded', { amount: formatMoneyExact(materials.refundApplied) })}
+            </span>
+          )}
           {materials.unpricedCount > 0 && (
             <span className="text-warning">
               {' · '}
@@ -463,7 +472,12 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
                 only unplanned receipts hid money already recorded. The block now stands down its
                 own zero-denominator parts instead (see PaymentsBlock). */}
             {eco?.payments && (
-              <PaymentsBlock objectId={objectId} summary={eco.payments} objectCreatedAt={objectCreatedAt} />
+              <PaymentsBlock
+                objectId={objectId}
+                summary={eco.payments}
+                materialsOutstanding={eco.materials.outstanding}
+                objectCreatedAt={objectCreatedAt}
+              />
             )}
 
           </>

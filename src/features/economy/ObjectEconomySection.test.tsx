@@ -9,7 +9,7 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { economyApi } from '@/api/economy.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { actsApi } from '@/api/acts.ts';
-import { formatMoney } from '@/lib/format.ts';
+import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
 import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse, WorkActResponse } from '@/api/types.ts';
 
 // Intl.NumberFormat('uk-UA') groups digits with U+00A0 (NBSP). RTL's default text normalizer
@@ -18,6 +18,11 @@ import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse, 
 // the same way RTL normalizes the DOM side (collapse any whitespace run to one ASCII space).
 function money(n: number): string {
   return formatMoney(n).replace(/\s+/g, ' ');
+}
+
+/** The materials axis prints kopecks — a receipt is a paper sum, not a rounded one. */
+function moneyExact(n: number): string {
+  return formatMoneyExact(n).replace(/\s+/g, ' ');
 }
 
 vi.mock('@/api/economy.ts', () => ({
@@ -75,11 +80,15 @@ const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
   contractedTotal: 15000,
   received: 1500,
   remaining: 13500,
+  materialRefunds: 0,
+  refundApplied: 0,
+  workPaid: 1500,
+  overpaid: 0,
   payments: [
     {
       id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс',
       received: 1500, remaining: 1500, status: 'PARTIAL', sortOrder: 0,
-      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 1500, receivedAt: '2026-07-01' }],
+      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 1500, receivedAt: '2026-07-01', materialRefund: false }],
     },
   ],
   unplannedReceipts: [],
@@ -100,7 +109,7 @@ function economyFixture(opts: {
     acts: opts.acts ?? { contracted: 15000, acceptedByActs: 0, received: 1500 },
     // Nothing bought by default: the materials card is absent until a receipt exists, so every
     // pre-V129 assertion in this file keeps seeing exactly the screen it was written against.
-    materials: opts.materials ?? { reimbursable: 0, receiptCount: 0, unpricedCount: 0 },
+    materials: opts.materials ?? { reimbursable: 0, refundApplied: 0, outstanding: 0, receiptCount: 0, unpricedCount: 0 },
     payments: pro ? (opts.payments ?? SAMPLE_PAYMENTS) : null,
     internals: pro,
   };
@@ -249,7 +258,10 @@ describe('ObjectEconomySection', () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
-      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [], unplannedReceipts: [] },
+      payments: {
+        contractedTotal: 0, received: 0, remaining: 0, materialRefunds: 0, refundApplied: 0,
+        workPaid: 0, overpaid: 0, payments: [], unplannedReceipts: [],
+      },
     }));
 
     renderSection('PRO');
@@ -273,7 +285,10 @@ describe('ObjectEconomySection', () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [],
       pro: { expenses: 0, profit: 0 },
-      payments: { contractedTotal: 0, received: 0, remaining: 0, payments: [SAMPLE_PAYMENTS.payments[0]], unplannedReceipts: [] },
+      payments: {
+        contractedTotal: 0, received: 0, remaining: 0, materialRefunds: 0, refundApplied: 0,
+        workPaid: 0, overpaid: 0, payments: [SAMPLE_PAYMENTS.payments[0]], unplannedReceipts: [],
+      },
     }));
 
     renderSection('PRO');
@@ -290,8 +305,9 @@ describe('ObjectEconomySection', () => {
       estimates: [],
       pro: { expenses: 0, profit: 0 },
       payments: {
-        contractedTotal: 0, received: 4000, remaining: 0, payments: [],
-        unplannedReceipts: [{ id: 'u1', planPaymentId: null, label: 'Завдаток', displayLabel: 'Завдаток', amount: 4000, receivedAt: '2026-09-01' }],
+        contractedTotal: 0, received: 4000, remaining: 0, materialRefunds: 0, refundApplied: 0,
+        workPaid: 4000, overpaid: 0, payments: [],
+        unplannedReceipts: [{ id: 'u1', planPaymentId: null, label: 'Завдаток', displayLabel: 'Завдаток', amount: 4000, receivedAt: '2026-09-01', materialRefund: false }],
       },
     }));
 
@@ -452,7 +468,7 @@ describe('ObjectEconomySection', () => {
 
   it('the materials card ⓘ explains itself instead of navigating away', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, receiptCount: 3, unpricedCount: 0 },
+      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
     }));
 
     renderSection('FREE');
@@ -467,7 +483,7 @@ describe('ObjectEconomySection', () => {
 
   it('the materials card still opens the receipts list when the card itself is tapped', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, receiptCount: 3, unpricedCount: 0 },
+      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
     }));
 
     renderSection('FREE');
@@ -486,5 +502,42 @@ describe('ObjectEconomySection', () => {
 
     await screen.findByText('Кухня');
     expect(screen.queryByText('Загалом по підписаних')).toBeNull();
+  });
+});
+
+/**
+ * Review B-65. The materials axis answers «скільки клієнт мені ще винен за чеки» — so once he has
+ * handed some of it back, the headline figure has to come DOWN. Showing the gross `reimbursable`
+ * after a refund told the master he was owed money he had already been paid, on the same screen
+ * that had just counted that refund as payment for work.
+ */
+describe('ObjectEconomySection — the materials axis nets what came back (B-65)', () => {
+  it('shows what is still OWED, not what was ever laid out, and names the difference', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      materials: { reimbursable: 4200, refundApplied: 2000, outstanding: 2200, receiptCount: 3, unpricedCount: 0 },
+    }));
+
+    renderSection('FREE');
+
+    const card = (await screen.findByText(/Матеріали за чеками/)).closest('button')!;
+    expect(within(card).getByText(moneyExact(2200))).toBeTruthy();
+    // The gross figure is not the answer to this question any more — and the refund is SAID, or
+    // the drop from 4 200 to 2 200 reads as receipts having gone missing.
+    expect(within(card).queryByText(moneyExact(4200))).toBeNull();
+    // The refund line sits under the tappable part, not inside it — a whole card that navigates
+    // would swallow the ⓘ next to it.
+    expect(screen.getByText(new RegExp('повернуто'))).toBeTruthy();
+  });
+
+  it('says nothing about refunds when none came back', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
+    }));
+
+    renderSection('FREE');
+
+    const card = (await screen.findByText(/Матеріали за чеками/)).closest('button')!;
+    expect(within(card).getByText(moneyExact(4200))).toBeTruthy();
+    expect(screen.queryByText(/повернуто/)).toBeNull();
   });
 });

@@ -34,6 +34,7 @@ function entry(over: Partial<CashEntryResponse> = {}): CashEntryResponse {
     projectName: null,
     materialRefund: false,
     noteLocked: false,
+    readOnly: false,
     ...over,
   };
 }
@@ -95,6 +96,29 @@ describe('CashFlowPage', () => {
 
     await waitFor(() => expect(screen.getByText('Дизель')).toBeTruthy());
     expect(screen.queryByText(/повернення за матеріал/)).toBeNull();
+  });
+
+  /**
+   * A receipt frozen into a signed act's `doc_hash` can only be refused (409). The month still has
+   * to add up, so the row stays — but it carries no tap at all: an affordance that can only fail
+   * is how the master decides the app is broken.
+   */
+  it('shows a row locked by a signed act, and offers no tap on it', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      entries: [entry({
+        id: 'e9', kind: 'ACT_RECEIPT', direction: 'EXPENSE', note: 'Плитка',
+        category: null, projectId: 'p1', projectName: 'Квартира на Лесі', readOnly: true,
+      })],
+    }));
+
+    renderPage();
+
+    const label = await screen.findByText('Плитка');
+    expect(screen.getByText(/у підписаному акті/)).toBeTruthy();
+    expect(label.closest('button')).toBeNull();
+    // And nothing opens if it is tapped anyway.
+    fireEvent.click(label);
+    expect(screen.queryByRole('button', { name: 'Зберегти' })).toBeNull();
   });
 
   /** An off-object row says so: «без обʼєкта» is an answer, a blank line is a question. */

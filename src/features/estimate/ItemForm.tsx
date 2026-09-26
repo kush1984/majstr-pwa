@@ -7,7 +7,7 @@ import { Select } from '@/components/Select.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
 import { CatalogAutocomplete } from './CatalogAutocomplete.tsx';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { parseDecimal, parseMoney } from '@/lib/decimal.ts';
 import {
   ITEM_TYPE_OPTIONS,
   UNIT_OPTIONS,
@@ -100,6 +100,7 @@ export function ItemForm({
     register,
     control,
     setValue,
+    setError,
     watch,
     handleSubmit,
     formState: { errors },
@@ -189,6 +190,13 @@ export function ItemForm({
     if (v.unit === 'PERCENT' && baseKind === 'TOTAL' && sameTypeTotalExists) {
       return; // one «Від кошторису» per type — the inline warning explains why
     }
+    // A frozen «%» line's price IS its base sum, and the schema never looks at a percent line's
+    // price field — so this is the one money field that could still reach the request as NaN.
+    const frozenBase = isPercent && isFrozen ? parseMoney(v.unitPrice, { allowZero: true }) : 0;
+    if (frozenBase === null) {
+      setError('unitPrice', { message: t('validation.badNumber') });
+      return;
+    }
     const req: EstimateItemRequest = {
       type: v.type,
       name: v.name.trim(),
@@ -201,7 +209,7 @@ export function ItemForm({
       // A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
       // another sum. A FROZEN (MANUAL) line's price IS the base sum it was frozen against, and
       // stays directly editable — there is no live base to derive it from any more.
-      unitPrice: isPercent ? (isFrozen ? parseDecimal(v.unitPrice) : 0) : parseDecimal(v.unitPrice),
+      unitPrice: isPercent ? frozenBase : parseDecimal(v.unitPrice),
       measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
       quantityManual,
       // Only a percentage line records a base; anything else sends none, whatever is in state.

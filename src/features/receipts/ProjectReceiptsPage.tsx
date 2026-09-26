@@ -13,6 +13,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatDate, formatMoneyExact } from '@/lib/format.ts';
+import { parseMoney } from '@/lib/decimal.ts';
 import { routes } from '@/lib/config.ts';
 import { decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { photosApi } from '@/api/photos.ts';
@@ -438,6 +439,9 @@ function ReceiptCard({
 }) {
   const { t } = useTranslation();
   const needsAmount = r.amount <= 0;
+  // A SIGNED act carries this paper's money now (V134). Everything below that touches the money —
+  // the amount, «чия це витрата», the delete — is therefore fixed; the wording is not.
+  const billed = r.billedOnActId != null;
 
   return (
     <li
@@ -488,31 +492,52 @@ function ReceiptCard({
           )}
           {/* Not a warning — an answer. This money is no longer a receivable here because a signed
               act moved it into «За договором», and the row says which act took it. */}
-          {r.billedOnActId != null && (
+          {billed && (
             <p className="mt-0.5 text-xs text-muted">
               {t('receipts.billedOnAct', { number: r.billedOnActNumber ?? '' })}
             </p>
           )}
 
           {/* The default state is stated, not implied: «клієнт відшкодовує» is the answer to the
-              question the master would otherwise stop and ask himself at the till. */}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onToggleOwn}
-            className={
-              'mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ' +
-              (r.reimbursable ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-secondary')
-            }
-          >
-            {r.reimbursable ? `↩ ${t('receipts.reimbursableBadge')}` : `💸 ${t('receipts.ownBadge')}`}
-          </button>
+              question the master would otherwise stop and ask himself at the till.
+
+              Once an act has billed the paper the answer is FROZEN (review B-32): the client has
+              signed for that money, and flipping the badge here would either delete the only record
+              of the cost or post a second one beside the act's. So the badge stays — the state is
+              still worth reading — but it stops being a control, because an affordance that can
+              only answer 409 is how the master decides the app is broken. */}
+          {billed ? (
+            <span
+              className={
+                'mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ' +
+                (r.reimbursable ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-secondary')
+              }
+            >
+              {r.reimbursable ? `↩ ${t('receipts.reimbursableBadge')}` : `💸 ${t('receipts.ownBadge')}`}
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onToggleOwn}
+              className={
+                'mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ' +
+                (r.reimbursable ? 'bg-brand-soft text-brand' : 'bg-surface-sunken text-secondary')
+              }
+            >
+              {r.reimbursable ? `↩ ${t('receipts.reimbursableBadge')}` : `💸 ${t('receipts.ownBadge')}`}
+            </button>
+          )}
           <p className="mt-1 text-[11px] text-muted">
-            {r.reimbursable ? t('receipts.markOwnHint') : t('receipts.markReimbursableHint')}
+            {billed
+              ? t('receipts.billedLocked')
+              : r.reimbursable
+                ? t('receipts.markOwnHint')
+                : t('receipts.markReimbursableHint')}
           </p>
 
           <div className="mt-2 flex flex-wrap gap-3">
-            {needsAmount && online && (
+            {needsAmount && online && !billed && (
               <button
                 type="button"
                 className="text-xs font-semibold text-brand"
@@ -525,9 +550,13 @@ function ReceiptCard({
             <button type="button" className="text-xs font-semibold text-brand" onClick={onEdit}>
               {t('common.edit')}
             </button>
-            <button type="button" className="text-xs font-semibold text-danger" onClick={onDelete}>
-              {t('common.delete')}
-            </button>
+            {/* Deleting a billed receipt drops the object's own record of a cost the client has
+                already signed for, so the door is closed rather than left to 409. */}
+            {!billed && (
+              <button type="button" className="text-xs font-semibold text-danger" onClick={onDelete}>
+                {t('common.delete')}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -623,12 +652,20 @@ function ReceiptForm({
     setReading(false);
   }
 
-  const num = (s: string): number => {
-    const n = Number(s.replace(',', '.'));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Review P-35. An amount that cannot be read is not 0 ₴: «1 200» off a phone keypad, or a stray
+  // letter, used to save the receipt at nothing — under a photo of the paper saying otherwise, and
+  // out of «Клієнт відшкодовує» for good. Blank stays 0 on purpose: that is the batch state a
+  // receipt is deliberately saved in before anyone prices it (V129).
+  const amountOf = (s: string): number | null =>
+    s.trim() === '' ? 0 : parseMoney(s, { allowZero: true });
+  const num = (s: string): number => amountOf(s) ?? 0;
+  // A signed act has already billed this paper (review B-32), so the sum is what the client agreed
+  // to — but the shop's name and the date are just what the paper says, and those he may still fix.
+  const billed = editing?.billedOnActId != null;
+  // A billed receipt's amount is frozen and the field disabled, so only a live one can be wrong.
+  const amountInvalid = !billed && amountOf(amount) === null;
   // The server names a blank label «Чек №N», so there is always something here to keep.
-  const valid = label.trim() !== '';
+  const valid = label.trim() !== '' && !amountInvalid;
   // Nothing a read could still fill in — leaving the button live invites a slow call whose only
   // possible effect is to overwrite what the master just typed off the paper in front of him.
   const nothingToRead = valid && num(amount) > 0 && issuedAt.trim() !== '';
@@ -682,35 +719,54 @@ function ReceiptForm({
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={t('receipts.amount')}>
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input
+              inputMode="decimal"
+              value={amount}
+              disabled={billed}
+              invalid={amountInvalid}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            {amountInvalid && (
+              <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>
+            )}
           </Field>
           <Field label={t('receipts.date')}>
             <Input type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
           </Field>
         </div>
 
-        <div className="border-t border-border pt-3">
-          <div className="flex items-center gap-1.5">
-            <Button
-              fullWidth
-              variant="secondary"
-              disabled={reading || nothingToRead}
-              onClick={() => void run()}
-            >
-              ✨ {t('receipts.recognizeOne')}
-            </Button>
-            <InfoPopover text={t('receipts.recognizeInfo')} />
+        {billed && (
+          <p className="text-xs text-muted">
+            {t('receipts.billedAmountLocked', { number: editing?.billedOnActNumber ?? '' })}
+          </p>
+        )}
+
+        {/* Reading the paper again can only propose a new SUM, which is the one thing a billed
+            receipt may not take — so the whole block goes rather than answer 409. */}
+        {!billed && (
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center gap-1.5">
+              <Button
+                fullWidth
+                variant="secondary"
+                disabled={reading || nothingToRead}
+                onClick={() => void run()}
+              >
+                ✨ {t('receipts.recognizeOne')}
+              </Button>
+              <InfoPopover text={t('receipts.recognizeInfo')} />
+            </div>
+            {nothingToRead && (
+              <p className="mt-1.5 text-xs text-muted">{t('receipts.nothingToRead')}</p>
+            )}
+            {reading && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-muted">
+                <Spinner size="sm" />
+                {t('receipts.recognizing')}
+              </p>
+            )}
           </div>
-          {nothingToRead && (
-            <p className="mt-1.5 text-xs text-muted">{t('receipts.nothingToRead')}</p>
-          )}
-          {reading && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-muted">
-              <Spinner size="sm" />
-              {t('receipts.recognizing')}
-            </p>
-          )}
-        </div>
+        )}
 
         <Button
           fullWidth
@@ -719,7 +775,9 @@ function ReceiptForm({
           onClick={() =>
             onSubmit({
               label: label.trim(),
-              amount: num(amount),
+              // The stored figure, never the field's: a billed receipt's amount is frozen, and the
+              // server refuses anything else.
+              amount: billed ? (editing?.amount ?? 0) : num(amount),
               issuedAt: issuedAt.trim() === '' ? null : issuedAt,
             })
           }

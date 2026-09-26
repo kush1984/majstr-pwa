@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { estimatesApi } from '@/api/estimates.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { markedUpPrice } from '@/lib/decimal.ts';
 import { track } from '@/lib/posthog.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
@@ -461,7 +462,7 @@ export function useMarkUpItems(estimateId: string) {
             // share of a base that is itself moving, so recomputeLines lifts them already. Marking
             // them up here too would show the master a number the sync then takes back.
             picked.has(i.id) && i.unit !== 'PERCENT'
-              ? { ...i, unitPrice: Math.round(i.unitPrice * factor) }
+              ? { ...i, unitPrice: markedUpPrice(i.unitPrice, factor) }
               : i));
         },
       });

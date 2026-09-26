@@ -33,6 +33,7 @@ async function registerMaster(page: Page, label: string): Promise<string> {
   await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
   await page.fill('#phone', '+380501110000');
   await page.fill('#companyName', 'Журі ФОП');
+  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
   // Generous timeout: the first spec alphabetically pays the cold-Vite compile.
   await expect(page).toHaveURL('http://localhost:5173/', { timeout: 25_000 });

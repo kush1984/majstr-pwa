@@ -26,7 +26,7 @@ vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn()
 function receipt(overrides: Partial<PaymentReceiptResponse> = {}): PaymentReceiptResponse {
   return {
     id: 'rcpt1', planPaymentId: 'pay1', label: null, displayLabel: 'Аванс',
-    amount: 2000, receivedAt: '2026-08-01', ...overrides,
+    amount: 2000, receivedAt: '2026-08-01', materialRefund: false, ...overrides,
   };
 }
 
@@ -40,15 +40,25 @@ function plannedRow(overrides: Partial<ProjectPaymentResponse> = {}): ProjectPay
 
 function summary(payments: ProjectPaymentResponse[] = [], unplannedReceipts: PaymentReceiptResponse[] = []): PaymentsSummaryResponse {
   const received = payments.reduce((s, p) => s + p.received, 0) + unplannedReceipts.reduce((s, r) => s + r.amount, 0);
-  return { contractedTotal: 20000, received, remaining: 20000 - received, payments, unplannedReceipts };
+  // The server's own split (B-65): only what did NOT come back for material pays for work.
+  const refunds = unplannedReceipts.filter((r) => r.materialRefund).reduce((s, r) => s + r.amount, 0);
+  const workPaid = received - refunds;
+  return {
+    contractedTotal: 20000, received, remaining: Math.max(0, 20000 - workPaid),
+    materialRefunds: refunds, refundApplied: refunds, workPaid,
+    overpaid: Math.max(0, workPaid - 20000), payments, unplannedReceipts,
+  };
 }
 
-function renderBlock(s: PaymentsSummaryResponse) {
+function renderBlock(s: PaymentsSummaryResponse, materialsOutstanding = 0) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<PaymentsBlock objectId="obj1" summary={s} />, { wrapper });
+  return render(
+    <PaymentsBlock objectId="obj1" summary={s} materialsOutstanding={materialsOutstanding} />,
+    { wrapper },
+  );
 }
 
 beforeEach(() => {
@@ -286,7 +296,8 @@ describe('PaymentsBlock — the journal does not repeat the axis', () => {
     // collapsed list says «✓ Отримано · 1» and no figure, so this line is the only place the
     // money on the object appears at all.
     renderBlock({
-      contractedTotal: 0, received: 4000, remaining: 0, payments: [],
+      contractedTotal: 0, received: 4000, remaining: 0, materialRefunds: 0, refundApplied: 0,
+      workPaid: 4000, overpaid: 0, payments: [],
       unplannedReceipts: [receipt({ id: 'r1', planPaymentId: null, amount: 4000 })],
     });
 
@@ -366,7 +377,8 @@ describe('PaymentsBlock — a refused save says so on the field', () => {
 
 describe('PaymentsBlock — an object with nothing signed', () => {
   const nothing: PaymentsSummaryResponse = {
-    contractedTotal: 0, received: 0, remaining: 0, payments: [], unplannedReceipts: [],
+    contractedTotal: 0, received: 0, remaining: 0, materialRefunds: 0, refundApplied: 0,
+    workPaid: 0, overpaid: 0, payments: [], unplannedReceipts: [],
   };
 
   it('keeps «+ Платіж» and drops only the figures that need a contract', () => {
@@ -389,5 +401,80 @@ describe('PaymentsBlock — an object with nothing signed', () => {
     // The collapsed history row only carries a count, so without this line the figure is nowhere.
     expect(screen.getByText(/4\s?000/)).toBeTruthy();
     expect(screen.queryByText(/Ще нічого не записано/)).toBeNull();
+  });
+});
+
+/**
+ * Review B-65. Money the client hands back for material is his OWN money returning — it buys no
+ * work — so the card may not count it against the contract, and «Усе сплачено» may not be said
+ * while a till receipt is still unreimbursed. Both halves have to be VISIBLE: a figure that moves
+ * for a reason the screen does not name reads as our arithmetic slipping.
+ */
+describe('PaymentsBlock — material coming back is not payment for work (B-65)', () => {
+  it('does not let a refund pay down the contract, and says why «Прийшло» is higher', () => {
+    const back = receipt({ id: 'r1', planPaymentId: null, amount: 2000, label: 'Повернув за плитку',
+      displayLabel: 'Повернув за плитку', materialRefund: true });
+    renderBlock(summary([], [back]), 0);
+
+    // 2 000 arrived and NOTHING was paid off the 20 000 contract.
+    expect(screen.queryByText('Усе сплачено ✓')).toBeNull();
+    expect(screen.getByText(/повернення за матеріал/)).toBeTruthy();
+  });
+
+  it('refuses «Усе сплачено» while a till receipt is still unreimbursed, and names what is left', () => {
+    // The works side is settled to the hryvnia, but the master is still 4 200 ₴ out of pocket for
+    // material. «Усе сплачено» there is simply false, and it is the line he reads to decide
+    // whether to chase the client.
+    const row = plannedRow({ purpose: 'Аванс', received: 20000, remaining: 0, status: 'RECEIVED',
+      receipts: [receipt({ amount: 20000 })] });
+    renderBlock(summary([row]), 4200);
+
+    expect(screen.queryByText('Усе сплачено ✓')).toBeNull();
+    expect(screen.getByText(/за матеріал ще/)).toBeTruthy();
+  });
+
+  it('says «Усе сплачено» once BOTH axes are at zero', () => {
+    const row = plannedRow({ purpose: 'Аванс', received: 20000, remaining: 0, status: 'RECEIVED',
+      receipts: [receipt({ amount: 20000 })] });
+    renderBlock(summary([row]), 0);
+
+    expect(screen.getByText('Усе сплачено ✓')).toBeTruthy();
+  });
+
+  it('shows an overpayment instead of swallowing it — `remaining` is floored at zero', () => {
+    const row = plannedRow({ purpose: 'Аванс', received: 23000, remaining: 0, status: 'RECEIVED',
+      receipts: [receipt({ amount: 23000 })] });
+    renderBlock(summary([row]), 0);
+
+    expect(screen.getByText(/Переплата/)).toBeTruthy();
+  });
+
+  it('asks «це повернення за матеріал?» only where there IS something to reimburse', () => {
+    renderBlock(summary(), 0);
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    // On an object with no till receipts the question has no true answer — it is pure noise.
+    expect(within(screen.getByRole('dialog')).queryByRole('checkbox')).toBeNull();
+  });
+
+  it('sends the tick with the receipt, so the object can do the split at all', async () => {
+    vi.mocked(paymentsApi.addReceipt).mockResolvedValue([]);
+    renderBlock(summary(), 4200);
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '2000' } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/Завдаток/), { target: { value: 'За плитку' } });
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    await waitFor(() => expect(paymentsApi.addReceipt).toHaveBeenCalled());
+    expect(vi.mocked(paymentsApi.addReceipt).mock.calls[0][1]).toMatchObject({
+      amount: 2000, materialRefund: true,
+    });
   });
 });

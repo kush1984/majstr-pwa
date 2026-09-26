@@ -13,6 +13,7 @@ import { actsApi } from '@/api/acts.ts';
 import { photosApi } from '@/api/photos.ts';
 import { decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { formatMoneyExact } from '@/lib/format.ts';
+import { parseMoney } from '@/lib/decimal.ts';
 import { ReceiptOrdinal, ReceiptPhoto } from '@/features/photos/ReceiptPhoto.tsx';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
@@ -575,14 +576,22 @@ function ReceiptForm({
     setReading(false);
   }
 
-  const num = (s: string): number => {
-    const n = Number(s.replace(',', '.'));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Review P-35. An amount that cannot be read is not 0 ₴ — and here it is money the CLIENT is
+  // billed for: «1 200» off a phone keypad used to bill the paper at nothing, and a mistyped
+  // return used to hand back nothing. Blank stays 0: an unpriced receipt is a legal batch state,
+  // refused only at the doors that publish or sign the act.
+  const amountOf = (s: string): number | null =>
+    s.trim() === '' ? 0 : parseMoney(s, { allowZero: true });
+  const num = (s: string): number => amountOf(s) ?? 0;
+  const amountInvalid = amountOf(amount) === null;
+  const returnedInvalid = amountOf(returned) === null;
   // Mirrors the server's cap (WORK_ACT_RECEIPT_RETURN_TOO_BIG). Named in place rather than left to
   // a toast after the save: the master is looking at both numbers while he types the wrong one.
-  const returnTooBig = num(returned) > num(amount);
-  const valid = label.trim() !== '' && num(amount) > 0 && !returnTooBig;
+  // A field that does not read yet says so itself — comparing the two 0s it would fall back to
+  // would answer «the return is fine» about numbers nobody has.
+  const returnTooBig = !amountInvalid && !returnedInvalid && num(returned) > num(amount);
+  const valid = label.trim() !== '' && !amountInvalid && !returnedInvalid
+    && num(amount) > 0 && !returnTooBig;
   // Nothing a read could still fill in: every field the footer pass returns is already there.
   // Leaving the button live invites a slow call whose only possible effect is to overwrite what the
   // master just typed off the paper in front of him.
@@ -636,7 +645,9 @@ function ReceiptForm({
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={t('acts.receiptAmount')}>
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input inputMode="decimal" value={amount} invalid={amountInvalid}
+              onChange={(e) => setAmount(e.target.value)} />
+            {amountInvalid && <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>}
           </Field>
           <Field label={t('acts.receiptDate')}>
             <Input type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
@@ -647,10 +658,12 @@ function ReceiptForm({
             the create endpoint has no such field, so a number typed here would go nowhere. */}
         {!pending && (
           <Field label={t('acts.receiptReturned')}>
-            <Input inputMode="decimal" value={returned} placeholder="0" onChange={(e) => setReturned(e.target.value)} />
+            <Input inputMode="decimal" value={returned} placeholder="0" invalid={returnedInvalid}
+              onChange={(e) => setReturned(e.target.value)} />
+            {returnedInvalid && <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>}
           </Field>
         )}
-        {!pending && (returnTooBig ? (
+        {!pending && !returnedInvalid && (returnTooBig ? (
           <p className="-mt-1 text-xs text-danger">{t('acts.receiptReturnedTooBig')}</p>
         ) : (
           <p className="-mt-1 text-xs text-muted">{t('acts.receiptReturnedHint')}</p>

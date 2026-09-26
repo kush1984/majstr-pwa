@@ -73,6 +73,9 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  // The applied figures are remembered per estimate now — a leak between tests would open the
+  // next one with the previous one's perimeter already answered.
+  localStorage.clear();
   calculate.mockReset();
   toShoppingList.mockReset();
   saveNorm.mockReset();
@@ -205,10 +208,10 @@ describe('MaterialCalculatorPage', () => {
 
     expect(await screen.findByText('Потрібна розгортка')).toBeTruthy();
     // One input per POSITION: the board and the ribs of one короб share a single розгортка.
-    fireEvent.change(screen.getByLabelText('Монтаж короба (прямого)'), {
+    fireEvent.change(screen.getByLabelText('Монтаж короба (прямого), м'), {
       target: { value: '0,4' },
     });
-    fireEvent.change(screen.getByLabelText('Монтаж ніші'), { target: { value: '1,2' } });
+    fireEvent.change(screen.getByLabelText('Монтаж ніші, м'), { target: { value: '1,2' } });
     fireEvent.click(screen.getByText('Порахувати'));
 
     await waitFor(() =>
@@ -523,7 +526,7 @@ describe('MaterialCalculatorPage', () => {
     );
     renderPage();
 
-    const field = await screen.findByLabelText('Штукатурення стін');
+    const field = await screen.findByLabelText('Штукатурення стін, мм');
     fireEvent.change(field, { target: { value: '25' } });
     fireEvent.click(screen.getByText('Порахувати'));
 
@@ -538,6 +541,102 @@ describe('MaterialCalculatorPage', () => {
       }),
     );
     expect(await screen.findByDisplayValue('25')).toBeTruthy();
+  });
+
+  /**
+   * The master's own complaint: he typed the thickness, tapped «Порахувати», sent the materials to
+   * the shopping list — and the next time he opened the screen the same card asked the same
+   * question with our default in it, while the list already held the answer. «Якщо вже майстер
+   * натиснув розрахувати, то воно це діло запамʼятовує автоматично.»
+   */
+  it('remembers the applied figures and asks nothing the second time round', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'THICKNESS',
+            materialName: 'Суміш штукатурна',
+            estimateItemId: 'e1',
+            positionName: 'Штукатурення стін',
+            suggested: 15,
+          },
+        ],
+      }),
+    );
+    const first = renderPage();
+    fireEvent.change(await screen.findByLabelText('Штукатурення стін, мм'), {
+      target: { value: '25' },
+    });
+    fireEvent.click(screen.getByText('Порахувати'));
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: 'e1:25',
+      }),
+    );
+    first.unmount();
+
+    // A fresh visit: the FIRST request already carries his figure, so the position is never
+    // missing and the card never asks again.
+    calculate.mockClear();
+    renderPage();
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: 'e1:25',
+      }),
+    );
+  });
+
+  /**
+   * The other half of remembering it: a figure kept forever needs somewhere to be corrected. The
+   * server only reports what is MISSING, so an answered position is read back off the arithmetic —
+   * the card keeps standing, showing the figure in use and headed as a fact rather than a demand.
+   */
+  it('keeps the answered thickness on screen, with its unit, so it can be changed', async () => {
+    const plaster = line({
+      name: 'Суміш штукатурна',
+      unit: 'M2',
+      sources: [
+        {
+          estimateItemId: 'e1',
+          name: 'Штукатурення стін',
+          unit: 'M2',
+          quantity: 30,
+          qtyPerUnit: 0.85,
+          normId: 'n1',
+          ownNorm: false,
+          basis: 'THICKNESS',
+          param: 15,
+          amount: 382.5,
+        },
+      ],
+    });
+    calculate.mockResolvedValue(answer({ materials: [plaster] }));
+    renderPage();
+
+    // Not «Потрібна товщина шару» — nothing is needed any more; and «мм» is in the LABEL, because
+    // the pre-filled field never shows its placeholder.
+    expect(await screen.findByText('Товщина шару')).toBeTruthy();
+    // The value arrives with the pre-fill effect, a tick after the label — find it, don't read it.
+    expect(await screen.findByDisplayValue('15')).toBeTruthy();
+    const field = screen.getByLabelText('Штукатурення стін, мм');
+
+    fireEvent.change(field, { target: { value: '20' } });
+    fireEvent.click(screen.getByText('Перерахувати'));
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: 'e1:20',
+      }),
+    );
   });
 
   it('shows the thickness as its own factor, in millimetres', async () => {

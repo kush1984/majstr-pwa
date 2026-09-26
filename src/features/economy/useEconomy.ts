@@ -178,32 +178,48 @@ export function useAddReceipt(objectId: string) {
       const id = newUuid();
       const result = await offlineMutate<PaymentReceiptResponse[]>({
         entity: 'payment-receipt', entityId: id, type: 'create', payload: { objectId, req },
-        deps: [objectId],
+        // The targeted stage is a dep, not just the object: a stage added in the same offline
+        // session carries a client-generated id that only exists on the server once ITS create
+        // has replayed, and a receipt naming it earlier would 404.
+        deps: req.planPaymentId ? [objectId, req.planPaymentId] : [objectId],
         online: () => paymentsApi.addReceipt(objectId, req, id),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => {
           const label = req.label?.trim() || null;
+          const refund = req.materialRefund === true;
+          // Money handed back for material arrives, but it buys no work: it raises «Прийшло» and
+          // leaves «Залишилось» exactly where it was (review B-65). The server applies the same
+          // split — and clamps it against what is actually reimbursable — on the next read.
+          const paysWork = refund ? 0 : req.amount;
           const receipt: PaymentReceiptResponse = {
             id, planPaymentId: req.planPaymentId ?? null, label,
             displayLabel: label ?? 'Оплата', amount: req.amount, receivedAt: req.receivedAt,
+            materialRefund: refund,
           };
           patchSummary(qc, objectId, (s) => {
             if (!req.planPaymentId) {
               return {
-                ...s, received: s.received + req.amount, remaining: Math.max(0, s.remaining - req.amount),
+                ...s, received: s.received + req.amount, remaining: Math.max(0, s.remaining - paysWork),
+                workPaid: s.workPaid + paysWork,
+                materialRefunds: s.materialRefunds + (refund ? req.amount : 0),
                 unplannedReceipts: [...s.unplannedReceipts, receipt],
               };
             }
             const payments = s.payments.map((p) => {
               if (p.id !== req.planPaymentId) return p;
-              const received = p.received + req.amount;
+              const received = p.received + paysWork;
               return {
                 ...p, received, remaining: Math.max(0, p.amount - received),
                 status: deriveStageStatus(p.amount, received, p.dueDate),
                 receipts: [...p.receipts, { ...receipt, label: null, displayLabel: p.purpose }],
               };
             });
-            return { ...s, payments, received: s.received + req.amount, remaining: Math.max(0, s.remaining - req.amount) };
+            return {
+              ...s, payments, received: s.received + req.amount,
+              remaining: Math.max(0, s.remaining - paysWork),
+              workPaid: s.workPaid + paysWork,
+              materialRefunds: s.materialRefunds + (refund ? req.amount : 0),
+            };
           });
           return [receipt];
         },
@@ -249,6 +265,8 @@ export function useEditReceipt(objectId: string) {
             if (r.id !== id) return r;
             const label = r.planPaymentId ? r.label : (req.label?.trim() || r.label);
             updated = { ...r, amount: req.amount, receivedAt: req.receivedAt, label,
+              // Three-valued like the server's: an omitted tick leaves the answer alone.
+              materialRefund: req.materialRefund ?? r.materialRefund,
               displayLabel: r.planPaymentId ? r.displayLabel : (label ?? r.displayLabel) };
             return updated;
           };
@@ -258,7 +276,8 @@ export function useEditReceipt(objectId: string) {
             unplannedReceipts: s.unplannedReceipts.map(editOne),
           }));
           return updated ?? { id, planPaymentId: null, label: req.label ?? null,
-            displayLabel: req.label ?? 'Оплата', amount: req.amount, receivedAt: req.receivedAt };
+            displayLabel: req.label ?? 'Оплата', amount: req.amount, receivedAt: req.receivedAt,
+            materialRefund: req.materialRefund ?? false };
         },
       }),
   });

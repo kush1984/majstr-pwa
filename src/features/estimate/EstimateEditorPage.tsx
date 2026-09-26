@@ -18,6 +18,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { bodyScrollLocked, scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
+import { markedUpPrice } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
@@ -1008,7 +1009,7 @@ function ItemMarkupSheet({
   const factor = 1 + (discount ? -percent : percent) / 100;
   const before = items.reduce((sum, i) => sum + i.lineTotal, 0);
   const after = valid
-    ? items.reduce((sum, i) => sum + Math.round(i.unitPrice * factor) * i.quantity, 0)
+    ? items.reduce((sum, i) => sum + markedUpPrice(i.unitPrice, factor) * i.quantity, 0)
     : before;
 
   return (

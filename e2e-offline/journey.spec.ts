@@ -28,13 +28,14 @@ async function registerAndSeed(page: Page): Promise<{ projectUrl: string }> {
   await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
   await page.fill('#phone', '+380501112233');
   await page.fill('#companyName', 'Офлайн ФОП');
+  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
   // Create an object + estimate so there is real data to see offline.
   await page.getByRole('button', { name: 'Створити перший кошторис' }).click();
   await page.fill('#pr-name', 'Обʼєкт Офлайн');
   await page.fill('#pr-addr', 'вул. Тестова 7');
-  await page.getByRole('button', { name: 'Створити кошторис' }).click();
+  await page.getByRole('button', { name: 'Створити', exact: true }).click();
   await expect(page).toHaveURL(/\/estimates\//);
 
   // Land on the object page — the deep route whose refresh used to die offline.

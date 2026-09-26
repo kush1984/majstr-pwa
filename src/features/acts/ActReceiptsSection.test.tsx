@@ -502,3 +502,42 @@ describe('ActReceiptsSection', () => {
     expect(screen.getByText(/Звʼязку немає/)).toBeTruthy();
   });
 });
+
+/**
+ * Review P-35. This money is billed to the CLIENT: an amount that could not be read used to become
+ * 0 ₴ under a photo of the paper saying otherwise, and a mistyped return used to hand back
+ * nothing. Nothing here is rounded to zero — the field says so and the save waits.
+ */
+describe('ActReceiptsSection — an unreadable amount is refused, never billed as zero (P-35)', () => {
+  const openEdit = () => {
+    renderSection({ receipts: [receipt({ label: 'Цвяхи', amount: 2000, hasPhoto: false })] });
+    fireEvent.click(screen.getByText('Редагувати'));
+    return screen.getByDisplayValue('2000');
+  };
+
+  it('reads a sum typed with the spacing a phone keypad puts in', async () => {
+    fireEvent.change(openEdit(), { target: { value: '1\u00a0200' } });
+    fireEvent.click(screen.getByText('Зберегти'));
+
+    await waitFor(() => expect(actsApi.updateReceipt).toHaveBeenCalled());
+    expect(vi.mocked(actsApi.updateReceipt).mock.calls[0][2]).toMatchObject({ amount: 1200 });
+  });
+
+  it('shuts the Save button and names the field instead of billing 0 ₴', () => {
+    fireEvent.change(openEdit(), { target: { value: '12а' } });
+
+    expect(screen.getByText(/Вкажіть число/)).toBeTruthy();
+    expect(screen.getByText('Зберегти').closest('button')!.disabled).toBe(true);
+    expect(actsApi.updateReceipt).not.toHaveBeenCalled();
+  });
+
+  it('a return that does not read says so, instead of passing the server cap as 0 vs 0', () => {
+    fireEvent.change(openEdit(), { target: { value: '' } }); // unpriced is legal; the return is not
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '5о0' } });
+
+    expect(screen.getByText(/Вкажіть число/)).toBeTruthy();
+    // 0 ≥ 0 would have read as «the return fits» about two numbers nobody has.
+    expect(screen.queryByText(/Повернення не може бути більшим/)).toBeNull();
+    expect(screen.getByText('Зберегти').closest('button')!.disabled).toBe(true);
+  });
+});

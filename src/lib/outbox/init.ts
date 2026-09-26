@@ -10,6 +10,7 @@ import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
 import { shoppingApi } from '@/api/shopping.ts';
 import { economyApi } from '@/api/economy.ts';
+import { paymentsApi } from '@/api/payments.ts';
 import { cashApi } from '@/api/cash.ts';
 import { actsApi } from '@/api/acts.ts';
 import { fromQueuedFile } from './queuedFile.ts';
@@ -20,7 +21,8 @@ import type {
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
-  NoteRequest, ProjectRequest,
+  NoteRequest, PaymentReceiptEditRequest, PaymentReceiptRequest, ProjectPaymentRequest,
+  ProjectRequest,
   ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
   TemplateItemRequest, TemplateItemsOrderRequest, Trade,
 } from '@/api/types.ts';
@@ -215,6 +217,44 @@ export function initOutbox(qc: QueryClient): () => void {
       // A DELETE carries no body, so the kind rides the op: an older queued op knew only his own
       // rows, which is exactly what the default means.
       await cashApi.remove(op.entityId, p.kind ?? 'PERSONAL');
+    }
+  });
+
+  // Object payments — the PLAN side (`project_payment`, V93). entityId is the STAGE id; the
+  // object id rides the payload. Hyphenated names, because that is what the call sites have
+  // always enqueued: a queue outlives an app update, so renaming them to camelCase would strand
+  // every op a master already has in IndexedDB.
+  //
+  // These two handlers were MISSING while both hooks queued against them (review P-33). A queued
+  // op with no handler is skipped by every flush and never retried, so an «Отримати платіж»
+  // authored with no signal showed as received, sat in the queue forever, and vanished from the
+  // screen at the next global invalidate — the money was never sent and nothing said so.
+  registerOutboxHandler('project-payment', async (op) => {
+    const p = op.payload as { objectId: string; req?: ProjectPaymentRequest };
+    if (op.type === 'create') {
+      await paymentsApi.add(p.objectId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await paymentsApi.update(p.objectId, op.entityId, p.req!);
+    } else {
+      await paymentsApi.remove(p.objectId, op.entityId);
+    }
+  });
+
+  // Received money — the FACT side (`payment_receipt`, V100). entityId is the RECEIPT id.
+  //
+  // The create replays under its own X-Entity-Uuid, so a retry can never bill the same money
+  // twice. A TRANSFER overflow never reaches here: it creates TWO receipts from one submission
+  // and is online-only by design (`useAddReceiptTransfer`).
+  registerOutboxHandler('payment-receipt', async (op) => {
+    const p = op.payload as {
+      objectId: string; req?: PaymentReceiptRequest & PaymentReceiptEditRequest;
+    };
+    if (op.type === 'create') {
+      await paymentsApi.addReceipt(p.objectId, p.req!, op.entityId);
+    } else if (op.type === 'update') {
+      await paymentsApi.editReceipt(p.objectId, op.entityId, p.req!);
+    } else {
+      await paymentsApi.removeReceipt(p.objectId, op.entityId);
     }
   });
 

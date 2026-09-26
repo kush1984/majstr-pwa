@@ -19,6 +19,7 @@ import { track } from '@/lib/posthog.ts';
 import { actsApi } from '@/api/acts.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
+import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { CatalogAutocomplete } from '@/features/estimate/CatalogAutocomplete.tsx';
 import { CatalogPicker } from '@/features/catalog/CatalogPicker.tsx';
@@ -33,11 +34,31 @@ import { useEconomy } from '@/features/economy/useEconomy.ts';
 import { ActReceiptsSection, billedOf } from './ActReceiptsSection.tsx';
 import { mergeQueuedReceipts, usePendingActReceipts } from './offlineReceipts.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
-import { UNITS } from '@/api/types.ts';
+import { ACT_UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
-import type { ActProgressLine, ItemType, Unit, WorkActItemLine, WorkActKind } from '@/api/types.ts';
+import type {
+  ActProgressLine, ItemType, Unit, WorkActItemLine, WorkActItemResponse, WorkActKind,
+} from '@/api/types.ts';
 
 const ADDITIONAL_WARNED_KEY = 'majstr-acts-additional-warned';
+
+/** Group key for act lines whose estimate can no longer be named (the FK is ON DELETE SET NULL). */
+const ACT_OWN_LINES = 'act';
+
+/**
+ * Review P-35. An unreadable field is NOT zero. «1 200», «12а» and «-5» all used to come out as
+ * 0 ₴ in silence — an additional-work price signed as a free line, a credited advance that
+ * vanished, a quantity that took its whole position out of the act. These answer `null`, the row
+ * says so, and Save/«Підписати» stay shut until it reads. Blank stays 0: «nothing here» is an
+ * answer a master gives on purpose, not a typo.
+ */
+const qtyOf = (s: string): number | null =>
+  s.trim() === '' ? 0 : parseQuantity(s, { allowZero: true });
+const moneyOf = (s: string): number | null =>
+  s.trim() === '' ? 0 : parseMoney(s, { allowZero: true });
+/** What to SHOW while a field is still wrong — the control it sits on is flagged red meanwhile. */
+const num = (s: string): number => qtyOf(s) ?? 0;
+const money = (s: string): number => moneyOf(s) ?? 0;
 
 interface Additional { name: string; type: ItemType; unit: Unit; unitPrice: string; quantity: string; }
 
@@ -60,6 +81,16 @@ function formSnapshot(s: {
   kind: WorkActKind; title: string; issuedAt: string; periodFrom: string; periodTo: string;
   contractRef: string; advance: string; showMaterials: boolean; showCumulative: boolean;
   receiptsToExpenses: boolean; showReceiptPhotos: boolean;
+  qty: Record<string, string>; additional: Additional[];
+}): string {
+  return JSON.stringify(s);
+}
+
+/** The MONEY half of that form — the only part the totals are computed from. Kept apart because a
+ *  retitled act is not a re-priced one: the auto-title alone makes every untitled draft read as
+ *  drifted, and the server's own figures would then never be the ones shown. */
+function moneySnapshot(s: {
+  advance: string; showMaterials: boolean;
   qty: Record<string, string>; additional: Additional[];
 }): string {
   return JSON.stringify(s);
@@ -128,6 +159,7 @@ export function ActEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   // The form as it was seeded or last saved — the reference the dirty check compares against.
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const [savedMoney, setSavedMoney] = useState<string | null>(null);
 
   useEffect(() => {
     if (seeded || !isNew) return;
@@ -159,6 +191,10 @@ export function ActEditorPage() {
     const seededQty: Record<string, string> = {};
     const seededAdditional: Additional[] = [];
     for (const it of a.items) {
+      // An ADJUSTMENT has no estimateItemId either (B-55), so it would fall into «Додаткові роботи»
+      // and be saved straight back as an off-estimate work — billing the estimate's own discount a
+      // second time, in the ADDENDUM. The server authors it; the editor only shows the figure.
+      if (it.lineKind === 'ADJUSTMENT') continue;
       if (it.estimateItemId) seededQty[it.estimateItemId] = String(it.quantity);
       else seededAdditional.push({ name: it.name, type: it.type, unit: it.unit, unitPrice: String(it.unitPrice), quantity: String(it.quantity) });
     }
@@ -172,22 +208,79 @@ export function ActEditorPage() {
       receiptsToExpenses: a.receiptsToExpenses, showReceiptPhotos: a.showReceiptPhotos,
       qty: seededQty, additional: seededAdditional,
     }));
+    setSavedMoney(moneySnapshot({
+      advance: a.advanceOffset == null ? '' : String(a.advanceOffset),
+      showMaterials: a.showMaterials, qty: seededQty, additional: seededAdditional,
+    }));
     setSeeded(true);
   }, [act.data, seeded]);
 
-  // Progress grouped by estimate. When scoped to one estimate (generated from its «Згенерувати акт»),
-  // only that estimate's positions are shown; unscoped (from the Acts tab), every SIGNED estimate is.
+  /**
+   * The lines the editor works from (review P-34). WHERE they come from is not the same question
+   * before and after the signature.
+   *
+   * A SIGNED act is a document, not a view of the estimate: it renders its OWN items, at the price
+   * and the quantity the client signed. The progress feed cannot serve it — the feed deliberately
+   * skips every estimate that is no longer counted in the economy, and a signed parent stops being
+   * counted the moment its duplicate is signed, so a signed act on one opened EMPTY, with
+   * «Разом 0,00» printed under a document the client had already accepted.
+   *
+   * A DRAFT or SENT act reads the live feed instead, because the feed is what the SERVER will
+   * write: an estimate-linked line takes its price, unit and quantity cap from the estimate at save
+   * time (B-56), so showing the frozen copy would disagree with the figure about to be saved. What
+   * the act already holds is still never thrown away — a saved line the feed no longer offers is
+   * added BACK at its own frozen price, so it is shown and re-saved instead of silently un-billing
+   * work the master had entered and the client may have already been shown.
+   */
+  const actLines = useMemo<ActProgressLine[]>(() => {
+    const meta = new Map<string, { name: string | null; createdAt: string }>();
+    for (const l of progress.data?.lines ?? []) {
+      meta.set(l.estimateId, { name: l.estimateName, createdAt: l.estimateCreatedAt });
+    }
+    const fromItem = (it: WorkActItemResponse, estimateItemId: string): ActProgressLine => {
+      const m = it.estimateId ? meta.get(it.estimateId) : undefined;
+      return {
+        estimateId: it.estimateId ?? ACT_OWN_LINES,
+        // Nothing left to name it with (the estimate FK is ON DELETE SET NULL, and an un-counted
+        // estimate is absent from the feed): say where the lines DO come from rather than invent a
+        // «Кошторис від …» that opens nothing.
+        estimateName: m ? m.name : t('acts.linesFromAct'),
+        estimateCreatedAt: m?.createdAt ?? '',
+        estimateItemId, type: it.type, name: it.name, category: it.category, unit: it.unit,
+        unitPrice: it.unitPrice,
+        // The act's own arithmetic, so the line still reads as progress: what earlier acts closed,
+        // what THIS one closes, and the sum of the two as the position it was cut from.
+        estimateQuantity: it.cumulativeBefore + it.quantity,
+        done: it.cumulativeBefore,
+        remaining: it.quantity,
+      };
+    };
+    const saved = (act.data?.items ?? []).filter((it) => it.lineKind !== 'ADJUSTMENT');
+    const own = (it: WorkActItemResponse): ActProgressLine[] =>
+      it.estimateItemId ? [fromItem(it, it.estimateItemId)] : [];
+    if (signed) return saved.flatMap(own);
+    const live = (progress.data?.lines ?? [])
+      .filter((l) => !scopeEstimate || l.estimateId === scopeEstimate);
+    const offered = new Set(live.map((l) => l.estimateItemId));
+    const orphans = saved.flatMap((it) =>
+      it.estimateItemId && !offered.has(it.estimateItemId) ? own(it) : []);
+    return [...live, ...orphans];
+  }, [signed, act.data, progress.data, scopeEstimate, t]);
+
+  // Grouped by estimate, the same shape as the act PDF. When scoped to one estimate (generated from
+  // its «Згенерувати акт») only that estimate's positions are offered; unscoped (from the Acts tab),
+  // every SIGNED estimate is — the filter lives in `actLines`, so nothing can be scoped away after
+  // it was saved.
   const groups = useMemo(() => {
     const byEstimate = new Map<string, { name: string; lines: ActProgressLine[] }>();
-    for (const line of progress.data?.lines ?? []) {
-      if (scopeEstimate && line.estimateId !== scopeEstimate) continue;
+    for (const line of actLines) {
       const g = byEstimate.get(line.estimateId)
         ?? { name: estimateName(line.estimateName, line.estimateCreatedAt), lines: [] };
       g.lines.push(line);
       byEstimate.set(line.estimateId, g);
     }
     return [...byEstimate.entries()];
-  }, [progress.data, scopeEstimate]);
+  }, [actLines]);
 
   // Every SIGNED-estimate line by name → the estimates that carry it. An off-estimate «додаткова»
   // line whose name matches one warns the master it already lives in a real estimate (where it can be
@@ -204,29 +297,55 @@ export function ActEditorPage() {
     return map;
   }, [progress.data]);
 
-  const num = (s: string): number => {
-    const n = Number(s.replace(',', '.'));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Every field that has to READ before the act can be written. A wholly blank additional row is
+  // not an error — it is the empty row the «+» just added; a row with anything in it must read.
+  const qtyErrors = useMemo(() => {
+    const bad = new Set<string>();
+    for (const [key, raw] of Object.entries(qty)) if (qtyOf(raw) === null) bad.add(key);
+    return bad;
+  }, [qty]);
+  const additionalErrors = useMemo(() => {
+    const bad = new Set<number>();
+    additional.forEach((a, i) => {
+      if (a.name.trim() === '' && a.quantity.trim() === '' && a.unitPrice.trim() === '') return;
+      if (qtyOf(a.quantity) === null || moneyOf(a.unitPrice) === null) bad.add(i);
+    });
+    return bad;
+  }, [additional]);
+  const advanceInvalid = moneyOf(advance) === null;
+  const invalid = qtyErrors.size > 0 || additionalErrors.size > 0 || advanceInvalid;
 
   // WYSIWYG (review fix): the act contains exactly what the editor shows. With «Показувати
   // матеріали» off, MATERIAL estimate lines are hidden — so they must not count into the total nor
   // be saved, or an invisible position would still be billed (entered quantities are kept in state,
   // so ticking the box back restores them). Additional works always count: the master added them
   // explicitly and their section never hides.
+  //
+  // Each line is rounded to the kopeck and the sum is added IN kopecks (review P-34/P-39): the
+  // server stores every line at scale 2 and adds those, so a float chain here drifts away from the
+  // figure the client is about to sign — on the one screen that exists to show that figure.
   const total = useMemo(() => {
-    let sum = 0;
-    for (const line of progress.data?.lines ?? []) {
+    const parts: number[] = [];
+    for (const line of actLines) {
       if (!showMaterials && line.type === 'MATERIAL') continue;
-      sum += num(qty[line.estimateItemId] ?? '') * line.unitPrice;
+      parts.push(num(qty[line.estimateItemId] ?? '') * line.unitPrice);
     }
-    for (const a of additional) sum += num(a.quantity) * num(a.unitPrice);
-    return sum;
-  }, [qty, additional, progress.data, showMaterials]);
+    for (const a of additional) parts.push(num(a.quantity) * money(a.unitPrice));
+    return sumMoney(parts);
+  }, [qty, additional, actLines, showMaterials]);
+  // «Знижка/надбавка за кошторисом» (B-55): the estimate's own «% від кошторису», prorated by what
+  // this act closes. The SERVER authors it on every save — the editor cannot recompute it (the
+  // progress endpoint deliberately drops «%» lines, they have no quantity to close), so it shows
+  // the figure from the last save and says so while the quantities are dirty. Leaving it out
+  // altogether is the one thing that is not an option: it would show a −10 % estimate's act at its
+  // gross price, which is 2 000 ₴ the client never agreed to.
+  const adjustments = (act.data?.items ?? []).filter((i) => i.lineKind === 'ADJUSTMENT');
+  const adjustmentsTotal = sumMoney(adjustments.map((i) => i.lineTotal));
+  const billedTotal = sumMoney([total, adjustmentsTotal]);
   // Shown in the «Додаткові роботи» panel header — the one figure that says whether the block is
   // worth opening on a phone.
   const additionalTotal = useMemo(
-    () => additional.reduce((sum, a) => sum + num(a.quantity) * num(a.unitPrice), 0), [additional]);
+    () => sumMoney(additional.map((a) => num(a.quantity) * money(a.unitPrice))), [additional]);
   // Receipts are saved the moment they are added, so they come straight off the loaded act — they
   // are money the client owes on this act, hence inside «До сплати», not a decorative appendix.
   //
@@ -239,8 +358,8 @@ export function ActEditorPage() {
   // Itemized receipts are reference-only — their positions already bill the money as act lines.
   // `billedOf` (not `amount`) — a partial return must reach «До сплати» here exactly as it reaches
   // the receipts panel's own subtotal and the server's `payable`.
-  const receiptsTotal = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + billedOf(r), 0);
-  const payable = Math.max(0, total + receiptsTotal - num(advance));
+  const receiptsTotal = sumMoney(receipts.filter((r) => !r.itemized).map((r) => billedOf(r)));
+  const payable = Math.max(0, sumMoney([billedTotal, receiptsTotal, -money(advance)]));
 
   // What «Зараховано авансу» is FOR, said in the object's own numbers instead of left to the
   // master's memory: money the client has already paid that no SIGNED act has accepted yet
@@ -256,32 +375,32 @@ export function ActEditorPage() {
   }, [economy.data]);
   // Never more than this act is worth — `payable` floors at 0 anyway, and offering to credit more
   // than the act bills would read as «the rest carries over», which nothing implements.
-  const advanceSuggestion = Math.round(Math.min(unearnedAdvance ?? 0, total + receiptsTotal) * 100) / 100;
+  const advanceSuggestion = roundMoney(Math.min(unearnedAdvance ?? 0, billedTotal + receiptsTotal));
 
   // Auto-title (master feedback): when every selected estimate line shares ONE category, that
   // category IS the act's stage name — offer it live until the master types his own.
   const autoTitle = useMemo(() => {
     const cats = new Set<string>();
-    for (const line of progress.data?.lines ?? []) {
+    for (const line of actLines) {
       if (!showMaterials && line.type === 'MATERIAL') continue;
       if (num(qty[line.estimateItemId] ?? '') <= 0) continue;
       cats.add((line.category ?? '').trim());
     }
     return cats.size === 1 ? [...cats][0] : '';
-  }, [qty, progress.data, showMaterials]);
+  }, [qty, actLines, showMaterials]);
   const effectiveTitle = titleEdited ? title : autoTitle;
 
   // Name suggestions = the object's own estimate categories (Демонтаж, Штукатурні роботи, …) —
   // the master's real vocabulary, no hardcoded template list to maintain.
   const titleSuggestions = useMemo(() => {
     const seen: string[] = [];
-    for (const line of progress.data?.lines ?? []) {
+    for (const line of actLines) {
       if (line.remaining <= 0) continue; // a fully closed stage is not a name for the NEXT act
       const c = (line.category ?? '').trim();
       if (c && !seen.includes(c)) seen.push(c);
     }
     return seen.slice(0, 8);
-  }, [progress.data]);
+  }, [actLines]);
 
   // Dirty = the form drifted from its seeded/last-saved snapshot. A signed act is read-only, so it
   // can never be dirty; before seeding there is nothing to lose. Uses the EFFECTIVE title, so the
@@ -290,10 +409,24 @@ export function ActEditorPage() {
     kind, title: effectiveTitle, issuedAt, periodFrom, periodTo, contractRef, advance,
     showMaterials, showCumulative, receiptsToExpenses, showReceiptPhotos, qty, additional,
   });
+  const currentMoney = moneySnapshot({ advance, showMaterials, qty, additional });
   // An unsaved new act is dirty by definition: there is no server row behind it, so leaving always
   // asks (master feedback — a mistaken tap used to leave a real numbered act on the object).
   const dirty = seeded && !signed
     && (isNew || (savedSnapshot !== null && currentSnapshot !== savedSnapshot));
+
+  // Review P-34. Once the form is exactly what the server holds and nothing is still queued on the
+  // phone, the SERVER's own figures are the ones shown — they are what the PDF prints, what the
+  // portal shows the client and what the economy counts, and the editor recomputing its own answer
+  // beside them is how the two quietly disagree. `total` there is the sum of EVERY stored line, the
+  // B-55 adjustment included, so the «Разом» row takes it back out and the adjustment keeps its
+  // own row underneath. While the form IS dirty the local arithmetic is the only honest answer:
+  // it is showing money that has not been saved yet.
+  const moneyClean = seeded && !isNew && savedMoney !== null && currentMoney === savedMoney;
+  const serverTotals = moneyClean && !act.isFetching && queued.size === 0 ? act.data ?? null : null;
+  const shownTotal = serverTotals ? roundMoney(serverTotals.total - adjustmentsTotal) : total;
+  const shownReceiptsTotal = serverTotals ? serverTotals.receiptsTotal : receiptsTotal;
+  const shownPayable = serverTotals ? serverTotals.payable : payable;
   // In-app back/swipe with unsaved edits → a ConfirmDialog instead of silent loss (review fix).
   // The ref lets the post-delete navigation pass through: the entity is gone, there is nothing
   // left to save, and the guard would otherwise fire before React re-renders with dirty=false.
@@ -303,12 +436,12 @@ export function ActEditorPage() {
   // At least one line with a quantity — the gate for signing (mirrors the backend's empty-act
   // guard: a SIGNED act is immutable and undeletable, so an empty one must never get that far).
   const hasLines = useMemo(() => {
-    for (const line of progress.data?.lines ?? []) {
+    for (const line of actLines) {
       if (!showMaterials && line.type === 'MATERIAL') continue;
       if (num(qty[line.estimateItemId] ?? '') > 0) return true;
     }
     return additional.some((a) => num(a.quantity) > 0 && a.name.trim() !== '');
-  }, [qty, additional, progress.data, showMaterials]);
+  }, [qty, additional, actLines, showMaterials]);
 
   if ((!isNew && act.isPending) || (Boolean(projectId) && progress.isPending)) {
     return <div className="py-16 text-center text-brand"><Spinner /></div>;
@@ -348,7 +481,7 @@ export function ActEditorPage() {
 
   const buildItems = (): WorkActItemLine[] => {
     const lines: WorkActItemLine[] = [];
-    for (const line of progress.data?.lines ?? []) {
+    for (const line of actLines) {
       if (!showMaterials && line.type === 'MATERIAL') continue; // hidden ⇒ not in the act (WYSIWYG)
       const q = num(qty[line.estimateItemId] ?? '');
       if (q > 0) {
@@ -362,7 +495,7 @@ export function ActEditorPage() {
       if (num(a.quantity) > 0 && a.name.trim()) {
         lines.push({
           estimateItemId: null, estimateId: null, type: a.type, name: a.name.trim(),
-          category: null, unit: a.unit, unitPrice: num(a.unitPrice), quantity: num(a.quantity),
+          category: null, unit: a.unit, unitPrice: money(a.unitPrice), quantity: num(a.quantity),
         });
       }
     }
@@ -373,7 +506,7 @@ export function ActEditorPage() {
     kind, issuedAt, periodFrom, periodTo,
     title: effectiveTitle.trim() || null,
     contractRef: contractRef.trim() || null,
-    advanceOffset: advance.trim() === '' ? null : num(advance),
+    advanceOffset: advance.trim() === '' ? null : money(advance),
     showMaterials, showCumulative,
   });
 
@@ -402,9 +535,17 @@ export function ActEditorPage() {
   };
 
   const onSave = async () => {
+    // Review P-35. Nothing is written while a field cannot be read: mapping it to 0 saved an
+    // additional work as a free line and credited an advance that vanished, both silently, both
+    // into a document the client is about to sign.
+    if (invalid) {
+      toast.error(t('acts.fixFields'));
+      return;
+    }
     try {
       const savedId = await persist();
       setSavedSnapshot(currentSnapshot); // the form as sent is now the saved reference
+      setSavedMoney(currentMoney);
       toast.success(t('acts.saved'));
       if (isNew) {
         // The act has a row now: move onto its real URL so receipts, share and PDF address it.
@@ -419,6 +560,10 @@ export function ActEditorPage() {
 
   const onSign = async () => {
     if (!signerName.trim()) return;
+    if (invalid) {
+      toast.error(t('acts.fixFields'));
+      return;
+    }
     try {
       // Persist current edits first so the signed act reflects the screen (creating it, if this is
       // still «/acts/new» — the master may fill an act and sign it in one sitting).
@@ -433,6 +578,7 @@ export function ActEditorPage() {
       // browser. A portal signature happens in the client's browser and is never measured.
       track('act_signed', { mode: 'offline' });
       setSavedSnapshot(currentSnapshot); // everything on screen is persisted (and now immutable)
+      setSavedMoney(currentMoney);
       setSignOpen(false);
       toast.success(t('acts.signed'));
       if (isNew) {
@@ -571,8 +717,8 @@ export function ActEditorPage() {
         if (visible.length === 0) return null; // the whole estimate is closed — nothing to offer
         const categories = categorize(visible);
         const sectioned = categories.length > 1 || (categories.length === 1 && categories[0][0] !== '');
-        const groupTotal = visible.reduce(
-          (sum, l) => sum + num(qty[l.estimateItemId] ?? '') * l.unitPrice, 0);
+        const groupTotal = sumMoney(
+          visible.map((l) => num(qty[l.estimateItemId] ?? '') * l.unitPrice));
         return (
         <Section key={estimateId} title={group.name}
           aside={groupTotal > 0 ? formatMoney(groupTotal) : undefined}>
@@ -596,6 +742,7 @@ export function ActEditorPage() {
                 )}
                 {lines.map((line) => {
                 const entered = num(qty[line.estimateItemId] ?? '');
+                const badQty = qtyErrors.has(line.estimateItemId);
                 const exceeds = line.done + entered > line.estimateQuantity;
                 return (
                   <div key={line.estimateItemId} className="rounded-card border border-border bg-surface p-3">
@@ -620,11 +767,15 @@ export function ActEditorPage() {
                         </p>
                         <div className="mt-2 flex items-center gap-2">
                           <Input type="text" inputMode="decimal" value={qty[line.estimateItemId] ?? ''} disabled={signed}
+                            invalid={badQty}
                             onChange={(e) => setQty((q) => ({ ...q, [line.estimateItemId]: e.target.value }))}
                             className="w-28" />
                           <span className="text-xs text-muted">{t('units.' + line.unit)}</span>
-                          <span className="ml-auto text-sm font-semibold text-primary">{formatMoney(entered * line.unitPrice)}</span>
+                          <span className="ml-auto text-sm font-semibold text-primary">
+                            {formatMoney(badQty ? 0 : roundMoney(entered * line.unitPrice))}
+                          </span>
                         </div>
+                        {badQty && <p className="mt-1 text-xs text-danger">{t('validation.badQuantity')}</p>}
                         {exceeds && !signed && (
                           <div className="mt-1 rounded-lg bg-amber-50 p-2">
                             <p className="text-xs text-amber-700">{t('acts.exceeds')}</p>
@@ -651,6 +802,7 @@ export function ActEditorPage() {
         <div className="space-y-2">
           {additional.map((a, i) => {
             const dupEstimates = [...(estimatesByLineName.get(a.name.trim().toLowerCase()) ?? [])];
+            const badRow = additionalErrors.has(i);
             return (
             <div key={i} className="rounded-card border border-border bg-surface p-3">
               {signed ? (
@@ -673,13 +825,16 @@ export function ActEditorPage() {
               <div className="mt-2 grid grid-cols-3 gap-2">
                 <Select value={a.unit} disabled={signed}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, unit: e.target.value as Unit } : x))}>
-                  {UNITS.map((code) => <option key={code} value={code}>{t('units.' + code)}</option>)}
+                  {ACT_UNITS.map((code) => <option key={code} value={code}>{t('units.' + code)}</option>)}
                 </Select>
                 <Input inputMode="decimal" placeholder={t('acts.qty')} value={a.quantity} disabled={signed}
+                  invalid={badRow && qtyOf(a.quantity) === null}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, quantity: e.target.value } : x))} />
                 <Input inputMode="decimal" placeholder={t('acts.price')} value={a.unitPrice} disabled={signed}
+                  invalid={badRow && moneyOf(a.unitPrice) === null}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, unitPrice: e.target.value } : x))} />
               </div>
+              {badRow && <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>}
               {!signed && (
                 <button type="button" className="mt-1.5 text-xs font-semibold text-danger"
                   onClick={() => setAdditional((list) => list.filter((_, j) => j !== i))}>{t('common.delete')}</button>
@@ -740,14 +895,17 @@ export function ActEditorPage() {
               <span className="text-sm font-medium text-secondary">{t('acts.advance')}</span>
               <InfoPopover text={t('acts.advanceInfo')} />
             </div>
-            <Input inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)} className="max-w-[200px]" />
-            <p className="mt-1 text-xs text-muted">{t('acts.advanceHint')}</p>
+            <Input inputMode="decimal" value={advance} invalid={advanceInvalid}
+              onChange={(e) => setAdvance(e.target.value)} className="max-w-[200px]" />
+            {advanceInvalid
+              ? <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>
+              : <p className="mt-1 text-xs text-muted">{t('acts.advanceHint')}</p>}
             {unearnedAdvance != null && unearnedAdvance > 0 && (
               <div className="mt-2 rounded-card border border-border bg-surface p-2.5">
                 <p className="text-xs text-secondary">
                   {t('acts.advanceUnearned', { amount: formatMoney(unearnedAdvance) })}
                 </p>
-                {advanceSuggestion > 0 && num(advance) !== advanceSuggestion && (
+                {advanceSuggestion > 0 && money(advance) !== advanceSuggestion && (
                   <button type="button" className="mt-1.5 text-xs font-semibold text-brand"
                     onClick={() => setAdvance(String(advanceSuggestion))}>
                     {t('acts.advanceApply', { amount: formatMoney(advanceSuggestion) })}
@@ -760,7 +918,7 @@ export function ActEditorPage() {
             )}
             {/* The one thing nothing else can catch: the same advance credited on two acts. It is a
                 warning, not a block — the master may be crediting money he never logged as a payment. */}
-            {unearnedAdvance != null && num(advance) > unearnedAdvance && (
+            {unearnedAdvance != null && money(advance) > unearnedAdvance && (
               <p className="mt-2 rounded-card bg-amber-50 p-2 text-xs text-amber-700">
                 {t('acts.advanceOverUnearned', { amount: formatMoney(unearnedAdvance) })}
               </p>
@@ -768,10 +926,17 @@ export function ActEditorPage() {
           </div>
         )}
         <div className={(signed ? '' : 'mt-3 border-t border-border pt-3 ') + 'space-y-1 text-sm'}>
-          <Row label={t('acts.total')} value={formatMoneyExact(total)} />
-          {receiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoneyExact(receiptsTotal)} />}
-          {num(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoneyExact(num(advance))} />}
-          <Row label={t('acts.payable')} value={formatMoneyExact(payable)} bold />
+          <Row label={t('acts.total')} value={formatMoneyExact(shownTotal)} />
+          {adjustments.map((a) => (
+            <Row key={a.id} label={a.name} value={formatMoneyExact(a.lineTotal)} />
+          ))}
+          {adjustments.length > 0 && dirty && (
+            <p className="text-xs text-muted">{t('acts.adjustmentRecalc')}</p>
+          )}
+          {shownReceiptsTotal > 0 && <Row label={t('acts.receiptsTotal')} value={formatMoneyExact(shownReceiptsTotal)} />}
+          {money(advance) > 0 && <Row label={t('acts.advanceShort')} value={'− ' + formatMoneyExact(money(advance))} />}
+          <Row label={t('acts.payable')} value={formatMoneyExact(shownPayable)} bold />
+          {invalid && <p className="text-xs text-danger">{t('acts.fixFields')}</p>}
         </div>
         {!signed && (
           <div className="mt-3 border-t border-border pt-3">
@@ -798,6 +963,12 @@ export function ActEditorPage() {
             )}
             {!signed && (
               <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => {
+                // An unreadable field is caught BEFORE the signature sheet opens: the master types
+                // the client's name, taps «Підписати» and only then learns nothing was saved.
+                if (invalid) {
+                  toast.error(t('acts.fixFields'));
+                  return;
+                }
                 if (!hasLines) {
                   toast.info(t('acts.emptyHint'));
                   return;

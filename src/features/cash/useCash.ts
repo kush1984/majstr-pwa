@@ -93,6 +93,25 @@ export function useCashSummary() {
 }
 
 /**
+ * Re-add the four figures after an optimistic edit — the SAME arithmetic the server does, or the
+ * screen disagrees with itself between the edit and the refetch.
+ *
+ * <p>`earned` is ONE subtraction (review B-33): the material a client pays back is already netted
+ * by its own COST sitting in `expense`, because the till receipt he is owed for is a feed row of
+ * its own. Subtracting `refunds` on top charged the master for it twice, so «Заробив» dropped the
+ * moment a row was touched and jumped back on refetch. `refunds` survives as a LABEL — it explains
+ * the gap between «Прийшло» and «Заробив» — and is never subtracted again.</p>
+ */
+export function cashTotals(flow: CashFlowResponse): CashFlowResponse {
+  const income = flow.entries.filter((e) => e.direction === 'INCOME')
+    .reduce((s, e) => s + e.amount, 0);
+  const expense = flow.entries.filter((e) => e.direction === 'EXPENSE')
+    .reduce((s, e) => s + e.amount, 0);
+  const refunds = flow.entries.filter((e) => e.materialRefund).reduce((s, e) => s + e.amount, 0);
+  return { ...flow, income, expense, refunds, earned: income - expense };
+}
+
+/**
  * Every write on this screen, offline-first — a master types «пальне 1200» in a van, which is most
  * of the point. ONE outbox entity covers all three kinds: adding is always his own row, and an edit
  * or a delete carries the `kind` that says which table the server should write through.
@@ -128,15 +147,6 @@ export function useCashActions(period: CashPeriod) {
     };
   };
 
-  const totals = (flow: CashFlowResponse): CashFlowResponse => {
-    const income = flow.entries.filter((e) => e.direction === 'INCOME')
-      .reduce((s, e) => s + e.amount, 0);
-    const expense = flow.entries.filter((e) => e.direction === 'EXPENSE')
-      .reduce((s, e) => s + e.amount, 0);
-    const refunds = flow.entries.filter((e) => e.materialRefund).reduce((s, e) => s + e.amount, 0);
-    return { ...flow, income, expense, refunds, earned: income - refunds - expense };
-  };
-
   const optimistically = async (
     edit: (flow: CashFlowResponse) => CashFlowResponse,
     write: () => Promise<void>,
@@ -158,7 +168,7 @@ export function useCashActions(period: CashPeriod) {
         const id = newUuid();
         const today = new Date();
         return optimistically(
-          (flow) => totals({
+          (flow) => cashTotals({
             ...flow,
             entries: [
               {
@@ -174,6 +184,7 @@ export function useCashActions(period: CashPeriod) {
                 projectName: null,
                 materialRefund: req.materialRefund,
                 noteLocked: false,
+                readOnly: false, // his own `cash_entry`: nothing has frozen it into an act
               },
               ...flow.entries,
             ],
@@ -192,7 +203,7 @@ export function useCashActions(period: CashPeriod) {
       onError,
       mutationFn: (vars: { id: string; req: CashEntryRequest }) =>
         optimistically(
-          (flow) => totals({
+          (flow) => cashTotals({
             ...flow,
             entries: flow.entries.map((e) => (e.id === vars.id
               ? {
@@ -220,7 +231,7 @@ export function useCashActions(period: CashPeriod) {
       onError,
       mutationFn: (vars: { id: string; kind: CashEntryKind }) =>
         optimistically(
-          (flow) => totals({ ...flow, entries: flow.entries.filter((e) => e.id !== vars.id) }),
+          (flow) => cashTotals({ ...flow, entries: flow.entries.filter((e) => e.id !== vars.id) }),
           () => offlineMutate<void>({
             entity: 'cashEntry', entityId: vars.id, type: 'delete', payload: { kind: vars.kind },
             online: async () => { await cashApi.remove(vars.id, vars.kind); },

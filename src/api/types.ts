@@ -236,6 +236,17 @@ export const UNITS = [
 
 export type Unit = (typeof UNITS)[number];
 
+/**
+ * The units an ACT line may carry — every unit but «%» (backend B-57).
+ *
+ * An act closes a QUANTITY of work, and a percentage is a share of something else. It was not
+ * merely meaningless there: the act totalled such a line as price × quantity, while the ADDENDUM
+ * the signature rolls it into is an estimate, where «%» means a share of the price column — so the
+ * contract absorbed a hundredth of what the client was billed and «Прийнято актами» climbed above
+ * «За договором». The server refuses the unit outright; this keeps the picker from offering it.
+ */
+export const ACT_UNITS = UNITS.filter((u) => u !== 'PERCENT');
+
 // ---------------------------------------------------------------------------
 // Clients (mirror ClientResponse / ClientRequest)
 // ---------------------------------------------------------------------------
@@ -798,6 +809,9 @@ export interface PaymentReceiptResponse {
   displayLabel: string;
   amount: number;
   receivedAt: string;
+  /** «Повернення за матеріал» — the client handing back what the master laid out at the till, not
+   *  payment for work. It decides how far the contract is really paid (B-65). */
+  materialRefund: boolean;
 }
 
 export interface PaymentReceiptRequest {
@@ -805,6 +819,9 @@ export interface PaymentReceiptRequest {
   label?: string | null;
   amount: number;
   receivedAt: string;
+  /** Money coming BACK for material, not payment for work — it settles the materials axis and is
+   *  kept off the contract (B-65). Omitted = an ordinary payment. */
+  materialRefund?: boolean;
   /** Only meaningful when the amount exceeds the targeted stage's remaining balance. */
   resolution?: PaymentOverflowResolution | null;
 }
@@ -813,6 +830,8 @@ export interface PaymentReceiptEditRequest {
   amount: number;
   receivedAt: string;
   label?: string | null;
+  /** Three-valued on the server: absent leaves the tick alone. */
+  materialRefund?: boolean;
 }
 
 /** Moves an over-received stage's surplus onto another stage as a partial receipt — offered when
@@ -827,8 +846,18 @@ export interface PaymentSurplusTransferRequest {
  *  only by the `payments_visible` toggle regardless of plan. */
 export interface PaymentsSummaryResponse {
   contractedTotal: number;
+  /** Every hryvnia that arrived, refunds included — the itemized rows add up to THIS. */
   received: number;
+  /** What is still owed for the WORK: `max(0, contractedTotal - workPaid)` (B-65). */
   remaining: number;
+  /** Σ of the receipts ticked «повернення за матеріал» — why `received` and `workPaid` differ. */
+  materialRefunds: number;
+  /** How much of that a till receivable actually absorbed: `min(materialRefunds, reimbursable)`. */
+  refundApplied: number;
+  /** `received - refundApplied` — the only half that may be measured against the contract. */
+  workPaid: number;
+  /** `max(0, workPaid - contractedTotal)`. Said out loud, never clamped away in silence. */
+  overpaid: number;
   payments: ProjectPaymentResponse[];
   /** Receipts with no matching plan stage — their own nodes on the timeline. */
   unplannedReceipts: PaymentReceiptResponse[];
@@ -870,8 +899,12 @@ export interface ObjectEconomyActsResponse {
  *  up. Receipts the master marked «це моя витрата» are absent here — those are object expenses, and
  *  counting them in both places would bill them twice.</p> */
 export interface ObjectEconomyMaterialsResponse {
-  /** What the client still owes back for material bought with the master's money. */
+  /** Gross — what the receipts still marked «клієнт відшкодовує» add up to. */
   reimbursable: number;
+  /** How much of it a «повернення за матеріал» payment has already settled (B-65). */
+  refundApplied: number;
+  /** `reimbursable - refundApplied`: what the client still owes. THIS is what the card asks for. */
+  outstanding: number;
   receiptCount: number;
   /** Photographed but not priced yet — they add nothing to `reimbursable` until a sum is on them. */
   unpricedCount: number;
@@ -1538,8 +1571,17 @@ export interface TemplateTradeRequest {
 export type WorkActKind = 'INTERIM' | 'FINAL';
 export type WorkActStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'REJECTED';
 
+/**
+ * What an act line IS (B-55). ADJUSTMENT is server-authored — the estimate's own «% від кошторису»
+ * prorated by what this act closes — so it carries an `estimateId` with no `estimateItemId`, which
+ * used to mean «additional work». Read this, never the two ids: echoing an adjustment back as an
+ * additional line would bill the estimate's own discount a second time, in the ADDENDUM.
+ */
+export type WorkActLineKind = 'ESTIMATE' | 'ADDITIONAL' | 'ADJUSTMENT';
+
 export interface WorkActItemResponse {
   id: string;
+  lineKind: WorkActLineKind;
   estimateItemId: string | null;
   estimateId: string | null;
   type: ItemType;
@@ -2019,7 +2061,16 @@ export type CashDirection = 'INCOME' | 'EXPENSE';
  * screen — a second door to one record, never a second copy: the write goes through the object's
  * own endpoints, so its rules still hold.
  */
-export type CashEntryKind = 'PERSONAL' | 'OBJECT_PAYMENT' | 'OBJECT_EXPENSE';
+export type CashEntryKind =
+  | 'PERSONAL'
+  | 'OBJECT_PAYMENT'
+  | 'OBJECT_EXPENSE'
+  /** A `project_receipt` the client has not paid back yet — money that left the master's pocket at
+   *  the till and is recorded in no other table (B-33). Edited through the object's own service. */
+  | 'OBJECT_RECEIPT'
+  /** A `work_act_receipt` of a SIGNED act that does not post its receipts to expenses. READ-ONLY:
+   *  the figure is frozen inside the act's `doc_hash`. */
+  | 'ACT_RECEIPT';
 
 /**
  * The first three mirror the object journal's buckets (MATERIALS / LABOR / OTHER) so the union
@@ -2048,11 +2099,15 @@ export interface CashEntryResponse {
   happenedAt?: string | null;
   projectId?: string | null;
   projectName?: string | null;
-  /** Income the client paid back for material: in the movement, out of «Заробив». */
+  /** Income the client paid back for material. Since B-33 it LABELS the row and nothing more —
+   *  the material it repays is itself a feed row now, so «Заробив» nets out on its own. */
   materialRefund: boolean;
   /** The text belongs to something else, so an edit would be a silent no-op: a PLANNED receipt
    *  is named by its payment stage. The sheet shows it read-only. */
   noteLocked: boolean;
+  /** The row may be shown but not changed from here. Hide the edit affordance rather than offer a
+   *  tap that can only 409. */
+  readOnly: boolean;
 }
 
 export interface CashMonthTotal {
@@ -2068,8 +2123,10 @@ export interface CashFlowResponse {
   to: string;
   income: number;
   expense: number;
-  /** income − refunds − expense: material the client merely paid back is not earnings. */
+  /** `income - expense`, ONE subtraction (B-33): the material the client pays back is netted by
+   *  its own cost being in `expense`. Never subtract `refunds` again on this side. */
   earned: number;
+  /** An INFO line: which part of «Прийшло» was not payment for work. Subtracted from nothing. */
   refunds: number;
   /** Empty for the YEAR view, which answers `months` instead. */
   entries: CashEntryResponse[];

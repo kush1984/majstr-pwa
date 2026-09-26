@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { UNITS } from '@/api/types.ts';
 import i18n from '@/lib/i18n.ts';
-import { decimalString } from '@/lib/decimal.ts';
+import { decimalString, parseMoney } from '@/lib/decimal.ts';
 
 /**
  * Manual estimate line item — also used for editing an existing item
@@ -36,10 +36,10 @@ export const itemFormSchema = z
       });
       return;
     }
-    const n = Number(val.unitPrice.replace(',', '.').replace(/\s/g, ''));
-    if (!Number.isFinite(n) || n <= 0) {
+    // Review P-35: one reader for every money field. `Number` here took «1 200,505» and «1e3».
+    if (parseMoney(val.unitPrice) === null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom, path: ['unitPrice'], message: i18n.t('validation.valueTooLow'),
+        code: z.ZodIssueCode.custom, path: ['unitPrice'], message: i18n.t('validation.badNumber'),
       });
     }
   });

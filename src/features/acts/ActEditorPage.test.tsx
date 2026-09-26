@@ -7,7 +7,9 @@ import { ActEditorPage } from './ActEditorPage.tsx';
 import { actsApi } from '@/api/acts.ts';
 import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
 import { economyApi } from '@/api/economy.ts';
-import type { ActProgressResponse, ObjectEconomyResponse, WorkActResponse } from '@/api/types.ts';
+import type {
+  ActProgressResponse, ObjectEconomyResponse, WorkActItemResponse, WorkActResponse,
+} from '@/api/types.ts';
 
 vi.mock('@/api/acts.ts', () => ({
   actsApi: {
@@ -127,7 +129,7 @@ function economy(acceptedByActs: number, received: number): ObjectEconomyRespons
   return {
     estimates: [],
     acts: { contracted: 0, acceptedByActs, received },
-    materials: { reimbursable: 0, receiptCount: 0, unpricedCount: 0 },
+    materials: { reimbursable: 0, refundApplied: 0, outstanding: 0, receiptCount: 0, unpricedCount: 0 },
     payments: null,
     internals: null,
   };
@@ -377,6 +379,48 @@ describe('ActEditorPage', () => {
     expect(await screen.findByText(/вже є в кошторисі «Чистові»/)).toBeTruthy();
   });
 
+  it('an estimate discount reaches «До сплати» and is never echoed back as an extra work (B-55)', async () => {
+    // The server authors an ADJUSTMENT line per estimate: «Знижка − 10 % від кошторису», prorated
+    // by what this act closes. It carries an estimateId with NO estimateItemId — which is what an
+    // off-estimate work looks like — so the editor has to read `lineKind`, not the ids: seeding it
+    // into «Додаткові роботи» would save the discount straight back as a billable line.
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(),
+      items: [
+        {
+          id: 'li1', lineKind: 'ESTIMATE', estimateItemId: 'i1', estimateId: 'e1', type: 'WORK',
+          name: 'Шпаклювання стін', category: 'Стіни', unit: 'M2', unitPrice: 145, quantity: 10,
+          lineTotal: 1450, cumulativeBefore: 0, exceedsEstimate: false, sortOrder: 0,
+        },
+        {
+          id: 'li2', lineKind: 'ADJUSTMENT', estimateItemId: null, estimateId: 'e1', type: 'WORK',
+          name: 'Знижка за кошторисом', category: null, unit: 'PIECE', unitPrice: -145, quantity: 1,
+          lineTotal: -145, cumulativeBefore: 0, exceedsEstimate: false, sortOrder: 1,
+        },
+      ],
+      // The act is untouched, so the editor shows the SERVER's own figures (P-34) — the fixture
+      // carries the whole set the server would send, not just the one it is asked about.
+      total: 1305, payable: 1305,
+    });
+    renderEditor();
+
+    // Shown as its own summary row, and inside what the client owes: 1 450 − 145.
+    expect(await screen.findByText('Знижка за кошторисом')).toBeTruthy();
+    expect(screen.getByText(moneyExact(-145))).toBeTruthy();
+    const payable = screen.getByText('До сплати').closest('div') as HTMLElement;
+    expect(within(payable).getByText(moneyExact(1305))).toBeTruthy();
+
+    // And it is NOT an editable additional work: it never seeds a row in «Додаткові роботи», so a
+    // save carries the one estimate line only — the discount belongs to the estimate, and the
+    // server re-derives it from the quantities this act closes.
+    expect(screen.queryByDisplayValue('Знижка за кошторисом')).toBeNull();
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(actsApi.replaceItems).mock.calls[0][1];
+    expect(sent.items).toHaveLength(1);
+    expect(sent.items[0].estimateItemId).toBe('i1');
+  });
+
   it('lists the act receipts, their subtotal, and bills them on top of the works', async () => {
     // The master's ask: «чек1 — сума, чек2 — сума, разом», added to what the act is worth.
     vi.mocked(actsApi.get).mockResolvedValue({
@@ -496,5 +540,175 @@ describe('ActEditorPage — the advance field explains itself', () => {
     expect(screen.getByText(/Більше, ніж клієнт заплатив наперед/)).toBeTruthy();
     // A warning, not a gate: the value the master typed stands.
     expect(screen.getByDisplayValue('3000')).toBeTruthy();
+  });
+});
+
+/** One stored act line. Everything the server freezes onto it — price included. */
+function item(over: Partial<WorkActItemResponse> = {}): WorkActItemResponse {
+  return {
+    id: 'it1', lineKind: 'ESTIMATE', estimateItemId: 'i1', estimateId: 'e1', type: 'WORK',
+    name: 'Шпаклювання стін', category: 'Стіни', unit: 'M2', unitPrice: 145, quantity: 20,
+    lineTotal: 2900, cumulativeBefore: 70, exceedsEstimate: false, sortOrder: 0, ...over,
+  };
+}
+
+/**
+ * Review P-34. An act is a DOCUMENT, and the estimate behind it keeps moving: it is re-priced,
+ * superseded by a duplicate, dropped out of the economy, deleted. Every one of those took lines off
+ * a screen that had already been signed, or off a draft the master had already filled.
+ */
+describe('ActEditorPage — the lines the act HOLDS, not the ones the estimate still offers (P-34)', () => {
+  it('renders a SIGNED act from its own items when the estimate is gone from the progress feed', async () => {
+    // The exact live case: a signed parent stops being counted the moment its duplicate is signed,
+    // and the progress endpoint skips every un-counted estimate. The act used to open EMPTY —
+    // «Разом 0,00» under a document the client had already accepted and paid against.
+    vi.mocked(actsApi.progress).mockResolvedValue({ lines: [] });
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(), status: 'SIGNED', signedAt: '2026-08-20', signerName: 'Олена',
+      items: [item()], total: 2900, payable: 2900,
+    });
+
+    renderEditor();
+
+    expect(await screen.findByText('Шпаклювання стін')).toBeTruthy();
+    expect(screen.getByDisplayValue('20')).toBeTruthy();
+    const totals = screen.getByText('Разом').parentElement as HTMLElement;
+    expect(totals.textContent?.replace(/\s+/g, ' ')).toContain(moneyExact(2900));
+  });
+
+  it('names the group after the ACT when the estimate cannot be named at all', async () => {
+    // `work_act_item.estimate_id` is ON DELETE SET NULL: the object was tidied up, the estimate is
+    // gone, the signed act is not. A dated «Кошторис від …» heading there points at nothing.
+    vi.mocked(actsApi.progress).mockResolvedValue({ lines: [] });
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(), status: 'SIGNED', signedAt: '2026-08-20',
+      items: [item({ estimateId: null })], total: 2900, payable: 2900,
+    });
+
+    renderEditor();
+
+    expect(await screen.findByText('Позиції акта')).toBeTruthy();
+  });
+
+  it('adds a DRAFT line the feed no longer offers back, and saves it again', async () => {
+    // Un-billing work the master already entered is the one failure a money screen may not have:
+    // he saved 20 м², the estimate line was renumbered away, and the next «Зберегти» wrote an act
+    // without it — silently, on a document he then signed.
+    vi.mocked(actsApi.progress).mockResolvedValue({
+      lines: progress().lines.filter((l) => l.estimateItemId !== 'i1'),
+    });
+    vi.mocked(actsApi.get).mockResolvedValue({ ...draftAct(), items: [item()], total: 2900, payable: 2900 });
+
+    renderEditor();
+
+    expect(await screen.findByText('Шпаклювання стін')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
+    const saved = vi.mocked(actsApi.replaceItems).mock.calls[0][1].items;
+    expect(saved.find((l) => l.estimateItemId === 'i1')).toMatchObject({ quantity: 20, unitPrice: 145 });
+  });
+
+  it('shows the SERVER\'s payable while the form is clean, and its own arithmetic once it is not', async () => {
+    // The server\'s figure is what the PDF prints, what the portal shows the client and what the
+    // economy counts. Two answers to «До сплати» on one object is the one thing a money screen may
+    // not produce — so while there is nothing unsaved, there is only the server\'s.
+    vi.mocked(actsApi.get).mockResolvedValue({
+      ...draftAct(), items: [item()], total: 2900, receiptsTotal: 0, payable: 2222.22,
+    });
+
+    renderEditor();
+
+    await screen.findByText('Шпаклювання стін');
+    const payable = () => (screen.getByText('До сплати').parentElement as HTMLElement)
+      .textContent?.replace(/\s+/g, ' ');
+    expect(payable()).toContain(moneyExact(2222.22));
+
+    // One keystroke and the act on the server is no longer what is on the screen: the local sum is
+    // then the only honest answer, and it says so by moving.
+    fireEvent.change(screen.getByDisplayValue('20'), { target: { value: '10' } });
+    await waitFor(() => expect(payable()).toContain(moneyExact(1450)));
+  });
+
+  it('adds lines in kopecks, so the act agrees with the server to the kopeck', async () => {
+    // 2,5 × 10,25 = 25,625 and a float chain lands on 25,624999…; the server stores 25,63. The
+    // client signs one of those two numbers.
+    vi.mocked(actsApi.progress).mockResolvedValue({
+      lines: [{
+        estimateId: 'e1', estimateName: 'Чорнові', estimateCreatedAt: '2026-08-01',
+        estimateItemId: 'i1', type: 'WORK', name: 'Крайова стрічка', category: null, unit: 'LINEAR_METER',
+        unitPrice: 10.25, estimateQuantity: 100, done: 0, remaining: 100,
+      }],
+    });
+
+    renderEditor();
+
+    const row = (await screen.findByText('Крайова стрічка')).closest('.rounded-card') as HTMLElement;
+    fireEvent.change(within(row).getByRole('textbox'), { target: { value: '2,5' } });
+
+    const totals = screen.getByText('Разом').parentElement as HTMLElement;
+    await waitFor(() => expect(totals.textContent?.replace(/\s+/g, ' ')).toContain(moneyExact(25.63)));
+  });
+});
+
+/**
+ * Review P-35. A money field that cannot be read is not worth 0 ₴. Every one of these used to be
+ * accepted in silence and written into a document the client then signed.
+ */
+describe('ActEditorPage — an unreadable field is refused, never rounded to zero (P-35)', () => {
+  it('refuses to save a quantity it cannot read, and says which field', async () => {
+    renderEditor();
+
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.change(within(row).getByRole('textbox'), { target: { value: '12а' } });
+
+    expect(within(row).getByText(/Вкажіть кількість/)).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+    const { toast } = await import('@/hooks/useToast.ts');
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    expect(actsApi.replaceItems).not.toHaveBeenCalled();
+    expect(actsApi.updateHeader).not.toHaveBeenCalled();
+  });
+
+  it('reads a price typed the way a phone keyboard offers it — «1 200» is 1 200 ₴, not 0', async () => {
+    renderEditor();
+
+    await screen.findByText('Шпаклювання стін');
+    fireEvent.click(screen.getByText('+ Додати роботу'));
+
+    const rows = screen.getAllByPlaceholderText('Ціна');
+    fireEvent.change(rows[rows.length - 1], { target: { value: '1 200' } });
+    const qtys = screen.getAllByPlaceholderText('К-сть');
+    fireEvent.change(qtys[qtys.length - 1], { target: { value: '1' } });
+
+    const totals = screen.getByText('Разом').parentElement as HTMLElement;
+    await waitFor(() => expect(totals.textContent?.replace(/\s+/g, ' ')).toContain(moneyExact(1200)));
+  });
+
+  it('refuses a credited advance it cannot read instead of crediting nothing', async () => {
+    // «−5» with a real minus sign, pasted from a message. It used to read as 0: the act billed the
+    // client the advance a second time, and nothing on the screen said so.
+    renderEditor();
+
+    await screen.findByText('Шпаклювання стін');
+    fireEvent.change(advanceInput(), { target: { value: '−5000' } });
+
+    expect(screen.getAllByText(/Вкажіть число/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+    const { toast } = await import('@/hooks/useToast.ts');
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    expect(actsApi.updateHeader).not.toHaveBeenCalled();
+  });
+
+  it('leaves a blank additional row alone — it is the empty row the «+» just added', async () => {
+    renderEditor();
+
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox'));
+    fireEvent.click(screen.getByText('+ Додати роботу'));
+
+    fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
+    await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
   });
 });

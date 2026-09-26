@@ -253,6 +253,46 @@ describe('ProjectReceiptsPage', () => {
     expect(screen.getByText('Епіцентр')).toBeTruthy();
   });
 
+  /**
+   * Review B-32. The client has signed for this money, so the object may no longer move it: flipping
+   * the badge would either delete the only record of that cost (B-32a) or post a second one beside
+   * the act's, and a delete takes it outright (B-32b). The server refuses all three with a 409 — the
+   * screen's job is not to offer them, because a control that can only fail reads as a broken app.
+   */
+  it('offers no money control at all on a receipt a signed act already billed', () => {
+    seed([receipt({ billedOnActId: 'a1', billedOnActNumber: '7' })], { reimbursableTotal: 0 });
+    renderPage();
+
+    // The state is still worth READING — it just stops being a control.
+    const badge = screen.getByText(/↩ Клієнт відшкодовує/);
+    expect(badge.closest('button')).toBeNull();
+    expect(screen.getByText(/суму і «чия це витрата» змінити вже не можна/)).toBeTruthy();
+    expect(screen.queryByText('Видалити')).toBeNull();
+
+    fireEvent.click(badge);
+    expect(updateMutate).not.toHaveBeenCalled();
+  });
+
+  /** The amount is what the client agreed to; the shop's name and the date are just what the paper
+   *  says, and a mistyped label must stay correctable. */
+  it('freezes the amount in the edit sheet but still takes a label fix', () => {
+    seed([receipt({ billedOnActId: 'a1', billedOnActNumber: '7', amount: 2000 })],
+      { reimbursableTotal: 0 });
+    renderPage();
+
+    fireEvent.click(screen.getByText('Редагувати'));
+    expect(screen.getByDisplayValue('2000').hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText(/Суму зафіксував акт № 7/)).toBeTruthy();
+
+    fireEvent.change(screen.getByDisplayValue('Епіцентр'), { target: { value: 'Нова Лінія' } });
+    fireEvent.click(screen.getByText('Зберегти'));
+
+    expect(updateAsync).toHaveBeenCalledWith({
+      receiptId: 'r1',
+      req: { label: 'Нова Лінія', amount: 2000, issuedAt: '2026-09-01' },
+    });
+  });
+
   it('says the receipts could not be loaded instead of claiming there are none', () => {
     // «Чеків ще немає» on a screen whose whole point is proof the master is owed money reads as the
     // receipts having been LOST. A failed fetch with nothing cached is an outage, and says so.
@@ -351,5 +391,51 @@ describe('ProjectReceiptsPage', () => {
 
     expect(screen.getByText('Чеків ще немає')).toBeTruthy();
     expect(screen.getByText(/клієнт вам поверне/)).toBeTruthy();
+  });
+});
+
+/**
+ * Review P-35. «1 200» is what a phone keypad offers and what a master types; it used to save as
+ * 0 ₴ — under a photo of the paper saying 1 200, and out of «Клієнт відшкодовує» for good.
+ */
+describe('ProjectReceiptsPage — an unreadable amount is refused, never rounded to zero (P-35)', () => {
+  const openEdit = () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Редагувати'));
+    return screen.getByDisplayValue('1250');
+  };
+
+  it('reads a sum typed with the spacing a keypad puts in', () => {
+    seed([receipt()]);
+    fireEvent.change(openEdit(), { target: { value: '1\u00a0200' } });
+    fireEvent.click(screen.getByText('Зберегти'));
+
+    expect(updateAsync).toHaveBeenCalledWith({
+      receiptId: 'r1',
+      req: { label: 'Епіцентр', amount: 1200, issuedAt: '2026-09-01' },
+    });
+  });
+
+  it('shuts the Save button and names the field instead of saving 0 ₴', () => {
+    seed([receipt()]);
+    fireEvent.change(openEdit(), { target: { value: '12а' } });
+
+    expect(screen.getByText(/Вкажіть число/)).toBeTruthy();
+    const save = screen.getByRole('button', { name: 'Зберегти' });
+    expect(save.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(save);
+    expect(updateAsync).not.toHaveBeenCalled();
+  });
+
+  it('still saves a receipt left blank — that is the batch state, not a typo', () => {
+    // A photographed slip nobody has priced yet is exactly what V129's «MIN_AMOUNT = 0» is for.
+    seed([receipt()]);
+    fireEvent.change(openEdit(), { target: { value: '' } });
+    fireEvent.click(screen.getByText('Зберегти'));
+
+    expect(updateAsync).toHaveBeenCalledWith({
+      receiptId: 'r1',
+      req: { label: 'Епіцентр', amount: 0, issuedAt: '2026-09-01' },
+    });
   });
 });

@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn.ts';
 import { routes } from '@/lib/config.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { estimateImportApi } from '@/api/estimateImport.ts';
@@ -54,7 +54,14 @@ function toDrafts(items: EstimateImportParseResponse['items']): Draft[] {
   }));
 }
 
-const num = (s: string): number => (s.trim() ? parseDecimal(s) : 0);
+// Review P-35. A read sheet is edited by hand before it is committed, and an unreadable cell used
+// to commit as 0 — a whole position at no price, inside an estimate the master then shares. Blank
+// stays 0: a line he has a price for and not yet a count is the ordinary state of an import.
+const qtyOf = (s: string): number | null =>
+  s.trim() === '' ? 0 : parseQuantity(s, { allowZero: true });
+const priceOf = (s: string): number | null =>
+  s.trim() === '' ? 0 : parseMoney(s, { allowZero: true });
+const num = (n: number | null): number => n ?? 0;
 
 export function EstimateImportPage() {
   const { t } = useTranslation();
@@ -114,12 +121,14 @@ export function EstimateImportPage() {
   // Only name + unit are required. Quantity / price may be 0 — a master often knows
   // the unit price but not yet the count (e.g. how many fixtures); the line total is
   // 0 until a quantity is set. So 0/empty here is allowed, not a validation error.
-  const isBad = (d: Draft) => !d.name.trim() || !d.unit;
+  const isBad = (d: Draft) =>
+    !d.name.trim() || !d.unit || qtyOf(d.quantity) === null || priceOf(d.price) === null;
+  const depositInvalid = deposit.trim() !== '' && parseMoney(deposit, { allowZero: true }) === null;
   const invalidCount = included.filter(isBad).length;
 
   const commit = async () => {
     if (included.length === 0) return;
-    if (invalidCount > 0) {
+    if (invalidCount > 0 || depositInvalid) {
       toast.error(t('estimateImport.fixHighlighted'));
       return;
     }
@@ -128,12 +137,12 @@ export function EstimateImportPage() {
       const res = await estimateImportApi.commit({
         projectId,
         estimateName: estName.trim() || undefined,
-        depositAmount: deposit.trim() ? parseDecimal(deposit) : null,
+        depositAmount: deposit.trim() ? parseMoney(deposit, { allowZero: true }) : null,
         items: included.map((d) => ({
           name: d.name.trim(),
           unit: d.unit as Unit,
-          quantity: num(d.quantity),
-          unitPrice: num(d.price),
+          quantity: num(qtyOf(d.quantity)),
+          unitPrice: num(priceOf(d.price)),
           type: d.type,
           category: d.category.trim() || null,
           toCatalog: d.toCatalog,
@@ -264,8 +273,12 @@ export function EstimateImportPage() {
                   inputMode="decimal"
                   placeholder="₴"
                   value={deposit}
+                  invalid={depositInvalid}
                   onChange={(e) => setDeposit(e.target.value)}
                 />
+                {depositInvalid && (
+                  <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>
+                )}
               </FormField>
             </div>
 
@@ -329,6 +342,7 @@ export function EstimateImportPage() {
                       <Input
                         value={d.quantity}
                         inputMode="decimal"
+                        invalid={d.include && qtyOf(d.quantity) === null}
                         onChange={(e) => patch(d.key, { quantity: e.target.value })}
                         placeholder={t('estimateImport.qtyPlaceholder')}
                       />
@@ -343,6 +357,7 @@ export function EstimateImportPage() {
                       <Input
                         value={d.price}
                         inputMode="decimal"
+                        invalid={d.include && priceOf(d.price) === null}
                         onChange={(e) => patch(d.key, { price: e.target.value })}
                         placeholder="₴"
                       />
