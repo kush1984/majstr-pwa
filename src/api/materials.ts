@@ -5,9 +5,11 @@ import type {
   MaterialCalculationResponse,
   MaterialNormResponse,
   MaterialNormUpdateRequest,
+  MaterialParamsRequest,
   MaterialPrefsRequest,
   MaterialPrefsResponse,
   ShoppingListResponse,
+  StoredMaterialParams,
 } from './types.ts';
 
 /**
@@ -36,6 +38,16 @@ export const materialsApi = {
     return api
       .get<MaterialCalculationResponse>(base(estimateId), { params })
       .then((r) => r.data);
+  },
+  /**
+   * Remember one of the three figures the calculation cannot derive (V142). A PATCH — the card that
+   * was tapped sends its own question and leaves the other two alone; a 0 forgets an answer.
+   *
+   * The answers used to live in this device's `localStorage`, so the same estimate on his laptop
+   * asked everything again with our suggestions in the fields.
+   */
+  saveParams(estimateId: string, req: MaterialParamsRequest): Promise<StoredMaterialParams> {
+    return api.put<StoredMaterialParams>(`${base(estimateId)}/params`, req).then((r) => r.data);
   },
   /** Is there anything to calculate here? Asked before the entry points are offered, not after. */
   availability(estimateId: string): Promise<MaterialAvailabilityResponse> {

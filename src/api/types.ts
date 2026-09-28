@@ -1998,6 +1998,22 @@ export interface MissingParameter {
   suggested?: number | null;
 }
 
+/**
+ * The three figures the calculator has to ASK for, as the SERVER now remembers them (V142) — the
+ * room's perimeter, and the розгортка / thickness of each position that was asked for one.
+ *
+ * <p>They lived in `localStorage` until then, which is per-device: he answered 5 mm on the phone,
+ * opened the same estimate on his laptop and the same card asked again with our suggestion back in
+ * the field — one estimate with two shopping lists. An unanswered question has NO entry at all,
+ * because the calculation reads a non-positive parameter as missing.</p>
+ */
+export interface StoredMaterialParams {
+  perimeter?: number | null;
+  /** Keyed by estimate item id. */
+  sections: Record<string, number>;
+  thicknesses: Record<string, number>;
+}
+
 export interface MaterialCalculationResponse {
   materials: CalculatedMaterialLine[];
   coverage: MaterialCoverage;
@@ -2010,6 +2026,21 @@ export interface MaterialCalculationResponse {
    *  of an estimate straight out of a bundle, and a different sentence from «we know no norms
    *  for this work». Optional: an older backend does not send it. */
   quantitiesMissing?: boolean;
+  /** What he has ANSWERED on this estimate, so the fields open with his own figures on a device
+   *  that has never seen it. Beside `perimeter` and not folded into it: that one is the figure this
+   *  calculation USED, which may be one the screen is holding and has not saved yet. */
+  answers?: StoredMaterialParams;
+}
+
+/**
+ * One card's answer, remembered on the estimate. A PATCH: each card owns its own «Порахувати», so
+ * an omitted question is left alone and a **zero forgets** the answer — «not answered» has exactly
+ * one spelling, and the calculation reads a non-positive parameter as missing.
+ */
+export interface MaterialParamsRequest {
+  perimeter?: number;
+  sections?: Record<string, number>;
+  thicknesses?: Record<string, number>;
 }
 
 /** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */

@@ -12,11 +12,11 @@ import { parseDecimal } from '@/lib/decimal.ts';
 import { routes } from '@/lib/config.ts';
 import { materialsApi } from '@/api/materials.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
-import { readParams, saveParams, type StoredParams } from './useMaterialParams.ts';
 import type {
   CalculatedMaterialLine,
   MaterialCalculationResponse,
   MaterialLineRequest,
+  MaterialParamsRequest,
   MaterialSourceLine,
   MissingParameter,
 } from '@/api/types.ts';
@@ -109,8 +109,8 @@ function askedPositions(parameters: MissingParameter[], kind: string): AskedPosi
  * arithmetic (`sources`, which carries the position, its basis and the param that was used).
  *
  * <p>Without this the card vanished the moment it was answered, and with the answer now remembered
- * across visits (see `useMaterialParams`) a thickness typed once would have had nowhere left to be
- * corrected. Unanswered positions come first: they are the ones holding the calculation up.</p>
+ * across visits (V142 — on the estimate, server-side) a thickness typed once would have had nowhere
+ * left to be corrected. Unanswered positions come first: they are the ones holding the calculation up.</p>
  */
 function parameterPositions(data: MaterialCalculationResponse, kind: string): AskedPosition[] {
   const byPosition = new Map<string, AskedPosition>();
@@ -162,6 +162,29 @@ function encoded(inputs: Record<string, string>): {
   return { value: entries.length > 0 ? entries.join(',') : undefined, errors };
 }
 
+/**
+ * The same per-position fields as the wire wants them for the PATCH that REMEMBERS them (V142) —
+ * every key the screen holds, blank included.
+ *
+ * <p>Blank is sent as **0**, which is how the server is told to forget an answer. Omitting it (what
+ * `encoded` does, correctly, for the calculation) would leave last week's figure stored while the
+ * field on screen is empty — the master would have cleared a розгортка and gone on buying against
+ * it. Called only once `encoded` has confirmed every non-blank field is a figure.</p>
+ */
+function numbers(inputs: Record<string, string>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [itemId, raw] of Object.entries(inputs)) {
+    out[itemId] = raw.trim() === '' ? 0 : (figure(raw) ?? 0);
+  }
+  return out;
+}
+
+/** The server's figures as the fields want them — the same `String(...)` the suggestion is filled
+ *  with, so «12.5» reads the same whichever of the two put it there. */
+function strings(values: Record<string, number>): Record<string, string> {
+  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)]));
+}
+
 function badQuantity(raw: string): boolean {
   if (raw.trim() === '') return false;
   const value = parseDecimal(raw);
@@ -175,25 +198,21 @@ export function MaterialCalculatorPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
 
-  // What he answered last time on THIS estimate. Read once, straight into the initial state, so the
-  // very first request already carries it — arrive with the figures remembered and the card has
-  // nothing left to ask, which is the whole point of remembering them.
-  const [stored] = useState<StoredParams>(() => readParams(id));
-
+  // What he answered last time on THIS estimate comes from the SERVER (V142) and arrives with the
+  // first calculation, which is already computed against it — the query string carries only what
+  // this screen has changed since. So the three query-param states start empty and the FIELDS are
+  // seeded from `answers` below.
   const [waste, setWaste] = useState(10);
-  const [perimeterInput, setPerimeterInput] = useState(stored.perimeter);
-  const [perimeter, setPerimeter] = useState<number | undefined>(
-    () => figure(stored.perimeter) ?? undefined,
-  );
+  const [perimeterInput, setPerimeterInput] = useState('');
+  const [perimeter, setPerimeter] = useState<number | undefined>(undefined);
   const [perimeterError, setPerimeterError] = useState(false);
-  const [sectionInputs, setSectionInputs] = useState<Record<string, string>>(stored.sections);
+  const [sectionInputs, setSectionInputs] = useState<Record<string, string>>({});
   const [sectionErrors, setSectionErrors] = useState<Record<string, boolean>>({});
-  const [sections, setSections] = useState<string | undefined>(() => encoded(stored.sections).value);
-  const [thicknessInputs, setThicknessInputs] = useState<Record<string, string>>(stored.thicknesses);
+  const [sections, setSections] = useState<string | undefined>(undefined);
+  const [thicknessInputs, setThicknessInputs] = useState<Record<string, string>>({});
   const [thicknessErrors, setThicknessErrors] = useState<Record<string, boolean>>({});
-  const [thicknesses, setThicknesses] = useState<string | undefined>(
-    () => encoded(stored.thicknesses).value,
-  );
+  const [thicknesses, setThicknesses] = useState<string | undefined>(undefined);
+  const [seeded, setSeeded] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
 
@@ -215,6 +234,27 @@ export function MaterialCalculatorPage() {
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
 
+  /*
+   * His own figures into the fields, ONCE, off the first answer that arrives. The calculation that
+   * brought them already used them, so nothing is re-requested — this is so the card SHOWS what it
+   * was answered with and can be corrected, which is the half that made remembering them safe.
+   *
+   * A field he has already touched wins: the answer can arrive late on a slow connection, and
+   * overwriting what he is typing would be worse than not seeding at all. Declared before the
+   * suggestion effect below for the same reason — that one refills nothing it finds filled, and an
+   * answered position must count as filled.
+   */
+  useEffect(() => {
+    if (seeded || !data?.answers) return;
+    const answers = data.answers;
+    setSeeded(true);
+    if (answers.perimeter != null) {
+      setPerimeterInput((prev) => (prev === '' ? String(answers.perimeter) : prev));
+    }
+    setSectionInputs((prev) => ({ ...strings(answers.sections), ...prev }));
+    setThicknessInputs((prev) => ({ ...strings(answers.thicknesses), ...prev }));
+  }, [data, seeded]);
+
   // What the last SUCCESSFUL answer asked for, and what it was already answered with. The
   // parameters ride the query KEY, so a refused request is a different query holding no data at
   // all — and the perimeter/section cards would disappear at exactly the moment the master needs
@@ -234,6 +274,14 @@ export function MaterialCalculatorPage() {
   }, [data]);
 
   const needsPerimeter = asked.perimeter;
+  /*
+   * Answered, by whoever answered it: this screen a moment ago (`perimeter`), or another device last
+   * week (`answers.perimeter`, which this calculation was already computed against — V142). Read off
+   * the local state alone, the card greeted a remembered perimeter with «Потрібен периметр» and
+   * «Порахувати» over a field already holding his own figure. The section and thickness cards have
+   * always taken this from the ANSWER, via `sources`.
+   */
+  const perimeterAnswered = perimeter != null || data?.answers?.perimeter != null;
   const sectionPositions = asked.section;
   const thicknessPositions = asked.thickness;
 
@@ -258,14 +306,31 @@ export function MaterialCalculatorPage() {
     });
   }, [thicknessPositions]);
 
-  // Tapping «Порахувати» is what makes an answer his, so that is where it is remembered — not on
-  // every keystroke, which would store a half-typed «1» of «15».
+  /*
+   * Tapping «Порахувати» is what makes an answer his, so that is where it is remembered — not on
+   * every keystroke, which would store a half-typed «1» of «15». Since V142 it is remembered on the
+   * ESTIMATE and not in this browser: `localStorage` was per-device, so the laptop asked again
+   * everything the phone had already answered, and one estimate had two shopping lists.
+   *
+   * A PATCH, one card at a time. Sending all three would store the thickness suggestions still
+   * sitting pre-filled and unconfirmed in their fields (V137) the moment he answered the perimeter.
+   *
+   * Nothing is said when the save fails, and nothing needs to be: the calculation itself is a server
+   * GET, so a screen that cannot reach the server has no figures on it to remember. The answer is
+   * invalidated because a 0 DELETES the row while the query key stops carrying that question — the
+   * calculation would otherwise go on using an answer that is gone.
+   */
+  const remember = useMutation({
+    mutationFn: (req: MaterialParamsRequest) => materialsApi.saveParams(id, req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['materials', id] }),
+  });
+
   const applyPerimeter = () => {
     const raw = perimeterInput.trim();
     if (raw === '') {
       setPerimeterError(false);
       setPerimeter(undefined);
-      saveParams(id, { perimeter: '' });
+      remember.mutate({ perimeter: 0 });
       return;
     }
     const value = figure(raw);
@@ -275,7 +340,7 @@ export function MaterialCalculatorPage() {
     }
     setPerimeterError(false);
     setPerimeter(value);
-    saveParams(id, { perimeter: raw });
+    remember.mutate({ perimeter: value });
   };
 
   const applyPerPosition = (
@@ -288,7 +353,9 @@ export function MaterialCalculatorPage() {
     setErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setValue(value);
-    saveParams(id, kind === 'sections' ? { sections: inputs } : { thicknesses: inputs });
+    remember.mutate(kind === 'sections'
+      ? { sections: numbers(inputs) }
+      : { thicknesses: numbers(inputs) });
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -394,9 +461,11 @@ export function MaterialCalculatorPage() {
         {needsPerimeter && (
           <div className="mb-4 rounded-card border border-border bg-surface p-3">
             <p className="text-sm font-semibold text-primary">
-              {perimeter == null ? t('materials.perimeterTitle') : t('materials.perimeterTitleSet')}
+              {perimeterAnswered
+                ? t('materials.perimeterTitleSet')
+                : t('materials.perimeterTitle')}
             </p>
-            {perimeter == null && (
+            {!perimeterAnswered && (
               <p className="mt-1 text-xs text-muted">{t('materials.perimeterHint')}</p>
             )}
             <div className="mt-2 flex items-end gap-2">
@@ -415,10 +484,10 @@ export function MaterialCalculatorPage() {
                 />
               </div>
               <Button variant="secondary" onClick={applyPerimeter}>
-                {perimeter == null ? t('materials.perimeterApply') : t('materials.recalculate')}
+                {perimeterAnswered ? t('materials.recalculate') : t('materials.perimeterApply')}
               </Button>
             </div>
-            {perimeter != null && (
+            {perimeterAnswered && (
               <p className="mt-2 text-[11px] text-muted">{t('materials.paramsRemembered')}</p>
             )}
             {perimeterError && (

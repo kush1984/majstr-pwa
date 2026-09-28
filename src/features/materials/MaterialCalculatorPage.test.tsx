@@ -12,8 +12,9 @@ const saveNorm = vi.hoisted(() => vi.fn());
 const restoreNorm = vi.hoisted(() => vi.fn());
 const prefs = vi.hoisted(() => vi.fn());
 const savePrefs = vi.hoisted(() => vi.fn());
+const saveParams = vi.hoisted(() => vi.fn());
 vi.mock('@/api/materials.ts', () => ({
-  materialsApi: { calculate, toShoppingList, saveNorm, restoreNorm, prefs, savePrefs },
+  materialsApi: { calculate, toShoppingList, saveNorm, restoreNorm, prefs, savePrefs, saveParams },
 }));
 
 function line(over: Partial<CalculatedMaterialLine> = {}): CalculatedMaterialLine {
@@ -73,9 +74,6 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  // The applied figures are remembered per estimate now — a leak between tests would open the
-  // next one with the previous one's perimeter already answered.
-  localStorage.clear();
   calculate.mockReset();
   toShoppingList.mockReset();
   saveNorm.mockReset();
@@ -88,6 +86,7 @@ beforeEach(() => {
   toShoppingList.mockResolvedValue({ projectId: 'p1' });
   prefs.mockResolvedValue({ prefs: {} });
   savePrefs.mockResolvedValue({ prefs: {} });
+  saveParams.mockResolvedValue({ perimeter: null, sections: {}, thicknesses: {} });
 });
 
 describe('MaterialCalculatorPage', () => {
@@ -548,8 +547,12 @@ describe('MaterialCalculatorPage', () => {
    * the shopping list — and the next time he opened the screen the same card asked the same
    * question with our default in it, while the list already held the answer. «Якщо вже майстер
    * натиснув розрахувати, то воно це діло запамʼятовує автоматично.»
+   *
+   * <p>It was remembered in `localStorage` first, and that fixed one device: «відкриваю на
+   * компютері і дальше так як було». Since V142 the answer goes to the ESTIMATE, so the tap has to
+   * SEND it — and send only the question that card owns.</p>
    */
-  it('remembers the applied figures and asks nothing the second time round', async () => {
+  it('remembers an applied figure on the estimate, not in this browser', async () => {
     calculate.mockResolvedValue(
       answer({
         materials: [],
@@ -564,33 +567,77 @@ describe('MaterialCalculatorPage', () => {
         ],
       }),
     );
-    const first = renderPage();
+    renderPage();
     fireEvent.change(await screen.findByLabelText('Штукатурення стін, мм'), {
       target: { value: '25' },
     });
     fireEvent.click(screen.getByText('Порахувати'));
-    await waitFor(() =>
-      expect(calculate).toHaveBeenCalledWith('est-1', {
-        wastePercent: 10,
-        perimeter: undefined,
-        sections: undefined,
-        thicknesses: 'e1:25',
-      }),
-    );
-    first.unmount();
 
-    // A fresh visit: the FIRST request already carries his figure, so the position is never
-    // missing and the card never asks again.
-    calculate.mockClear();
-    renderPage();
-    await waitFor(() =>
-      expect(calculate).toHaveBeenCalledWith('est-1', {
-        wastePercent: 10,
-        perimeter: undefined,
-        sections: undefined,
-        thicknesses: 'e1:25',
+    await waitFor(() => expect(saveParams).toHaveBeenCalledWith('est-1', { thicknesses: { e1: 25 } }));
+  });
+
+  /**
+   * The other device, which is the whole point: the server has the answer, so the first calculation
+   * already used it — the request carries no parameter of its own, the card asks nothing, and his
+   * figure is in the field where it can be corrected.
+   */
+  it('opens with his own figures on a device that has never seen this estimate', async () => {
+    const plaster = line({
+      name: 'Суміш штукатурна',
+      unit: 'M2',
+      sources: [
+        {
+          estimateItemId: 'e1',
+          name: 'Штукатурення стін',
+          unit: 'M2',
+          quantity: 30,
+          qtyPerUnit: 0.85,
+          normId: 'n1',
+          ownNorm: false,
+          basis: 'THICKNESS',
+          param: 25,
+          amount: 637.5,
+        },
+      ],
+    });
+    calculate.mockResolvedValue(
+      answer({
+        materials: [plaster],
+        answers: { perimeter: null, sections: {}, thicknesses: { e1: 25 } },
       }),
     );
+    renderPage();
+
+    expect(await screen.findByDisplayValue('25')).toBeTruthy();
+    expect(screen.queryByText('Потрібна товщина шару')).toBeFalsy();
+    expect(calculate).toHaveBeenCalledWith('est-1', {
+      wastePercent: 10,
+      perimeter: undefined,
+      sections: undefined,
+      thicknesses: undefined,
+    });
+  });
+
+  /**
+   * A cleared field has to FORGET the answer, which on the wire is a 0. Omitting the key — what the
+   * calculation's own encoding does, correctly — would leave last week's figure stored while the
+   * field is empty, and he would go on buying against a розгортка he deleted.
+   */
+  it('forgets an answer when the master clears the field', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        perimeter: 16,
+        answers: { perimeter: 16, sections: {}, thicknesses: {} },
+      }),
+    );
+    renderPage();
+
+    const field = await screen.findByLabelText('Периметр, м.п.');
+    expect(await screen.findByDisplayValue('16')).toBeTruthy();
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.click(screen.getByText('Перерахувати'));
+
+    await waitFor(() => expect(saveParams).toHaveBeenCalledWith('est-1', { perimeter: 0 }));
   });
 
   /**

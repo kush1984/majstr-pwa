@@ -169,6 +169,11 @@
   "MaterialNormUpdateRequest": {
     "qtyPerUnit": "number"
   },
+  "MaterialParamsRequest": {
+    "perimeter": "number?",
+    "sections": "object?",
+    "thicknesses": "object?"
+  },
   "MaterialPrefsRequest": {
     "prefs": "object"
   },
