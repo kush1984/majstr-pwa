@@ -171,7 +171,7 @@
    */
   button:active:not(:disabled),
   a:active,
-  label:active:not(:has(input:not([type='checkbox']):not([type='radio']))):not(:has(textarea)):not(:has(select)),
+  label:active,
   [role='button']:active,
   [role='checkbox']:active,
   [role='menuitem']:active,
@@ -179,11 +179,23 @@
   [role='tab']:active {
     opacity: 0.65;
   }
+
+  /*
+   * ...except a <label> that WRAPS a typed field. Every sheet in this app does (so does
+   * `FormField`), so `label:active` fired on a press INSIDE the field and dimmed the caption, the
+   * border and the text being typed — on every keystroke-sized press, which reads as the screen
+   * flickering (review P-32). A label around a CHECKBOX or a radio keeps the feedback: there the
+   * label IS the control's tap target and dimming it is exactly right.
+   *
+   * ITS OWN RULE, and that is the point. `:has()` is young enough to be missing on an older phone,
+   * and an unsupported selector invalidates the WHOLE list it appears in — folded into the block
+   * above, it would have taken the press feedback of every button in the app down with it, on
+   * exactly the devices that need it most. Alone, it degrades to «the label dims too», which is
+   * what it did before.
+   */
+  label:active:has(input:not([type='checkbox']):not([type='radio'])),
+  label:active:has(textarea),
+  label:active:has(select) {
+    opacity: 1;
+  }
 }
-/*
- * Why that `:has()` chain (review P-32): every sheet in this app wraps its field in a bare <label>
- * (so does `FormField`), so `label:active` fired on a tap INSIDE the field and dimmed the caption,
- * the border and the text being typed — on every keystroke-sized press, which reads as the screen
- * flickering. A label that wraps a CHECKBOX or a radio keeps the feedback: there the label IS the
- * control's tap target and dimming it is exactly right.
- */

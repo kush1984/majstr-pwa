@@ -114,6 +114,49 @@ describe('the queued receipt handler', () => {
     expect(req.file.type).toBe('image/jpeg');
     expect(await outboxCount()).toBe(0);
   });
+
+  /**
+   * The fiscal identity rides the CREATE, because a queued receipt makes no other call.
+   *
+   * <p>The printed QR is decoded ON THE DEVICE, so a receipt photographed with no signal already
+   * knows which piece of paper it is — and the create is its only request ever: it replays as a
+   * create and never as a PATCH, which is where the identity used to be written. Without this the
+   * code read off the paper was dropped, and V134's whole point is that a dropped identity is how
+   * the same slip stays billed twice with nothing able to see it.</p>
+   */
+  it('carries the identity the device read, through the queue and into the create', async () => {
+    onlineManager.setOnline(false);
+    await addActReceipt('a1', {
+      id: 'u9', amount: 0, file: photo(), fiscalFn: '4000123456', fiscalId: '77',
+    });
+
+    onlineManager.setOnline(true);
+    vi.mocked(actsApi.addReceipt).mockResolvedValue({ id: 'u9' } as WorkActReceiptResponse);
+    expect(await flushOutbox()).toEqual({ synced: 1, failed: 0, blocked: 0 });
+
+    const [, req] = vi.mocked(actsApi.addReceipt).mock.calls[0];
+    expect(req).toMatchObject({ fiscalFn: '4000123456', fiscalId: '77' });
+  });
+
+  /** A read that found no code must not ERASE one an earlier rung of the ladder already stored. */
+  it('keeps a stored identity when a later read answers without one', async () => {
+    onlineManager.setOnline(false);
+    await addActReceipt('a1', {
+      id: 'u8', amount: 0, file: photo(), fiscalFn: '4000123456', fiscalId: '77',
+    });
+    await patchQueuedReceiptFromRead('u8', {
+      label: 'Епіцентр', amount: 2400, issuedAt: '2026-09-14', fiscalFn: null, fiscalId: null,
+    });
+
+    onlineManager.setOnline(true);
+    vi.mocked(actsApi.addReceipt).mockResolvedValue({ id: 'u8' } as WorkActReceiptResponse);
+    await flushOutbox();
+
+    const [, req] = vi.mocked(actsApi.addReceipt).mock.calls[0];
+    expect(req).toMatchObject({
+      label: 'Епіцентр', amount: 2400, fiscalFn: '4000123456', fiscalId: '77',
+    });
+  });
 });
 
 describe('correcting a receipt that has not synced yet', () => {
