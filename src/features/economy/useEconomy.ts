@@ -65,17 +65,6 @@ export function useToggleEstimateCounted(objectId: string) {
   });
 }
 
-/**
- * Expense CRUD — offline-first. A master logs a purchase standing in the shop, which is exactly
- * where the signal dies.
- *
- * <p><b>No screen on the object writes one any more.</b> «Прибуток» came off the object with the
- * crew-margin round, and the journal went with it: an `ObjectExpense` is now written by a V129 till
- * receipt flipped to «це моя витрата», by an act's `receipts_to_expenses`, and by the estimate-side
- * receipt import — and it is READ in «Мої гроші», which is also where it is edited and deleted.
- * These three mutations are what the outbox replays for that import, and nothing else calls them.
- * The old note here described an optimistic profit figure on a card that no longer exists.</p>
- */
 /** Mirrors ProjectPayment.status(today, received) server-side — used only for the brief
  *  optimistic window before a real fetch confirms the authoritative value (offline only; see
  *  offlineMutate — this never runs on a normal online success). */

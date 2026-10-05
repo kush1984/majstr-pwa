@@ -261,6 +261,12 @@ export function initOutbox(qc: QueryClient): () => void {
   });
 
   // Object expenses (PRO) — entityId is the EXPENSE id; the object id rides the payload.
+  // An object expense. NOTHING ENQUEUES THIS ANY MORE: the journal screen went with «Прибуток» on
+  // the object, so its three hooks are gone, and the one writer left — the estimate-side receipt
+  // import's «зберегти як витрату» — calls `economyApi.addExpense` directly and is online-only.
+  // The handler STAYS for the same reason `estimateItemsMarkup` does: a master's phone can still
+  // hold an op written by a build that had those hooks, and an entity with no handler is skipped in
+  // silence by every flush. `updateExpense`/`deleteExpense` are reachable only from here.
   registerOutboxHandler('expense', async (op) => {
     const p = op.payload as { objectId: string; req?: ExpenseRequest };
     if (op.type === 'create') {
