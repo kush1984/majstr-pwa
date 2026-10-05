@@ -29,6 +29,15 @@ export function useNoteActions(objectId: string) {
   const patch = (edit: (list: NoteResponse[]) => NoteResponse[]) => {
     qc.setQueryData<NoteResponse[]>(key(objectId), (old) => edit(old ?? []));
   };
+  /**
+   * Stop the fetches the optimistic patch below is about to overwrite (review P-31).
+   *
+   * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not
+   * yet hold the queued op — straight over it, so what the master just entered disappears for as
+   * long as that request takes. Handed to `offlineMutate` as its `cancel`, which awaits it
+   * immediately before the patch.</p>
+   */
+  const cancel = () => qc.cancelQueries({ queryKey: key(objectId) });
 
   return {
     add: useMutation({
@@ -40,6 +49,7 @@ export function useNoteActions(objectId: string) {
           entity: 'note', entityId: id, type: 'create', payload: { objectId, req },
           deps: [objectId],
           online: async () => { await notesApi.add(objectId, req, id); },
+          cancel,
           onOnlineSuccess: invalidate,
           // Newest first, matching the server's ordering.
           optimistic: () => patch((list) => [{
@@ -56,6 +66,7 @@ export function useNoteActions(objectId: string) {
           entity: 'note', entityId: vars.noteId, type: 'update',
           payload: { objectId, req: vars.req }, deps: [objectId],
           online: async () => { await notesApi.update(objectId, vars.noteId, vars.req); },
+          cancel,
           onOnlineSuccess: invalidate,
           optimistic: () => patch((list) => list.map((n) => (n.id === vars.noteId
             ? { ...n, title: vars.req.title ?? null, phone: vars.req.phone ?? null, body: vars.req.body }
@@ -69,6 +80,7 @@ export function useNoteActions(objectId: string) {
           entity: 'note', entityId: noteId, type: 'delete', payload: { objectId },
           deps: [objectId],
           online: async () => { await notesApi.remove(objectId, noteId); },
+          cancel,
           onOnlineSuccess: invalidate,
           optimistic: () => patch((list) => list.filter((n) => n.id !== noteId)),
         }),

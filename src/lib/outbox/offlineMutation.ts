@@ -27,6 +27,19 @@ export async function offlineMutate<T>(opts: {
   deps?: string[];
   online: () => Promise<T>;
   optimistic: () => T;
+  /**
+   * Cancel the GETs the {@link optimistic} patch is about to overwrite, and await it first.
+   *
+   * <p>A fetch already in flight resolves AFTER the patch and writes server state — which does not
+   * contain this op — straight over it (review P-31). The master's row then disappears for as long
+   * as that request took, which in a basement is the whole point of the feature failing in front of
+   * him. `cancelQueries` is TanStack's own answer and the reason its optimistic-update guide opens
+   * with it; nothing else in this file can know which keys a caller patches.</p>
+   *
+   * <p>Pass it wherever `optimistic` touches the cache. Omitting it is not an error — some ops
+   * patch nothing — but a patch without it is a race.</p>
+   */
+  cancel?: () => Promise<unknown>;
   onOnlineSuccess?: () => void;
   /**
    * For an op that states the entity's WHOLE state, so a queued one is worthless once a newer one
@@ -43,6 +56,7 @@ export async function offlineMutate<T>(opts: {
       if (!isNetworkError(e)) throw e; // real error → surface; network blip → queue below
     }
   }
+  await opts.cancel?.();
   const optimistic = opts.optimistic();
   const queue = opts.coalesce ? enqueueLatest : enqueue;
   await queue({

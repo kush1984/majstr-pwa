@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { clientsApi } from '@/api/clients.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
@@ -6,6 +6,15 @@ import type { ClientRequest, ClientResponse } from '@/api/types.ts';
 
 export const CLIENTS_KEY = ['clients'] as const;
 const listKey = [...CLIENTS_KEY, 'list'] as const;
+/**
+ * Stop the fetches an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not yet
+ * hold the queued op — straight over it, so what the master just entered leaves the screen again
+ * for as long as that request takes. Handed to `offlineMutate` as its `cancel`, which awaits it
+ * immediately before the patch.</p>
+ */
+const cancelClients = (qc: QueryClient) => () => qc.cancelQueries({ queryKey: CLIENTS_KEY });
 
 const byName = (a: ClientResponse, b: ClientResponse) => a.fullName.localeCompare(b.fullName, 'uk');
 
@@ -52,6 +61,7 @@ export function useCreateClient() {
       return offlineMutate<ClientResponse>({
         entity: 'client', entityId: id, type: 'create', payload: req, deps: [],
         online: () => clientsApi.create(req, id),
+        cancel: cancelClients(qc),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: CLIENTS_KEY }),
         optimistic: () => {
           qc.setQueryData<ClientResponse[]>(listKey, (old) => [...(old ?? []), optimistic].sort(byName));
@@ -74,6 +84,7 @@ export function useUpdateClient() {
       return offlineMutate<void>({
         entity: 'client', entityId: id, type: 'update', payload: req, deps: [],
         online: async () => { await clientsApi.update(id, req); },
+        cancel: cancelClients(qc),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: CLIENTS_KEY }),
         optimistic: () => {
           qc.setQueryData<ClientResponse[]>(listKey, (old) => (old ?? []).map((c) => (c.id === id ? patch(c) : c)).sort(byName));

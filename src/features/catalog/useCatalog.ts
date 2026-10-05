@@ -17,6 +17,16 @@ function resolveCustomTradeName(
 }
 
 export const CATALOG_KEY = ['catalog'] as const;
+/**
+ * Stop the fetches an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not yet
+ * hold the queued op — straight over it, so what the master just entered leaves the screen again
+ * for as long as that request takes. Handed to `offlineMutate` as its `cancel`, which awaits it
+ * immediately before the patch.</p>
+ */
+const cancelCatalog = (qc: ReturnType<typeof useQueryClient>) => () =>
+  qc.cancelQueries({ queryKey: CATALOG_KEY });
 
 export function useCatalog(type?: ItemType) {
   return useQuery({
@@ -108,6 +118,7 @@ export function useCreateCatalogItem() {
       return offlineMutate<CatalogItemResponse>({
         entity: 'catalogItem', entityId: id, type: 'create', payload: req, deps: [],
         online: () => catalogApi.create(req, id),
+        cancel: cancelCatalog(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           // Only into lists this item belongs in: the "all" list and its own type's list.
@@ -128,6 +139,7 @@ export function useUpdateCatalogItem() {
       offlineMutate<void>({
         entity: 'catalogItem', entityId: id, type: 'update', payload: req, deps: [],
         online: async () => { await catalogApi.update(id, req); },
+        cancel: cancelCatalog(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const customTradeId = req.customTradeId ?? null;
@@ -152,6 +164,7 @@ export function useDeleteCatalogItem() {
       offlineMutate<void>({
         entity: 'catalogItem', entityId: id, type: 'delete', payload: {}, deps: [],
         online: async () => { await catalogApi.remove(id); },
+        cancel: cancelCatalog(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => patchCatalog(qc, (items) => items.filter((i) => i.id !== id)),
       }),
@@ -176,6 +189,7 @@ export function useDeleteCatalogItems() {
         // something a later edit of one of these rows can meaningfully depend on — they are gone.
         entity: 'catalogItem', entityId: ids[0], type: 'delete', payload: { ids }, deps: [],
         online: async () => { await catalogApi.deleteItems(ids); },
+        cancel: cancelCatalog(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const gone = new Set(ids);

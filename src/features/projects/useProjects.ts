@@ -11,6 +11,19 @@ import type { ClientResponse, ObjectStage, ProjectRequest, ProjectResponse, Proj
 
 export const PROJECTS_KEY = ['projects'] as const;
 
+/**
+ * Stop the fetches an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not yet
+ * hold the queued op — straight over it, so an object created or renamed offline blinks out again
+ * for as long as that request takes. Both keys every patch here touches: the LIST the card sits in
+ * and the DETAIL screen behind it.</p>
+ */
+const cancelProjects = (qc: QueryClient, id?: string) => () => Promise.all([
+  qc.cancelQueries({ queryKey: [...PROJECTS_KEY, 'list'] }),
+  ...(id ? [qc.cancelQueries({ queryKey: [...PROJECTS_KEY, 'detail', id] })] : []),
+]);
+
 /** The client's display name, from the clients cache — so an offline card shows it before syncing. */
 function clientName(qc: QueryClient, clientId?: string): string | null {
   if (!clientId) return null;
@@ -73,6 +86,7 @@ export function useCreateProject() {
         entity: 'project', entityId: id, type: 'create', payload: req,
         deps: req.clientId ? [req.clientId] : [],
         online: () => projectsApi.create(req, id),
+        cancel: cancelProjects(qc, id),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           // Fired here, not in `online`: the object exists for the master the moment the
@@ -102,6 +116,7 @@ export function useUpdateProject() {
         entity: 'project', entityId: id, type: 'update', payload: req,
         deps: req.clientId ? [req.clientId] : [],
         online: async () => { await projectsApi.update(id, req); },
+        cancel: cancelProjects(qc, id),
         onOnlineSuccess: () => {
           invalidate();
           void qc.invalidateQueries({ queryKey: [...PROJECTS_KEY, 'detail', id] });
@@ -131,6 +146,7 @@ export function useDeleteProject() {
         entity: 'project', entityId: id, type: 'delete', payload: {},
         deps: [],
         online: async () => { await projectsApi.remove(id); },
+        cancel: cancelProjects(qc, id),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           qc.setQueriesData<ProjectResponse[]>({ queryKey: [...PROJECTS_KEY, 'list'] }, (old) =>
@@ -179,6 +195,7 @@ export function useSetProjectStatus() {
         entity: 'projectStatus', entityId: id, type: 'update', payload: { status },
         deps: [],
         online: async () => { await projectsApi.setStatus(id, status); },
+        cancel: cancelProjects(qc, id),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const patch = (p: ProjectResponse): ProjectResponse => ({

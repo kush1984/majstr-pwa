@@ -114,6 +114,17 @@ function cachedItems(qc: QueryClient, estimateId: string): EstimateItemResponse[
   return qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId])?.items ?? null;
 }
 
+/**
+ * Stop the fetches an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not yet
+ * contain the queued op — straight over it. The line the master just typed vanishes for as long as
+ * that request takes, and in a basement that is the feature failing in front of him. Handed to
+ * `offlineMutate` as its `cancel`, so it runs immediately before the patch on the queued path.</p>
+ */
+const cancelEstimate = (qc: QueryClient, estimateId: string) => () =>
+  qc.cancelQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
+
 /** Apply a change to the cached estimate detail (if present) and re-derive totals. */
 function patchEstimate(qc: QueryClient, estimateId: string, edit: (items: EstimateItemResponse[]) => EstimateItemResponse[]): void {
   qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], (old) =>
@@ -182,6 +193,11 @@ export function useCreateEstimate() {
         entity: 'estimate', entityId: id, type: 'create',
         payload: { projectId, req }, deps: [projectId],
         online: () => estimatesApi.createForProject(projectId, req, id),
+        // Both keys this patch writes, not just the detail.
+        cancel: () => Promise.all([
+          qc.cancelQueries({ queryKey: [...ESTIMATE_KEY, id] }),
+          qc.cancelQueries({ queryKey: ['project-estimates', projectId] }),
+        ]),
         onOnlineSuccess: () => {
           void qc.invalidateQueries({ queryKey: ['project-estimates', projectId] });
           void qc.invalidateQueries({ queryKey: ['projects'] });
@@ -214,6 +230,7 @@ export function useAddItem(estimateId: string) {
         entity: 'estimateItem', entityId: id, type: 'create',
         payload: { estimateId, req }, deps: [estimateId],
         online: () => estimatesApi.addItem(estimateId, req, id),
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const item: EstimateItemResponse = {
@@ -261,6 +278,7 @@ export function useAddItemFromCatalog(estimateId: string) {
         online: async () => {
           await estimatesApi.addItemFromCatalog(estimateId, args.catalogItemId, args.req, id);
         },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => patchEstimateWithCatalogLines(qc, estimateId, [
           { id, catalogItemId: args.catalogItemId, quantity: args.req.quantity, sortOrder: args.req.sortOrder },
@@ -290,6 +308,7 @@ export function useAddItemsFromCatalogBatch(estimateId: string) {
         payload: { estimateId, items: withIds },
         deps: [estimateId],
         online: async () => { await estimatesApi.addItemsFromCatalogBatch(estimateId, withIds); },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => patchEstimateWithCatalogLines(qc, estimateId, withIds),
       });
@@ -351,6 +370,7 @@ export function useUpdateItem(estimateId: string) {
         entity: 'estimateItem', entityId: itemId, type: 'update',
         payload: { estimateId, req }, deps: [estimateId],
         online: async () => { await estimatesApi.updateItem(estimateId, itemId, req); },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           patchEstimate(qc, estimateId, (items) => items.map((i) => (i.id === itemId ? {
@@ -387,6 +407,7 @@ export function useReorderItems(estimateId: string) {
         entity: 'estimateItemOrder', entityId: estimateId, type: 'update',
         payload: { req }, deps: [estimateId], coalesce: true,
         online: async () => { await estimatesApi.reorderItems(estimateId, req); },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         // sortOrder is renumbered from the position so the cached estimate re-groups into the same
         // sections the master just dragged — grouping reads sortOrder, not the array order.
@@ -408,6 +429,7 @@ export function useRemoveItem(estimateId: string) {
         entity: 'estimateItem', entityId: itemId, type: 'delete',
         payload: { estimateId }, deps: [estimateId],
         online: async () => { await estimatesApi.removeItem(estimateId, itemId); },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           patchEstimate(qc, estimateId, (items) => items.filter((i) => i.id !== itemId));
@@ -434,6 +456,7 @@ export function useDeleteItems(estimateId: string) {
         entity: 'estimateItemsBulkDelete', entityId: estimateId, type: 'delete',
         payload: { itemIds }, deps: [estimateId],
         online: async () => { await estimatesApi.deleteItems(estimateId, itemIds); },
+        cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const gone = new Set(itemIds);
@@ -473,7 +496,9 @@ export function useMarkUpItems(estimateId: string) {
         .filter((i) => picked.has(i.id) && i.unit !== 'PERCENT');
 
       // Applied ONCE, before either path: the queued path below must not add the markup a second
-      // time to a cache the online attempt has already moved.
+      // time to a cache the online attempt has already moved. Cancelled first for the same reason
+      // every other patch here is (review P-31) — a GET in flight would land the old prices back.
+      await cancelEstimate(qc, estimateId)();
       patchEstimate(qc, estimateId, (items) => items.map((i) => (
         picked.has(i.id) && i.unit !== 'PERCENT'
           ? { ...i, unitPrice: markedUpPrice(i.unitPrice, factor) }
@@ -578,6 +603,11 @@ export function useUpdateEstimate(estimateId: string) {
         entity: 'estimate', entityId: estimateId, type: 'update', payload: { req },
         deps: [],
         online: async () => { await estimatesApi.update(estimateId, req); },
+        // The list as well as the detail — this patch writes a status and a name onto both.
+        cancel: () => Promise.all([
+          cancelEstimate(qc, estimateId)(),
+          qc.cancelQueries({ queryKey: ['project-estimates'] }),
+        ]),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], (old) =>
@@ -616,6 +646,9 @@ export function useDeleteEstimate(estimateId: string) {
         entity: 'estimate', entityId: estimateId, type: 'delete', payload: {},
         deps: [],
         online: async () => { await estimatesApi.remove(estimateId); },
+        // The LIST is what this patches; the detail is REMOVED outright, which no in-flight fetch
+        // can undo — `removeQueries` cancels it on the way out.
+        cancel: () => qc.cancelQueries({ queryKey: ['project-estimates'] }),
         onOnlineSuccess: () => {
           void qc.invalidateQueries({ queryKey: ['projects'] });
           void qc.invalidateQueries({ queryKey: ['dashboard'] });

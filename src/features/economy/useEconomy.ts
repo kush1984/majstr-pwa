@@ -31,6 +31,17 @@ export const economyKeys = {
 };
 
 /**
+ * Stop the fetch an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>Every patch in this module writes into the ONE economy key, and a GET already in flight
+ * resolves after it with server state that does not yet hold the queued op — so a payment the
+ * master has just recorded leaves the screen again for the length of that request. On a money
+ * screen that is the worst place for it to happen.</p>
+ */
+const cancelEconomy = (qc: QueryClient, objectId: string) => () =>
+  qc.cancelQueries({ queryKey: economyKeys.economy(objectId) });
+
+/**
  * The economy tab's data — panels + payments are FREE-visible, so this is always fetched
  * (unlike the expense journal below, which stays PRO-gated). `internals` comes back null for
  * FREE; the section renders the lock teaser for that part only.
@@ -115,6 +126,7 @@ export function useAddPayment(objectId: string) {
         entity: 'project-payment', entityId: id, type: 'create', payload: { objectId, req },
         deps: [objectId],
         online: () => paymentsApi.add(objectId, req, id),
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => {
           const created: ProjectPaymentResponse = {
@@ -140,6 +152,7 @@ export function useUpdatePayment(objectId: string) {
         entity: 'project-payment', entityId: id, type: 'update', payload: { objectId, req },
         deps: [objectId],
         online: async () => { await paymentsApi.update(objectId, id, req); },
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => patchPayments(qc, objectId, (list) => list.map((p) => (p.id === id ? {
           ...p, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
@@ -158,6 +171,7 @@ export function useDeletePayment(objectId: string) {
         entity: 'project-payment', entityId: paymentId, type: 'delete', payload: { objectId },
         deps: [objectId],
         online: async () => { await paymentsApi.remove(objectId, paymentId); },
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => patchPayments(qc, objectId, (list) => list.filter((p) => p.id !== paymentId)),
       }),
@@ -185,6 +199,7 @@ export function useAddReceipt(objectId: string) {
         // has replayed, and a receipt naming it earlier would 404.
         deps: req.planPaymentId ? [objectId, req.planPaymentId] : [objectId],
         online: () => paymentsApi.addReceipt(objectId, req, id),
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => {
           const label = req.label?.trim() || null;
@@ -260,6 +275,7 @@ export function useEditReceipt(objectId: string) {
         entity: 'payment-receipt', entityId: id, type: 'update', payload: { objectId, req },
         deps: [objectId],
         online: () => paymentsApi.editReceipt(objectId, id, req),
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => {
           let updated: PaymentReceiptResponse | null = null;
@@ -294,6 +310,7 @@ export function useDeleteReceipt(objectId: string) {
         entity: 'payment-receipt', entityId: receiptId, type: 'delete', payload: { objectId },
         deps: [objectId],
         online: async () => { await paymentsApi.removeReceipt(objectId, receiptId); },
+        cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
         optimistic: () => patchSummary(qc, objectId, (s) => ({
           ...s,

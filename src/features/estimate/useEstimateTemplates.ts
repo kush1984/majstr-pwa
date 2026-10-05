@@ -25,6 +25,16 @@ import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 
 export const ESTIMATE_TEMPLATE_KEY = ['estimate-templates'] as const;
+/**
+ * Stop the fetches an optimistic patch is about to overwrite (review P-31).
+ *
+ * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not yet
+ * hold the queued op — straight over it, so what the master just entered leaves the screen again
+ * for as long as that request takes. Handed to `offlineMutate` as its `cancel`, which awaits it
+ * immediately before the patch.</p>
+ */
+const cancelTemplates = (qc: QueryClient) => () =>
+  qc.cancelQueries({ queryKey: ESTIMATE_TEMPLATE_KEY });
 
 /** Defaults relevant to my trades (+ general) plus my own templates. */
 export function useEstimateTemplates() {
@@ -142,6 +152,7 @@ export function useSetTemplateTrade() {
         entity: 'estimateTemplate', entityId: id, type: 'update',
         payload: { op: 'trade', trade, customTradeId }, deps: [],
         online: async () => { await estimateTemplatesApi.setTrade(id, { trade, customTradeId }); },
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const effectiveTrade = customTradeId ? 'OTHER' : trade;
@@ -182,6 +193,7 @@ export function useRenameTemplate() {
         // reads, and it is the one that means «leave the paragraph the client reads alone».
         payload: { op: 'rename', name, ...(description === undefined ? {} : { description }) }, deps: [],
         online: () => estimateTemplatesApi.rename(id, { name, description }),
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           const edit = <T extends { name: string; description?: string | null }>(row: T): T => ({
@@ -206,6 +218,7 @@ export function useDeleteTemplate() {
       offlineMutate<void>({
         entity: 'estimateTemplate', entityId: id, type: 'delete', payload: {}, deps: [],
         online: async () => { await estimateTemplatesApi.remove(id); },
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: invalidate,
         optimistic: () => {
           qc.setQueryData<EstimateTemplateSummary[]>(ESTIMATE_TEMPLATE_KEY, (old) =>
@@ -228,6 +241,7 @@ export function useAddTemplateItem(templateId: string) {
         entity: 'templateItem', entityId: id, type: 'create',
         payload: { templateId, req }, deps: [templateId],
         online: () => estimateTemplatesApi.addItem(templateId, req, id),
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => {
           patchSummary(qc, templateId, (t) => ({ ...t, itemCount: t.itemCount + 1 }));
@@ -255,6 +269,7 @@ export function useRemoveTemplateItem(templateId: string) {
         entity: 'templateItem', entityId: itemId, type: 'delete',
         payload: { templateId }, deps: [templateId],
         online: () => estimateTemplatesApi.removeItem(templateId, itemId),
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => {
           patchSummary(qc, templateId, (t) => ({ ...t, itemCount: Math.max(0, t.itemCount - 1) }));
@@ -283,6 +298,7 @@ export function useUpdateTemplateItem(templateId: string) {
         entity: 'templateItem', entityId: itemId, type: 'update',
         payload: { templateId, req }, deps: [templateId],
         online: () => estimateTemplatesApi.updateItem(templateId, itemId, req),
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => patchDetail(qc, templateId, (d) => ({
           ...d, items: d.items.map((i) => (i.id === itemId ? { ...i, ...req } : i)),
@@ -310,6 +326,7 @@ export function useReorderTemplateItems(templateId: string) {
         entity: 'templateItemOrder', entityId: templateId, type: 'update',
         payload: { req }, deps: [templateId], coalesce: true,
         online: () => estimateTemplatesApi.reorderItems(templateId, req),
+        cancel: cancelTemplates(qc),
         onOnlineSuccess: () => { void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY }); },
         optimistic: () => patchDetail(qc, templateId, (d) => ({
           ...d, items: arranged.map((i, idx) => ({ ...i, sortOrder: idx })),

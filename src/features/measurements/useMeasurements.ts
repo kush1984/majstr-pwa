@@ -44,6 +44,15 @@ export function useMeasurementActions(objectId: string) {
   /** Optimistic tree edit + totals re-derived exactly like the server buckets them. */
   const edit = (fn: (t: MeasurementsResponse) => MeasurementsResponse): MeasurementsResponse =>
     apply(recomputeTree(fn(current())));
+  /**
+   * Stop the fetches the optimistic patch below is about to overwrite (review P-31).
+   *
+   * <p>A GET already in flight resolves AFTER the patch and writes server state — which does not
+   * yet hold the queued op — straight over it, so what the master just entered disappears for as
+   * long as that request takes. Handed to `offlineMutate` as its `cancel`, which awaits it
+   * immediately before the patch.</p>
+   */
+  const cancel = () => qc.cancelQueries({ queryKey: key });
 
   const addRoom = useMutation({
     networkMode: 'always',
@@ -53,6 +62,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementRoom', entityId: id, type: 'create',
         payload: { objectId, req }, deps: [objectId],
         online: async () => apply(await measurementsApi.addRoom(objectId, req, id)),
+        cancel,
         optimistic: () => edit((t) => ({
           ...t,
           rooms: [...t.rooms, {
@@ -72,6 +82,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementRoom', entityId: roomId, type: 'update',
         payload: { objectId, req }, deps: [objectId],
         online: async () => apply(await measurementsApi.updateRoom(objectId, roomId, req)),
+        cancel,
         optimistic: () => edit((t) => ({
           ...t,
           rooms: t.rooms.map((r) => (r.id === roomId ? { ...r, name: req.name } : r)),
@@ -86,6 +97,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementRoom', entityId: roomId, type: 'delete',
         payload: { objectId }, deps: [objectId],
         online: async () => apply(await measurementsApi.deleteRoom(objectId, roomId)),
+        cancel,
         optimistic: () => edit((t) => ({ ...t, rooms: t.rooms.filter((r) => r.id !== roomId) })),
       }),
   });
@@ -98,6 +110,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementItem', entityId: id, type: 'create',
         payload: { objectId, roomId, req }, deps: [roomId],
         online: async () => apply(await measurementsApi.addItem(objectId, roomId, req, id)),
+        cancel,
         optimistic: () => edit((t) => ({
           ...t,
           rooms: t.rooms.map((r) => (r.id === roomId ? { ...r, items: [...r.items, itemOf(id, req, r.items.length)] } : r)),
@@ -115,6 +128,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementItem', entityId: itemId, type: 'update',
         payload: { objectId, roomId, req }, deps: [roomId],
         online: async () => apply(await measurementsApi.updateItem(objectId, roomId, itemId, req)),
+        cancel,
         optimistic: () => edit((t) => ({
           ...t,
           rooms: t.rooms.map((r) => (r.id !== roomId ? r : {
@@ -132,6 +146,7 @@ export function useMeasurementActions(objectId: string) {
         entity: 'measurementItem', entityId: itemId, type: 'delete',
         payload: { objectId, roomId }, deps: [roomId],
         online: async () => apply(await measurementsApi.deleteItem(objectId, roomId, itemId)),
+        cancel,
         optimistic: () => edit((t) => ({
           ...t,
           rooms: t.rooms.map((r) => (r.id !== roomId ? r : { ...r, items: r.items.filter((i) => i.id !== itemId) })),
