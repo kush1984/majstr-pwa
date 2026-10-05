@@ -105,7 +105,11 @@ export function CatalogPicker({
       .filter((i) => !needle || i.name.toLowerCase().includes(needle));
   }, [data, q, typeFilter]);
 
-  const branches = useMemo(() => toTradeTree(filtered), [filtered]);
+  // Which trades EXIST is a fact about the catalog, not about what the search box is showing
+  // (review P-28). Built from `filtered`, a search that hid every drywall row also removed the
+  // DRYWALL branch — so a position both trades ship appeared under the other one, and the line
+  // was filed there. `data` answers «whose folder is this», `filtered` «what do I see».
+  const branches = useMemo(() => toTradeTree(filtered, data ?? []), [filtered, data]);
 
   // One branch = nothing for a trade level to disambiguate, so it is not drawn and its categories
   // sit at the top level, exactly as they did before the tree.

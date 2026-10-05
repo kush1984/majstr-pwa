@@ -32,8 +32,15 @@ export function ToastViewport() {
         <div
           key={item.id}
           role="status"
+          /*
+           * The CARD takes no taps; its two buttons do (review P-32). At `z-[70]` a toast sits
+           * over a sheet's own Save row — on a 375 px screen, exactly over it — so a master
+           * pressing «Зберегти» again after the first attempt was refused hit the toast telling
+           * him it had been refused, and nothing happened. Only the things that ARE controls
+           * answer a press now.
+           */
           className={cn(
-            'pointer-events-auto max-w-md rounded-lg border px-4 py-3 text-sm shadow-sm',
+            'pointer-events-none max-w-md rounded-lg border px-4 py-3 text-sm shadow-sm',
             kindStyles[item.kind],
           )}
         >
@@ -46,7 +53,7 @@ export function ToastViewport() {
                   dismiss(item.id);
                   item.action?.onClick();
                 }}
-                className="flex-shrink-0 font-semibold text-current underline underline-offset-2"
+                className="pointer-events-auto flex-shrink-0 font-semibold text-current underline underline-offset-2"
               >
                 {item.action.label}
               </button>
@@ -54,7 +61,7 @@ export function ToastViewport() {
             <button
               type="button"
               onClick={() => dismiss(item.id)}
-              className="text-current opacity-60 hover:opacity-100"
+              className="pointer-events-auto text-current opacity-60 hover:opacity-100"
               aria-label={t('common.close')}
             >
               ✕

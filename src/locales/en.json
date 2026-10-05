@@ -588,6 +588,7 @@
     "deletedCount": "Deleted: {{count}}",
     "duplicateWithMarkup": "Copy ±%",
     "duplicateCreate": "Create the copy",
+    "copySuffix": "(copy)",
     "duplicated": "Copy created",
     "duplicatedToEstimatesTab": "Estimate «{{name}}» created in the Estimates tab",
     "markup": "Markup",
@@ -631,7 +632,6 @@
     "teaser": "Payment schedule and object summary — in PRO",
     "openPro": "Open PRO →",
     "paymentsNoneYet": "Nothing recorded yet. An advance can be entered before an estimate is signed.",
-    "income": "Income",
     "ofWhichSigned": "of which signed: {{amount}}",
     "received": "Received",
     "contracted": "Contracted",
@@ -649,14 +649,6 @@
     "excludeAct": "Exclude this estimate",
     "includeAct": "Include this estimate",
     "amount": "Amount, ₴",
-    "amountRequired": "Enter an amount greater than 0",
-    "cat": {
-      "MATERIALS": "Materials",
-      "LABOR": "Labor",
-      "OTHER": "Other"
-    },
-    "noteOptional": "Note (optional)",
-    "notePlaceholder": "e.g. glue, filler",
     "date": "Date",
     "paymentsTitle": "Payments",
     "paymentsAllDone": "All paid ✓",
@@ -716,6 +708,7 @@
     "deletePaymentMessage": "This payment will be deleted. This can't be undone.",
     "splitTitle": "Split into shares",
     "customPercentsLabel": "Your own shares, % (comma-separated)",
+    "customPercentsRead": "Read as: {{shares}} = {{sum}} %",
     "customPercentsPlaceholder": "e.g. 40, 30, 30",
     "previewSplit": "Preview",
     "confirmSplit": "Confirm the split",
@@ -726,7 +719,8 @@
     "crewMargin": "Your margin",
     "crewMarginAccepted": "accepted by acts",
     "crewMarginHint": "The difference between the client price and the crew price. Materials, fuel and the rest are not part of it.",
-    "crewMarginUnpriced": "{{count}} position(s) worth {{sum}} were added with no crew price — not counted in the margin."
+    "crewMarginUnpriced_one": "{{count}} position worth {{sum}} was added with no crew price — not counted in the margin.",
+    "crewMarginUnpriced_other": "{{count}} positions worth {{sum}} were added with no crew price — not counted in the margin."
   },
   "consolidate": {
     "addButton": "+ Consolidated",
@@ -887,6 +881,11 @@
     "receiptSaveToPhotosInfo": "A separate copy appears in the object's Photos under «Чеки». The act keeps its own copy, so the gallery one can be freely deleted or re-filed.",
     "newTitle": "New act",
     "leaveNewText": "The act is not saved yet — leaving will not create it. Leave?",
+    "rowTotal": "Row total",
+    "rowFree": "Price 0 ₴ — this row bills nothing.",
+    "signedWhileEditing": "The client signed this act. Unsaved changes did not make it in.",
+    "receiptsNotSent": "{{count}} receipt(s) not sent yet. Get online and we will sign.",
+    "receiptsRejected": "The server refused {{count}} receipt(s). Open «Sync» in your profile.",
     "receiptsAfterSave": "Save the act to add receipts and invoices.",
     "receiptPickFiles": "Pick from gallery",
     "receiptBatchTitle": "Add receipts",
@@ -948,6 +947,7 @@
     "directionExpense": "Spent it",
     "amount": "Amount, ₴",
     "amountRequired": "Enter an amount greater than zero.",
+    "amountInvalid": "That amount cannot be read. E.g. 1 200 or 1200.50.",
     "date": "Date",
     "category": "Category (optional)",
     "note": "Note",
@@ -965,7 +965,11 @@
     "truncated": "Showing the first {{count}} entries. The totals above cover the whole period.",
     "periodCUSTOM": "Range",
     "rangeFrom": "From",
-    "rangeTo": "To"
+    "rangeTo": "To",
+    "window": "{{from}} — {{to}}",
+    "deleteTitle": "Delete this entry?",
+    "deleteMessage": "The row leaves the cash movement. If it is an object's payment or expense, it leaves there too.",
+    "deleteConfirm": "Yes, delete"
   },
   "cashCategory": {
     "MATERIALS": "Materials",
@@ -1131,6 +1135,7 @@
     "habitSheet": "Drywall: sheet format, e.g. 1200x2500",
     "habitsSave": "Save my habits",
     "habitsSaved": "Saved — we will use these on your other objects too",
+    "habitInvalid": "That value is out of range — please check it.",
     "habitsFailed": "Could not save"
   },
   "receipt": {

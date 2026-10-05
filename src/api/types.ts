@@ -492,8 +492,10 @@ export interface EstimateDuplicateRequest {
   name?: string;
   /** The MAGNITUDE of the change, ≥ 0. `discount` decides the sign. */
   markupPercent: number;
-  /** false = markup (prices up), true = discount (prices down). */
-  discount?: boolean;
+  /** false = markup (prices up), true = discount (prices down). REQUIRED — the backend refuses an
+   *  omitted flag (review B-38): it reverses the SIGN of money, and the global
+   *  `fail-on-null-for-primitives: false` would otherwise read a missing field as «raise prices». */
+  discount: boolean;
   itemIds?: string[];
 }
 
@@ -510,8 +512,9 @@ export interface EstimateItemsMarkupRequest {
   itemIds: string[];
   /** The MAGNITUDE of the change, ≥ 0. `discount` decides the sign. */
   percent: number;
-  /** false = markup (prices up), true = discount (prices down, capped at 100 %). */
-  discount?: boolean;
+  /** false = markup (prices up), true = discount (prices down, capped at 100 %). REQUIRED — see
+   *  `EstimateDuplicateRequest.discount` (review B-38). */
+  discount: boolean;
 }
 
 export interface EstimateResponse {
@@ -2116,6 +2119,12 @@ export type CashCategory =
 export const CASH_EXPENSE_CATEGORIES: CashCategory[] =
   ['MATERIALS', 'CREW', 'FUEL', 'TOOLS', 'TAXES', 'OTHER'];
 export const CASH_INCOME_CATEGORIES: CashCategory[] = ['ADVANCE', 'WORK', 'OTHER'];
+/**
+ * What an OBJECT's expense row can really be. `object_expenses` stores three buckets
+ * (MATERIALS / LABOR / OTHER) and `CashCategory.toExpenseCategory` folds everything else into
+ * OTHER, so offering FUEL on such a row asked a question and discarded the answer.
+ */
+export const CASH_OBJECT_EXPENSE_CATEGORIES: CashCategory[] = ['MATERIALS', 'CREW', 'OTHER'];
 
 export interface CashEntryResponse {
   id: string;
@@ -2167,8 +2176,9 @@ export interface CashFlowResponse {
 }
 
 /**
- * This WEEK — the same period the screen opens on, so tapping the strip cannot land on a different
- * number than it showed. `from`/`to` ride along so neither side re-derives the window.
+ * This MONTH — a week was too small a window to be worth a glance on the home screen (master's
+ * call), so the strip says «Цей місяць» and the tap carries that period into the screen, which
+ * otherwise opens on the WEEK. `from`/`to` ride along so neither side re-derives the window.
  */
 export interface CashSummaryResponse {
   from: string;

@@ -178,7 +178,13 @@ export function DictationSheet({
   const usedMic = useRef(false);
   const appendSpoken = useCallback((chunk: string) => {
     usedMic.current = true;
-    setText((prev) => (prev.trim() ? prev.replace(/\s+$/, '') + '\n' + chunk : chunk));
+    // Clamped to the same MAX_TEXT the textarea enforces (review P-26). The field carried
+    // `maxLength` and the microphone walked straight past it — a long dictation sailed over the
+    // server's own cap and came back a 400 on «Розпізнати», with nothing on screen saying why.
+    setText((prev) => {
+      const joined = prev.trim() ? prev.replace(/\s+$/, '') + '\n' + chunk : chunk;
+      return joined.length <= MAX_TEXT ? joined : joined.slice(0, MAX_TEXT);
+    });
   }, []);
   const mic = useSpeechDictation({ onFinal: appendSpoken });
 
@@ -406,7 +412,8 @@ export function DictationSheet({
             </p>
           )}
           <p className="text-xs text-muted">{t('dictation.catalogHint')}</p>
-          <Button fullWidth disabled={!text.trim() || !online} onClick={() => void runParse()}>
+          <Button fullWidth disabled={!text.trim() || !online || text.length > MAX_TEXT}
+            onClick={() => void runParse()}>
             {t('dictation.recognize')}
           </Button>
         </div>

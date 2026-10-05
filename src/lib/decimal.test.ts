@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { markedUpPrice, parseMoney, parseQuantity, roundMoney, sumMoney } from './decimal.ts';
+import {
+  markedUpPrice, parseMoney, parseQuantity, roundMoney, roundQuantity, sumMoney,
+} from './decimal.ts';
 
 /**
  * The mirror of `EstimateService.markedUp` (review B-47). The offline editor prices a duplicate on
@@ -76,5 +78,29 @@ describe('parseQuantity', () => {
     expect(parseQuantity('2,5555')).toBeNull();
     expect(parseQuantity('0')).toBeNull();
     expect(parseQuantity('0', { allowZero: true })).toBe(0);
+  });
+});
+
+/**
+ * A quantity at the scale the server stores it. The case it exists for is a SUBTRACTION — «what is
+ * left of this position» — where binary floating point shows up in a figure that then goes onto a
+ * document: `3.3 - 1.1` is 2.1999999999999997.
+ */
+describe('roundQuantity', () => {
+  it('rounds to three decimals, the server\'s own QUANTITY_SCALE', () => {
+    expect(roundQuantity(3.3 - 1.1)).toBe(2.2);
+    expect(roundQuantity(0.1 + 0.2)).toBe(0.3);
+    expect(roundQuantity(12.3456)).toBe(12.346);
+    expect(roundQuantity(12.3454)).toBe(12.345);
+  });
+
+  it('rounds HALF_UP away from zero, like the server', () => {
+    expect(roundQuantity(1.0005)).toBe(1.001);
+    expect(roundQuantity(-1.0005)).toBe(-1.001);
+  });
+
+  it('leaves a figure that is already at scale alone', () => {
+    expect(roundQuantity(0)).toBe(0);
+    expect(roundQuantity(18.5)).toBe(18.5);
   });
 });

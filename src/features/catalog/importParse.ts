@@ -1,4 +1,5 @@
 import type { ItemType, Unit } from '@/api/types.ts';
+import { roundMoney } from '@/lib/decimal.ts';
 
 /**
  * Small client mirror of the backend's unit/price/type heuristics — used ONLY to
@@ -55,7 +56,9 @@ export function parsePrice(raw: string | null | undefined): number | null {
   }
   const n = Number(cleaned);
   if (!Number.isFinite(n) || n < 0 || n > 100_000_000) return null;
-  return Math.round(n * 100) / 100;
+  // The server's own HALF_UP (review P-39): an imported price that rounds the other way lands a
+  // kopeck away from what the estimate then stores, on every line of the sheet.
+  return roundMoney(n);
 }
 
 export function guessType(name: string): ItemType {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
 import { actPortalApi } from '@/api/portal.ts';
@@ -10,7 +11,13 @@ vi.mock('@/api/portal.ts', () => ({
 }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
-const wrapper = ({ children }: { children: ReactNode }) => <>{children}</>;
+// Publishing flips DRAFT→SENT, so the sheet invalidates the act it just changed (review P-50) —
+// which needs a real client behind it.
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    {children}
+  </QueryClientProvider>
+);
 
 beforeEach(() => vi.clearAllMocks());
 

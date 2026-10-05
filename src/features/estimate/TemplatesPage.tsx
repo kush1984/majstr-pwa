@@ -77,6 +77,8 @@ export function TemplatesPage() {
   const { t } = useTranslation();
   const { data, isPending, isError, error, refetch } = useEstimateTemplates();
   const deleteTemplate = useDeleteTemplate();
+  /** The id «Створити» just wrote, until its editor is closed — see the EditModal mount below. */
+  const justCreated = useRef<string | null>(null);
   const restoreDefaults = useRestoreDefaults();
 
   const [creating, setCreating] = useState(false);
@@ -216,11 +218,30 @@ export function TemplatesPage() {
           setCreating(false);
           // Straight into the editor: a template with no positions is not yet a template, and the
           // master came here to write a sequence, not to name an empty row.
+          justCreated.current = made.id;
           setEditing(made);
         }}
       />
 
-      {editing && <EditModal template={editing} onClose={() => setEditing(null)} />}
+      {/*
+        * «Створити» writes the row immediately, so the editor behind it has an id its position
+        * endpoints can address. The cost is that dismissing that editor left a named bundle with
+        * nothing in it on «Мої шаблони» (review P-32) — and by the page's own rule, a template with
+        * no positions is not yet a template. So a create the master walked straight back out of is
+        * undone. Only a create: an EXISTING bundle emptied down to nothing is a decision he made
+        * position by position, and deleting it under him would be a different gesture entirely.
+        */}
+      {editing && (
+        <EditModal
+          template={editing}
+          onClose={(empty) => {
+            const abandoned = empty && justCreated.current === editing.id;
+            justCreated.current = null;
+            setEditing(null);
+            if (abandoned) deleteTemplate.mutate(editing.id);
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deleting)}
@@ -571,7 +592,8 @@ function EditModal({
   onClose,
 }: {
   template: EstimateTemplateSummary;
-  onClose: () => void;
+  /** `empty` = the bundle has no positions on the server. See the FAB's own note in the page. */
+  onClose: (empty: boolean) => void;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -742,8 +764,10 @@ function EditModal({
     scrollRowIntoView(row);
   }, [items, editingItem]);
 
-  const requestClose = () => (dirty ? setConfirmingClose(true) : onClose());
-  const saveAndClose = async () => { if (await save()) onClose(); };
+  // `baseline` is what the SERVER holds — a draft-only row the master abandoned does not count.
+  const closeReportingEmpty = () => onClose(seeded && baseline.items.length === 0);
+  const requestClose = () => (dirty ? setConfirmingClose(true) : closeReportingEmpty());
+  const saveAndClose = async () => { if (await save()) onClose(false); };
 
   return (
     <Modal open onClose={requestClose} title={t('templates.editTitle')} size="lg">
@@ -860,7 +884,7 @@ function EditModal({
           <Button fullWidth loading={saving} disabled={!canSave} onClick={() => void saveAndClose()}>
             {t('common.save')}
           </Button>
-          <Button variant="secondary" fullWidth onClick={onClose}>
+          <Button variant="secondary" fullWidth onClick={closeReportingEmpty}>
             {t('templates.discard')}
           </Button>
           <Button variant="ghost" fullWidth onClick={() => setConfirmingClose(false)}>

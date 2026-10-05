@@ -19,7 +19,7 @@ import { track } from '@/lib/posthog.ts';
 import { actsApi } from '@/api/acts.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
-import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity, roundMoney, roundQuantity, sumMoney } from '@/lib/decimal.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { CatalogAutocomplete } from '@/features/estimate/CatalogAutocomplete.tsx';
 import { CatalogPicker } from '@/features/catalog/CatalogPicker.tsx';
@@ -32,7 +32,11 @@ import {
 import { isoDay } from './useNewAct.ts';
 import { useEconomy } from '@/features/economy/useEconomy.ts';
 import { ActReceiptsSection, billedOf } from './ActReceiptsSection.tsx';
-import { mergeQueuedReceipts, usePendingActReceipts } from './offlineReceipts.ts';
+import { flushOutbox } from '@/lib/outbox/outbox.ts';
+import {
+  actReceiptsStillQueued, dropQueuedReceiptsOfAct, mergeQueuedReceipts,
+  usePendingActReceipts,
+} from './offlineReceipts.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
 import { ACT_UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
@@ -77,13 +81,38 @@ function categorize(lines: ActProgressLine[]): [string, ActProgressLine[]][] {
 
 /** Everything the editor can change, serialized — the dirty check is «snapshot now ≠ snapshot at
  *  seed/last save». One function for both sides so the serialization can never drift apart. */
+/**
+ * The numbers as NUMBERS, so a snapshot says what was entered rather than how it was typed.
+ *
+ * <p>«12,5» and «12.5» are one quantity, and the server answers with the dot — so re-seeding from a
+ * save the master had typed with a comma marked the form dirty on arrival, and the leave guard
+ * asked about changes nobody had made (review P-50). `null` for an unreadable field is kept
+ * distinct from a blank one: those are two different states and Save refuses one of them.</p>
+ */
+const normalizedQty = (qty: Record<string, string>) =>
+  Object.fromEntries(Object.entries(qty).map(([k, v]) => [k, v.trim() === '' ? '' : parseQuantity(v, { allowZero: true })]));
+const normalizedAdditional = (rows: Additional[]) => rows.map((a) => ({
+  name: a.name.trim(), type: a.type, unit: a.unit,
+  unitPrice: a.unitPrice.trim() === '' ? '' : parseMoney(a.unitPrice, { allowZero: true }),
+  quantity: a.quantity.trim() === '' ? '' : parseQuantity(a.quantity, { allowZero: true }),
+}));
+const normalizedMoney = (advance: string) =>
+  (advance.trim() === '' ? '' : parseMoney(advance, { allowZero: true }));
+
 function formSnapshot(s: {
   kind: WorkActKind; title: string; issuedAt: string; periodFrom: string; periodTo: string;
   contractRef: string; advance: string; showMaterials: boolean; showCumulative: boolean;
   receiptsToExpenses: boolean; showReceiptPhotos: boolean;
   qty: Record<string, string>; additional: Additional[];
 }): string {
-  return JSON.stringify(s);
+  return JSON.stringify({
+    ...s,
+    title: s.title.trim(),
+    contractRef: s.contractRef.trim(),
+    advance: normalizedMoney(s.advance),
+    qty: normalizedQty(s.qty),
+    additional: normalizedAdditional(s.additional),
+  });
 }
 
 /** The MONEY half of that form — the only part the totals are computed from. Kept apart because a
@@ -93,7 +122,12 @@ function moneySnapshot(s: {
   advance: string; showMaterials: boolean;
   qty: Record<string, string>; additional: Additional[];
 }): string {
-  return JSON.stringify(s);
+  return JSON.stringify({
+    advance: normalizedMoney(s.advance),
+    showMaterials: s.showMaterials,
+    qty: normalizedQty(s.qty),
+    additional: normalizedAdditional(s.additional),
+  });
 }
 
 /** Create/edit screen for one work act (acts iteration). Loads the act + the object's progress
@@ -172,6 +206,25 @@ export function ActEditorPage() {
     setPeriodTo(today);
     setSeeded(true);
   }, [isNew, seeded, searchParams]);
+
+  /**
+   * The client signed while this editor was open (review P-38).
+   *
+   * <p>Seeding runs once, so the form went on holding whatever the master had typed — under a
+   * SIGNED badge, on a document that is now immutable. Re-seed from the server and say what
+   * happened: anything he had not saved did not make it into what the client accepted, and
+   * discovering that from a 409 on the next Save is finding out too late.</p>
+   */
+  const wasSigned = useRef(false);
+  useEffect(() => {
+    if (!seeded || isNew) return;
+    if (signed && !wasSigned.current) {
+      wasSigned.current = true;
+      if (dirtyRef.current) toast.info(t('acts.signedWhileEditing'));
+      setSeeded(false); // the effect below re-reads the server's own figures
+    }
+    if (!signed) wasSigned.current = false;
+  }, [signed, seeded, isNew, t]);
 
   useEffect(() => {
     if (seeded || !act.data) return;
@@ -353,7 +406,7 @@ export function ActEditorPage() {
   // both the panel and this page's «До сплати» read from: a receipt photographed in a basement is
   // money the master has already spent, and a total that quietly ignores it until the queue drains
   // is the same lie in the opposite direction as losing the photo.
-  const { queued, refresh: refreshQueued } = usePendingActReceipts(id);
+  const { queued, rejected, refresh: refreshQueued } = usePendingActReceipts(id);
   const receipts = mergeQueuedReceipts(act.data?.receipts ?? [], queued);
   // Itemized receipts are reference-only — their positions already bill the money as act lines.
   // `billedOf` (not `amount`) — a partial return must reach «До сплати» here exactly as it reaches
@@ -371,7 +424,14 @@ export function ActEditorPage() {
   const economy = useEconomy(projectId);
   const unearnedAdvance = useMemo(() => {
     const a = economy.data?.acts;
-    return a ? Math.max(0, a.received - a.acceptedByActs) : null;
+    if (!a) return null;
+    // WORK-only money, never gross «Отримано» (review P-40). `received` includes the receipts
+    // ticked «повернення за матеріал», which are the client paying a till receipt BACK — the same
+    // split `MaterialRefundSplit.workPaid` makes server-side. Without it a 2 000 ₴ material refund
+    // on a 3 000 ₴ act offered «Зарахувати 2 000» and printed «До сплати 1 000» on a document the
+    // client then signed, for work nobody had paid for.
+    const workPaid = a.received - (economy.data?.materials.refundApplied ?? 0);
+    return Math.max(0, workPaid - a.acceptedByActs);
   }, [economy.data]);
   // Never more than this act is worth — `payable` floors at 0 anyway, and offering to credit more
   // than the act bills would read as «the rest carries over», which nothing implements.
@@ -432,6 +492,10 @@ export function ActEditorPage() {
   // left to save, and the guard would otherwise fire before React re-renders with dirty=false.
   const skipLeaveGuard = useRef(false);
   const leaveBlocker = useLeaveGuard(dirty, skipLeaveGuard);
+  // Read by the «client signed while you were editing» effect above, which must not re-run every
+  // time a digit is typed.
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
 
   // At least one line with a quantity — the gate for signing (mirrors the backend's empty-act
   // guard: a SIGNED act is immutable and undeletable, so an empty one must never get that far).
@@ -558,12 +622,40 @@ export function ActEditorPage() {
     }
   };
 
+  /**
+   * A receipt the phone is still carrying may not be left out of a signature (review P-36).
+   *
+   * <p>Queued receipts are shown and counted into «До сплати» — correctly: the money left the
+   * master's pocket. But the act is signed SERVER-side, so a receipt still in the queue is simply
+   * absent from the document, from its `doc_hash` and from the ADDENDUM — the screen said 4 800 ₴
+   * and the client accepted 4 000 ₴. So: flush, and refuse while anything is left.</p>
+   *
+   * <p>A REFUSED (blocked) receipt is a different answer and gets a different one: flushing will
+   * never move it, so it is the master's to resolve in the sync sheet. It is excluded from the
+   * totals for the same reason — it is money the server has said no to.</p>
+   */
+  const queuedReceiptsClear = async (): Promise<boolean> => {
+    // Asked of the QUEUE, not of `queued` — that map is React state loaded a tick after the page
+    // renders, so trusting it would let a signature through in exactly the window this guards.
+    if (await actReceiptsStillQueued(id) === 0) return true;
+    await flushOutbox();
+    refreshQueued();
+    const left = await actReceiptsStillQueued(id);
+    if (left > 0) {
+      toast.error(t('acts.receiptsNotSent', { count: left }));
+      return false;
+    }
+    invalidateAct(id);
+    return true;
+  };
+
   const onSign = async () => {
     if (!signerName.trim()) return;
     if (invalid) {
       toast.error(t('acts.fixFields'));
       return;
     }
+    if (!(await queuedReceiptsClear())) return;
     try {
       // Persist current edits first so the signed act reflects the screen (creating it, if this is
       // still «/acts/new» — the master may fill an act and sign it in one sitting).
@@ -590,7 +682,39 @@ export function ActEditorPage() {
     }
   };
 
+  /**
+   * Both doors that hand the act to someone ELSE go through the same gate (review P-37).
+   *
+   * <p>They used to read the STORED version: the share sheet publishes on open without saving, and
+   * the PDF fetch is a GET. So a master who corrected a quantity and tapped «Поділитися» sent the
+   * client a link to the old figures — signable — and the PDF he checked it against was the old one
+   * too. Saving first is the only honest answer; a receipt still in the queue blocks it for the
+   * same reason it blocks a signature.</p>
+   */
+  const beforeHandingOver = async (): Promise<boolean> => {
+    if (invalid) {
+      toast.error(t('acts.fixFields'));
+      return false;
+    }
+    if (!(await queuedReceiptsClear())) return false;
+    if (!dirty) return true;
+    try {
+      await persist();
+      setSavedSnapshot(currentSnapshot);
+      setSavedMoney(currentMoney);
+      return true;
+    } catch (err) {
+      toast.error(toAppError(err).message);
+      return false;
+    }
+  };
+
+  const onShare = async () => {
+    if (await beforeHandingOver()) setShareOpen(true);
+  };
+
   const onPdf = async () => {
+    if (!(await beforeHandingOver())) return;
     try {
       // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
       await openPdfTab(() => actsApi.fetchPdf(id));
@@ -617,7 +741,7 @@ export function ActEditorPage() {
   // the overflow into a new additional-works row (off-estimate work the client must agree to).
   const convertExcess = (line: ActProgressLine) => {
     const entered = num(qty[line.estimateItemId] ?? '');
-    const excess = entered - line.remaining;
+    const excess = roundQuantity(entered - line.remaining);
     if (excess <= 0) return;
     setQty((q) => ({ ...q, [line.estimateItemId]: String(line.remaining) }));
     setAdditional((a) => [...a, {
@@ -648,7 +772,7 @@ export function ActEditorPage() {
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {act.data && (
-            <button type="button" onClick={() => setShareOpen(true)} aria-label={t('acts.share')}
+            <button type="button" onClick={() => void onShare()} aria-label={t('acts.share')}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
           )}
           {!signed && (
@@ -743,7 +867,11 @@ export function ActEditorPage() {
                 {lines.map((line) => {
                 const entered = num(qty[line.estimateItemId] ?? '');
                 const badQty = qtyErrors.has(line.estimateItemId);
-                const exceeds = line.done + entered > line.estimateQuantity;
+                // Compared in THOUSANDTHS, the scale a quantity is stored at: 1.1 + 2.2 > 3.3 is
+                // true in binary floating point, so a line filled exactly to its remainder warned
+                // «перевищує кошторис» and offered to move nothing into additional works (P-50).
+                const exceeds = Math.round((line.done + entered) * 1000)
+                  > Math.round(line.estimateQuantity * 1000);
                 return (
                   <div key={line.estimateItemId} className="rounded-card border border-border bg-surface p-3">
                     <div className="flex items-start gap-2">
@@ -835,6 +963,21 @@ export function ActEditorPage() {
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, unitPrice: e.target.value } : x))} />
               </div>
               {badRow && <p className="mt-1 text-xs text-danger">{t('validation.badNumber')}</p>}
+              {/* The amount of THIS row. Every estimate line shows its own, and these are the
+                  lines the client never agreed a price for — so the one place the figure matters
+                  most was the one place it was missing (review P-50). A 0 ₴ row is legal (a
+                  goodwill extra) but it is said out loud rather than signed by accident. */}
+              {!badRow && (a.name.trim() !== '' || a.quantity.trim() !== '') && (
+                <div className="mt-1.5 flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted">{t('acts.rowTotal')}</span>
+                  <span className="text-sm font-semibold text-primary">
+                    {formatMoney(roundMoney(num(a.quantity) * money(a.unitPrice)))}
+                  </span>
+                </div>
+              )}
+              {!badRow && num(a.quantity) > 0 && money(a.unitPrice) === 0 && (
+                <p className="mt-1 text-xs text-amber-700">{t('acts.rowFree')}</p>
+              )}
               {!signed && (
                 <button type="button" className="mt-1.5 text-xs font-semibold text-danger"
                   onClick={() => setAdditional((list) => list.filter((_, j) => j !== i))}>{t('common.delete')}</button>
@@ -879,11 +1022,21 @@ export function ActEditorPage() {
           <p className="text-sm text-muted">{t('acts.receiptsAfterSave')}</p>
         </Section>
       ) : (
-        <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
-          sent={sent}
-          queued={queued} onQueuedChanged={refreshQueued}
-          toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
-          showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />
+        <>
+          {/* A receipt the server REFUSED is named out loud and counted nowhere (review P-36). It
+              will not move on its own, so «Синхронізація» is where it is resolved — leaving it
+              inside «До сплати» billed the client for a receipt that was never going to exist. */}
+          {rejected.size > 0 && (
+            <p className="mb-2 rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
+              {t('acts.receiptsRejected', { count: rejected.size })}
+            </p>
+          )}
+          <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+            sent={sent}
+            queued={queued} onQueuedChanged={refreshQueued}
+            toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
+            showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />
+        </>
       )}
 
       {/* The bill. Its own panel because it is the block the master and the client both read last,
@@ -959,12 +1112,14 @@ export function ActEditorPage() {
             {/* Same sheet as the top bar's 🔗. Duplicated on purpose: deep in a long editor the top
                 bar is scrolled away, and «поділитися» is exactly what the master reaches for there. */}
             {act.data && (
-              <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => setShareOpen(true))} />
+              <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => void onShare())} />
             )}
             {!signed && (
-              <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => {
+              <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => void (async () => {
                 // An unreadable field is caught BEFORE the signature sheet opens: the master types
-                // the client's name, taps «Підписати» and only then learns nothing was saved.
+                // the client's name, taps «Підписати» and only then learns nothing was saved. A
+                // receipt still in the queue is refused in the same place and for the same reason
+                // (review P-36) — it is money on this screen that the signature would leave out.
                 if (invalid) {
                   toast.error(t('acts.fixFields'));
                   return;
@@ -973,8 +1128,9 @@ export function ActEditorPage() {
                   toast.info(t('acts.emptyHint'));
                   return;
                 }
+                if (!(await queuedReceiptsClear())) return;
                 setSignOpen(true);
-              })} />
+              })())} />
             )}
             {!signed && (
               <FabAction icon="💾" label={t('common.save')} onClick={() => close(() => void onSave())} />
@@ -997,7 +1153,10 @@ export function ActEditorPage() {
         confirmLabel={t('common.delete')} loading={deleteAct.isPending}
         onConfirm={() => deleteAct.mutate(id, {
           onSuccess: () => {
-            // The act is gone — there is nothing left to save, let the exit pass the leave guard.
+            // The act is gone, so its unsent photos have nowhere to land: each would replay as a
+            // POST against a deleted act and sit in the sync sheet as a 404 (review P-50).
+            void dropQueuedReceiptsOfAct(id).then(() => refreshQueued());
+            // There is nothing left to save, so let the exit pass the leave guard.
             skipLeaveGuard.current = true;
             void navigate(routes.project(projectId) + '?tab=acts');
           },

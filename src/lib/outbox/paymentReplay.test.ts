@@ -44,7 +44,7 @@ describe('queued object payments replay', () => {
       payload: { objectId: OBJECT, req }, deps: [OBJECT],
     });
 
-    expect(await flushOutbox()).toEqual({ synced: 1, failed: 0 });
+    expect(await flushOutbox()).toEqual({ synced: 1, failed: 0, blocked: 0 });
     expect(paymentsApi.add).toHaveBeenCalledWith(OBJECT, req, 'pay-1');
     expect(await outboxCount()).toBe(0);
   });
@@ -64,7 +64,7 @@ describe('queued object payments replay', () => {
       payload: { objectId: OBJECT }, deps: [OBJECT],
     });
 
-    expect(await flushOutbox()).toEqual({ synced: 3, failed: 0 });
+    expect(await flushOutbox()).toEqual({ synced: 3, failed: 0, blocked: 0 });
     expect(paymentsApi.addReceipt).toHaveBeenCalledWith(OBJECT, req, 'rec-1');
     expect(paymentsApi.editReceipt).toHaveBeenCalledWith(
       OBJECT, 'rec-1', { ...req, amount: 18_000 },
@@ -89,7 +89,7 @@ describe('queued object payments replay', () => {
       payload: { objectId: OBJECT, req: { amount: 5_000, purpose: 'Етап 1' } }, deps: [OBJECT],
     });
 
-    expect(await flushOutbox()).toEqual({ synced: 2, failed: 0 });
+    expect(await flushOutbox()).toEqual({ synced: 2, failed: 0, blocked: 0 });
     expect(order).toEqual(['stage', 'receipt']);
   });
 });

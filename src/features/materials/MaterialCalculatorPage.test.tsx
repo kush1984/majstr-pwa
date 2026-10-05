@@ -732,13 +732,54 @@ describe('MaterialCalculatorPage', () => {
     });
     fireEvent.click(screen.getByText('Зберегти звички'));
 
-    // Every shown field is sent, blanks included — a blank FORGETS the habit server-side.
+    // ONLY what he moved. A blank still forgets a habit — that is why a cleared field is sent —
+    // but an untouched one is left out, so a card rendered with no answers in it cannot tell the
+    // server to forget everything (review P-23).
     await waitFor(() =>
-      expect(savePrefs).toHaveBeenCalledWith({ prefs: { PAINT_COVERAGE: '8', PAINT_COATS: '3' } }),
+      expect(savePrefs).toHaveBeenCalledWith({ prefs: { PAINT_COVERAGE: '8' } }),
     );
     // A habit rescales the coefficients, and rounding up to a package does not commute with
     // scaling — so the answer is recomputed, same as the waste toggle and a corrected norm.
     await waitFor(() => expect(calculate).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * The failure this card could not survive: the GET fails, `isLoading` is false, `draft` is null,
+   * every input renders empty — and one tap on «Зберегти» told the server to forget every habit
+   * the master had (review P-23). A form is never shown over answers we do not have.
+   */
+  it('shows an error with a retry instead of a form it has no answers for', async () => {
+    prefs.mockRejectedValue(new Error('offline'));
+    renderPage();
+    fireEvent.click(await screen.findByText('Мої звички'));
+
+    await waitFor(() => expect(prefs).toHaveBeenCalled());
+    expect(screen.queryByLabelText(/Гіпсокартон: формат листа/)).toBeFalsy();
+    expect(screen.queryByText('Зберегти звички')).toBeFalsy();
+    expect(savePrefs).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `PAINT_COVERAGE` DIVIDES, so 0,5 m²/l multiplies every paint figure by eighteen — a habit is a
+   * small correction to a shipped norm, not a free variable. The bands are the server's own
+   * (`MaterialPrefs`, review B-19), asked here so the refusal lands under the field.
+   */
+  it('refuses a habit outside the band the server states', async () => {
+    calculate.mockResolvedValue(answer({ coverage: { trades: ['PAINTER'], otherWorks: false } }));
+    prefs.mockResolvedValue({ prefs: {} });
+    renderPage();
+    fireEvent.click(await screen.findByText('Мої звички'));
+
+    const field = await screen.findByLabelText('Фарба: м² з літра за один шар');
+    fireEvent.change(field, { target: { value: '0,5' } });
+    fireEvent.click(screen.getByText('Зберегти звички'));
+
+    expect(await screen.findByText(/Це значення не підходить/)).toBeTruthy();
+    expect(savePrefs).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: '8' } });
+    fireEvent.click(screen.getByText('Зберегти звички'));
+    await waitFor(() => expect(savePrefs).toHaveBeenCalledWith({ prefs: { PAINT_COVERAGE: '8' } }));
   });
 
   it('never hands a drywaller a question about paint', async () => {

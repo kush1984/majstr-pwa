@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cashPeriod, monthPeriod, cashTotals } from './useCash.ts';
+import { applyCashDelta, cashPeriod, monthPeriod } from './useCash.ts';
 import type { CashEntryResponse, CashFlowResponse } from '@/api/types.ts';
 
 /**
@@ -26,6 +26,25 @@ describe('cashPeriod', () => {
 
     expect(period.from).toBe('2026-09-07');
     expect(period.to).toBe('2026-09-13');
+  });
+
+  it('ends a week six days after it STARTED, across a month boundary', () => {
+    // Review P-19. `to` was a copy of the ANCHOR, so «31 August + 6» was counted in the anchor's
+    // own month: Wednesday 2 September asked the server for 31 Aug – 7 OCTOBER. WEEK is the
+    // default tab, so roughly one week a month the screen opened on five weeks of money.
+    const wednesday = cashPeriod('WEEK', new Date(2026, 8, 2)); // Wed 2 Sep 2026
+    expect(wednesday.from).toBe('2026-08-31');
+    expect(wednesday.to).toBe('2026-09-06');
+
+    // Sunday 1 March 2026 belongs to the week that began in February.
+    const sunday = cashPeriod('WEEK', new Date(2026, 2, 1));
+    expect(sunday.from).toBe('2026-02-23');
+    expect(sunday.to).toBe('2026-03-01');
+
+    // And across a year.
+    const newYear = cashPeriod('WEEK', new Date(2026, 11, 31)); // Thu 31 Dec 2026
+    expect(newYear.from).toBe('2026-12-28');
+    expect(newYear.to).toBe('2027-01-03');
   });
 
   it('ends a month on its real last day, whatever the month is', () => {
@@ -72,28 +91,55 @@ function flow(entries: CashEntryResponse[]): CashFlowResponse {
  * The optimistic side of «Мої гроші» must do the SERVER's arithmetic, or an edit moves a figure
  * the refetch then moves back — on a money screen that reads as the app being wrong.
  */
-describe('cashTotals', () => {
+describe('applyCashDelta', () => {
+  const totals = (over: Partial<CashFlowResponse>) => ({ ...flow([]), ...over });
+
   it('earns income minus outlays — ONE subtraction, whatever came back for material', () => {
     // Review B-33. The material the client repays is netted by its own COST already being a feed
     // row, so subtracting the refund again billed the master for the same purchase twice.
-    const totals = cashTotals(flow([
-      entry({ id: 'i1', amount: 28000 }),
-      entry({ id: 'r1', amount: 8000, materialRefund: true }),
-      entry({ id: 'e1', direction: 'EXPENSE', amount: 8000 }),
-    ]));
+    const after = applyCashDelta(
+      totals({ income: 28000, expense: 8000, refunds: 0, earned: 20000 }),
+      { added: entry({ id: 'r1', amount: 8000, materialRefund: true }) },
+    );
 
-    expect(totals.income).toBe(36000);
-    expect(totals.expense).toBe(8000);
-    expect(totals.earned).toBe(28000);
+    expect(after.income).toBe(36000);
+    expect(after.expense).toBe(8000);
+    expect(after.refunds).toBe(8000);
+    expect(after.earned).toBe(28000); // and NOT 20 000
   });
 
-  it('keeps `refunds` as a LABEL — it explains the gap, it never moves it', () => {
-    const totals = cashTotals(flow([
-      entry({ id: 'r1', amount: 5000, materialRefund: true }),
-      entry({ id: 'e1', direction: 'EXPENSE', amount: 5000 }),
-    ]));
+  it('moves the figures by the DELTA, never by summing what is on screen', () => {
+    // Review P-21. The YEAR view answers MONTHS and carries no entries at all, and a truncated
+    // list holds 500 of the rows while the totals cover them all — summing `entries` there turned
+    // a month of money into the one row that had just been added.
+    const year = totals({ income: 240000, expense: 90000, earned: 150000, entries: [] });
 
-    expect(totals.refunds).toBe(5000);
-    expect(totals.earned).toBe(0); // and NOT −5 000
+    const after = applyCashDelta(year, { added: entry({ id: 'x', amount: 1000 }) });
+
+    expect(after.income).toBe(241000);
+    expect(after.expense).toBe(90000);
+    expect(after.earned).toBe(151000);
+  });
+
+  it('swaps one row for another — an edit is a removal and an addition', () => {
+    const before = entry({ id: 'e1', direction: 'EXPENSE', amount: 1200 });
+    const after = applyCashDelta(
+      totals({ income: 5000, expense: 1200, earned: 3800 }),
+      { removed: before, added: { ...before, amount: 400 } },
+    );
+
+    expect(after.expense).toBe(400);
+    expect(after.earned).toBe(4600);
+  });
+
+  it('drops a refund out of the label when its row is deleted', () => {
+    const refund = entry({ id: 'r1', amount: 5000, materialRefund: true });
+    const after = applyCashDelta(
+      totals({ income: 5000, expense: 0, refunds: 5000, earned: 5000 }),
+      { removed: refund },
+    );
+
+    expect(after.refunds).toBe(0);
+    expect(after.income).toBe(0);
   });
 });

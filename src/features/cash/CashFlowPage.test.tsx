@@ -198,6 +198,9 @@ describe('CashFlowPage', () => {
     renderPage();
     fireEvent.click(await screen.findByText('Дизель'));
     fireEvent.click(screen.getByRole('button', { name: 'Видалити' }));
+    // Asked first (review P-27): the write goes through that object's own service and there is no
+    // undo behind it — every other delete in the app confirms, and this one deleted on one tap.
+    fireEvent.click(await screen.findByRole('button', { name: 'Так, видалити' }));
 
     await waitFor(() => expect(cashApi.remove).toHaveBeenCalledWith('e2', 'OBJECT_EXPENSE'));
   });
@@ -256,17 +259,74 @@ describe('CashFlowPage', () => {
     expect(vi.mocked(cashApi.flow).mock.calls.every(([p]) => p?.monthly !== true)).toBe(true);
   });
 
-  /** Two date fields on a phone are tapped in whatever order — reversed bounds are not an error. */
+  /**
+   * Two date fields on a phone are tapped in whatever order — reversed bounds are not an error.
+   *
+   * <p>Pinned against a FIXED clock and asserted on the exact call: the old version asked whether
+   * ANY request had `from <= to`, which the screen's own opening WEEK already satisfied, so it
+   * would have stayed green with the custom range wired to nothing at all (review P-45).</p>
+   */
   it('swaps a reversed range instead of asking for nothing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 8, 10, 12)); // Thu 10 Sep 2026
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({}));
+
+    renderPage();
+    // The default tab, computed on his own phone: Monday 7 Sep to Sunday 13 Sep.
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
+      from: '2026-09-07', to: '2026-09-13', monthly: false,
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Період' }));
+    fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-09-30' } });
+
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
+      from: '2026-09-13', to: '2026-09-30', monthly: false,
+    }));
+    vi.useRealTimers();
+  });
+
+  /**
+   * A `<input type="date">` reports every intermediate year while a keyboard is used, and each
+   * answer became its own query key persisted for a week — above 9999 the screen went to its
+   * error state over a date half-typed (review P-45).
+   */
+  it('ignores a half-typed year instead of asking the server about it', async () => {
     vi.mocked(cashApi.flow).mockResolvedValue(flow({}));
 
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Період' }));
-    fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-09-30' } });
+    for (const half of ['0002-09-01', '0020-09-01', '0202-09-01']) {
+      fireEvent.change(screen.getByLabelText('Від'), { target: { value: half } });
+    }
 
-    await waitFor(() => expect(vi.mocked(cashApi.flow).mock.calls.some(
-      ([p]) => p?.from != null && p.to != null && p.from <= p.to,
-    )).toBe(true));
+    expect(vi.mocked(cashApi.flow).mock.calls.every(([p]) => (p?.from ?? '') >= '2000-01-01'))
+      .toBe(true);
+    // And the field still shows what he typed — it is committed, not corrected under him.
+    expect(screen.getByLabelText<HTMLInputElement>('Від').value).toBe('0202-09-01');
+  });
+
+  /**
+   * Clearing one field used to send `''`, which the server reads as «no bound» and answers about
+   * its own default month — the screen then showed figures for a window it had not asked about.
+   */
+  it('falls back to the other bound when a field is cleared', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({}));
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Період' }));
+    fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('До'), { target: { value: '2026-08-31' } });
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
+      from: '2026-08-01', to: '2026-08-31', monthly: false,
+    }));
+
+    fireEvent.change(screen.getByLabelText('До'), { target: { value: '' } });
+
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
+      from: '2026-08-01', to: '2026-08-01', monthly: false,
+    }));
+    expect(vi.mocked(cashApi.flow).mock.calls.every(([p]) => p?.to !== '')).toBe(true);
   });
 
   /** Totals cover everything even when the list does not — a screen that quietly hides money is
@@ -306,6 +366,55 @@ describe('CashFlowPage', () => {
     expect(vi.mocked(cashApi.add).mock.calls[0][0]).toMatchObject({
       direction: 'INCOME', amount: 5000, materialRefund: true, kind: null,
     });
+  });
+
+  /**
+   * An amount nobody typed may not reach the server, and a `NaN` may not reach IndexedDB.
+   *
+   * <p>`parseDecimal` answered `NaN` for «12а», «1.200,50» and a Unicode minus, and `NaN` fails
+   * neither `== null` nor `<= 0` — so the sheet closed, the text was gone, and offline the row
+   * rendered «NaN ₴» and poisoned the totals until the queue blocked hours later (review
+   * P-20).</p>
+   */
+  it('refuses an amount it cannot read, and keeps the sheet open', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow());
+    vi.mocked(cashApi.add).mockResolvedValue(entry());
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Додати запис/ }));
+
+    for (const typo of ['12а', '1.200,50', '\u22125', '0,004', '']) {
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: typo } });
+      fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+      expect(await screen.findByText(/Сума не читається/)).toBeTruthy();
+    }
+    expect(cashApi.add).not.toHaveBeenCalled();
+
+    // A phone keypad's «1 200» IS readable, and that is the point of the helper.
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1 200,50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(cashApi.add).toHaveBeenCalled());
+    expect(vi.mocked(cashApi.add).mock.calls[0][0]).toMatchObject({ amount: 1200.5 });
+  });
+
+  /**
+   * An object's expense has only the three buckets `object_expenses` stores. FUEL, TOOLS and TAXES
+   * fold into OTHER on the way in, so offering them asked a question and discarded the answer.
+   */
+  it('offers an object expense only the categories its own table has', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      entries: [entry({ id: 'e2', kind: 'OBJECT_EXPENSE', projectName: 'Квартира на Лесі' })],
+    }));
+
+    renderPage();
+    fireEvent.click(await screen.findByText('Дизель'));
+
+    expect(screen.getByRole('button', { name: 'Матеріали' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Бригада' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Інше' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Пальне' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Податки' })).toBeNull();
   });
 
   /** The refund tick is an income idea; on spending it would skew «Заробив» the other way. */

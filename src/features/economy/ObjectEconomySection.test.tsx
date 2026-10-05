@@ -28,7 +28,6 @@ function moneyExact(n: number): string {
 vi.mock('@/api/economy.ts', () => ({
   economyApi: {
     economy: vi.fn(),
-    listExpenses: vi.fn(),
     addExpense: vi.fn(),
     updateExpense: vi.fn(),
     deleteExpense: vi.fn(),
@@ -164,13 +163,13 @@ describe('ObjectEconomySection', () => {
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
     expect(await screen.findByText('Загалом по підписаних')).toBeTruthy(); // summary panel
     expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
-    // economy-hide-internals: parked behind INTERNALS_ENABLED — backend still sends `internals`
-    // (used above to build the fixture), the component just doesn't render it.
-    expect(screen.queryByText('Заробіток')).toBeNull();
+    // «Прибуток» is GONE from the object, not hidden behind a flag: the formula subtracted
+    // expenses no screen lets a master enter against an object, so it read ≈ «За договором» for
+    // everyone. Earnings live in «Мої гроші». Asserted on the two labels the card DID carry, since
+    // `queryByText('Заробіток')` named a string that is no longer in any bundle — an assertion
+    // that can never fail is not a guard (review P-52).
     expect(screen.queryByText('Витрати')).toBeNull();
     expect(screen.queryByText('+ Витрата')).toBeNull();
-    // Not fetched either — no point requesting a journal nobody sees.
-    expect(economyApi.listExpenses).not.toHaveBeenCalled();
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
   });
@@ -240,7 +239,9 @@ describe('ObjectEconomySection', () => {
     renderSection('PRO');
 
     expect(await screen.findByText('з прийнятого актами')).toBeTruthy();
-    expect(screen.getByText(/додано без ціни бригади/)).toBeTruthy();
+    // Matched on the stable half: the sentence has plural forms now (review P-51), so «2 позиції
+    // … додані» and «5 позицій … додано» are both this line.
+    expect(screen.getByText(/без ціни бригади/)).toBeTruthy();
   });
 
   it('an ordinary estimate shows no crew figures at all', async () => {

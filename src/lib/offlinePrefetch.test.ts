@@ -33,7 +33,7 @@ vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
 vi.mock('@/api/dashboard.ts', () => ({ dashboardApi: { metrics: vi.fn() } }));
 vi.mock('@/api/messages.ts', () => ({ messagesApi: { listForProject: vi.fn() } }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { list: vi.fn() } }));
-vi.mock('@/api/economy.ts', () => ({ economyApi: { economy: vi.fn(), listExpenses: vi.fn() } }));
+vi.mock('@/api/economy.ts', () => ({ economyApi: { economy: vi.fn() } }));
 
 const project = { id: 'p1', name: 'Хата' };
 
@@ -49,7 +49,6 @@ beforeEach(() => {
   vi.mocked(messagesApi.listForProject).mockResolvedValue([] as never);
   vi.mocked(photosApi.list).mockResolvedValue([] as never);
   vi.mocked(economyApi.economy).mockResolvedValue({} as never);
-  vi.mocked(economyApi.listExpenses).mockResolvedValue([] as never);
   vi.mocked(dashboardApi.metrics).mockResolvedValue({} as never);
   vi.mocked(projectsApi.list).mockResolvedValue([project] as never);
   vi.mocked(projectsApi.get).mockResolvedValue(project as never);
@@ -89,11 +88,10 @@ describe('prefetchForOffline', () => {
     expect(qc.getQueryData([...ESTIMATE_TEMPLATE_KEY, 't1'])).toBeTruthy();
   });
 
-  it('skips PRO-only measurements + the expense journal on FREE (would just 403)', async () => {
+  it('skips PRO-only measurements on FREE (would just 403)', async () => {
     const qc = client();
     await prefetchForOffline(qc, { isPro: false });
     expect(measurementsApi.tree).not.toHaveBeenCalled();
-    expect(economyApi.listExpenses).not.toHaveBeenCalled();
   });
 
   it('still prefetches economy() on FREE — panels + payments are FREE-visible now', async () => {

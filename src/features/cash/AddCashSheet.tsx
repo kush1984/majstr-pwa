@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toAppError } from '@/api/errors.ts';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { FormField } from '@/components/FormField.tsx';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { parseMoney } from '@/lib/decimal.ts';
 import {
-  CASH_EXPENSE_CATEGORIES, CASH_INCOME_CATEGORIES,
+  CASH_EXPENSE_CATEGORIES, CASH_INCOME_CATEGORIES, CASH_OBJECT_EXPENSE_CATEGORIES,
   type CashCategory, type CashDirection, type CashEntryRequest, type CashEntryResponse,
 } from '@/api/types.ts';
 
@@ -43,8 +45,9 @@ export function AddCashSheet({
   /** Present = editing that row, whichever table it lives in. */
   entry?: CashEntryResponse | null;
   onClose: () => void;
-  onSubmit: (req: CashEntryRequest) => void;
-  onDelete?: () => void;
+  /** Rejecting keeps the sheet open with the server's own words under the field (review P-20). */
+  onSubmit: (req: CashEntryRequest) => void | Promise<unknown>;
+  onDelete?: () => void | Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const kind = entry?.kind ?? 'PERSONAL';
@@ -60,6 +63,8 @@ export function AddCashSheet({
   const [day, setDay] = useState(today());
   const [refund, setRefund] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Re-seed whenever the sheet opens: a stale draft from the last entry is worse than an empty one,
   // and the edit sheet is the same component opened on a row.
@@ -74,27 +79,55 @@ export function AddCashSheet({
     setDay(entry?.happenedOn ?? today());
     setRefund(entry?.materialRefund ?? false);
     setError(null);
+    setBusy(false);
+    setConfirming(false);
   }, [open, entry]);
 
-  const categories = direction === 'INCOME' ? CASH_INCOME_CATEGORIES : CASH_EXPENSE_CATEGORIES;
+  // An object's expense has only the three buckets `object_expenses` actually stores: FUEL, TOOLS
+  // and TAXES all fold into OTHER on the way in (`CashCategory.toExpenseCategory`), so offering
+  // them here was a chip that answered a question and then threw the answer away.
+  const categories = direction === 'EXPENSE'
+    ? (kind === 'OBJECT_EXPENSE' ? CASH_OBJECT_EXPENSE_CATEGORIES : CASH_EXPENSE_CATEGORIES)
+    : CASH_INCOME_CATEGORIES;
 
-  const submit = () => {
-    // Handles the comma AND the space a phone keyboard puts in «1 200».
-    const value = parseDecimal(amount);
-    if (value == null || value <= 0) {
-      setError(t('cash.amountRequired'));
+  /**
+   * Nothing leaves this sheet that the server would not recognise as a number.
+   *
+   * <p>`parseDecimal` answered `NaN` for «12а», «1.200,50» and a Unicode minus, and `NaN` fails
+   * neither `== null` nor `<= 0` — so online the server refused it after the sheet had closed and
+   * the text was gone, and OFFLINE a `NaN` went into IndexedDB, rendered «NaN ₴», poisoned the
+   * totals and blocked the queue hours later. `parseMoney` answers `null` instead (review P-20),
+   * with the same bounds the server validates (B-37: ≥ 0,01, two decimals).</p>
+   *
+   * <p>And the sheet now WAITS for the write: a refusal belongs under the field he has to fix, not
+   * in a toast over a screen he has already left.</p>
+   */
+  const submit = async () => {
+    const value = parseMoney(amount);
+    if (value == null) {
+      setError(t('cash.amountInvalid'));
       return;
     }
-    onSubmit({
-      direction,
-      amount: value,
-      category: category === '' ? null : category,
-      note: note.trim() || null,
-      happenedOn: day,
-      materialRefund: direction === 'INCOME' && refund,
-      // Which table the server should write through. A create is always his own row.
-      kind: entry ? entry.kind : null,
-    });
+    setBusy(true);
+    try {
+      await onSubmit({
+        direction,
+        amount: value,
+        category: category === '' ? null : category,
+        note: note.trim() || null,
+        // A cleared date field is `''`, which the server reads as a blank string rather than «leave
+        // it alone» — null is the word for that, and on a create it means today.
+        happenedOn: day || null,
+        materialRefund: direction === 'INCOME' && refund,
+        // Which table the server should write through. A create is always his own row.
+        kind: entry ? entry.kind : null,
+      });
+    } catch (e) {
+      setBusy(false);
+      setError(toAppError(e).message);
+      return;
+    }
+    setBusy(false);
   };
 
   return (
@@ -212,13 +245,33 @@ export function AddCashSheet({
         )}
 
         <div className="flex gap-2 pt-1">
+          {/* Asked first, like every other delete in the app: this row may be an object's own
+              payment or expense, and the write goes through that object's service — there is no
+              undo behind it. `PaymentsBlock` set the pattern. */}
           {onDelete && (
-            <Button variant="ghost" onClick={onDelete}>{t('common.delete')}</Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirming(true)}>
+              {t('common.delete')}
+            </Button>
           )}
-          <Button variant="secondary" fullWidth onClick={onClose}>{t('common.cancel')}</Button>
-          <Button fullWidth onClick={submit}>{t('common.save')}</Button>
+          <Button variant="secondary" fullWidth disabled={busy} onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button fullWidth loading={busy} onClick={() => void submit()}>{t('common.save')}</Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title={t('cash.deleteTitle')}
+        message={t('cash.deleteMessage')}
+        // Distinct from the sheet's own «Видалити», which stays on screen under the dialog.
+        confirmLabel={t('cash.deleteConfirm')}
+        onConfirm={() => {
+          setConfirming(false);
+          void onDelete?.();
+        }}
+        onClose={() => setConfirming(false)}
+      />
     </Modal>
   );
 }

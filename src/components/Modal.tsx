@@ -22,6 +22,7 @@ export function Modal({
   children,
   size = 'md',
   dismissable = true,
+  mask = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -32,6 +33,15 @@ export function Modal({
   /** When false, hide the ✕ and ignore backdrop/Escape — a required dialog the
    *  user must resolve via an in-content action (e.g. consent). */
   dismissable?: boolean;
+  /**
+   * Redact the content in session replay. ON by default, and that is the whole point (review
+   * P-44): a modal renders through `createPortal` into `document.body`, so it sits OUTSIDE every
+   * `.ph-mask` its caller put around the screen. Payment sheets, receipt forms, the markup preview
+   * and every confirm dialog were therefore recorded in full — amounts, client names, crew prices
+   * — while the screen behind them was masked. A default of «masked» means a new sheet is private
+   * unless someone decides otherwise, which is the right direction for the default to fail in.
+   */
+  mask?: boolean;
 }) {
   const { t } = useTranslation();
   useEffect(() => {
@@ -91,6 +101,7 @@ export function Modal({
         className={cn(
           'relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-card-lg sm:rounded-2xl',
           size === 'lg' ? 'max-w-xl' : 'max-w-md',
+          mask && 'ph-mask',
         )}
       >
         <div className="mb-4 flex items-center justify-between">

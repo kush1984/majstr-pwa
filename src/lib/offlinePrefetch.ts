@@ -102,16 +102,18 @@ export async function prefetchForOffline(
     () => qc.prefetchQuery({ queryKey: ESTIMATE_TEMPLATE_KEY, queryFn: () => estimateTemplatesApi.list() }),
     () => qc.prefetchQuery({ queryKey: ['dashboard', 'metrics'], queryFn: () => dashboardApi.metrics() }),
     () => qc.prefetchQuery({ queryKey: SHOPPING_SUMMARY_KEY, queryFn: () => shoppingApi.summary() }),
-    // «Мої гроші» — the home strip, and the month the screen opens on. Typing «пальне 1200» in a
-    // van with no signal is most of the point, and the screen has to have something to add it to.
+    // «Мої гроші» — the home strip, and BOTH windows a master can land on: the WEEK the screen
+    // itself opens on and the MONTH the strip shows. Typing «пальне 1200» in a van with no signal
+    // is most of the point, and priming only the month meant the screen's own default query had
+    // nothing cached — it errored cold offline, and an entry queued into it was invisible.
     () => qc.prefetchQuery({ queryKey: CASH_SUMMARY_KEY, queryFn: () => cashApi.summary() }),
-    () => {
-      const month = cashPeriod('MONTH');
+    ...(['WEEK', 'MONTH'] as const).map((kind) => () => {
+      const window = cashPeriod(kind);
       return qc.prefetchQuery({
-        queryKey: CASH_KEY(month.from, month.to, month.monthly),
-        queryFn: () => cashApi.flow({ from: month.from, to: month.to }),
+        queryKey: CASH_KEY(window.from, window.to, window.monthly),
+        queryFn: () => cashApi.flow({ from: window.from, to: window.to }),
       });
-    },
+    }),
   ];
   total = core.length + 1; // + the projects list below
   report();

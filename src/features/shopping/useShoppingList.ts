@@ -4,7 +4,7 @@ import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
-import { dropPendingCreate, patchPendingCreate } from '@/lib/outbox/outbox.ts';
+import { dropPendingEntity, patchPendingCreate } from '@/lib/outbox/outbox.ts';
 import type {
   ShoppingListItemRequest,
   ShoppingListItemResponse,
@@ -161,6 +161,10 @@ export function useShoppingActions(projectId: string) {
     edit: (items: ShoppingListItemResponse[]) => ShoppingListItemResponse[],
     write: () => Promise<void>,
   ) => {
+    // A GET already in flight lands AFTER the patch and overwrites it (review P-31): the tick goes
+    // on, a refetch started a moment earlier answers with the row still unbought, and the row
+    // un-ticks itself in a shop where the master is reading the row rather than the toast.
+    await qc.cancelQueries({ queryKey: SHOPPING_KEY(projectId) });
     const undo = patch(edit);
     try {
       await write();
@@ -274,10 +278,14 @@ export function useShoppingActions(projectId: string) {
         optimistically(
           (items) => items.filter((i) => i.id !== itemId),
           async () => {
-            // Added and deleted without ever reaching the server: dropping the queued create IS the
-            // delete. As an op of its own it replayed POST-then-DELETE — two round trips to arrive
-            // where the master already is, the first of them spending a row against his object.
-            if (await dropPendingCreate(ITEM_ENTITY, itemId)) return;
+            // Added and deleted without ever reaching the server: dropping the queued create IS
+            // the delete. As an op of its own it replayed POST-then-DELETE — two round trips to
+            // arrive where the master already is, the first of them spending a row against his
+            // object. EVERYTHING queued about the row goes with it (review P-18): add offline,
+            // tick, delete used to drop only the create and leave the tick queued, replaying as a
+            // PATCH on a row the server had never heard of — a 404 the master then had to resolve
+            // in the sync sheet, for a row he had already thrown away.
+            if (await dropPendingEntity(ITEM_ENTITY, itemId)) return;
             await offlineMutate<void>({
               entity: ITEM_ENTITY, entityId: itemId, type: 'delete', payload: { projectId },
               deps: [projectId],

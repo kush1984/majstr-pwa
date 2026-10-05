@@ -18,6 +18,20 @@ import type { NewOutboxOp, OutboxHandler, OutboxOp } from './types.ts';
 /** Give up retrying an op after this many failed attempts (a stuck op no longer blocks flushes). */
 export const MAX_ATTEMPTS = 8;
 
+/**
+ * What one flush did. `blocked` is why it is not just `{synced, failed}` (review P-47): an op the
+ * server REFUSED leaves optimistic money on screen — a payment the master can read, that will
+ * never exist — and the old caller only refetched when something had LANDED. A refusal is exactly
+ * the moment the screen has to go back to what the server actually holds.
+ */
+export interface FlushResult {
+  synced: number;
+  /** Entities whose write failed transiently and will be retried. */
+  failed: number;
+  /** Ops that moved to the terminal `blocked` state during this flush. */
+  blocked: number;
+}
+
 const handlers = new Map<string, OutboxHandler>();
 
 /** Register the network handler for an entity. Overwrites any previous handler for that key. */
@@ -147,6 +161,17 @@ export async function enqueueLatest(op: NewOutboxOp): Promise<void> {
 }
 
 /**
+ * Seqs currently being sent — the window between «the request left» and «the op was deleted».
+ *
+ * <p>In memory, not in IndexedDB, and that is right rather than lazy: only the tab that is
+ * flushing can have a request in the air, and a reload ends every one of them. What it buys is
+ * {@link patchPendingCreate} and the two drops answering `false` for an op whose POST is already
+ * gone — editing its payload then would change nothing the server will ever see, and deleting it
+ * would leave the row on the server with nothing left locally to delete it with.</p>
+ */
+const inFlight = new Set<number>();
+
+/**
  * Edit a create that has not replayed yet, in place.
  *
  * <p>Deliberately NOT a queued `update` op: the entity has no server id, so an update would replay
@@ -167,7 +192,7 @@ export async function patchPendingCreate(
       .equals(entityId)
       .filter((o) => o.entity === entity && o.type === 'create')
       .first();
-    if (!op?.seq) return false;
+    if (!op?.seq || inFlight.has(op.seq)) return false;
     await outboxDb.ops.update(op.seq, {
       payload: patch(op.payload),
       // A blocked op edited by the master is a fresh attempt: it was blocked on the CONTENT the
@@ -186,8 +211,37 @@ export async function dropPendingCreate(entity: string, entityId: string): Promi
   const removed = await outboxDb.ops
     .where('entityId')
     .equals(entityId)
-    .filter((o) => o.entity === entity && o.type === 'create')
+    .filter((o) => o.entity === entity && o.type === 'create'
+      && (o.seq === undefined || !inFlight.has(o.seq)))
     .delete();
+  if (removed > 0) await refreshPending();
+  return removed > 0;
+}
+
+/**
+ * Drop EVERY queued op of one entity, provided its create is still waiting.
+ *
+ * <p>Why this is not {@link dropPendingCreate}: add a row offline, tick it, delete it. Dropping
+ * only the create left the tick queued, and it replayed as a PATCH on a row the server had never
+ * heard of — a 404 the master then had to resolve in the sync sheet, for a row he had already
+ * thrown away. The ops after a create are statements ABOUT it, so they go with it.</p>
+ *
+ * <p>Returns false when there is no pending create (it drained, or its POST is in the air), which
+ * is the caller's cue to delete the row the ordinary online way.</p>
+ */
+export async function dropPendingEntity(entity: string, entityId: string): Promise<boolean> {
+  const removed = await outboxDb.transaction('rw', outboxDb.ops, async () => {
+    const ops = await outboxDb.ops
+      .where('entityId')
+      .equals(entityId)
+      .filter((o) => o.entity === entity)
+      .toArray();
+    const create = ops.find((o) => o.type === 'create');
+    if (!create?.seq || inFlight.has(create.seq)) return 0;
+    const seqs = ops.map((o) => o.seq).filter((s): s is number => s !== undefined);
+    await outboxDb.ops.bulkDelete(seqs);
+    return seqs.length;
+  });
   if (removed > 0) await refreshPending();
   return removed > 0;
 }
@@ -302,16 +356,18 @@ export async function discardForeignOps(ownerId: string | null): Promise<number>
 
 let flushing = false;
 
+
 /**
  * Replay the queue. Repeated passes let a just-synced parent unblock its children within one
  * flush. Each op is tried at most once per flush; deps still in the queue (pending OR failed)
  * hold their dependents back. Concurrency-guarded so overlapping triggers don't double-send.
  */
-export async function flushOutbox(): Promise<{ synced: number; failed: number }> {
-  if (flushing) return { synced: 0, failed: 0 };
+export async function flushOutbox(): Promise<FlushResult> {
+  if (flushing) return { synced: 0, failed: 0, blocked: 0 };
   flushing = true;
   setSyncing(true);
   let synced = 0;
+  let blocked = 0;
   const failedEntityIds = new Set<string>();
   const attempted = new Set<number>(); // seq — one attempt per op per flush
   try {
@@ -336,11 +392,13 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
           // `failed` at the cap forever, counted as pending, with no way for the master
           // to see or resolve them. Promote to the terminal state on first sight.
           await outboxDb.ops.update(seq, { status: 'blocked', blockReason: 'stuck' });
+          blocked += 1;
           continue;
         }
         const handler = handlers.get(op.entity);
         if (!handler) continue; // no handler (e.g. an entity a newer build owns) — leave it
         attempted.add(seq);
+        inFlight.add(seq);
         try {
           await handler(op);
           await outboxDb.ops.delete(seq);
@@ -359,6 +417,7 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
               await outboxDb.ops.update(seq, {
                 status: 'blocked', blockReason: 'stuck', attempts, lastError: errMessage(e),
               });
+              blocked += 1;
             } else {
               await outboxDb.ops.update(seq, {
                 status: 'failed', attempts, lastError: errMessage(e),
@@ -371,7 +430,10 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
             await outboxDb.ops.update(seq, {
               status: 'blocked', blockReason: kind, lastError: errMessage(e),
             });
+            blocked += 1;
           }
+        } finally {
+          inFlight.delete(seq);
         }
       }
     }
@@ -380,7 +442,7 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
     setSyncing(false);
     await refreshPending(); // publish the post-flush queue size
   }
-  return { synced, failed: failedEntityIds.size };
+  return { synced, failed: failedEntityIds.size, blocked };
 }
 
 /**
@@ -390,7 +452,7 @@ export async function flushOutbox(): Promise<{ synced: number; failed: number }>
 /** Backoff for the self-retry below: 15s, 30s, 60s, then every 2 min. */
 const RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
 
-export function startOutboxSync(onFlush?: (result: { synced: number; failed: number }) => void): () => void {
+export function startOutboxSync(onFlush?: (result: FlushResult) => void): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let misses = 0;
 

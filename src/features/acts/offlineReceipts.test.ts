@@ -103,7 +103,7 @@ describe('the queued receipt handler', () => {
 
     onlineManager.setOnline(true);
     vi.mocked(actsApi.addReceipt).mockResolvedValue({ id: 'u1' } as WorkActReceiptResponse);
-    expect(await flushOutbox()).toEqual({ synced: 1, failed: 0 });
+    expect(await flushOutbox()).toEqual({ synced: 1, failed: 0, blocked: 0 });
 
     const [actId, req] = vi.mocked(actsApi.addReceipt).mock.calls[0];
     expect(actId).toBe('a1');

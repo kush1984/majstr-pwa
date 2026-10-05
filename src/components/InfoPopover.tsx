@@ -94,7 +94,10 @@ export function InfoPopover({ text, children, label }: { text?: string; children
               ? { top: pos.top, left: pos.left, width: pos.maxWidth }
               : { top: -9999, left: -9999, width: 288 }}
             className={cn(
-              'fixed z-[61] rounded-2xl bg-surface p-3.5 pr-8 shadow-card-lg ring-1 ring-black/5',
+              // `ph-mask`: rendered through a portal into <body>, so it sits outside whatever
+              // `.ph-mask` the screen put around itself (review P-44). An ⓘ beside a money figure
+              // explains that figure, and the explanation names it.
+              'ph-mask fixed z-[61] rounded-2xl bg-surface p-3.5 pr-8 shadow-card-lg ring-1 ring-black/5',
               'text-[13px] leading-snug text-primary',
             )}
           >

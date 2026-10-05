@@ -64,6 +64,44 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
     expect(crewMarginOf(est)).toBeNull();
   });
 
+  /**
+   * THE SECOND PARITY FIXTURE (review B-72), asserted to the same two figures by
+   * `CrewMarginIntegrationTest#aDiscountTypedOnTheCopyComesOutOfTheMastersOwnMargin`.
+   *
+   * A «Знижка −10 % від кошторису» typed on the copy AFTER it was made has no crew price. Both
+   * sides used to re-measure it against the crew's smaller subtotal — −1 000 ₴ for the crew
+   * against −1 200 ₴ for the client — so the discount read as 1 800 ₴ of margin. The owner's rule
+   * freezes an unpriced line at the client's amount and a negative one at ZERO: the discount comes
+   * out of the master's own margin, which is 800 ₴.
+   */
+  it('takes a discount typed on the copy out of the master own margin', () => {
+    const est = estimate([
+      line({ id: 'a', quantity: 100, unitPrice: 120, lineTotal: 12000, sourceUnitPrice: 100 }),
+      line({ id: 'd', unit: 'PERCENT', quantity: -10, unitPrice: 0, lineTotal: -1200,
+             percentBaseKind: 'TOTAL' }),
+    ]);
+
+    const margin = crewMarginOf(est)!;
+
+    expect(margin.crewTotal).toBe(10000);
+    expect(margin.margin).toBe(800);
+    expect(margin.unpricedCount).toBe(1);
+  });
+
+  /** The mirror image: a surcharge typed afterwards passes through both views unchanged. */
+  it('passes a surcharge typed on the copy through both views', () => {
+    const est = estimate([
+      line({ id: 'a', quantity: 100, unitPrice: 120, lineTotal: 12000, sourceUnitPrice: 100 }),
+      line({ id: 's', unit: 'PERCENT', quantity: 10, unitPrice: 0, lineTotal: 1200,
+             percentBaseKind: 'TOTAL' }),
+    ]);
+
+    const margin = crewMarginOf(est)!;
+
+    expect(margin.crewTotal).toBe(11200);
+    expect(margin.margin).toBe(2000);
+  });
+
   /** A price raised after duplicating is real margin — the copy is the client's sheet. */
   it('follows a price edited in the copy', () => {
     const est = estimate([

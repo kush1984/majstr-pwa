@@ -18,10 +18,16 @@ import type {
   ProjectPaymentStatus,
 } from '@/api/types.ts';
 
-/** Query keys for one object's economy + expense journal. */
+/**
+ * Query key for one object's economy.
+ *
+ * <p>`expenses` went with the journal SCREEN: nothing has read `['object-expenses', …]` since
+ * «Прибуток» came off the object, so invalidating it refreshed nothing while reading as if it did
+ * (review P-48/P-52). An expense is still written — a till receipt flipped to «моя витрата» posts
+ * one — and the surface that shows it now is «Мої гроші», which is what the writers invalidate.</p>
+ */
 export const economyKeys = {
   economy: (objectId: string) => ['object-economy', objectId] as const,
-  expenses: (objectId: string) => ['object-expenses', objectId] as const,
 };
 
 /**
@@ -49,19 +55,26 @@ export function useToggleEstimateCounted(objectId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
       void qc.invalidateQueries({ queryKey: ['project-estimates', objectId] });
+      // `progress` skips an estimate that does not count, which is the whole point of the toggle:
+      // an open act editor reading the old progress would still offer lines it may no longer
+      // close, and the object card reads Σ SIGNED ∧ counted (review P-48).
+      void qc.invalidateQueries({ queryKey: ['act-progress'] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }
 
 /**
- * Expense CRUD — offline-first. A master logs a purchase standing in the shop, which is
- * exactly where the signal dies. Economy is PRO-gated, and the prefetch already skips it on
- * FREE, so a FREE master never has a cached journal to edit — the gate stays aligned.
+ * Expense CRUD — offline-first. A master logs a purchase standing in the shop, which is exactly
+ * where the signal dies.
  *
- * <p>Only the expense LIST is patched optimistically, not the profit summary: that figure
- * mixes estimate income, deposits and a completed-object settlement rule that lives on the
- * server. Showing a locally re-derived profit risks it disagreeing with the real one — the
- * list is the honest part, and the summary refreshes on sync.
+ * <p><b>No screen on the object writes one any more.</b> «Прибуток» came off the object with the
+ * crew-margin round, and the journal went with it: an `ObjectExpense` is now written by a V129 till
+ * receipt flipped to «це моя витрата», by an act's `receipts_to_expenses`, and by the estimate-side
+ * receipt import — and it is READ in «Мої гроші», which is also where it is edited and deleted.
+ * These three mutations are what the outbox replays for that import, and nothing else calls them.
+ * The old note here described an optimistic profit figure on a card that no longer exists.</p>
  */
 /** Mirrors ProjectPayment.status(today, received) server-side — used only for the brief
  *  optimistic window before a real fetch confirms the authoritative value (offline only; see

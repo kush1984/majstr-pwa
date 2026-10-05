@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { roundMoney } from '@/lib/decimal.ts';
 import i18n from '@/lib/i18n.ts';
 import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
@@ -43,7 +44,7 @@ export const catalogItemSchema = z.object({
 
 export type CatalogItemFormValues = z.infer<typeof catalogItemSchema>;
 
-/** "1 234,50" / "1234.5" → 1234.5, rounded to kopecks. */
+/** "1 234,50" / "1234.5" → 1234.5, rounded the way the SERVER rounds (`roundMoney`, review P-39). */
 export function parsePrice(s: string): number {
-  return Math.round(Number(s.replace(',', '.')) * 100) / 100;
+  return roundMoney(Number(s.replace(',', '.')));
 }

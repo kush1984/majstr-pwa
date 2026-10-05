@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -19,6 +20,7 @@ import { actPortalApi } from '@/api/portal.ts';
  */
 export function ActShareSheet({ actId, open, onClose }: { actId: string; open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const [url, setUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [busy, setBusy] = useState<'copy' | 'email' | null>(null);
@@ -28,11 +30,19 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
     let alive = true;
     setPublishing(true);
     actPortalApi.publish(actId)
-      .then((s) => { if (alive) setUrl(s.url); })
+      .then((s) => {
+        if (!alive) return;
+        setUrl(s.url);
+        // Publishing flips DRAFT→SENT on the server. Nothing invalidated the act, so the badge
+        // behind the sheet still said «Чернетка» and the FAB went on offering «Видалити» on an act
+        // the client already had a link to (review P-50).
+        void qc.invalidateQueries({ queryKey: ['act', actId] });
+        void qc.invalidateQueries({ queryKey: ['acts'] });
+      })
       .catch((err) => { if (alive) { toast.error(toAppError(err).message); onClose(); } })
       .finally(() => { if (alive) setPublishing(false); });
     return () => { alive = false; };
-  }, [open, actId, onClose]);
+  }, [open, actId, onClose, qc]);
 
   const onCopy = async () => {
     setBusy('copy');

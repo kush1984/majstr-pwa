@@ -101,10 +101,12 @@ export function initOutbox(qc: QueryClient): () => void {
     await estimatesApi.deleteItems(op.entityId, p.itemIds);
   });
 
-  // A price change on several lines at once. Deliberately NOT coalesced and NOT idempotent: two
-  // queued markups are two decisions (+10 % then +5 % is what the master did, and the second was
-  // typed while looking at the result of the first), so replaying both is correct. This is also why
-  // the op carries the whole selection — a partial replay would leave a half-repriced sheet.
+  // A price change on several lines at once. NOTHING ENQUEUES THIS ANY MORE (review P-41): a
+  // percentage is not idempotent, and a lost response left the op queued to be applied a SECOND
+  // time — +10 % twice is +21 %, on a sheet the master had already shown a client. `useMarkUpItems`
+  // now queues the PRICES the percentage produces, one ordinary line update each, which is
+  // idempotent by construction. The handler stays because a master's phone may still hold an op
+  // written by the build before this one; an entity with no handler is skipped in silence.
   registerOutboxHandler('estimateItemsMarkup', async (op) => {
     const p = op.payload as { req: EstimateItemsMarkupRequest };
     await estimatesApi.markUpItems(op.entityId, p.req);
@@ -361,6 +363,10 @@ export function initOutbox(qc: QueryClient): () => void {
       amount: p.amount,
       issuedAt: p.issuedAt,
       saveToPhotos: p.saveToPhotos,
+      // Decoded on the phone while the paper was in his hand — the create is the only call a
+      // queued receipt ever makes, so the identity either rides it or is lost (review P-32).
+      fiscalFn: p.fiscalFn,
+      fiscalId: p.fiscalId,
       file: fromQueuedFile(p.file),
     });
   });
@@ -392,8 +398,12 @@ export function initOutbox(qc: QueryClient): () => void {
   });
 
   initSyncStatus(); // publish the queued-op count (leftovers from a prior offline session)
-  // On reconnect, replay the queue; if anything landed, refetch so the cache reflects the server.
+  // On reconnect, replay the queue; refetch whenever the flush CHANGED anything — landed, gave up,
+  // or was refused. Only `synced > 0` used to trigger it, so a write the server rejected left its
+  // optimistic row standing: «Отримано 20 000» the master could read, on money that would never
+  // exist (review P-47). A refusal is precisely the moment the screen must go back to the server's
+  // own figures, with the sync sheet explaining why.
   return startOutboxSync((r) => {
-    if (r.synced > 0) void qc.invalidateQueries();
+    if (r.synced > 0 || r.blocked > 0 || r.failed > 0) void qc.invalidateQueries();
   });
 }

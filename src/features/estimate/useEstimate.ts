@@ -1,9 +1,12 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  onlineManager, useMutation, useQuery, useQueryClient, type QueryClient,
+} from '@tanstack/react-query';
 import { estimatesApi } from '@/api/estimates.ts';
 import { newUuid } from '@/lib/uuid.ts';
-import { markedUpPrice } from '@/lib/decimal.ts';
+import { markedUpPrice, roundMoney } from '@/lib/decimal.ts';
 import { track } from '@/lib/posthog.ts';
-import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { isNetworkError, offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { enqueue } from '@/lib/outbox/outbox.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
 import { MATERIALS_AVAILABILITY_KEY } from '@/features/materials/useMaterialsAvailability.ts';
@@ -24,7 +27,10 @@ import type {
 
 export const ESTIMATE_KEY = ['estimate'] as const;
 
-const round2 = (n: number): number => Math.round(n * 100) / 100;
+// The server's HALF_UP, not `Math.round(n * 100) / 100` (review P-39): that ties toward +∞, so a
+// NEGATIVE «%» line — a discount, the line this pass exists for — disagreed with the stored amount
+// on 5,89 % of cases, and a figure the master read on the estimate is not the one he was billed.
+const round2 = roundMoney;
 
 /**
  * The three-step pass, mirroring the server's EstimateMath — <b>change the two together</b>.
@@ -103,6 +109,11 @@ function recompute(est: EstimateResponse): EstimateResponse {
   return { ...est, items, worksSubtotal, materialsSubtotal, total, balance };
 }
 
+/** The cached lines of one estimate, or null when nothing is cached yet. */
+function cachedItems(qc: QueryClient, estimateId: string): EstimateItemResponse[] | null {
+  return qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId])?.items ?? null;
+}
+
 /** Apply a change to the cached estimate detail (if present) and re-derive totals. */
 function patchEstimate(qc: QueryClient, estimateId: string, edit: (items: EstimateItemResponse[]) => EstimateItemResponse[]): void {
   qc.setQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId], (old) =>
@@ -142,6 +153,9 @@ export function useInvalidateEstimate(estimateId: string) {
     // estimate was still empty outlived every line the master then added, and the button stayed
     // away until the page was left and reopened a minute later.
     void qc.invalidateQueries({ queryKey: MATERIALS_AVAILABILITY_KEY(estimateId) });
+    // What an act may still close is Σ over this estimate's positions, so an edited quantity or a
+    // deleted line moves «виконано раніше» and the per-line cap in an open act editor too.
+    void qc.invalidateQueries({ queryKey: ['act-progress'] });
   };
 }
 
@@ -440,32 +454,77 @@ export function useDeleteItems(estimateId: string) {
  * <b>Offline-capable, unlike the duplicate</b>, and the difference is the whole reason this is
  * cheap: a duplicate has to flip the source out of the economy and stamp provenance, which a device
  * cannot compose. This just edits prices the master already owns. The optimistic patch rounds the
- * same way the server does (whole hryvnia on the UNIT price), and `patchEstimate` re-runs the
- * percent pass — so a «% від кошторису» line lifts on screen exactly as it will on the server.
+ * same way the server does — `markedUpPrice`, scale 2 HALF_UP with a kopeck floor since review B-47,
+ * NOT the whole hryvnia this comment used to claim — and `patchEstimate` re-runs the percent pass,
+ * so a «% від кошторису» line lifts on screen exactly as it will on the server.
  */
 export function useMarkUpItems(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
     networkMode: 'always',
-    mutationFn: (req: EstimateItemsMarkupRequest): Promise<void> => {
-      return offlineMutate<void>({
-        entity: 'estimateItemsMarkup', entityId: estimateId, type: 'update',
-        payload: { req }, deps: [estimateId],
-        online: async () => { await estimatesApi.markUpItems(estimateId, req); },
-        onOnlineSuccess: invalidate,
-        optimistic: () => {
-          const factor = 1 + (req.discount ? -req.percent : req.percent) / 100;
-          const picked = new Set(req.itemIds);
-          patchEstimate(qc, estimateId, (items) => items.map((i) =>
-            // PERCENT lines are skipped here for the same reason the server skips them: they are a
-            // share of a base that is itself moving, so recomputeLines lifts them already. Marking
-            // them up here too would show the master a number the sync then takes back.
-            picked.has(i.id) && i.unit !== 'PERCENT'
-              ? { ...i, unitPrice: markedUpPrice(i.unitPrice, factor) }
-              : i));
-        },
-      });
+    mutationFn: async (req: EstimateItemsMarkupRequest): Promise<void> => {
+      const factor = 1 + (req.discount ? -req.percent : req.percent) / 100;
+      const picked = new Set(req.itemIds);
+      // PERCENT lines are skipped for the same reason the server skips them: they are a share of a
+      // base that is itself moving, so `recomputeLines` lifts them already. Marking them up here
+      // too would show the master a number the sync then takes back.
+      const affected = (cachedItems(qc, estimateId) ?? [])
+        .filter((i) => picked.has(i.id) && i.unit !== 'PERCENT');
+
+      // Applied ONCE, before either path: the queued path below must not add the markup a second
+      // time to a cache the online attempt has already moved.
+      patchEstimate(qc, estimateId, (items) => items.map((i) => (
+        picked.has(i.id) && i.unit !== 'PERCENT'
+          ? { ...i, unitPrice: markedUpPrice(i.unitPrice, factor) }
+          : i)));
+
+      if (onlineManager.isOnline()) {
+        try {
+          await estimatesApi.markUpItems(estimateId, req);
+          invalidate();
+          return;
+        } catch (e) {
+          if (!isNetworkError(e)) {
+            invalidate(); // put the screen back on the server's own prices
+            throw e;
+          }
+        }
+      }
+
+      /**
+       * Offline, a percentage is queued as the PRICES it produces — one ordinary line update each
+       * (review P-41).
+       *
+       * <p>«+10 %» is not idempotent, and the op that carried it could replay: the server applied
+       * it, the answer was lost on a dying link, the op stayed queued, and the next flush applied
+       * it again — +21 %, on a sheet the master had already shown a client. A target price is
+       * idempotent by construction, replays through an endpoint that already exists, and makes the
+       * queue say what it actually means: «this line now costs 57,50 ₴».</p>
+       *
+       * <p>The figures come from the cache the master is looking at, through the same
+       * `markedUpPrice` the server rounds with (scale 2 HALF_UP, B-47), so the two agree to the
+       * kopeck. Nothing is queued for a line whose price does not move.</p>
+       */
+      for (const item of affected) {
+        const unitPrice = markedUpPrice(item.unitPrice, factor);
+        if (unitPrice === item.unitPrice) continue; // nothing to say about a price that holds
+        await enqueue({
+          entity: 'estimateItem',
+          entityId: item.id,
+          type: 'update',
+          payload: {
+            estimateId,
+            req: {
+              type: item.type, name: item.name, category: item.category ?? undefined,
+              unit: item.unit, quantity: item.quantity, unitPrice,
+              percentBaseKind: item.percentBaseKind, percentBaseItemId: item.percentBaseItemId,
+              measurementRefs: item.measurementRefs, quantityManual: item.quantityManual,
+            } satisfies EstimateItemRequest,
+          },
+          deps: [estimateId],
+        });
+      }
     },
   });
 }
@@ -489,7 +548,12 @@ export function useDuplicateEstimate(estimateId: string) {
       // Both estimates changed: the copy is new, and the source just stopped counting in the
       // economy, which the object screen shows.
       void qc.invalidateQueries({ queryKey: ['project-estimates', created.projectId] });
-      void qc.invalidateQueries({ queryKey: ['economy', created.projectId] });
+      // `['economy', …]` was never a key this app reads — the economy lives under
+      // `['object-economy', …]`, so the panel the comment above describes was never refreshed
+      // (review P-48). The object card and the dashboard read the same figures.
+      void qc.invalidateQueries({ queryKey: ['object-economy', created.projectId] });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: [...ESTIMATE_KEY, estimateId] });
     },
   });

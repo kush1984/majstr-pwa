@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/Badge.tsx';
@@ -18,7 +20,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { bodyScrollLocked, scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
-import { markedUpPrice } from '@/lib/decimal.ts';
+import { markedUpPrice, parseDecimal } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
@@ -872,8 +874,13 @@ export function EstimateEditorPage() {
           duplicate.mutate(
             // The name is composed HERE, not on the server, because «Кошторис від 10 липня» is a
             // display fallback the client invents for an estimate whose stored name is null. The
-            // server sees that null and could only ever produce a bare «Кошторис +15%» — a copy
+            // server sees that null and could only ever produce a bare «Кошторис (копія)» — a copy
             // whose name has nothing to do with the sheet it came from.
+            //
+            // The RATE is deliberately NOT in the name any more (review B-74). This name is printed
+            // on the client's portal page and in the act's group headers, so «Санвузол +20%» handed
+            // him one division and the crew's prices — the one number in this product he must never
+            // see. The direction stays visible to the master: the copy's own panel words it.
             //
             // No itemIds: the server reads that as every WORK line and leaves materials at cost,
             // which is the foreman's normal case. Materials are bought at their price and passed
@@ -881,7 +888,7 @@ export function EstimateEditorPage() {
             {
               markupPercent: percent,
               discount,
-              name: `${estimateName(est.name, est.createdAt)} ${discount ? '-' : '+'}${percent}%`,
+              name: `${estimateName(est.name, est.createdAt)} ${t('estimate.copySuffix')}`,
             },
             {
               onSuccess: (created) => {
@@ -927,10 +934,13 @@ function MarkupSheet({
   // Націнка (up) or Уцінка (down) — the same copy, only the sign of the change differs.
   const [discount, setDiscount] = useState(false);
   const [value, setValue] = useState('15');
-  const percent = Number(value.replace(',', '.'));
+  // `Number('')` is 0 and `Number('15 ')` is 15 but `Number('1 5')` is NaN — so an EMPTY field read
+  // as a valid «0 %» and the sheet confirmed a copy at the same prices while saying it had marked
+  // them up (review P-32). A percentage has to be a figure, and 0 is not a decision.
+  const percent = parseDecimal(value);
   // A discount cannot exceed 100 % (it would drive prices to zero or below); a markup is open-ended.
   const max = discount ? 100 : 1000;
-  const valid = Number.isFinite(percent) && percent >= 0 && percent <= max;
+  const valid = Number.isFinite(percent) && percent > 0 && percent <= max;
 
   return (
     <Modal open={open} onClose={onClose} title={t('estimate.duplicateWithMarkup')}>
@@ -941,6 +951,7 @@ function MarkupSheet({
               key={String(d)}
               type="button"
               onClick={() => setDiscount(d)}
+              aria-pressed={discount === d}
               className={
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ' +
                 (discount === d ? 'bg-surface text-primary shadow-card' : 'text-muted')
@@ -1003,9 +1014,10 @@ function ItemMarkupSheet({
   const { t } = useTranslation();
   const [discount, setDiscount] = useState(false);
   const [value, setValue] = useState('15');
-  const percent = Number(value.replace(',', '.'));
+  // Same rule as the duplicate sheet: an empty field is not «0 %», it is «he has not answered».
+  const percent = parseDecimal(value);
   const max = discount ? 100 : 1000;
-  const valid = Number.isFinite(percent) && percent >= 0 && percent <= max;
+  const valid = Number.isFinite(percent) && percent > 0 && percent <= max;
   const factor = 1 + (discount ? -percent : percent) / 100;
   const before = items.reduce((sum, i) => sum + i.lineTotal, 0);
   const after = valid
@@ -1021,6 +1033,7 @@ function ItemMarkupSheet({
               key={String(d)}
               type="button"
               onClick={() => setDiscount(d)}
+              aria-pressed={discount === d}
               className={
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ' +
                 (discount === d ? 'bg-surface text-primary shadow-card' : 'text-muted')
@@ -1121,7 +1134,10 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
           className="fixed inset-0 z-30 bg-ink/40 lg:hidden"
         />
       )}
-      <div className="fixed inset-x-0 bottom-0 z-40 rounded-t-2xl bg-ink pb-[env(safe-area-inset-bottom)] text-white shadow-card-lg lg:hidden">
+      {/* `ph-mask`: the phone's summary carries the same figures as the desktop card — the total,
+          the breakdown and «Бригаді / Твоя націнка» (reviews P-25, P-44). 95 % of masters are on a
+          phone, so this is the copy that actually gets recorded. */}
+      <div className="ph-mask fixed inset-x-0 bottom-0 z-40 rounded-t-2xl bg-ink pb-[env(safe-area-inset-bottom)] text-white shadow-card-lg lg:hidden">
         <div onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
           <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-white/25" aria-hidden />
           <button
@@ -1151,7 +1167,7 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
               <TypeBreakdown items={est.items} type="WORK" subtotal={est.worksSubtotal} label={t('estimate.works')} />
               <TypeBreakdown items={est.items} type="MATERIAL" subtotal={est.materialsSubtotal} label={t('estimate.materials')} />
               <AdjustNote items={est.items} />
-              <CrewMarginLine est={est} />
+              <CrewMarginLine est={est} counts />
               {noMaterials && materialsOffered && (
                 <button
                   type="button"
@@ -1187,21 +1203,38 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
  * <p>White/60 like the rest of the secondary lines here — a difference between two prices, not an
  * earning to celebrate in green.</p>
  */
-export function CrewMarginLine({ est }: { est: EstimateResponse }) {
+export function CrewMarginLine({ est, counts = false }: {
+  est: EstimateResponse;
+  /**
+   * Whether THIS copy is the one that reports being seen.
+   *
+   * <p>The line renders twice — once in the desktop `SummaryCard` and once in the phone's
+   * `MobileSummarySheet` — and both are mounted at once, each hidden by a `lg:` breakpoint. So
+   * `crew_margin_viewed` fired from the desktop card on every phone, which is 95 % of masters
+   * (review P-51): the event measured mounting, not seeing. Only the surface that is actually
+   * visible sends it.</p>
+   */
+  counts?: boolean;
+}) {
   const { t } = useTranslation();
-  const margin = crewMarginOf(est);
+  // `useMemo` because this walks every line of the estimate and the sheet re-renders on each
+  // keystroke of a quantity field.
+  const margin = useMemo(() => crewMarginOf(est), [est]);
   // Once per estimate, not once per keystroke: the question is whether he reaches the figure at
   // all, and every edit recomputes it.
-  const shown = margin != null;
+  const shown = counts && margin != null;
   useEffect(() => {
     if (shown) track('crew_margin_viewed', { scope: 'editor' });
   }, [shown]);
   if (!margin) return null;
+  // `-0 ₴` — what `formatMoney` prints for a margin between −0,5 and 0 — reads as a bug rather than
+  // as «нічого». A sign is shown only where there is one.
+  const marginShown = Math.abs(margin.margin) < 0.005 ? 0 : margin.margin;
   return (
     <p className="mt-1 text-[11px] text-white/60" data-testid="crew-margin-line">
       {t('economy.crewTotal')} {formatMoney(margin.crewTotal)}
       {' · '}
-      {t('economy.crewMargin')} {margin.margin > 0 ? '+' : ''}{formatMoney(margin.margin)}
+      {t('economy.crewMargin')} {marginShown > 0 ? '+' : ''}{formatMoney(marginShown)}
     </p>
   );
 }
@@ -1295,8 +1328,10 @@ function AdjustNote({ items }: { items: EstimateItemResponse[] }) {
 
 function ClientBanner({ project }: { project: ProjectResponse }) {
   const { t } = useTranslation();
+  // `ph-mask`: the client's own name and the object's address, which is the pair the privacy
+  // policy promises never leaves the device (review P-25).
   return (
-    <div className="mb-4 flex items-center gap-3 rounded-card border border-brand-soft-2 bg-gradient-to-br from-brand-soft to-brand-soft-2 p-3.5">
+    <div className="ph-mask mb-4 flex items-center gap-3 rounded-card border border-brand-soft-2 bg-gradient-to-br from-brand-soft to-brand-soft-2 p-3.5">
       <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
         {initials(project.clientFullName) || '🏠'}
       </span>
@@ -1318,8 +1353,10 @@ function SummaryCard({
   project: ProjectResponse | undefined;
 }) {
   const { t } = useTranslation();
+  // `ph-mask`: the client's name, the object's name and — since the crew-margin round — what the
+  // BRIGADE is paid and what the master keeps (reviews P-25, P-44).
   return (
-    <div className="rounded-card bg-ink p-5 text-white">
+    <div className="ph-mask rounded-card bg-ink p-5 text-white">
       {project && (
         <div className="mb-4 flex items-center gap-2.5 border-b border-white/10 pb-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-[13px] font-bold">

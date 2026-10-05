@@ -29,6 +29,10 @@ export function usePushRefresh() {
       void qc.invalidateQueries({ queryKey: ['project-estimates'] });
       void qc.invalidateQueries({ queryKey: ['object-economy'] });
       void qc.invalidateQueries({ queryKey: ['acts'] });
+      // `['acts', projectId]` does NOT prefix-match `['act', id]` or `['act-progress', …]`, so an
+      // act signed in the portal left the open editor showing DRAFT (review P-38).
+      void qc.invalidateQueries({ queryKey: ['act'] });
+      void qc.invalidateQueries({ queryKey: ['act-progress'] });
     };
 
     navigator.serviceWorker.addEventListener('message', onMessage);

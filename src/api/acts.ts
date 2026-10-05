@@ -72,7 +72,7 @@ export const actsApi = {
   addReceipt(
     actId: string,
     req: { id?: string; label?: string; amount: number; issuedAt?: string | null; file: File;
-           saveToPhotos?: boolean },
+           saveToPhotos?: boolean; fiscalFn?: string | null; fiscalId?: string | null },
   ): Promise<WorkActReceiptResponse> {
     const form = new FormData();
     form.append('file', req.file); // mandatory (round 2): the photo is the receipt's proof
@@ -80,6 +80,14 @@ export const actsApi = {
     form.append('amount', String(req.amount));
     if (req.saveToPhotos) form.append('saveToPhotos', 'true');
     if (req.issuedAt) form.append('issuedAt', req.issuedAt);
+    // Sent TOGETHER or not at all — half an identity is not one (B-21). The create is the only
+    // chance a QUEUED receipt gets to carry what its QR said: it replays as a create and never as
+    // a PATCH, so without this the code read on the phone was lost and the same paper could be
+    // billed on the act and in the object with nothing able to see it (review P-32).
+    if (req.fiscalFn && req.fiscalId) {
+      form.append('fiscalFn', req.fiscalFn);
+      form.append('fiscalId', req.fiscalId);
+    }
     return api
       .post<WorkActReceiptResponse>(`/api/acts/${actId}/receipts`, form, {
         headers: {

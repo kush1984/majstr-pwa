@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import contract from './contract/request-dtos.json';
 
@@ -46,10 +46,18 @@ function coarse(raw: string): string {
   return alias === undefined ? 'object' : coarse(alias);
 }
 
-/** Brace-counting rather than a regex: a few interfaces carry an inline object member. */
+/**
+ * Brace-counting rather than a regex: a few interfaces carry an inline object member.
+ *
+ * <p>`extends` is part of the header (review P-30). Without it `WorkActUpdateRequest extends
+ * WorkActCreateRequest` was simply not found, so the DTO the act editor PATCHes with — the one
+ * carrying every money field on the document — was outside the contract entirely. An inherited
+ * field counts as declared: that is what `extends` means on the wire.</p>
+ */
 function interfaces(): Map<string, Map<string, Field>> {
-  const found = new Map<string, Map<string, Field>>();
-  const header = /export interface (\w+Request)\s*\{/g;
+  const own = new Map<string, Map<string, Field>>();
+  const bases = new Map<string, string>();
+  const header = /export interface (\w+Request)(?:\s+extends\s+([\w\s,]+?))?\s*\{/g;
   for (let m = header.exec(source); m !== null; m = header.exec(source)) {
     let depth = 1;
     let i = m.index + m[0].length;
@@ -57,7 +65,17 @@ function interfaces(): Map<string, Map<string, Field>> {
       if (source[i] === '{') depth++;
       else if (source[i] === '}') depth--;
     }
-    found.set(m[1], members(source.slice(m.index + m[0].length, i - 1)));
+    own.set(m[1], members(source.slice(m.index + m[0].length, i - 1)));
+    if (m[2] !== undefined) bases.set(m[1], m[2].trim());
+  }
+  const found = new Map<string, Map<string, Field>>();
+  for (const [name, fields] of own) {
+    const merged = new Map<string, Field>();
+    for (const base of (bases.get(name) ?? '').split(',').map((b) => b.trim()).filter(Boolean)) {
+      for (const [field, spec] of own.get(base) ?? []) merged.set(field, spec);
+    }
+    for (const [field, spec] of fields) merged.set(field, spec);
+    found.set(name, merged);
   }
   return found;
 }
@@ -71,29 +89,94 @@ function members(body: string): Map<string, Field> {
     const before = depth;
     depth += (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
     const m = /^\s*(\w+)(\??):\s*(.+?);?\s*$/.exec(line);
-    if (m !== null && before === 0) fields.set(m[1], { type: coarse(m[3]), optional: m[2] === '?' });
+    // `foo: string | null` is NOT a field the backend can require (review P-30): TypeScript calls
+    // it mandatory, and the value it makes mandatory is a `null` a `@NotNull` component refuses.
+    // So nullable counts as optional here, which is the question this contract actually asks.
+    if (m !== null && before === 0) {
+      // Asked of the TOP-LEVEL type only: `items: { id: string; category?: string | null }[]` is
+      // not a nullable field, it is an array whose ELEMENT has one.
+      const bare = m[3].replace(/\{[^}]*\}/g, 'object');
+      fields.set(m[1], {
+        type: coarse(m[3]),
+        optional: m[2] === '?' || /\|\s*null\b/.test(bare),
+      });
+    }
   }
   return fields;
 }
 
 const declared = interfaces();
-const shared = [...declared.keys()].filter((name) => name in contract).sort();
+// A dotted key — «ApplyTemplatesRequest.TemplatePick» — is a NESTED backend record, recorded by the
+// snapshot since review B-46 so a required field added to one reddens the backend's own test. This
+// reader matches top-level request types by name, so those entries are simply not among `shared`;
+// checking them here would need a name map from each nested record to the interface we call it, and
+// the drift they exist to catch is already caught one repo over.
+/**
+ * What the backend calls an interface we name differently.
+ *
+ * <p>A NESTED backend record is keyed `Parent.Nested` in the snapshot (review B-46), and this repo
+ * flattens those into their own interfaces — `TemplatePickRequest` is `ApplyTemplatesRequest`'s own
+ * `TemplatePick`. One line each, so the nested record is compared here too instead of being skipped
+ * for having an unfamiliar name (review P-30).</p>
+ */
+const BACKEND_NAME: Record<string, string> = {
+  TemplatePickRequest: 'ApplyTemplatesRequest.TemplatePick',
+};
+
+/** The snapshot key for one of our interfaces, or undefined when the backend has no such DTO. */
+const keyOf = (name: string): string | undefined => {
+  const mapped = BACKEND_NAME[name] ?? name;
+  return mapped in contract ? mapped : undefined;
+};
+
+const shared = [...declared.keys()].filter((name) => keyOf(name) !== undefined).sort();
+
+/**
+ * Every `*Request` type the API LAYER mentions — these are the bodies this app really sends.
+ *
+ * <p>The contract used to compare whatever happened to match by name, which is a different and
+ * weaker question (review P-30): a DTO the app posts under a name the snapshot spells differently
+ * was simply skipped, silently, and that is precisely the drift the file exists to catch. A
+ * backend DTO with no caller HERE is not a problem — plenty of endpoints have options this app has
+ * no screen for — so the coverage is asked from our side, not from the snapshot's.</p>
+ */
+const apiDir = join(process.cwd(), 'src/api');
+const posted = new Set<string>();
+for (const file of readdirSync(apiDir)) {
+  if (!file.endsWith('.ts') || file.endsWith('.test.ts') || file === 'types.ts') continue;
+  for (const [, name] of readFileSync(join(apiDir, file), 'utf8').matchAll(/\b(\w+Request)\b/g)) {
+    posted.add(name);
+  }
+}
 
 describe('the request contract with the backend', () => {
   it('reaches the interfaces it is meant to guard', () => {
     // A guard that matches nothing passes forever. Name the one this was written for.
     expect(shared).toContain('PaymentReceiptRequest');
     expect(shared.length).toBeGreaterThan(20);
+    // And the DTO whose header the old regex could not read at all.
+    expect(shared).toContain('WorkActUpdateRequest');
+  });
+
+  it('covers every request body the api layer actually sends', () => {
+    const uncovered = [...posted]
+      .filter((name) => declared.has(name))
+      .filter((name) => keyOf(name) === undefined)
+      .sort();
+    expect(
+      uncovered,
+      'these are sent by src/api but absent from the backend snapshot — renamed, or removed',
+    ).toEqual([]);
   });
 
   it.each(shared)('%s declares nothing the backend does not have', (name) => {
-    const backend = contract[name as keyof typeof contract] as Record<string, string>;
+    const backend = contract[keyOf(name) as keyof typeof contract] as Record<string, string>;
     const unknown = [...declared.get(name)!.keys()].filter((f) => !(f in backend));
     expect(unknown, `${name} sends fields the backend DTO has no component for`).toEqual([]);
   });
 
   it.each(shared)('%s declares every field the backend requires', (name) => {
-    const backend = contract[name as keyof typeof contract] as Record<string, string>;
+    const backend = contract[keyOf(name) as keyof typeof contract] as Record<string, string>;
     const ours = declared.get(name)!;
     const missing = Object.entries(backend)
       .filter(([, spec]) => !spec.endsWith('?'))
@@ -103,7 +186,7 @@ describe('the request contract with the backend', () => {
   });
 
   it.each(shared)('%s agrees with the backend on types', (name) => {
-    const backend = contract[name as keyof typeof contract] as Record<string, string>;
+    const backend = contract[keyOf(name) as keyof typeof contract] as Record<string, string>;
     const wrong = [...declared.get(name)!.entries()]
       .filter(([field]) => field in backend)
       .filter(([, ours]) => ours.type !== 'object')
@@ -119,11 +202,26 @@ describe('the request contract with the backend', () => {
    * failure.
    */
   it('matches the live backend snapshot when the sibling repo is present', () => {
-    const live = join(process.cwd(), '..', 'majstr-backend', SNAPSHOT);
-    if (!existsSync(live)) return;
+    // `MAJSTR_BACKEND_DIR` for a checkout that is not the sibling `../majstr-backend` (review
+    // P-30), and a WARNING rather than silence when neither is there: a staleness check that can
+    // skip itself without saying so is a check nobody knows they lost.
+    const root = process.env.MAJSTR_BACKEND_DIR ?? join(process.cwd(), '..', 'majstr-backend');
+    const live = join(root, SNAPSHOT);
+    if (!existsSync(live)) {
+      console.warn(
+        `[contract] no backend checkout at ${root} — the copy's freshness was NOT verified.`
+        + ' Set MAJSTR_BACKEND_DIR to point at one.',
+      );
+      return;
+    }
+    // Line endings normalised on BOTH sides (review B-36): the backend BUILDS this file with LF,
+    // and with core.autocrlf a Windows checkout of either repo hands back CRLF — so a byte-for-byte
+    // comparison could never hold, and it passed only where a run had just rewritten the file.
+    const lf = (text: string) =>
+      text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
     expect(
-      readFileSync(join(process.cwd(), 'src/api/contract/request-dtos.json'), 'utf8').trim(),
+      lf(readFileSync(join(process.cwd(), 'src/api/contract/request-dtos.json'), 'utf8')),
       `stale copy — refresh it from ../majstr-backend/${SNAPSHOT}`,
-    ).toBe(readFileSync(live, 'utf8').trim());
+    ).toBe(lf(readFileSync(live, 'utf8')));
   });
 });

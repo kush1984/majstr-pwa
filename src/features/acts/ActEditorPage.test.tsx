@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import 'fake-indexeddb/auto';
 import '@/lib/i18n.ts';
+import { clearOutbox } from '@/lib/outbox/outbox.ts';
 import { ActEditorPage } from './ActEditorPage.tsx';
 import { actsApi } from '@/api/acts.ts';
 import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
@@ -141,11 +143,14 @@ function advanceInput(): HTMLElement {
   return within(block).getByRole('textbox');
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   vi.mocked(actsApi.get).mockResolvedValue(draftAct());
   vi.mocked(actsApi.progress).mockResolvedValue(progress());
   vi.mocked(economyApi.economy).mockResolvedValue(economy(0, 0));
+  // The outbox is module state shared by every test in this file, and a queued receipt is MONEY on
+  // the screen: one left behind by an earlier test adds itself to the next one's «До сплати».
+  await clearOutbox();
 });
 
 describe('ActEditorPage (new act)', () => {
@@ -289,6 +294,40 @@ describe('ActEditorPage', () => {
     expect(screen.queryByText('Підписання акта офлайн')).toBeNull();
     const { toast } = await import('@/hooks/useToast.ts');
     expect(vi.mocked(toast.info)).toHaveBeenCalled();
+  });
+
+  /**
+   * A receipt the phone is still carrying may not be left out of a signature (review P-36).
+   *
+   * <p>Queued receipts are SHOWN and counted into «До сплати» — correctly, the money left the
+   * master's pocket — but the act is signed server-side, so one still in the queue is absent from
+   * the document, from its `doc_hash` and from the ADDENDUM. The screen said 4 800 ₴ and the client
+   * accepted 4 000 ₴. The flush is tried first; what is left refuses the signature by name.</p>
+   */
+  it('refuses to sign while a receipt is still in the queue', async () => {
+    const { enqueue, clearOutbox } = await import('@/lib/outbox/outbox.ts');
+    const { tokens } = await import('@/lib/tokens.ts');
+    tokens.set(`h.${btoa(JSON.stringify({ sub: 'm1' })).replace(/=/g, '')}.s`, 'r');
+    await clearOutbox();
+    await enqueue({
+      entityId: 'queued-receipt',
+      entity: 'actReceipt',
+      type: 'create',
+      payload: { actId: 'a1', amount: 800, file: { name: 'r.jpg', type: 'image/jpeg', bytes: [] } },
+      deps: [],
+    });
+
+    renderEditor();
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox')); // one line ticked, so the act is signable
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Підписати'));
+
+    const { toast } = await import('@/hooks/useToast.ts');
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    expect(screen.queryByText('Підписання акта офлайн')).toBeNull();
+    expect(actsApi.signOffline).not.toHaveBeenCalled();
+    await clearOutbox();
   });
 
   it('a fully closed line is not offered again — finished work leaves the picker', async () => {

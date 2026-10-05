@@ -567,7 +567,7 @@ function ContactRow({
   return (
     <a
       href={href}
-      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
+      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
       className="flex w-full items-center gap-3 border-b border-border p-3.5 text-left last:border-b-0"
     >
       <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] bg-surface-sunken text-base text-secondary">

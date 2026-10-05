@@ -16,7 +16,7 @@ import { economyApi } from '@/api/economy.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { parseDecimal, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
@@ -252,7 +252,12 @@ export function ReceiptImportSheet({
       toast.success(t('receipt.added', { count: included.length }));
       // The receipts are also the master's real cost — offer to log them as ONE object expense
       // (closes the cash-flow loop). Then offer to keep the photos.
-      receiptTotal.current = included.reduce((s, d) => s + num(d.quantity) * num(d.price), 0);
+      // Line by line at the scale money is stored at, then summed in kopecks — the figure goes
+      // into an `ObjectExpense`, so a float chain here lands a kopeck off the master's own cost
+      // (review P-52/P-39).
+      receiptTotal.current = sumMoney(
+        included.map((d) => roundMoney(num(d.quantity) * num(d.price))),
+      );
       if (receiptTotal.current > 0) setExpenseOpen(true);
       else offerToKeepPhoto();
     } catch (err) {

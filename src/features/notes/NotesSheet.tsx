@@ -76,7 +76,9 @@ export function NotesSheet({
             )}
             <div className="space-y-3">
               {notes.data.map((note) => (
-                <div key={note.id} className="rounded-card border border-border bg-surface p-3.5">
+                // `ph-mask`: a note is «ключі в консьєржа», a gate code and a phone number —
+                // somebody else's personal data, kept on the master's device (review P-25).
+                <div key={note.id} className="ph-mask rounded-card border border-border bg-surface p-3.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       {note.title && (

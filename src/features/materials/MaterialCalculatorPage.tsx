@@ -6,6 +6,7 @@ import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { formatNumber } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
@@ -72,15 +73,25 @@ const WASTE_STEPS = [5, 10, 15];
  * розгортка, millimetres for a layer thickness.
  *
  * <p>«abc» parses to NaN, and NaN used to be applied and sent — the server answers 400, so the
- * screen blamed the connection for a typo and offered nothing to fix. The upper bound is a sanity
- * check rather than a rule of building: no room on this screen is a kilometre around and no layer
- * is a metre thick, and a stray extra digit is the mistake it actually catches. One bound serves
- * both units because it is that stray digit it is looking for, not a building code.</p>
+ * screen blamed the connection for a typo and offered nothing to fix.</p>
+ *
+ * <p><b>The bound belongs to the QUESTION</b>, and these are the server's own (review B-49, V145).
+ * One shared 1000 bounded none of the three: a screed typed «400» for 40 mm passed and put 800
+ * kg/m² of dry mix on the shopping list, with the arithmetic line reading as if we meant it. They
+ * are sanity checks rather than rules of building — no layer is 15 cm, no короб's розгортка is 5 m
+ * and no room on this screen is a kilometre around — so what they catch is the stray extra digit,
+ * and the server refuses the same figure anyway.</p>
  */
-const MAX_FIGURE = 1000;
-function figure(raw: string): number | null {
+const MAX_FIGURE: Record<ParameterKind, number> = {
+  PERIMETER: 1000, // metres
+  SECTION: 5, // metres of розгортка per metre of profile
+  THICKNESS: 150, // millimetres
+};
+type ParameterKind = 'PERIMETER' | 'SECTION' | 'THICKNESS';
+
+function figure(raw: string, kind: ParameterKind): number | null {
   const value = parseDecimal(raw);
-  return Number.isFinite(value) && value > 0 && value <= MAX_FIGURE ? value : null;
+  return Number.isFinite(value) && value > 0 && value <= MAX_FIGURE[kind] ? value : null;
 }
 
 /**
@@ -147,7 +158,7 @@ function parameterPositions(data: MaterialCalculationResponse, kind: string): As
  * dropped it — the card just kept asking, with nothing on screen saying why. Nothing is sent until
  * every figure actually typed is a figure.</p>
  */
-function encoded(inputs: Record<string, string>): {
+function encoded(inputs: Record<string, string>, kind: ParameterKind): {
   value?: string;
   errors: Record<string, boolean>;
 } {
@@ -155,7 +166,7 @@ function encoded(inputs: Record<string, string>): {
   const entries: string[] = [];
   for (const [itemId, raw] of Object.entries(inputs)) {
     if (raw.trim() === '') continue;
-    const value = figure(raw);
+    const value = figure(raw, kind);
     if (value == null) errors[itemId] = true;
     else entries.push(`${itemId}:${value}`);
   }
@@ -171,10 +182,10 @@ function encoded(inputs: Record<string, string>): {
  * field on screen is empty — the master would have cleared a розгортка and gone on buying against
  * it. Called only once `encoded` has confirmed every non-blank field is a figure.</p>
  */
-function numbers(inputs: Record<string, string>): Record<string, number> {
+function numbers(inputs: Record<string, string>, kind: ParameterKind): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [itemId, raw] of Object.entries(inputs)) {
-    out[itemId] = raw.trim() === '' ? 0 : (figure(raw) ?? 0);
+    out[itemId] = raw.trim() === '' ? 0 : (figure(raw, kind) ?? 0);
   }
   return out;
 }
@@ -185,11 +196,16 @@ function strings(values: Record<string, number>): Record<string, string> {
   return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)]));
 }
 
+/** The server's own `@Digits(12, 3)` on a material quantity — anything past it is a 400. */
+const MAX_QUANTITY = 999_999_999.999;
+
 function badQuantity(raw: string): boolean {
   if (raw.trim() === '') return false;
   const value = parseDecimal(raw);
   // 0 is not a typo — it is the second way he says «не це», and the row drops out of the payload.
-  return !Number.isFinite(value) || value < 0;
+  // The upper bound is the server's (review P-29): without it a slipped keypad sent a figure the
+  // server refused, and the screen had nothing to say about which row it was.
+  return !Number.isFinite(value) || value < 0 || value > MAX_QUANTITY;
 }
 
 export function MaterialCalculatorPage() {
@@ -333,7 +349,7 @@ export function MaterialCalculatorPage() {
       remember.mutate({ perimeter: 0 });
       return;
     }
-    const value = figure(raw);
+    const value = figure(raw, 'PERIMETER');
     if (value == null) {
       setPerimeterError(true);
       return;
@@ -349,13 +365,14 @@ export function MaterialCalculatorPage() {
     setErrors: (errors: Record<string, boolean>) => void,
     setValue: (value: string | undefined) => void,
   ) => {
-    const { value, errors } = encoded(inputs);
+    const question: ParameterKind = kind === 'sections' ? 'SECTION' : 'THICKNESS';
+    const { value, errors } = encoded(inputs, question);
     setErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setValue(value);
     remember.mutate(kind === 'sections'
-      ? { sections: numbers(inputs) }
-      : { thicknesses: numbers(inputs) });
+      ? { sections: numbers(inputs, question) }
+      : { thicknesses: numbers(inputs, question) });
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -607,7 +624,14 @@ export function MaterialCalculatorPage() {
             <Button
               fullWidth
               loading={toShoppingList.isPending}
-              disabled={toShoppingList.isPending || nothingPicked || badRows.size > 0}
+              // `placeholderData: keepPreviousData` leaves the PREVIOUS answer's rows on screen
+              // while a new one loads, and the overrides were cleared with the parameters — so
+              // switching waste 10 % → 15 % and tapping «до списку» at once sent the 10 % figures
+              // under a screen that already said 15 % (review P-22).
+              disabled={
+                toShoppingList.isPending || nothingPicked || badRows.size > 0
+                || calc.isPlaceholderData || calc.isFetching
+              }
               onClick={() => toShoppingList.mutate()}
             >
               🛒 {t('materials.toShoppingList')}
@@ -715,6 +739,7 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   const prefs = useQuery({
     queryKey: ['material-prefs'],
@@ -728,8 +753,15 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
   }, [stored]);
 
   const save = useMutation({
-    // Every field this card shows is sent, blanks included: a blank FORGETS the habit server-side,
-    // so omitting a cleared field would quietly keep the number he just deleted.
+    /**
+     * Only the fields he actually MOVED are sent.
+     *
+     * <p>A blank still FORGETS the habit — that is the point of sending a cleared field — but a
+     * field that has not been touched is left out entirely. Sending the whole card every time was
+     * fine until the GET failed: `isLoading` was then false, `draft` was null, every input rendered
+     * empty, and one tap on «Зберегти» told the server to forget every habit the master had
+     * (review P-23). It is also why the card now refuses to render a form it has no answers for.</p>
+     */
     mutationFn: (values: Record<string, string>) => materialsApi.savePrefs({ prefs: values }),
     onSuccess: (answer) => {
       setDraft({ ...answer.prefs });
@@ -754,6 +786,44 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
 
   const value = (key: string) => draft?.[key] ?? '';
 
+  /**
+   * The same bands the server states (`MaterialPrefs`, review B-19), asked here so a refusal lands
+   * under the field rather than as a toast over a card that still shows the number.
+   *
+   * <p>`PAINT_COVERAGE` DIVIDES: 0,5 m²/l multiplies every paint figure by eighteen and sends him
+   * for 54 litres for one room. A habit is a small correction to a shipped norm, not a free
+   * variable. A blank is always legal — it is how a habit is forgotten.</p>
+   */
+  const invalid = (key: string, raw: string): boolean => {
+    const text = raw.trim();
+    if (text === '') return false;
+    if (key === 'GKL_SHEET') return !/^\d{1,5}\s*[x×*]\s*\d{1,5}$/.test(text);
+    const n = parseDecimal(text);
+    if (!Number.isFinite(n)) return true;
+    if (key === 'PAINT_COVERAGE') return n < 3 || n > 20;
+    if (key === 'PAINT_COATS') return n < 1 || n > 4 || !Number.isInteger(n);
+    if (key === 'TILE_JOINT_MM') return n < 1 || n > 20;
+    return false;
+  };
+
+  const submit = () => {
+    const bad: Record<string, boolean> = {};
+    for (const f of fields) if (invalid(f.key, value(f.key))) bad[f.key] = true;
+    setErrors(bad);
+    if (Object.keys(bad).length > 0) return;
+    // Only what he moved. An untouched field is not an answer being re-given.
+    const changed = Object.fromEntries(
+      fields
+        .map((f) => [f.key, value(f.key).trim()] as const)
+        .filter(([key, text]) => text !== (stored?.[key] ?? '').trim()),
+    );
+    if (Object.keys(changed).length === 0) {
+      setOpen(false);
+      return;
+    }
+    save.mutate(changed);
+  };
+
   return (
     <div className="mb-4 rounded-card border border-border bg-surface p-3">
       <button
@@ -773,6 +843,14 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
             <div className="py-3">
               <Spinner />
             </div>
+          ) : prefs.isError || !draft ? (
+            // Never a form: empty fields over a failed GET read as «no habits stored», and one tap
+            // on «Зберегти» would have made that true (review P-23).
+            <ErrorState
+              error={prefs.error}
+              what={t('materials.habitsTitle')}
+              onRetry={() => void prefs.refetch()}
+            />
           ) : (
             <>
               <div className="mt-2 space-y-2">
@@ -788,10 +866,15 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
                       id={`habit-${f.key}`}
                       inputMode={f.key === 'GKL_SHEET' ? 'text' : 'decimal'}
                       value={value(f.key)}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...(prev ?? {}), [f.key]: e.target.value }))
-                      }
+                      aria-invalid={errors[f.key] ? true : undefined}
+                      onChange={(e) => {
+                        setDraft((prev) => ({ ...(prev ?? {}), [f.key]: e.target.value }));
+                        setErrors((prev) => ({ ...prev, [f.key]: false }));
+                      }}
                     />
+                    {errors[f.key] && (
+                      <p className="mt-1 text-xs text-danger">{t('materials.habitInvalid')}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -801,9 +884,7 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
                 className="mt-2"
                 loading={save.isPending}
                 disabled={save.isPending}
-                onClick={() =>
-                  save.mutate(Object.fromEntries(fields.map((f) => [f.key, value(f.key)])))
-                }
+                onClick={submit}
               >
                 {t('materials.habitsSave')}
               </Button>
@@ -868,9 +949,11 @@ function MaterialRow({
   // quantity the master had corrected to 200 кг was our arithmetic contradicting his, on the same
   // line — and the packages are the thing he actually carries to the till.
   const typed = parseDecimal(value);
+  // `Math.ceil` over a binary division over-counts on the exact case: 2.1 / 0.3 is 7.000000000000001,
+  // so «7 мішків» became 8 and the master carried one he did not need (review P-29).
   const packages =
     line.packageSize != null && line.packageSize > 0 && typed > 0
-      ? Math.ceil(typed / line.packageSize)
+      ? Math.ceil(typed / line.packageSize - 1e-9)
       : null;
   const errorId = `qty-${line.materialId}-error`;
 

@@ -6,7 +6,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { routes } from '@/lib/config.ts';
-import { formatMoneyExact, formatDate } from '@/lib/format.ts';
+import { formatMoney, formatDate } from '@/lib/format.ts';
 import type { CashEntryResponse, CashMonthTotal } from '@/api/types.ts';
 import { AddCashSheet } from './AddCashSheet.tsx';
 import {
@@ -37,9 +37,17 @@ export function CashFlowPage() {
   // The WEEK by default (master's call): «за цей тиждень» is the question he actually opens this
   // screen with. The home strip is the one exception — it shows the MONTH, so it says so in the
   // navigation state and the screen lands on exactly the window he tapped.
-  const [period, setPeriod] = useState<CashPeriod>(
-    () => cashPeriod((location.state as { period?: CashPeriodKind } | null)?.period ?? 'WEEK'),
-  );
+  const [period, setPeriod] = useState<CashPeriod>(() => {
+    const sent = location.state as
+      { period?: CashPeriodKind; window?: { from: string; to: string } } | null;
+    // A door that names its own window wins — the home strip sends the bounds the SERVER answered
+    // about, so the screen lands on exactly the figures it showed rather than on a month this
+    // device re-derives one timezone away.
+    if (sent?.window) {
+      return { kind: sent.period ?? 'MONTH', ...sent.window, monthly: false };
+    }
+    return cashPeriod(sent?.period ?? 'WEEK');
+  });
   // The custom range lives beside the period, not inside it: the two fields stay filled while he
   // switches to «Місяць» and back, so a second look at the same window is one tap, not four.
   const [range, setRange] = useState<{ from: string; to: string }>(
@@ -50,6 +58,34 @@ export function CashFlowPage() {
 
   const flow = useCashFlow(period);
   const actions = useCashActions(period);
+
+  /**
+   * A typed-in date commits only once it IS a date.
+   *
+   * <p>A `<input type="date">` reports every intermediate year on a keyboard: «0002-09-01»,
+   * «0020-09-01», «0202-09-01». Each one was a request, and each ANSWER became its own query key
+   * persisted to IndexedDB for a week; above year 9999 the whole screen went to its error state.
+   * Ten characters and a floor of 2000 is what a real window looks like (review P-45).</p>
+   *
+   * <p>A CLEARED field falls back to the OTHER bound rather than sending `''`: an empty string
+   * made the server resolve its own default month, so the screen asked about one window and
+   * displayed the answer about another.</p>
+   */
+  const commitRange = (next: { from: string; to: string }) => {
+    setRange(next);
+    const usable = (v: string) => v.length === 10 && v >= '2000-01-01' && v <= '9999-12-31';
+    const from = usable(next.from) ? next.from : next.to;
+    const to = usable(next.to) ? next.to : next.from;
+    if (usable(from) && usable(to)) setPeriod(customPeriod(from, to));
+  };
+
+  /**
+   * Which window the numbers below are about, spelled out. After drilling from YEAR into February
+   * only «Місяць» is lit, and «Місяць» alone does not say WHICH — the same gap the strip had.
+   */
+  const windowLabel = period.monthly
+    ? String(new Date(period.from + 'T00:00:00').getFullYear())
+    : t('cash.window', { from: formatDate(period.from), to: formatDate(period.to) });
 
   /**
    * «←» goes back to the door he came IN by — the home strip or the Профіль row — not always to one
@@ -73,8 +109,10 @@ export function CashFlowPage() {
 
   const failed = flow.isError && !flow.data;
 
+  // `ph-mask` on the whole screen: every figure on it is the master's own money and every row
+  // names an object (review P-25). Nothing here is layout worth watching in a replay.
   return (
-    <div className="min-h-dvh bg-canvas">
+    <div className="ph-mask min-h-dvh bg-canvas">
       <div className="mx-auto max-w-xl px-4 pb-28 pt-4 sm:px-6">
         <div className="mb-4 flex items-center gap-3">
           <button
@@ -117,6 +155,9 @@ export function CashFlowPage() {
           ))}
         </div>
 
+        {/* Which window, in words. A money screen may not show three figures with no «за коли». */}
+        <p className="mb-3 text-center text-xs text-muted">{windowLabel}</p>
+
         {/* Only while «Період» is the answer — two empty fields above every other view would be
             four taps of furniture on a screen opened to read three numbers. */}
         {period.kind === 'CUSTOM' && (
@@ -127,11 +168,7 @@ export function CashFlowPage() {
                 type="date"
                 value={range.from}
                 max={range.to}
-                onChange={(e) => {
-                  const next = { ...range, from: e.target.value };
-                  setRange(next);
-                  if (next.from) setPeriod(customPeriod(next.from, next.to));
-                }}
+                onChange={(e) => commitRange({ ...range, from: e.target.value })}
                 className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-primary"
               />
             </label>
@@ -141,11 +178,7 @@ export function CashFlowPage() {
                 type="date"
                 value={range.to}
                 min={range.from}
-                onChange={(e) => {
-                  const next = { ...range, to: e.target.value };
-                  setRange(next);
-                  if (next.to) setPeriod(customPeriod(next.from, next.to));
-                }}
+                onChange={(e) => commitRange({ ...range, to: e.target.value })}
                 className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-primary"
               />
             </label>
@@ -200,11 +233,14 @@ export function CashFlowPage() {
         </div>
       </div>
 
+      {/* The sheet closes when the write LANDED, not when it was fired: a refusal belongs under
+          the field the master has to fix (review P-20). Offline that is still instant — the op is
+          queued and `offlineMutate` resolves — so nothing waits for a van to find signal. */}
       <AddCashSheet
         open={adding}
         onClose={() => setAdding(false)}
-        onSubmit={(req) => {
-          actions.add.mutate(req);
+        onSubmit={async (req) => {
+          await actions.add.mutateAsync(req);
           setAdding(false);
         }}
       />
@@ -212,12 +248,12 @@ export function CashFlowPage() {
         open={editing != null}
         entry={editing}
         onClose={() => setEditing(null)}
-        onSubmit={(req) => {
-          if (editing) actions.update.mutate({ id: editing.id, req });
+        onSubmit={async (req) => {
+          if (editing) await actions.update.mutateAsync({ id: editing.id, req });
           setEditing(null);
         }}
-        onDelete={() => {
-          if (editing) actions.remove.mutate({ id: editing.id, kind: editing.kind });
+        onDelete={async () => {
+          if (editing) await actions.remove.mutateAsync({ id: editing.id, kind: editing.kind });
           setEditing(null);
         }}
       />
@@ -233,25 +269,25 @@ function Totals({ flow }: { flow: { income: number; expense: number; earned: num
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm text-muted">{t('cash.income')}</span>
         <span className="font-mono text-sm font-semibold tabular-nums text-success">
-          +{formatMoneyExact(flow.income)}
+          +{formatMoney(flow.income)}
         </span>
       </div>
       <div className="mt-1.5 flex items-baseline justify-between gap-2">
         <span className="text-sm text-muted">{t('cash.expense')}</span>
         <span className="font-mono text-sm font-semibold tabular-nums text-primary">
-          −{formatMoneyExact(flow.expense)}
+          −{formatMoney(flow.expense)}
         </span>
       </div>
       <div className="mt-2.5 flex items-baseline justify-between gap-2 border-t border-border pt-2.5">
         <span className="text-sm font-bold text-primary">{t('cash.earned')}</span>
         <span className="font-mono text-base font-extrabold tabular-nums text-primary">
-          {formatMoneyExact(flow.earned)}
+          {formatMoney(flow.earned)}
         </span>
       </div>
       {/* Without this the gap between «Прийшло» and «Заробив» looks like our arithmetic slipping. */}
       {flow.refunds > 0 && (
         <p className="mt-1.5 text-xs text-muted">
-          {t('cash.refundsHint', { amount: formatMoneyExact(flow.refunds) })}
+          {t('cash.refundsHint', { amount: formatMoney(flow.refunds) })}
         </p>
       )}
     </div>
@@ -273,11 +309,13 @@ function MonthList({ months, onOpen }: { months: CashMonthTotal[]; onOpen: (mont
           className="flex min-h-14 w-full items-center gap-3 border-b border-border px-3.5 text-left last:border-b-0"
         >
           <span className="text-sm font-medium text-primary">
-            {new Date(m.month).toLocaleDateString('uk-UA', { month: 'long' })}
+            {/* `new Date('2026-03-01')` is parsed as UTC, which is February everywhere west of it —
+                the row would name the month before the one it totals. */}
+            {new Date(m.month + 'T00:00:00').toLocaleDateString('uk-UA', { month: 'long' })}
           </span>
           <span className="ml-auto flex flex-shrink-0 items-baseline gap-2 font-mono text-sm tabular-nums">
-            <span className="text-success">+{formatMoneyExact(m.income)}</span>
-            <span className="text-muted">−{formatMoneyExact(m.expense)}</span>
+            <span className="text-success">+{formatMoney(m.income)}</span>
+            <span className="text-muted">−{formatMoney(m.expense)}</span>
           </span>
         </button>
       ))}
@@ -307,7 +345,7 @@ function Row({ entry, onOpen }: { entry: CashEntryResponse; onOpen: () => void }
           + (income ? 'text-success' : 'text-primary')
         }
       >
-        {income ? '+' : '−'}{formatMoneyExact(entry.amount)}
+        {income ? '+' : '−'}{formatMoney(entry.amount)}
       </span>
     </>
   );

@@ -1,0 +1,6 @@
+# The request-contract copy is compared BYTE FOR BYTE against the backend's own snapshot
+# (review B-36), and that file is built with LF endings. core.autocrlf would hand a fresh Windows
+# checkout CRLF, so the comparison could never be equal — green only on the machine whose own run
+# had rewritten it. Pinned to LF here, normalised in the test too, because a working copy that
+# predates this line is still out there. `majstr-backend/.gitattributes` carries the same rule.
+src/api/contract/*.json text eol=lf

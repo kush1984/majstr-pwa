@@ -231,7 +231,7 @@ describe('add from catalog — offline (how estimates are actually built)', () =
 });
 
 describe('markup on the picked lines — offline («Націнка на вибрані позиції»)', () => {
-  it('moves the UNIT price of every picked line, re-derives totals, queues ONE op', async () => {
+  it('moves the UNIT price of every picked line and queues the PRICE, not the percentage', async () => {
     const { qc, wrapper } = setup();
     const { result } = renderHook(() => useMarkUpItems(EID), { wrapper });
 
@@ -240,20 +240,35 @@ describe('markup on the picked lines — offline («Націнка на вибр
     });
 
     const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
-    // Rounded to the whole hryvnia on the UNIT price, the way the server rounds it — round the
-    // line total instead and the two drift apart the moment a quantity is not 1.
+    // Rounded on the UNIT price, the way the server rounds it — round the line total instead and
+    // the two drift apart the moment a quantity is not 1.
     expect(est.items[0].unitPrice).toBe(115);
     expect(est.items[0].lineTotal).toBe(230); // 2 × 115, re-derived rather than carried
     expect(est.total).toBe(230);
 
-    // ONE op for the whole selection, like the bulk delete: a replay that stopped half-way would
-    // leave him an estimate he has already stopped checking.
+    // Review P-41. «+15 %» is not idempotent: the server applied it, the answer was lost on a
+    // dying link, the op stayed queued, and the next flush applied it AGAIN — +32 %, on a sheet
+    // the master had already shown a client. A target PRICE replays as many times as it likes.
     const ops = await listOutbox();
     expect(ops).toHaveLength(1);
     expect(ops[0]).toMatchObject({
-      entity: 'estimateItemsMarkup', type: 'update', entityId: EID, deps: [EID],
+      entity: 'estimateItem', type: 'update', entityId: 'i1', deps: [EID],
     });
-    expect((ops[0].payload as { req: { itemIds: string[] } }).req.itemIds).toEqual(['i1']);
+    const payload = ops[0].payload as { req: { unitPrice: number; quantity: number } };
+    expect(payload.req.unitPrice).toBe(115);
+    expect(payload.req.quantity).toBe(2); // the whole line is restated, not just its price
+  });
+
+  it('queues nothing for a line whose price does not move', async () => {
+    const { qc, wrapper } = setup();
+    const { result } = renderHook(() => useMarkUpItems(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ itemIds: ['i1'], percent: 0, discount: false });
+    });
+
+    expect(qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!.items[0].unitPrice).toBe(100);
+    expect(await listOutbox()).toHaveLength(0);
   });
 
   it('applies a discount downwards, from the same unsigned magnitude', async () => {

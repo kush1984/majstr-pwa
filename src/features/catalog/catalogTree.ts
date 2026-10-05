@@ -62,9 +62,17 @@ export function tradeKeyOf(item: CatalogItemResponse): TradeKey {
  * that one row would be a trade he does not do. A foreign trade earns a branch only when some row
  * is stored under it.</p>
  */
-export function toTradeTree(items: readonly CatalogItemResponse[]): TradeBranch[] {
+export function toTradeTree(
+  items: readonly CatalogItemResponse[],
+  /**
+   * Every row the catalog holds, not only the ones on screen — which trades exist is a fact about
+   * the LIBRARY, and a search that happens to hide a branch must not re-file the rows that remain
+   * under it (review P-28). Defaults to `items` for callers with nothing filtered out.
+   */
+  all: readonly CatalogItemResponse[] = items,
+): TradeBranch[] {
   const stored = new Set<TradeKey>();
-  for (const item of items) stored.add(tradeKeyOf(item));
+  for (const item of all) stored.add(tradeKeyOf(item));
 
   const rows = new Map<TradeKey, BranchRow[]>();
   const push = (key: TradeKey, item: CatalogItemResponse) => {

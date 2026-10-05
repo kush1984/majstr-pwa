@@ -128,9 +128,17 @@ export function useReceiptBatch(actId: string, projectId: string) {
    * carries the row's WHOLE state, so each field sent over an answer he has already given is an
    * overwrite — including {@code returnedAmount}, which was erased back to 0 by being left out.</p>
    *
-   * <p>«Already answered» is simply «no longer what we saved a moment ago»: the server creates the
-   * row as «Чек №N» priced 0 with no date, so a field that has moved since was moved BY HIM. Same
-   * rule the single-photo read in ActReceiptsSection follows.</p>
+   * <p><b>«Already answered» is a value that is not the server's own creation default</b>, and that
+   * is the one rule both kinds of row obey. A receipt is created priced 0 with no date, so any
+   * amount or date on it was put there BY HIM. Comparing against «what we saved a moment ago»
+   * instead looked equivalent and was not, for a row that had been QUEUED (review P-24): its local
+   * snapshot is the placeholder, so the server's «Чек №N» read as an edit and beat the label read
+   * off the paper, while a `null` date against an absent one (`default-property-inclusion:
+   * non_null`) read as an edit too and dropped the date that had just been read.</p>
+   *
+   * <p>The LABEL is the one field with no sentinel — «Чек №N» is a name, not a blank — so it is
+   * answered by WHERE the label can have come from: for a queued row only the payload, which is
+   * the local snapshot; for an uploaded one, a change since we read it.</p>
    */
   const applyRead = useCallback(
     async (entry: SavedReceipt, read: ReceiptRead) => {
@@ -143,11 +151,15 @@ export function useReceiptBatch(actId: string, projectId: string) {
       const now =
         qc.getQueryData<WorkActResponse>(actKey(actId))?.receipts.find((r) => r.id === before.id)
         ?? before;
+      const typedLabel = entry.queued
+        ? (before.label.trim() || null) // the queued payload is the only place his label can be
+        : (now.label !== before.label ? now.label : null);
       await actsApi.updateReceipt(actId, before.id, {
-        label: now.label !== before.label ? now.label : (read.label ?? before.label),
-        amount: now.amount !== before.amount ? now.amount : read.amount,
-        issuedAt:
-          now.issuedAt !== before.issuedAt ? now.issuedAt : (read.issuedAt ?? before.issuedAt),
+        // Never blank: `now.label` is the server's own «Чек №N», which `@NotBlank` accepts and a
+        // placeholder's `''` did not.
+        label: typedLabel ?? read.label?.trim() ?? now.label,
+        amount: now.amount > 0 ? now.amount : read.amount,
+        issuedAt: now.issuedAt ?? read.issuedAt,
         returnedAmount: now.returnedAmount,
         // Not three-valued, unlike everything above: the identity belongs to the PHOTO, so there is
         // no «he changed it meanwhile» to preserve, and a null simply leaves it alone.
@@ -228,7 +240,16 @@ export function useReceiptBatch(actId: string, projectId: string) {
       }
 
       setProgress(null);
-      return { saved: saved.length, offline: !online, failed, unread, error };
+      // «Offline» means something actually ended up in the QUEUE. The link can die on photo 4 of
+      // 5, and `!online` — read once before the loop — then described a batch that never existed
+      // and sent the master looking for rows the server did not have (review P-32).
+      return {
+        saved: saved.length,
+        offline: saved.some((r) => r.queued),
+        failed,
+        unread,
+        error,
+      };
     },
     [actId, applyRead, invalidate, readOne],
   );

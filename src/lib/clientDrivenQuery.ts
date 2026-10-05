@@ -1,3 +1,5 @@
+import { getSyncStatus } from '@/lib/outbox/outbox.ts';
+
 /**
  * Query options for data the CLIENT can change behind the master's back.
  *
@@ -16,4 +18,25 @@
  * into a request. Offline the fetch fails fast and the cached answer stays on screen
  * (`networkMode: 'offlineFirst'`).</p>
  */
-export const CLIENT_DRIVEN_QUERY = { refetchOnWindowFocus: true } as const;
+export const CLIENT_DRIVEN_QUERY = {
+  refetchOnWindowFocus: () => !outboxBusy(),
+} as const;
+
+/**
+ * Whether the queue is mid-air — the one state in which a focus refetch must NOT fire.
+ *
+ * <p>The flush runs on the same `visibilitychange` as this refetch, and the GET usually comes back
+ * first: with the server's state, which does not yet contain the queued ops, straight over the
+ * optimistic cache. The master walked back into the kitchen and his three lines were gone — for
+ * 15 s on a good link, for two minutes on a failing op — so he typed them again, and the replay
+ * then landed the originals too (review P-42).</p>
+ *
+ * <p>Deliberately the WHOLE queue, not «ops for this query key»: an op names an entity id, not a
+ * query key, and a wrong mapping would fail in exactly the direction that costs work. Nothing is
+ * lost by waiting — the flush invalidates everything it changed when it finishes, which is a
+ * better-informed refetch than this one would have been.</p>
+ */
+function outboxBusy(): boolean {
+  const status = getSyncStatus();
+  return status.pending > 0 || status.syncing;
+}

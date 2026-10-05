@@ -34,7 +34,10 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
         className="flex w-full items-start gap-3 rounded-card border border-border bg-surface p-3.5 pr-11 text-left transition-transform active:scale-[0.99]"
       >
         <IconTile tone="brand">📁</IconTile>
-        <div className="min-w-0 flex-1">
+        {/* `ph-mask`: an object's name is a street, and the line under it is the address and the
+            client's own name. Every other surface that shows them redacts them in session replay;
+            the card they are shown on most — the dashboard and the object list — did not (P-25). */}
+        <div className="ph-mask min-w-0 flex-1">
           {/* Wraps rather than truncates. A master names objects by street or by client, so what
               tells «Квартира на Зубрівській» from «Квартира на Зеленій» sits at the END — precisely
               what an ellipsis eats first on a 375 px screen. The address line wraps for the same

@@ -104,7 +104,9 @@ export function ActionMenu({
               ? { top: pos.top, right: pos.right }
               : { top: -9999, left: -9999 }}
             className={cn(
-              'fixed z-[61] min-w-[13rem] max-w-[min(20rem,calc(100vw-2rem))]',
+              // Outside every `.ph-mask` (a portal into <body>) — and its items name documents and
+              // clients: «Поділитися кошторисом для Олени Петренко» (review P-44).
+              'ph-mask fixed z-[61] min-w-[13rem] max-w-[min(20rem,calc(100vw-2rem))]',
               'overflow-hidden rounded-2xl bg-surface py-1 shadow-card-lg ring-1 ring-black/5',
             )}
           >

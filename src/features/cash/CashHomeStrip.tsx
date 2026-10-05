@@ -30,8 +30,17 @@ export function CashHomeStrip() {
   return (
     <button
       type="button"
-      onClick={() => navigate(routes.cash, { state: { from: routes.home, period: 'MONTH' } })}
-      className="mb-6 flex min-h-11 w-full items-center gap-3 rounded-card border border-border bg-surface px-3.5 py-2.5 text-left"
+      onClick={() => navigate(routes.cash, {
+        state: {
+          from: routes.home,
+          period: 'MONTH',
+          // The window the server answered about, not a month this device re-derives. Two clocks
+          // and one timezone boundary are enough to make a strip and a screen disagree about one
+          // number, which is the one thing a money screen may not do (review P-27).
+          window: { from: summary.data.from, to: summary.data.to },
+        },
+      })}
+      className="ph-mask mb-6 flex min-h-11 w-full items-center gap-3 rounded-card border border-border bg-surface px-3.5 py-2.5 text-left"
     >
       <span className="text-base leading-none" aria-hidden>💰</span>
       <span className="truncate text-sm font-semibold text-primary">{t('cash.thisMonth')}</span>

@@ -23,16 +23,24 @@ export function useActs(projectId: string) {
   });
 }
 
+/**
+ * One act. CLIENT-DRIVEN, like the list: the client signs it in HIS browser, on his own phone, and
+ * nothing in the master's session fires (review P-38). The master switched back to a tab that
+ * still said DRAFT and went on typing into a document that had been accepted.
+ */
 export function useAct(id: string, enabled = true) {
   return useQuery({
+    ...CLIENT_DRIVEN_QUERY,
     queryKey: actKey(id),
     queryFn: () => actsApi.get(id),
     enabled: enabled && Boolean(id),
   });
 }
 
+/** Also client-driven: a signature moves «виконано раніше» on every position the act closed. */
 export function useActProgress(projectId: string, enabled = true) {
   return useQuery({
+    ...CLIENT_DRIVEN_QUERY,
     queryKey: progressKey(projectId),
     queryFn: () => actsApi.progress(projectId),
     enabled: enabled && Boolean(projectId),
@@ -71,19 +79,36 @@ export function useActWriter(id: string, projectId: string) {
   return () => invalidate(id);
 }
 
+/**
+ * Both act writes answer with the WHOLE act, and both put that answer straight into the cache
+ * before the refetch lands (review P-31).
+ *
+ * <p>The editor shows the SERVER's totals once the form is clean (P-34), so the gap between «the
+ * save returned» and «the refetch landed» was a window where it showed the previous figures under
+ * a form that had just been saved — and the receipt batch, which reads the same cache to decide
+ * what the master has already answered, read them too.</p>
+ */
 export function useUpdateActHeader(id: string, projectId: string) {
+  const qc = useQueryClient();
   const invalidate = useActWriter(id, projectId);
   return useMutation({
     mutationFn: (req: WorkActUpdateRequest) => actsApi.updateHeader(id, req),
-    onSuccess: invalidate,
+    onSuccess: (saved) => {
+      qc.setQueryData(actKey(id), saved);
+      invalidate();
+    },
   });
 }
 
 export function useReplaceActItems(id: string, projectId: string) {
+  const qc = useQueryClient();
   const invalidate = useActWriter(id, projectId);
   return useMutation({
     mutationFn: (req: WorkActItemsRequest) => actsApi.replaceItems(id, req),
-    onSuccess: invalidate,
+    onSuccess: (saved) => {
+      qc.setQueryData(actKey(id), saved);
+      invalidate();
+    },
   });
 }
 

@@ -68,6 +68,17 @@ export function parseMoney(
 }
 
 /**
+ * A quantity at the scale the server stores it — three decimals, HALF_UP, by the same string
+ * detour {@link roundMoney} takes. A subtraction of two quantities is where binary floating point
+ * shows: `3.3 - 1.1` is 2.1999999999999997, and that figure then printed into a document.
+ */
+export function roundQuantity(n: number): number {
+  const a = Math.abs(Number(n.toPrecision(15)));
+  const r = Number(`${Math.round(Number(`${a}e3`))}e-3`);
+  return n < 0 ? -r : r;
+}
+
+/**
  * The same door for a quantity: 3 decimals, matching the server's `QUANTITY_SCALE`, and `null`
  * rather than a 0 that silently drops the line out of the act.
  */

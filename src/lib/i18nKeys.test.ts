@@ -57,6 +57,34 @@ describe('translation keys', () => {
     expect(used.size).toBeGreaterThan(300);
   });
 
+  /**
+   * Keys the regex cannot see, listed by hand (review P-32).
+   *
+   * <p>A key chosen by a ternary or built by concatenation is invisible to this test, and the
+   * `estimate.qualityNote*` deletion showed what that costs: the keys went with the card, and
+   * nothing would have noticed a surviving `t()` call. So the branches of the ternaries the app
+   * actually renders are named here. One line per key, and the point is that adding a branch
+   * without adding its line is a thing a human does — which is why this is a FLOOR and the static
+   * scan above is the real guard.</p>
+   */
+  const COMPOSED_KEYS = [
+    // Both halves of «Націнка / Знижка» on the two percent sheets.
+    'estimate.markup', 'estimate.discount', 'estimate.markupPercent', 'estimate.discountPercent',
+    'estimate.markupHint', 'estimate.discountHint',
+    // The receipts warning on an act, which reads differently once the act is SENT.
+    'acts.receiptsUnpricedSummary', 'acts.receiptsUnpricedSent',
+    // «Отримав / Витратив» and the cash row's fallback label.
+    'cash.directionIncome', 'cash.directionExpense', 'cash.income', 'cash.expense',
+    // The two titles the templates delete dialog picks between.
+    'templates.deleteTitle', 'templates.hideDefaultTitle',
+    'templates.deleteMessage', 'templates.hideDefaultMessage',
+  ];
+
+  it('carries the keys the scan cannot see, in both bundles', () => {
+    const missing = COMPOSED_KEYS.filter((key) => !translated(uk, key) || !translated(en, key));
+    expect(missing).toEqual([]);
+  });
+
   it('has a Ukrainian string for every static key the app renders', () => {
     const missing = [...used].filter(([key]) => !translated(uk, key));
     expect(missing.map(([key, file]) => `${key} (${file})`)).toEqual([]);

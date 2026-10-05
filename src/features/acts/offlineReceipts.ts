@@ -36,6 +36,9 @@ export interface ActReceiptOpPayload {
   amount: number;
   issuedAt?: string | null;
   saveToPhotos?: boolean;
+  /** What the printed QR said, decoded ON THE DEVICE — the identity travels with the create. */
+  fiscalFn?: string | null;
+  fiscalId?: string | null;
   file: QueuedFile;
 }
 
@@ -73,7 +76,10 @@ export interface AddedActReceipt {
  */
 export async function addActReceipt(
   actId: string,
-  req: { id: string; amount: number; file: File; saveToPhotos?: boolean },
+  req: {
+    id: string; amount: number; file: File; saveToPhotos?: boolean;
+    fiscalFn?: string | null; fiscalId?: string | null;
+  },
 ): Promise<AddedActReceipt> {
   if (onlineManager.isOnline()) {
     try {
@@ -86,6 +92,8 @@ export async function addActReceipt(
     actId,
     amount: req.amount,
     saveToPhotos: req.saveToPhotos,
+    fiscalFn: req.fiscalFn ?? null,
+    fiscalId: req.fiscalId ?? null,
     // Downscaled before it is queued, not before it is sent: these bytes live in IndexedDB until
     // the master finds signal, and a pile of 6 MB phone photos is how a device runs out of quota
     // holding work it has not lost yet.
@@ -147,7 +155,10 @@ export function patchQueuedReceipt(
  */
 export function patchQueuedReceiptFromRead(
   id: string,
-  read: { label: string | null; amount: number; issuedAt: string | null },
+  read: {
+    label: string | null; amount: number; issuedAt: string | null;
+    fiscalFn?: string | null; fiscalId?: string | null;
+  },
 ): Promise<boolean> {
   return patchPendingCreate(ACT_RECEIPT_ENTITY, id, (raw) => {
     const payload = raw as ActReceiptOpPayload;
@@ -157,8 +168,47 @@ export function patchQueuedReceiptFromRead(
       // A queued receipt is created at 0 — «not priced yet» — so anything above it is his.
       amount: payload.amount > 0 ? payload.amount : read.amount,
       issuedAt: payload.issuedAt ?? read.issuedAt,
+      // NOT three-valued, unlike the three above: the identity belongs to the PHOTO, so there is
+      // no «he changed it meanwhile» to preserve — but a read that found no code must not erase
+      // one a previous rung did.
+      fiscalFn: read.fiscalFn ?? payload.fiscalFn ?? null,
+      fiscalId: read.fiscalId ?? payload.fiscalId ?? null,
     };
   });
+}
+
+/**
+ * How many of ONE act's receipts the phone is still carrying, asked straight at the queue.
+ *
+ * <p>Not the hook: the hook's state is a snapshot taken when the queue's size last changed, and
+ * the question «is anything left NOW» is asked immediately after a flush, before React has
+ * re-rendered anything (review P-36). A BLOCKED op does not count — flushing will never move it,
+ * so it is the master's to resolve in the sync sheet rather than something to wait for.</p>
+ */
+export async function actReceiptsStillQueued(actId: string): Promise<number> {
+  const ops = await listOutbox();
+  return ops.filter((op) => op.entity === ACT_RECEIPT_ENTITY
+    && op.type === 'create'
+    && op.status !== 'blocked'
+    && (op.payload as ActReceiptOpPayload).actId === actId).length;
+}
+
+/**
+ * Drop every queued receipt of an act that is being DELETED (review P-50).
+ *
+ * <p>Left behind, each replayed a POST against an act the server no longer has — a 404 for every
+ * photo, landing in the sync sheet as work the master must resolve, for a draft he threw away.
+ * Returns how many were dropped, which is also how many photos are being discarded with it.</p>
+ */
+export async function dropQueuedReceiptsOfAct(actId: string): Promise<number> {
+  const ops = await listOutbox();
+  const mine = ops.filter((op) => op.entity === ACT_RECEIPT_ENTITY
+    && (op.payload as ActReceiptOpPayload).actId === actId);
+  let dropped = 0;
+  for (const op of mine) {
+    if (await dropPendingCreate(ACT_RECEIPT_ENTITY, op.entityId)) dropped += 1;
+  }
+  return dropped;
 }
 
 /** Delete a receipt that has not synced yet — dropping the op IS deleting the row. */
@@ -176,22 +226,30 @@ export function dropQueuedReceipt(id: string): Promise<boolean> {
  */
 export function usePendingActReceipts(actId: string): {
   queued: Map<string, QueuedActReceipt>;
+  /** Ops the SERVER refused. Shown, never counted — see below. */
+  rejected: Map<string, QueuedActReceipt>;
   refresh: () => void;
 } {
   const { pending, blocked } = useSyncStatus();
   const [version, setVersion] = useState(0);
   const [queued, setQueued] = useState<Map<string, QueuedActReceipt>>(new Map());
+  const [rejected, setRejected] = useState<Map<string, QueuedActReceipt>>(new Map());
 
   useEffect(() => {
     let alive = true;
     void listOutbox().then((ops) => {
       if (!alive) return;
-      setQueued((prev) => {
+      const mine = ops.filter((op) => op.entity === ACT_RECEIPT_ENTITY
+        && op.type === 'create'
+        && (op.payload as ActReceiptOpPayload).actId === actId);
+      const build = (
+        prev: Map<string, QueuedActReceipt>,
+        want: (status: string) => boolean,
+      ) => {
         const next = new Map<string, QueuedActReceipt>();
-        for (const op of ops) {
-          if (op.entity !== ACT_RECEIPT_ENTITY || op.type !== 'create') continue;
+        for (const op of mine) {
+          if (!want(op.status)) continue;
           const payload = op.payload as ActReceiptOpPayload;
-          if (payload.actId !== actId) continue;
           const before = prev.get(op.entityId);
           next.set(op.entityId, {
             id: op.entityId,
@@ -200,7 +258,13 @@ export function usePendingActReceipts(actId: string): {
           });
         }
         return next;
-      });
+      };
+      // Two piles, because they are two different answers (review P-36). A receipt still TRYING is
+      // money the master has spent and will reach the act, so it is shown and counted. One the
+      // server REFUSED will never move on its own — counting it into «До сплати» billed the client
+      // for a receipt that was never going to exist, on a document he could sign at any second.
+      setQueued((prev) => build(prev, (status) => status !== 'blocked'));
+      setRejected((prev) => build(prev, (status) => status === 'blocked'));
     });
     return () => {
       alive = false;
@@ -208,7 +272,7 @@ export function usePendingActReceipts(actId: string): {
   }, [actId, pending, blocked, version]);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
-  return { queued, refresh };
+  return { queued, rejected, refresh };
 }
 
 /**

@@ -108,6 +108,29 @@
   input[type='radio'],
   input[type='submit'] {
     touch-action: manipulation;
+  }
+
+  /*
+   * The callout menu, suppressed everywhere a long press is a mis-tap rather than an intention —
+   * but NOT on the three link kinds a long press is the whole point of (review P-32). A note's
+   * «📞 +380…» is a `tel:` link the master holds down to copy the number into another app, and
+   * «Написати в Telegram» the same; `-webkit-touch-callout: none` on every `a` took that away with
+   * nothing in its place. The press feedback and the click behaviour are untouched.
+   */
+  button,
+  a:not([href^='tel:']):not([href^='mailto:']):not([href^='https://t.me']),
+  label,
+  summary,
+  select,
+  [role='button'],
+  [role='checkbox'],
+  [role='menuitem'],
+  [role='switch'],
+  [role='tab'],
+  input[type='button'],
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='submit'] {
     -webkit-touch-callout: none;
   }
 
@@ -148,7 +171,7 @@
    */
   button:active:not(:disabled),
   a:active,
-  label:active,
+  label:active:not(:has(input:not([type='checkbox']):not([type='radio']))):not(:has(textarea)):not(:has(select)),
   [role='button']:active,
   [role='checkbox']:active,
   [role='menuitem']:active,
@@ -157,3 +180,10 @@
     opacity: 0.65;
   }
 }
+/*
+ * Why that `:has()` chain (review P-32): every sheet in this app wraps its field in a bare <label>
+ * (so does `FormField`), so `label:active` fired on a tap INSIDE the field and dimmed the caption,
+ * the border and the text being typed — on every keystroke-sized press, which reads as the screen
+ * flickering. A label that wraps a CHECKBOX or a radio keeps the feedback: there the label IS the
+ * control's tap target and dimming it is exactly right.
+ */

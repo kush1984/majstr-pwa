@@ -2,6 +2,13 @@
   "AddCatalogItemsBatchRequest": {
     "items": "array"
   },
+  "AddCatalogItemsBatchRequest.Entry": {
+    "catalogItemId": "string",
+    "id": "string?",
+    "quantity": "number",
+    "sortOrder": "number?",
+    "trade": "string?"
+  },
   "AddTemplatesRequest": {
     "trades": "array"
   },
@@ -21,6 +28,15 @@
     "estimate": "object?",
     "templates": "array"
   },
+  "ApplyTemplatesRequest.EstimateCreateRequest": {
+    "name": "string?",
+    "notes": "string?",
+    "validUntil": "string?"
+  },
+  "ApplyTemplatesRequest.TemplatePick": {
+    "itemIds": "array?",
+    "templateId": "string"
+  },
   "CashEntryRequest": {
     "amount": "number",
     "category": "string?",
@@ -38,6 +54,13 @@
     "items": "array",
     "trade": "string?"
   },
+  "CatalogImportCommitRequest.CommitItem": {
+    "name": "string",
+    "policy": "string?",
+    "price": "number",
+    "type": "string",
+    "unit": "string"
+  },
   "CatalogItemRequest": {
     "category": "string?",
     "customTradeId": "string?",
@@ -49,6 +72,10 @@
   },
   "CatalogItemsOrderRequest": {
     "items": "array"
+  },
+  "CatalogItemsOrderRequest.Line": {
+    "category": "string?",
+    "id": "string"
   },
   "CheckoutRequest": {
     "autoRenew": "boolean?",
@@ -75,6 +102,14 @@
   "DictationCommitRequest": {
     "items": "array"
   },
+  "DictationCommitRequest.CommitItem": {
+    "category": "string?",
+    "name": "string",
+    "quantity": "number",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
+  },
   "DictationParseRequest": {
     "text": "string"
   },
@@ -96,7 +131,7 @@
     "validUntil": "string?"
   },
   "EstimateDuplicateRequest": {
-    "discount": "boolean?",
+    "discount": "boolean",
     "itemIds": "array?",
     "markupPercent": "number",
     "name": "string?"
@@ -106,6 +141,16 @@
     "estimateName": "string?",
     "items": "array",
     "projectId": "string"
+  },
+  "EstimateImportCommitRequest.CommitItem": {
+    "catalogPolicy": "string?",
+    "category": "string?",
+    "name": "string",
+    "quantity": "number",
+    "toCatalog": "boolean?",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
   },
   "EstimateItemFromCatalogRequest": {
     "quantity": "number",
@@ -129,12 +174,16 @@
     "itemIds": "array"
   },
   "EstimateItemsMarkupRequest": {
-    "discount": "boolean?",
+    "discount": "boolean",
     "itemIds": "array",
     "percent": "number"
   },
   "EstimateItemsOrderRequest": {
     "items": "array"
+  },
+  "EstimateItemsOrderRequest.Line": {
+    "category": "string?",
+    "id": "string"
   },
   "EstimateUpdateRequest": {
     "name": "string?",
@@ -161,6 +210,10 @@
   },
   "MaterialApplyRequest": {
     "materials": "array"
+  },
+  "MaterialApplyRequest.MaterialLineRequest": {
+    "materialId": "string",
+    "quantity": "number"
   },
   "MaterialLineRequest": {
     "materialId": "string",
@@ -253,6 +306,17 @@
   "ProjectImportCommitRequest": {
     "rooms": "array"
   },
+  "ProjectImportCommitRequest.Room": {
+    "floor": "string?",
+    "items": "array",
+    "name": "string"
+  },
+  "ProjectImportCommitRequest.Room.MeasurementItemRequest": {
+    "name": "string",
+    "payload": "object",
+    "sortOrder": "number?",
+    "type": "string"
+  },
   "ProjectPaymentRequest": {
     "amount": "number",
     "dueDate": "string?",
@@ -279,6 +343,11 @@
   "ProjectTriageRequest": {
     "sheets": "array"
   },
+  "ProjectTriageRequest.Sheet": {
+    "id": "string?",
+    "name": "string?",
+    "text": "string?"
+  },
   "PushSubscribeRequest": {
     "auth": "string",
     "endpoint": "string",
@@ -295,6 +364,14 @@
   },
   "ReceiptItemsCommitRequest": {
     "items": "array"
+  },
+  "ReceiptItemsCommitRequest.CommitItem": {
+    "category": "string?",
+    "name": "string",
+    "quantity": "number",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
   },
   "ReferralSourceUpdateRequest": {
     "source": "string?"
@@ -348,6 +425,16 @@
   "SketchCommitRequest": {
     "rooms": "array"
   },
+  "SketchCommitRequest.Room": {
+    "items": "array",
+    "name": "string"
+  },
+  "SketchCommitRequest.Room.MeasurementItemRequest": {
+    "name": "string",
+    "payload": "object",
+    "sortOrder": "number?",
+    "type": "string"
+  },
   "TemplateItemRequest": {
     "name": "string",
     "type": "string",
@@ -384,6 +471,16 @@
   },
   "WorkActItemsRequest": {
     "items": "array"
+  },
+  "WorkActItemsRequest.Line": {
+    "category": "string?",
+    "estimateId": "string?",
+    "estimateItemId": "string?",
+    "name": "string",
+    "quantity": "number",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
   },
   "WorkActReceiptRequest": {
     "amount": "number",

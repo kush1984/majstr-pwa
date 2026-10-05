@@ -12,9 +12,24 @@ const number2 = new Intl.NumberFormat('uk-UA', {
 });
 const number3 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 3 });
 
-/** "61 070 ₴" — whole hryvnias, the default for cards and totals. */
+/**
+ * "61 070 ₴", and "12 345,50 ₴" when there ARE kopecks — ONE rule for money on screen.
+ *
+ * <p>It used to round to whole hryvnia everywhere, which lied in two directions at once (review
+ * P-43, P-46). A unit price of 0,40 ₴ read «0 ₴/шт» and 12,50 ₴ read «13 ₴/м²» beside a «125 ₴»
+ * that was exact; an estimate total showed «12 346 ₴» where the PDF the client signs says
+ * 12 345,50; and the economy panel's rounded parts did not add up to its rounded sum. Hiding
+ * kopecks that are not there keeps the common case short — which is why it was rounded in the
+ * first place — without ever showing a figure the master cannot find on his own paper.</p>
+ */
 export function formatMoney(value: number | null | undefined): string {
-  return `${number0.format(value ?? 0)} ₴`;
+  const n = value ?? 0;
+  return `${(hasKopecks(n) ? number2 : number0).format(n)} ₴`;
+}
+
+/** Whether a figure has anything after the comma, asked at the scale money is stored in. */
+function hasKopecks(value: number): boolean {
+  return Math.round(value * 100) % 100 !== 0;
 }
 
 /** "61 070,00 ₴" — with kopecks, for places that need exactness. */
@@ -22,10 +37,11 @@ export function formatMoneyExact(value: number | null | undefined): string {
   return `${number2.format(value ?? 0)} ₴`;
 }
 
-/** "61 070" — no currency glyph, for a row inside a list whose currency is already established
- *  by a header above it (e.g. a compact payments row). */
+/** "61 070" — the same rule without the glyph, for a row inside a list whose currency is already
+ *  established by a header above it (e.g. a compact payments row). */
 export function formatAmount(value: number | null | undefined): string {
-  return number0.format(value ?? 0);
+  const n = value ?? 0;
+  return (hasKopecks(n) ? number2 : number0).format(n);
 }
 
 /** Plain number with uk grouping, e.g. unit price "200" or quantity "18,5". */

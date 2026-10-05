@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  clearOutbox, dropBlockedOps, enqueue, flushOutbox, getSyncStatus, listBlockedOps, listOutbox,
-  discardForeignOps,
+  clearOutbox, dropBlockedOps, dropPendingCreate, dropPendingEntity, enqueue, flushOutbox,
+  getSyncStatus, listBlockedOps, listOutbox, discardForeignOps, patchPendingCreate,
   MAX_ATTEMPTS, outboxCount, registerOutboxHandler, retryBlockedOps, setOutboxErrorClassifier,
 } from './outbox.ts';
 import { tokens } from '@/lib/tokens.ts';
@@ -24,7 +24,7 @@ describe('outbox engine', () => {
 
     const result = await flushOutbox();
 
-    expect(result).toEqual({ synced: 2, failed: 0 });
+    expect(result).toEqual({ synced: 2, failed: 0, blocked: 0 });
     expect(log).toEqual(['project:p1', 'estimate:e1']);
     expect(await outboxCount()).toBe(0);
   });
@@ -39,7 +39,7 @@ describe('outbox engine', () => {
     await enqueue({ entityId: 'e1', entity: 'estimate', type: 'create', payload: {}, deps: ['p1'] });
 
     const first = await flushOutbox();
-    expect(first).toEqual({ synced: 0, failed: 1 });
+    expect(first).toEqual({ synced: 0, failed: 1, blocked: 0 });
     expect(estimateRan).toBe(false);            // child never ran while its parent is unsynced
     expect(await outboxCount()).toBe(2);        // both still queued
     const [failed] = await listOutbox();
@@ -49,7 +49,7 @@ describe('outbox engine', () => {
     // Network heals → the next flush lands the parent, which unblocks the child.
     parentFails = false;
     const second = await flushOutbox();
-    expect(second).toEqual({ synced: 2, failed: 0 });
+    expect(second).toEqual({ synced: 2, failed: 0, blocked: 0 });
     expect(estimateRan).toBe(true);
     expect(await outboxCount()).toBe(0);
   });
@@ -247,5 +247,60 @@ describe('owner tagging — the queue outlives a logout without leaking between 
 
     expect(await discardForeignOps(null)).toBe(0);
     expect(await outboxCount()).toBe(0);
+  });
+});
+
+/**
+ * A row that never reached the server has no second fact about it — only the one the create will
+ * carry. These two helpers are how a correction and a delete reach a queued create instead of
+ * stacking a round trip behind it, and both must know when it is too late to try.
+ */
+describe('reaching a create that has not replayed yet', () => {
+  it('drops EVERY queued op of the entity, not only its create', async () => {
+    // Review P-18: add offline, tick, delete. Dropping the create alone left the tick queued, and
+    // it replayed as a PATCH on a row the server had never heard of — a 404 the master then had to
+    // resolve in the sync sheet, for a row he had already thrown away.
+    await enqueue({ entityId: 'row-1', entity: 'shoppingItem', type: 'create', payload: {}, deps: [] });
+    await enqueue({ entityId: 'row-1', entity: 'shoppingItem', type: 'update', payload: { bought: true }, deps: [] });
+    await enqueue({ entityId: 'row-2', entity: 'shoppingItem', type: 'create', payload: {}, deps: [] });
+
+    expect(await dropPendingEntity('shoppingItem', 'row-1')).toBe(true);
+
+    expect((await listOutbox()).map((o) => o.entityId)).toEqual(['row-2']);
+  });
+
+  it('answers false with no pending create, so the caller deletes it online instead', async () => {
+    // The row IS on the server (its create drained); an update queued behind it is a real op about
+    // a real row, and dropping it silently would throw the master's edit away.
+    await enqueue({ entityId: 'row-1', entity: 'shoppingItem', type: 'update', payload: {}, deps: [] });
+
+    expect(await dropPendingEntity('shoppingItem', 'row-1')).toBe(false);
+    expect(await outboxCount()).toBe(1);
+  });
+
+  it('refuses to touch an op whose request is already in the air', async () => {
+    // Review P-31. The flush sends a snapshot and deletes the op only once the handler resolves,
+    // so between those two moments an edit folded into the payload would change nothing the server
+    // will ever see, and a drop would leave the row ON the server with nothing left to delete it.
+    let release = () => {};
+    const sent = new Promise<void>((resolve) => { release = resolve; });
+    let seenDuringFlight: { patched: boolean; dropped: boolean; droppedAll: boolean } | null = null;
+
+    registerOutboxHandler('inflight', async () => {
+      seenDuringFlight = {
+        patched: await patchPendingCreate('inflight', 'x1', (p) => p),
+        dropped: await dropPendingCreate('inflight', 'x1'),
+        droppedAll: await dropPendingEntity('inflight', 'x1'),
+      };
+      await sent;
+    });
+    await enqueue({ entityId: 'x1', entity: 'inflight', type: 'create', payload: {}, deps: [] });
+
+    const flush = flushOutbox();
+    release();
+    await flush;
+
+    expect(seenDuringFlight).toEqual({ patched: false, dropped: false, droppedAll: false });
+    expect(await outboxCount()).toBe(0); // and the op itself landed
   });
 });

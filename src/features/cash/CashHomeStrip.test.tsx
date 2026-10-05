@@ -61,6 +61,15 @@ describe('CashHomeStrip', () => {
     // Two things ride the tap: `from`, so «←» over there comes back HERE and not to some other
     // door, and `period`, so it lands on the window this strip just showed — the strip sums a
     // MONTH while the screen otherwise opens on the week.
-    expect(navigateMock).toHaveBeenCalledWith('/finance', { state: { from: '/', period: 'MONTH' } });
+    // It hands over the WINDOW the server answered about, not a month the device re-derives:
+    // two clocks either side of a timezone boundary are enough to make the strip and the screen
+    // disagree about one number (review P-27).
+    expect(navigateMock).toHaveBeenCalledWith('/finance', {
+      state: {
+        from: '/',
+        period: 'MONTH',
+        window: { from: '2026-09-01', to: '2026-09-30' },
+      },
+    });
   });
 });

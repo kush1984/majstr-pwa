@@ -165,10 +165,12 @@ export function DashboardPage() {
         {t('common.addEstimate')}
       </Button>
 
-      {/* What is left to buy, per object. Renders nothing when there is nothing to buy. */}
-      {/* One LINE, not a card: this screen is already long, and money is a weekly glance. */}
+      {/* One LINE, not a card: this screen is already long. The MONTH, not the week — a week here
+          was too small a window to be worth a glance (master's call), and the tap carries that
+          window into «Мої гроші» so the two surfaces cannot disagree about one figure. */}
       <CashHomeStrip />
 
+      {/* What is left to buy, per object. Renders nothing when there is nothing to buy. */}
       <ShoppingHomeCard />
 
       {isEmpty ? (

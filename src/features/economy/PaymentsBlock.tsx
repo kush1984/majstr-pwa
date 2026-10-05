@@ -6,9 +6,9 @@ import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
-import { formatMoney, formatAmount } from '@/lib/format.ts';
+import { formatMoney, formatAmount, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity, roundMoney } from '@/lib/decimal.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import {
@@ -97,6 +97,29 @@ type ReceivedNode =
   | { kind: 'stage'; key: string; label: string; amount: number; date: string | null; stage: ProjectPaymentResponse }
   | { kind: 'unplanned'; key: string; label: string; amount: number; date: string | null; receipt: PaymentReceiptResponse };
 
+/**
+ * «30 40 30», «30;40;30», «30, 40, 30», «33,3 33,3 33,4» — the shares a master types himself.
+ *
+ * <p>The comma used to be the SEPARATOR, which is the one thing it cannot be on a Ukrainian
+ * keyboard: «33,3, 33,3, 33,4» was cut into six numbers and the sheet previewed a 109 % split
+ * (review P-49). The same shape V145's `B-49` found on the calculator's per-position parameter,
+ * and the same answer: separate on what is unambiguously a separator — `;` or whitespace — and let
+ * a comma be a decimal. A bare «30,40,30» with no spaces in it is still the integer-share shape
+ * nobody would write as one number, so that one token falls back to commas.</p>
+ *
+ * <p>An unreadable share DROPS rather than counting as 0 %, and the sheet shows what was read plus
+ * its sum, so «я ж написав сто» is answered on screen instead of by the server.</p>
+ */
+export function parseShares(raw: string): number[] {
+  const trimmed = raw.trim();
+  if (trimmed === '') return [];
+  let tokens = trimmed.split(/[;\s]+/).map((part) => part.replace(/^,+|,+$/g, ''));
+  if (tokens.length === 1 && tokens[0].includes(',')) tokens = tokens[0].split(',');
+  return tokens
+    .map((token) => parseQuantity(token, { max: 100 }))
+    .filter((n): n is number => n !== null);
+}
+
 function lastReceiptDate(stage: ProjectPaymentResponse): string | null {
   if (!stage.receipts.length) return null;
   return stage.receipts.reduce((max, r) => (r.receivedAt > max ? r.receivedAt : max), stage.receipts[0].receivedAt);
@@ -107,7 +130,13 @@ function groupPayments(summary: PaymentsSummaryResponse): { received: ReceivedNo
   const upcoming: ProjectPaymentResponse[] = [];
   summary.payments.forEach((stage) => {
     if (stage.status === 'RECEIVED') {
-      received.push({ kind: 'stage', key: stage.id, label: stage.purpose, amount: stage.amount, date: lastReceiptDate(stage), stage });
+      // What ARRIVED, not what was planned (review P-49). A client who paid 5 000 against a 4 000
+      // stage left a row reading «4 000» in a list whose own total said 5 000 — and the row is the
+      // journal entry the master checks that total against.
+      received.push({
+        kind: 'stage', key: stage.id, label: stage.purpose,
+        amount: stage.received, date: lastReceiptDate(stage), stage,
+      });
     } else {
       upcoming.push(stage);
     }
@@ -1028,12 +1057,8 @@ function SplitSheet({ open, onClose, objectId }: { open: boolean; onClose: () =>
   const preview = usePreviewSplit(objectId);
   const commit = useCommitSplit(objectId);
 
-  // The separator IS the comma, so a share is written «30 40 30» or «33.3, 33.3, 33.4» — a dot
-  // decimal here, and an unreadable share drops out rather than counting as 0 %.
-  const customPercents = customText
-    .split(',')
-    .map((s) => parseQuantity(s, { max: 100 }))
-    .filter((n): n is number => n !== null);
+  const customPercents = parseShares(customText);
+  const sharesSum = roundMoney(customPercents.reduce((sum, n) => sum + n, 0));
 
   const onPreview = async () => {
     setRows(null);
@@ -1092,6 +1117,19 @@ function SplitSheet({ open, onClose, objectId }: { open: boolean; onClose: () =>
               onChange={(e) => { setCustomText(e.target.value); setRows(null); }}
               placeholder={t('economy.customPercentsPlaceholder')}
             />
+            {/* What we READ, and what it adds up to — the figure the server will refuse if it is
+                not 100. Said here, where he can fix it, instead of after the request. */}
+            {customPercents.length > 0 && (
+              <span className={cn(
+                'mt-1 block text-xs',
+                sharesSum === 100 ? 'text-muted' : 'text-amber-700',
+              )}>
+                {t('economy.customPercentsRead', {
+                  shares: customPercents.map((n) => formatNumber(n, 1)).join(' + '),
+                  sum: formatNumber(sharesSum, 1),
+                })}
+              </span>
+            )}
           </label>
         )}
 
