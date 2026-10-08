@@ -43,7 +43,7 @@
     "direction": "string",
     "happenedOn": "string?",
     "kind": "string?",
-    "materialRefund": "boolean?",
+    "materialRefund": "boolean",
     "note": "string?"
   },
   "CatalogBulkDeleteRequest": {

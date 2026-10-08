@@ -459,6 +459,18 @@ describe('PaymentsBlock — material coming back is not payment for work (B-65)'
     expect(within(screen.getByRole('dialog')).queryByRole('checkbox')).toBeNull();
   });
 
+  // Review B-102: a stage is a share of the WORK. A refund for tiles counted against it closed a
+  // stage with work still owed — the server now refuses the pair, so the sheet does not offer it.
+  it('never offers the refund tick on a stage', () => {
+    const stage = plannedRow({ purpose: 'Аванс', received: 0, remaining: 6800, status: 'PLANNED' });
+    renderBlock(summary([stage]), 4200);
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    expect(within(screen.getByRole('dialog')).queryByRole('checkbox')).toBeNull();
+  });
+
   it('sends the tick with the receipt, so the object can do the split at all', async () => {
     vi.mocked(paymentsApi.addReceipt).mockResolvedValue([]);
     renderBlock(summary(), 4200);

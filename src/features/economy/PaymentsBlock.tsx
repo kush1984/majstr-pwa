@@ -746,7 +746,8 @@ function ReceivePaymentSheet({
       label: stageId ? null : label.trim(),
       amount: amountValue,
       receivedAt: date,
-      materialRefund: refund,
+      // A refund never pays a stage (review B-102): the server refuses the pair.
+      materialRefund: refund && !stageId,
       resolution: resolution ?? null,
     };
     try {
@@ -851,7 +852,9 @@ function ReceivePaymentSheet({
               гроші» — the screen he opens least, and the object's card was the one drawing the
               wrong conclusion from the answer. Offered only where there IS a receivable: on an
               object with no till receipts the question has no true answer and is pure noise. */}
-          {materialsOutstanding > 0 && (
+          {/* Never on a stage (review B-102): a stage is a share of the WORK, and a refund for
+              tiles counted against it closed a stage with work still owed. */}
+          {materialsOutstanding > 0 && !stageId && (
             <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
               <input
                 type="checkbox"
@@ -935,7 +938,9 @@ function EditReceiptSheet({
           amount: value,
           receivedAt: date,
           label: receipt.planPaymentId ? null : label.trim(),
-          materialRefund: refund,
+          // A stage receipt may only LOSE a tick an older build put there (review B-102): keeping it
+          // is sent as «leave it alone», which the server accepts, while «true» would be refused.
+          materialRefund: receipt.planPaymentId && refund ? undefined : refund,
         },
       });
       onClose();
@@ -975,7 +980,7 @@ function EditReceiptSheet({
           </label>
           {/* A wrongly ticked receipt must be untickable, so a row that already carries the tick
               keeps the control even once the receivable it settled is down to nothing. */}
-          {(materialsOutstanding > 0 || refund) && (
+          {(refund || (materialsOutstanding > 0 && !receipt?.planPaymentId)) && (
             <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
               <input
                 type="checkbox"
