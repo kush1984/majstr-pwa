@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { initSyncStatus, registerOutboxHandler, setOutboxErrorClassifier, startOutboxSync } from './outbox.ts';
+import { initSyncStatus, registerOutboxHandler, setOutboxErrorClassifier, shouldRefetchAfterFlush, startOutboxSync } from './outbox.ts';
 import { clientsApi } from '@/api/clients.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
@@ -404,12 +404,11 @@ export function initOutbox(qc: QueryClient): () => void {
   });
 
   initSyncStatus(); // publish the queued-op count (leftovers from a prior offline session)
-  // On reconnect, replay the queue; refetch whenever the flush CHANGED anything — landed, gave up,
-  // or was refused. Only `synced > 0` used to trigger it, so a write the server rejected left its
-  // optimistic row standing: «Отримано 20 000» the master could read, on money that would never
-  // exist (review P-47). A refusal is precisely the moment the screen must go back to the server's
-  // own figures, with the sync sheet explaining why.
+  // On reconnect, replay the queue; refetch when the flush landed or was refused AND nothing that
+  // can still land is left (`shouldRefetchAfterFlush`). A refusal must send the screen back to the
+  // server's own figures, with the sync sheet explaining why (review P-47); a merely failing op
+  // must not, or its optimistic row vanishes on every retry (review P-54).
   return startOutboxSync((r) => {
-    if (r.synced > 0 || r.blocked > 0 || r.failed > 0) void qc.invalidateQueries();
+    if (shouldRefetchAfterFlush(r)) void qc.invalidateQueries();
   });
 }

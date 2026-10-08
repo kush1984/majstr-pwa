@@ -1127,6 +1127,7 @@
     "positionWithUnit": "{{name}}, {{unit}}",
     "recalculate": "Recalculate",
     "paramsRemembered": "Your figures for this estimate are remembered — change them and recalculate if needed.",
+    "paramsNotSaved": "Could not remember your figures — check the connection and tap «Recalculate» again.",
     "habitsTitle": "My habits",
     "habitsHint": "We remember these across every object and rescale the norms to them. An empty field forgets one.",
     "habitCoverage": "Paint: m² per litre in one coat",

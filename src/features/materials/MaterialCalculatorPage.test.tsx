@@ -57,8 +57,7 @@ function answer(over: Partial<MaterialCalculationResponse> = {}): MaterialCalcul
   };
 }
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   const router = createMemoryRouter(
     [
       { path: '/estimates/:id/materials', element: <MaterialCalculatorPage /> },
@@ -616,6 +615,83 @@ describe('MaterialCalculatorPage', () => {
       sections: undefined,
       thicknesses: undefined,
     });
+  });
+
+  /** One plaster position answered at `thickness` mm — what the server sends once V142 holds it. */
+  function answeredPlaster(itemId: string, thickness: number) {
+    return line({
+      name: 'Суміш штукатурна',
+      unit: 'M2',
+      sources: [
+        {
+          estimateItemId: itemId,
+          name: `Штукатурення ${itemId}`,
+          unit: 'M2',
+          quantity: 30,
+          qtyPerUnit: 0.85,
+          normId: 'n1',
+          ownNorm: false,
+          basis: 'THICKNESS',
+          param: thickness,
+          amount: 30 * 0.85 * thickness,
+        },
+      ],
+    });
+  }
+
+  /**
+   * Review P-57. Calculations are persisted for a week, and the key this screen opens on every visit
+   * still held the answer from BEFORE the last save: seeded off that, the suggestion filled «15»
+   * over his saved 25, and the next «Перерахувати» stored 15 back over it.
+   */
+  it('fills the fields from the fresh answer, never from a stale cached one', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['materials', 'est-1', 10, null, null, null], answer({
+      materials: [],
+      parameters: [{
+        parameter: 'THICKNESS', materialName: 'Суміш штукатурна', estimateItemId: 'e1',
+        positionName: 'Штукатурення e1', suggested: 15,
+      }],
+    }));
+    calculate.mockResolvedValue(answer({
+      materials: [answeredPlaster('e1', 25)],
+      answers: { perimeter: null, sections: {}, thicknesses: { e1: 25 } },
+    }));
+    renderPage(qc);
+
+    expect(await screen.findByDisplayValue('25')).toBeTruthy();
+    expect(screen.queryByDisplayValue('15')).toBeFalsy();
+  });
+
+  /** Review P-57: the card holds every figure on screen, and saving one used to send them all —
+   *  another device's answers as this one last saw them, unconfirmed suggestions included. */
+  it('remembers only the figure the master changed', async () => {
+    calculate.mockResolvedValue(answer({
+      materials: [answeredPlaster('e1', 25), answeredPlaster('e2', 30)],
+      answers: { perimeter: null, sections: {}, thicknesses: { e1: 25, e2: 30 } },
+    }));
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Штукатурення e2, мм'), { target: { value: '35' } });
+    fireEvent.click(screen.getByText('Перерахувати'));
+
+    await waitFor(() => expect(saveParams).toHaveBeenCalledWith('est-1', { thicknesses: { e2: 35 } }));
+  });
+
+  it('does not claim it remembered a figure the server refused to keep', async () => {
+    saveParams.mockRejectedValue(new Error('offline'));
+    calculate.mockResolvedValue(answer({
+      materials: [answeredPlaster('e1', 25)],
+      answers: { perimeter: null, sections: {}, thicknesses: { e1: 25 } },
+    }));
+    renderPage();
+
+    expect(await screen.findByText(/Запамʼятали ваші числа/)).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText('Штукатурення e1, мм'), { target: { value: '30' } });
+    fireEvent.click(screen.getByText('Перерахувати'));
+
+    await waitFor(() => expect(saveParams).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText(/Запамʼятали ваші числа/)).toBeFalsy());
   });
 
   /**

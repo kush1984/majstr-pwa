@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -29,6 +29,13 @@ interface AskedPosition {
   suggested?: number | null;
   /** The figure is already in the answer — the card shows it so it can be changed, not asked for. */
   answered?: boolean;
+}
+
+/** What this screen last put into the fields itself — a field still holding it is untouched. */
+interface Filled {
+  perimeter: string;
+  sections: Record<string, string>;
+  thicknesses: Record<string, string>;
 }
 
 /** The two variants of every word on a parameter card: still asking, or showing what he answered. */
@@ -196,6 +203,35 @@ function strings(values: Record<string, number>): Record<string, string> {
   return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)]));
 }
 
+/**
+ * Re-seed the fields from a NEW set of stored answers, but only the ones nobody has touched since
+ * this screen last filled them (review P-57): an answer another device saved, or the one this
+ * device just saved, must reach a field still showing our previous fill — and must never overwrite
+ * what the master is typing.
+ */
+function reseed(
+  current: Record<string, string>,
+  filled: Record<string, string>,
+  next: Record<string, string>,
+): Record<string, string> {
+  const out = { ...current };
+  for (const key of new Set([...Object.keys(filled), ...Object.keys(next)])) {
+    const untouched = current[key] === undefined || current[key] === filled[key];
+    if (!untouched) continue;
+    if (next[key] !== undefined) out[key] = next[key];
+    else if (filled[key] !== undefined) delete out[key];
+  }
+  return out;
+}
+
+/** Only the keys whose figure differs from what the server already holds (0 = «no answer»). */
+function changedOnly(
+  all: Record<string, number>,
+  stored: Record<string, number> | undefined,
+): Record<string, number> {
+  return Object.fromEntries(Object.entries(all).filter(([k, v]) => v !== (stored?.[k] ?? 0)));
+}
+
 /** The server's own `@Digits(12, 3)` on a material quantity — anything past it is a 400. */
 const MAX_QUANTITY = 999_999_999.999;
 
@@ -251,25 +287,36 @@ export function MaterialCalculatorPage() {
   const materials = useMemo(() => data?.materials ?? [], [data]);
 
   /*
-   * His own figures into the fields, ONCE, off the first answer that arrives. The calculation that
-   * brought them already used them, so nothing is re-requested — this is so the card SHOWS what it
-   * was answered with and can be corrected, which is the half that made remembering them safe.
+   * His own figures into the fields, off an answer FETCHED SINCE THIS SCREEN OPENED. The calculation
+   * that brought them already used them, so nothing is re-requested — this is so the card SHOWS
+   * what it was answered with and can be corrected, which is the half that made remembering them
+   * safe.
    *
-   * A field he has already touched wins: the answer can arrive late on a slow connection, and
-   * overwriting what he is typing would be worse than not seeding at all. Declared before the
-   * suggestion effect below for the same reason — that one refills nothing it finds filled, and an
-   * answered position must count as filled.
+   * Never off the persisted cache (review P-57): calculations are kept for a week, and the base key
+   * opened on every visit still carried the answers from BEFORE the last save. Seeded once from
+   * that, the suggestion filled «15» over his saved 25, the fresh answer arrived and changed
+   * nothing, and the next «Перерахувати» stored 15 — across two devices, over the other's answer.
+   * So: fresh data only, and every later set of answers re-seeds the fields still showing what this
+   * screen put there. A field he has touched always wins.
+   *
+   * Declared before the suggestion effect below, which waits for `seeded`: an answered position
+   * must count as filled before a suggestion may fill it.
    */
+  const fresh = calc.isFetchedAfterMount && !calc.isPlaceholderData;
+  const filled = useRef<Filled>({ perimeter: '', sections: {}, thicknesses: {} });
   useEffect(() => {
-    if (seeded || !data?.answers) return;
-    const answers = data.answers;
+    if (!fresh || !data) return;
+    const answers = data.answers ?? { sections: {}, thicknesses: {} };
+    const perimeterNext = answers.perimeter != null ? String(answers.perimeter) : '';
+    const sectionsNext = strings(answers.sections);
+    const thicknessesNext = strings(answers.thicknesses);
+    const before = filled.current;
+    setPerimeterInput((prev) => (prev === '' || prev === before.perimeter ? perimeterNext : prev));
+    setSectionInputs((prev) => reseed(prev, before.sections, sectionsNext));
+    setThicknessInputs((prev) => reseed(prev, before.thicknesses, thicknessesNext));
+    filled.current = { perimeter: perimeterNext, sections: sectionsNext, thicknesses: thicknessesNext };
     setSeeded(true);
-    if (answers.perimeter != null) {
-      setPerimeterInput((prev) => (prev === '' ? String(answers.perimeter) : prev));
-    }
-    setSectionInputs((prev) => ({ ...strings(answers.sections), ...prev }));
-    setThicknessInputs((prev) => ({ ...strings(answers.thicknesses), ...prev }));
-  }, [data, seeded]);
+  }, [data, fresh]);
 
   // What the last SUCCESSFUL answer asked for, and what it was already answered with. The
   // parameters ride the query KEY, so a refused request is a different query holding no data at
@@ -310,17 +357,20 @@ export function MaterialCalculatorPage() {
    * A field he has touched is never refilled, an emptied one included: «» is an answer.
    */
   useEffect(() => {
+    if (!seeded) return; // his stored answer first — a suggestion only fills what is still empty
     setThicknessInputs((prev) => {
       const next = { ...prev };
       let changed = false;
       for (const p of thicknessPositions) {
         if (p.suggested == null || prev[p.estimateItemId] !== undefined) continue;
         next[p.estimateItemId] = String(p.suggested);
+        // Ours, not his: a later stored answer may replace it (see `reseed`).
+        filled.current.thicknesses[p.estimateItemId] = next[p.estimateItemId];
         changed = true;
       }
       return changed ? next : prev;
     });
-  }, [thicknessPositions]);
+  }, [thicknessPositions, seeded]);
 
   /*
    * Tapping «Порахувати» is what makes an answer his, so that is where it is remembered — not on
@@ -331,22 +381,26 @@ export function MaterialCalculatorPage() {
    * A PATCH, one card at a time. Sending all three would store the thickness suggestions still
    * sitting pre-filled and unconfirmed in their fields (V137) the moment he answered the perimeter.
    *
-   * Nothing is said when the save fails, and nothing needs to be: the calculation itself is a server
-   * GET, so a screen that cannot reach the server has no figures on it to remember. The answer is
-   * invalidated because a 0 DELETES the row while the query key stops carrying that question — the
-   * calculation would otherwise go on using an answer that is gone.
+   * Only the keys that DIFFER from what the server holds are sent (review P-57): the card holds
+   * every figure on screen, and device B saving Y used to send A's X back as B last saw it —
+   * unconfirmed suggestions included. A failed save says so; «Запамʼятали» used to show regardless,
+   * because the figure on screen came back from the query string, not from the store. The answer
+   * is invalidated because a 0 DELETES the row while the query key stops carrying that question.
    */
   const remember = useMutation({
     mutationFn: (req: MaterialParamsRequest) => materialsApi.saveParams(id, req),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['materials', id] }),
+    onError: () => toast.error(t('materials.paramsNotSaved')),
   });
+  const rememberedHonestly = !remember.isPending && !remember.isError;
 
   const applyPerimeter = () => {
     const raw = perimeterInput.trim();
+    const stored = data?.answers?.perimeter ?? 0;
     if (raw === '') {
       setPerimeterError(false);
       setPerimeter(undefined);
-      remember.mutate({ perimeter: 0 });
+      if (stored !== 0) remember.mutate({ perimeter: 0 });
       return;
     }
     const value = figure(raw, 'PERIMETER');
@@ -356,7 +410,7 @@ export function MaterialCalculatorPage() {
     }
     setPerimeterError(false);
     setPerimeter(value);
-    remember.mutate({ perimeter: value });
+    if (value !== stored) remember.mutate({ perimeter: value });
   };
 
   const applyPerPosition = (
@@ -370,9 +424,9 @@ export function MaterialCalculatorPage() {
     setErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setValue(value);
-    remember.mutate(kind === 'sections'
-      ? { sections: numbers(inputs, question) }
-      : { thicknesses: numbers(inputs, question) });
+    const changed = changedOnly(numbers(inputs, question), data?.answers?.[kind]);
+    if (Object.keys(changed).length === 0) return;
+    remember.mutate(kind === 'sections' ? { sections: changed } : { thicknesses: changed });
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -500,11 +554,11 @@ export function MaterialCalculatorPage() {
                   aria-describedby={perimeterError ? 'perimeter-error' : undefined}
                 />
               </div>
-              <Button variant="secondary" onClick={applyPerimeter}>
+              <Button variant="secondary" onClick={applyPerimeter} disabled={remember.isPending}>
                 {perimeterAnswered ? t('materials.recalculate') : t('materials.perimeterApply')}
               </Button>
             </div>
-            {perimeterAnswered && (
+            {perimeterAnswered && rememberedHonestly && (
               <p className="mt-2 text-[11px] text-muted">{t('materials.paramsRemembered')}</p>
             )}
             {perimeterError && (
@@ -524,6 +578,8 @@ export function MaterialCalculatorPage() {
           onApply={() =>
             applyPerPosition('sections', sectionInputs, setSectionErrors, setSections)
           }
+          busy={remember.isPending}
+          rememberedHonestly={rememberedHonestly}
           labels={{
             title: t('materials.sectionTitle'),
             titleSet: t('materials.sectionTitleSet'),
@@ -545,6 +601,8 @@ export function MaterialCalculatorPage() {
           onApply={() =>
             applyPerPosition('thicknesses', thicknessInputs, setThicknessErrors, setThicknesses)
           }
+          busy={remember.isPending}
+          rememberedHonestly={rememberedHonestly}
           labels={{
             title: t('materials.thicknessTitle'),
             titleSet: t('materials.thicknessTitleSet'),
@@ -657,6 +715,8 @@ function PerPositionAsk({
   errors,
   onInput,
   onApply,
+  busy,
+  rememberedHonestly,
   labels,
 }: {
   idPrefix: string;
@@ -665,6 +725,10 @@ function PerPositionAsk({
   errors: Record<string, boolean>;
   onInput: (estimateItemId: string, value: string) => void;
   onApply: () => void;
+  /** A save is in the air — a second tap would race it with the figures it is replacing. */
+  busy: boolean;
+  /** False while a save is pending or after it failed: «Запамʼятали» must not claim what failed. */
+  rememberedHonestly: boolean;
   labels: AskLabels;
 }) {
   const { t } = useTranslation();
@@ -714,8 +778,8 @@ function PerPositionAsk({
           answers, his own — kept from last time — afterwards. */}
       {pending
         ? suggested && <p className="mt-2 text-[11px] text-muted">{labels.suggested}</p>
-        : <p className="mt-2 text-[11px] text-muted">{labels.remembered}</p>}
-      <Button variant="secondary" fullWidth className="mt-2" onClick={onApply}>
+        : rememberedHonestly && <p className="mt-2 text-[11px] text-muted">{labels.remembered}</p>}
+      <Button variant="secondary" fullWidth className="mt-2" onClick={onApply} disabled={busy}>
         {pending ? labels.apply : labels.applySet}
       </Button>
     </div>

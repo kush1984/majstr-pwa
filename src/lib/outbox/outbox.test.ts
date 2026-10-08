@@ -4,6 +4,7 @@ import {
   clearOutbox, dropBlockedOps, dropPendingCreate, dropPendingEntity, enqueue, flushOutbox,
   getSyncStatus, listBlockedOps, listOutbox, discardForeignOps, patchPendingCreate,
   MAX_ATTEMPTS, outboxCount, registerOutboxHandler, retryBlockedOps, setOutboxErrorClassifier,
+  shouldRefetchAfterFlush,
 } from './outbox.ts';
 import { tokens } from '@/lib/tokens.ts';
 
@@ -193,6 +194,52 @@ describe('outbox engine', () => {
 
     await flushOutbox();
     expect(childRan).toBe(false); // nothing was released to fire at a non-existent parent
+  });
+
+  // Review P-55: an op waiting behind a refusal stays `pending` until the master resolves the sync
+  // sheet. It cannot land on its own, so it must not count as work in the air.
+  it('an op held behind a blocked one is pending but NOT runnable', async () => {
+    setOutboxErrorClassifier(() => 'other');
+    registerOutboxHandler('estimateItem', async (op) => {
+      if (op.type === 'update' && (op.payload as { price?: number }).price) throw new Error('409 signed');
+    });
+    await enqueue({ entityId: 'x', entity: 'estimateItem', type: 'update', payload: { price: 10 }, deps: [] });
+    await enqueue({ entityId: 'x', entity: 'estimateItem', type: 'update', payload: { qty: 2 }, deps: [] });
+    await enqueue({ entityId: 'y', entity: 'estimateItem', type: 'update', payload: { qty: 1 }, deps: ['x'] });
+
+    await flushOutbox();
+
+    expect(getSyncStatus()).toMatchObject({ blocked: 1, pending: 2, runnable: 0, syncing: false });
+  });
+
+  // Review P-54: a refetch while an op is merely FAILING answers without it and wipes its
+  // optimistic row on every retry; a refusal still refetches (P-47), and so does a drained queue.
+  it('a flush asks for a refetch only once nothing that can still land is left', async () => {
+    let down = true;
+    registerOutboxHandler('payment', async (op) => { if (down && op.entityId === 'p2') throw new Error('503'); });
+    await enqueue({ entityId: 'p1', entity: 'payment', type: 'create', payload: {}, deps: [] });
+    await enqueue({ entityId: 'p2', entity: 'payment', type: 'create', payload: {}, deps: [] });
+
+    const partial = await flushOutbox();
+    expect(partial).toEqual({ synced: 1, failed: 1, blocked: 0 });
+    expect(shouldRefetchAfterFlush(partial)).toBe(false);
+
+    down = false;
+    const drained = await flushOutbox();
+    expect(shouldRefetchAfterFlush(drained)).toBe(true);
+  });
+
+  it('a refusal refetches even while ops behind it wait for the master', async () => {
+    setOutboxErrorClassifier(() => 'limit');
+    registerOutboxHandler('project', async () => { throw new Error('403 limit'); });
+    registerOutboxHandler('estimate', async () => { /* never reached */ });
+    await enqueue({ entityId: 'p1', entity: 'project', type: 'create', payload: {}, deps: [] });
+    await enqueue({ entityId: 'e1', entity: 'estimate', type: 'create', payload: {}, deps: ['p1'] });
+
+    const result = await flushOutbox();
+
+    expect(result.blocked).toBe(1);
+    expect(shouldRefetchAfterFlush(result)).toBe(true);
   });
 
   it('clearOutbox empties the queue', async () => {

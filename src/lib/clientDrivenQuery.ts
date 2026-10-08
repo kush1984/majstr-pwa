@@ -38,5 +38,9 @@ export const CLIENT_DRIVEN_QUERY = {
  */
 function outboxBusy(): boolean {
   const status = getSyncStatus();
-  return status.pending > 0 || status.syncing;
+  // `runnable`, not `pending`: an op waiting behind a blocked one stays pending until the master
+  // resolves the sync sheet, and a gate on it shut this refetch app-wide for that long — a SIGNED
+  // estimate or act then surfaced only through a push (review P-55). Nothing held there can land
+  // on its own, so there is nothing for the refetch to race.
+  return status.runnable > 0 || status.syncing;
 }

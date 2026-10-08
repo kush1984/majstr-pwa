@@ -48,6 +48,13 @@ export interface SyncStatus {
   pending: number;
   /** Ops the server permanently rejected (e.g. over the FREE limit) — need a user decision. */
   blocked: number;
+  /**
+   * The part of `pending` that can still reach the server on its own: not blocked, and not waiting
+   * (transitively) behind a blocked op. An op held by a refusal stays `pending` until the master
+   * resolves the sync sheet, so `pending > 0` can last forever — which is why a gate on it shut
+   * the focus refetch app-wide and a client's signature went unseen (review P-55).
+   */
+  runnable: number;
   /** A flush is in progress right now. */
   syncing: boolean;
 }
@@ -61,8 +68,9 @@ export function setOutboxErrorClassifier(fn: (e: unknown) => OutboxErrorKind): v
 
 let cachedPending = 0;
 let cachedBlocked = 0;
+let cachedRunnable = 0;
 let syncing = false;
-let statusSnapshot: SyncStatus = { pending: 0, blocked: 0, syncing: false };
+let statusSnapshot: SyncStatus = { pending: 0, blocked: 0, runnable: 0, syncing: false };
 const statusListeners = new Set<() => void>();
 
 export function getSyncStatus(): SyncStatus {
@@ -75,7 +83,7 @@ export function subscribeSyncStatus(cb: () => void): () => void {
 }
 
 function emitStatus(): void {
-  statusSnapshot = { pending: cachedPending, blocked: cachedBlocked, syncing };
+  statusSnapshot = { pending: cachedPending, blocked: cachedBlocked, runnable: cachedRunnable, syncing };
   statusListeners.forEach((l) => l());
 }
 
@@ -86,15 +94,37 @@ function setSyncing(v: boolean): void {
   }
 }
 
-/** Re-count the queue from Dexie (pending vs blocked) and publish if it changed. Never throws. */
+/**
+ * Every entity a blocked op holds back: the blocked ones themselves, every later op on them, and —
+ * transitively — everything depending on one. The same closure `dropBlockedOps` deletes.
+ */
+function heldEntities(all: OutboxOp[]): Set<string> {
+  const held = new Set<string>(all.filter((o) => o.status === 'blocked').map((o) => o.entityId));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const op of all) {
+      if (held.has(op.entityId)) continue;
+      if (op.deps.some((d) => held.has(d))) {
+        held.add(op.entityId);
+        grew = true;
+      }
+    }
+  }
+  return held;
+}
+
+/** Re-count the queue from Dexie (pending vs blocked vs runnable) and publish if it changed. Never throws. */
 async function refreshPending(): Promise<void> {
   try {
-    const total = await outboxDb.ops.count();
-    const blocked = await outboxDb.ops.where('status').equals('blocked').count();
-    const pending = total - blocked;
-    if (pending !== cachedPending || blocked !== cachedBlocked) {
+    const all = await outboxDb.ops.toArray();
+    const blocked = all.filter((o) => o.status === 'blocked').length;
+    const pending = all.length - blocked;
+    const held = heldEntities(all);
+    const runnable = all.filter((o) => o.status !== 'blocked' && !held.has(o.entityId)).length;
+    if (pending !== cachedPending || blocked !== cachedBlocked || runnable !== cachedRunnable) {
       cachedPending = pending;
       cachedBlocked = blocked;
+      cachedRunnable = runnable;
       emitStatus();
     }
   } catch {
@@ -119,7 +149,9 @@ export async function enqueue(op: NewOutboxOp): Promise<void> {
     createdAt: op.createdAt ?? Date.now(),
   });
   cachedPending += 1;
+  cachedRunnable += 1; // optimistic for the synchronous readers; the re-count below corrects it
   emitStatus();
+  void refreshPending();
 }
 
 /**
@@ -285,23 +317,9 @@ export async function retryBlockedOps(): Promise<{ synced: number; failed: numbe
  */
 export async function dropBlockedOps(): Promise<string[]> {
   const all = await outboxDb.ops.toArray();
-  const doomed = new Set<string>(
-    all.filter((o) => o.status === 'blocked').map((o) => o.entityId),
-  );
-
   // Transitive closure: an op dies if it targets a doomed entity (a later edit of the same
-  // row) or depends on one. Repeat until nothing new is added — a grandchild reaches the
-  // dropped parent only through its parent.
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const op of all) {
-      if (doomed.has(op.entityId)) continue;
-      if (op.deps.some((d) => doomed.has(d))) {
-        doomed.add(op.entityId);
-        grew = true;
-      }
-    }
-  }
+  // row) or depends on one — a grandchild reaches the dropped parent only through its parent.
+  const doomed = heldEntities(all);
 
   const seqs = all
     .filter((o) => doomed.has(o.entityId) && o.seq !== undefined)
@@ -325,6 +343,8 @@ export async function clearOutbox(): Promise<void> {
     /* IndexedDB unavailable — nothing to clear. */
   }
   cachedPending = 0;
+  cachedBlocked = 0;
+  cachedRunnable = 0;
   emitStatus();
 }
 
@@ -347,6 +367,7 @@ export async function discardForeignOps(ownerId: string | null): Promise<number>
     const remaining = all.length - foreign.length;
     cachedPending = remaining;
     emitStatus();
+    void refreshPending(); // the blocked/runnable split of what survived
     return remaining;
   } catch {
     /* IndexedDB unavailable — treat as an empty queue rather than blocking the login. */
@@ -443,6 +464,19 @@ export async function flushOutbox(): Promise<FlushResult> {
     await refreshPending(); // publish the post-flush queue size
   }
   return { synced, failed: failedEntityIds.size, blocked };
+}
+
+/**
+ * Whether a finished flush should send the screens back to the server's figures.
+ *
+ * <p>Only once nothing that can still land is left. A refetch while an op is merely FAILING (a
+ * 503, a half-open link) answers with server state that does not hold that op yet, straight over
+ * its optimistic row — the line vanished on every 15 s / 30 s / 60 s / 2 min retry, the master
+ * typed it again, and the replay later landed both (review P-54). A refusal still refetches (the
+ * point of P-47): ops held behind it are not runnable, so they do not keep the screen waiting.</p>
+ */
+export function shouldRefetchAfterFlush(result: FlushResult): boolean {
+  return (result.synced > 0 || result.blocked > 0) && getSyncStatus().runnable === 0;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
@@ -24,6 +24,12 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   const [url, setUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [busy, setBusy] = useState<'copy' | 'email' | null>(null);
+  // Every caller passes an inline `onClose`, so a dependency on it re-ran the publish on each parent
+  // render — and the publish itself invalidates the act, which re-renders the parent: a PUT per
+  // refetch for as long as the sheet stayed open, each taking the row lock a portal signature needs
+  // (review P-53). The effect reads the latest callback through a ref and depends on the act alone.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) { setUrl(null); return; }
@@ -39,10 +45,10 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         void qc.invalidateQueries({ queryKey: ['act', actId] });
         void qc.invalidateQueries({ queryKey: ['acts'] });
       })
-      .catch((err) => { if (alive) { toast.error(toAppError(err).message); onClose(); } })
+      .catch((err) => { if (alive) { toast.error(toAppError(err).message); onCloseRef.current(); } })
       .finally(() => { if (alive) setPublishing(false); });
     return () => { alive = false; };
-  }, [open, actId, onClose, qc]);
+  }, [open, actId, qc]);
 
   const onCopy = async () => {
     setBusy('copy');

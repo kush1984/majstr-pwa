@@ -13,13 +13,17 @@ vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), error: vi.fn(
 
 // Publishing flips DRAFT→SENT, so the sheet invalidates the act it just changed (review P-50) —
 // which needs a real client behind it.
+// One client per test, like the app's single one: a client minted per render would itself change the
+// effect's dependencies and hide whether the sheet re-publishes.
+let client: QueryClient;
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    {children}
-  </QueryClientProvider>
+  <QueryClientProvider client={client}>{children}</QueryClientProvider>
 );
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+});
 
 describe('ActShareSheet', () => {
   it('publishes the act on open and shows the share link', async () => {
@@ -31,6 +35,20 @@ describe('ActShareSheet', () => {
     // Honest wording — a confirmation of acceptance, not a legal-equivalence claim.
     expect(screen.getByText(/підтвердити приймання робіт/i)).toBeTruthy();
     expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
+  });
+
+  // Review P-53: callers pass an inline `onClose`, and the publish invalidates the act, which
+  // re-renders the parent — so a dependency on the callback published once per refetch, forever.
+  it('publishes ONCE per opening, however often the parent re-renders', async () => {
+    vi.mocked(actPortalApi.publish).mockResolvedValue({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
+
+    const { rerender } = render(<ActShareSheet actId="a1" open onClose={() => {}} />, { wrapper });
+    await screen.findByDisplayValue(/\?a=TOK/);
+    rerender(<ActShareSheet actId="a1" open onClose={() => {}} />);
+    rerender(<ActShareSheet actId="a1" open onClose={() => {}} />);
+    await screen.findByDisplayValue(/\?a=TOK/);
+
+    expect(actPortalApi.publish).toHaveBeenCalledTimes(1);
   });
 
   it('does not publish while closed', () => {
