@@ -7,7 +7,7 @@ import { Select } from '@/components/Select.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
 import { CatalogAutocomplete } from './CatalogAutocomplete.tsx';
-import { parseDecimal, parseMoney } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import {
   ITEM_TYPE_OPTIONS,
   UNIT_OPTIONS,
@@ -156,7 +156,7 @@ export function ItemForm({
   // The field is a positive magnitude; a «Від кошторису» (or frozen) line may carry a «−» sign
   // (a discount).
   const pct = (isPercent && percentCanBeNegative && percentMinus ? -1 : 1)
-    * (parseDecimal(watch('quantity')) || 0);
+    * (parseQuantity(watch('quantity'), { allowZero: true }) ?? 0);
   const baseLine = siblings.find((s) => s.id === baseItemId) ?? null;
   // «Від кошторису» base = the subtotal of every line of THIS line's type that is not itself a
   // «% від кошторису» — the exact rule EstimateMath uses server-side (a WORK percent measures works,
@@ -165,14 +165,17 @@ export function ItemForm({
   const totalBase = siblings
     .filter((s) => s.type === watchedType
       && !(s.unit === 'PERCENT' && (s.percentBaseKind ?? 'MANUAL') === 'TOTAL'))
-    .reduce((sum, s) => sum + (s.lineTotal ?? 0), 0);
-  const baseAmount = baseKind === 'TOTAL' ? totalBase : (baseLine?.lineTotal ?? 0);
+    .map((s) => s.lineTotal ?? 0);
+  const totalBaseSum = sumMoney(totalBase);
+  const baseAmount = baseKind === 'TOTAL' ? totalBaseSum : (baseLine?.lineTotal ?? 0);
   const percentPreview = (() => {
-    const result = formatMoney(Math.round(((baseAmount * pct) / 100) * 100) / 100);
+    // roundMoney, not Math.round (review P-66): Math.round ties toward +∞, so a negative «%» line
+    // previewed a kopeck off what the server then stored (12 345,50 × −5 % → −617,27 vs −617,28).
+    const result = formatMoney(roundMoney((baseAmount * pct) / 100));
     if (baseKind === 'TOTAL') {
       const scope = t(watchedType === 'WORK'
         ? 'estimate.percentScopeWorks' : 'estimate.percentScopeMaterials');
-      return t('estimate.percentPreviewTotal', { pct, scope, base: formatMoney(totalBase), result });
+      return t('estimate.percentPreviewTotal', { pct, scope, base: formatMoney(totalBaseSum), result });
     }
     return baseLine
       ? t('estimate.percentPreviewItem', {
@@ -197,6 +200,19 @@ export function ItemForm({
       setError('unitPrice', { message: t('validation.badNumber') });
       return;
     }
+    // Submit the figures the validators PARSED (review P-58): validation read «1'200» with
+    // parseMoney while the submit read it with parseDecimal → NaN, which went offline into the
+    // queue, printed «NaN ₴» and blocked the replay.
+    const quantity = parseQuantity(v.quantity, { allowZero: true });
+    const unitPrice = isPercent ? frozenBase : parseMoney(v.unitPrice, { allowZero: true });
+    if (quantity === null) {
+      setError('quantity', { message: t('validation.badNumber') });
+      return;
+    }
+    if (unitPrice === null) {
+      setError('unitPrice', { message: t('validation.badNumber') });
+      return;
+    }
     const req: EstimateItemRequest = {
       type: v.type,
       name: v.name.trim(),
@@ -204,12 +220,11 @@ export function ItemForm({
       unit: v.unit,
       // The field is a positive magnitude; a «Від кошторису» (or frozen) «−» makes the percent
       // negative (a discount). «Від позиції» is always a positive markup.
-      quantity: isPercent && percentCanBeNegative && percentMinus
-        ? -parseDecimal(v.quantity) : parseDecimal(v.quantity),
+      quantity: isPercent && percentCanBeNegative && percentMinus ? -quantity : quantity,
       // A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
       // another sum. A FROZEN (MANUAL) line's price IS the base sum it was frozen against, and
       // stays directly editable — there is no live base to derive it from any more.
-      unitPrice: isPercent ? frozenBase : parseDecimal(v.unitPrice),
+      unitPrice,
       measurementRefs: measurementRefs.length > 0 ? measurementRefs : undefined,
       quantityManual,
       // Only a percentage line records a base; anything else sends none, whatever is in state.

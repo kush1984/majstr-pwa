@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn.ts';
 import { routes } from '@/lib/config.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity, roundMoney, roundQuantity } from '@/lib/decimal.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { estimateImportApi } from '@/api/estimateImport.ts';
@@ -44,8 +44,12 @@ function toDrafts(items: EstimateImportParseResponse['items']): Draft[] {
     key: keySeq++,
     name: it.name,
     unit: it.unit ?? '',
-    quantity: it.quantity != null ? String(it.quantity) : '',
-    price: it.unitPrice != null ? String(it.unitPrice) : '',
+    // Seeded at the scale the server stores (review P-58): the model's 1234.5678 or a four-decimal
+    // m³ was refused by the cell's own reader, and the row went red over a figure nobody typed. A
+    // negative price is no estimate line at all (the server refuses it), so it arrives blank — to be
+    // priced — rather than refused.
+    quantity: it.quantity != null ? String(roundQuantity(it.quantity)) : '',
+    price: it.unitPrice != null && it.unitPrice >= 0 ? String(roundMoney(it.unitPrice)) : '',
     type: it.type,
     category: it.category ?? '',
     include: true,

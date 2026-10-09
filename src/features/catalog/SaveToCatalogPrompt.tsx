@@ -6,7 +6,7 @@ import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { parseMoney } from '@/lib/decimal.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useCatalogCategories, useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
 import type { ItemType, Trade, Unit } from '@/api/types.ts';
@@ -48,6 +48,13 @@ export function SaveToCatalogPrompt({
   const [price, setPrice] = useState(item.unitPrice != null ? String(item.unitPrice) : '');
 
   const onAdd = async () => {
+    // The same reader as every money field (review P-58): `parseDecimal` let «1'200» through as NaN.
+    // Blank is still 0 — a template position carries no price, and that is the ordinary case here.
+    const defaultPrice = price.trim() === '' ? 0 : parseMoney(price, { allowZero: true });
+    if (defaultPrice === null) {
+      toast.error(t('validation.badNumber'));
+      return;
+    }
     try {
       await createCatalog.mutateAsync({
         name: item.name,
@@ -55,7 +62,7 @@ export function SaveToCatalogPrompt({
         trade: showTrade ? trade : 'OTHER',
         type: item.type,
         unit: item.unit,
-        defaultPrice: parseDecimal(price),
+        defaultPrice,
       });
       toast.success(t('estimate.savedToCatalog'));
       onClose();

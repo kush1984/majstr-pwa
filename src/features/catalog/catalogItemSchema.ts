@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { roundMoney } from '@/lib/decimal.ts';
+import { parseMoney } from '@/lib/decimal.ts';
 import i18n from '@/lib/i18n.ts';
 import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
@@ -17,10 +17,9 @@ export const UNIT_OPTIONS: readonly Unit[] = UNITS;
 const priceString = z
   .string()
   .min(1, i18n.t('validation.enterPrice'))
-  .refine((s) => {
-    const n = Number(s.replace(',', '.'));
-    return Number.isFinite(n) && n > 0;
-  }, i18n.t('validation.priceTooLow'));
+  // The same reader as every money field (review P-58): `Number` refused «1 200» and passed
+  // «0,004» as a price the server then rounded to 0.
+  .refine((s) => parseMoney(s) !== null, i18n.t('validation.priceTooLow'));
 
 export const catalogItemSchema = z.object({
   name: z
@@ -44,7 +43,7 @@ export const catalogItemSchema = z.object({
 
 export type CatalogItemFormValues = z.infer<typeof catalogItemSchema>;
 
-/** "1 234,50" / "1234.5" → 1234.5, rounded the way the SERVER rounds (`roundMoney`, review P-39). */
+/** "1 234,50" / "1234.5" → 1234.5 through `parseMoney` (review P-58); NaN when the field is not a price. */
 export function parsePrice(s: string): number {
-  return roundMoney(Number(s.replace(',', '.')));
+  return parseMoney(s) ?? Number.NaN;
 }

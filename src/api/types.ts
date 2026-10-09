@@ -359,6 +359,8 @@ export interface PortalEstimateFlag {
   name: string | null;
   status: EstimateStatus;
   createdAt: string;
+  /** Signature portal: the master ticked it. Economy portal: signed and counted — what the client
+   *  sees, never a pick (review B-103). */
   visible: boolean;
 }
 

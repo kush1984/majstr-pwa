@@ -1,3 +1,4 @@
+import { roundMoney } from '@/lib/decimal.ts';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { economyApi } from '@/api/economy.ts';
 import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
@@ -215,27 +216,30 @@ export function useAddReceipt(objectId: string) {
           };
           patchSummary(qc, objectId, (s) => {
             if (!req.planPaymentId) {
+              // In kopecks (review P-59): 4 000,30 − 1 000,10 is 3000.2000000000003 in floats, and
+              // that figure then pre-filled a field its own reader refuses.
               return {
-                ...s, received: s.received + req.amount, remaining: Math.max(0, s.remaining - paysWork),
-                workPaid: s.workPaid + paysWork,
-                materialRefunds: s.materialRefunds + (refund ? req.amount : 0),
+                ...s, received: roundMoney(s.received + req.amount),
+                remaining: Math.max(0, roundMoney(s.remaining - paysWork)),
+                workPaid: roundMoney(s.workPaid + paysWork),
+                materialRefunds: roundMoney(s.materialRefunds + (refund ? req.amount : 0)),
                 unplannedReceipts: [...s.unplannedReceipts, receipt],
               };
             }
             const payments = s.payments.map((p) => {
               if (p.id !== req.planPaymentId) return p;
-              const received = p.received + paysWork;
+              const received = roundMoney(p.received + paysWork);
               return {
-                ...p, received, remaining: Math.max(0, p.amount - received),
+                ...p, received, remaining: Math.max(0, roundMoney(p.amount - received)),
                 status: deriveStageStatus(p.amount, received, p.dueDate),
                 receipts: [...p.receipts, { ...receipt, label: null, displayLabel: p.purpose }],
               };
             });
             return {
-              ...s, payments, received: s.received + req.amount,
-              remaining: Math.max(0, s.remaining - paysWork),
-              workPaid: s.workPaid + paysWork,
-              materialRefunds: s.materialRefunds + (refund ? req.amount : 0),
+              ...s, payments, received: roundMoney(s.received + req.amount),
+              remaining: Math.max(0, roundMoney(s.remaining - paysWork)),
+              workPaid: roundMoney(s.workPaid + paysWork),
+              materialRefunds: roundMoney(s.materialRefunds + (refund ? req.amount : 0)),
             };
           });
           return [receipt];
@@ -254,12 +258,16 @@ export function useAddReceipt(objectId: string) {
 
 /** TRANSFER creates TWO receipts from one submission (this stage's closing amount + the surplus
  *  on the next open stage) — doesn't fit the outbox's one-entity-per-op model, so it's online-only,
- *  same as split preview/commit. */
+ *  same as split preview/commit.
+ *
+ *  It still carries a client id (review P-61): the server answers a replay under the same id with
+ *  BOTH rows it wrote (B-69), and without one a retry after a lost response recorded the overflow a
+ *  second time. The caller holds the id for the life of one submission, so a second tap is a replay. */
 export function useAddReceiptTransfer(objectId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (req: PaymentReceiptRequest) => {
-      const result = await paymentsApi.addReceipt(objectId, req);
+    mutationFn: async ({ req, id }: { req: PaymentReceiptRequest; id: string }) => {
+      const result = await paymentsApi.addReceipt(objectId, req, id);
       await qc.refetchQueries({ queryKey: economyKeys.economy(objectId), type: 'active' }); // see useAddReceipt
       return result;
     },

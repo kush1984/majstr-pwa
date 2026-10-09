@@ -9,7 +9,7 @@ import { dictationApi } from '@/api/dictation.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseDecimal } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
 import { cn } from '@/lib/cn.ts';
 import { useSpeechDictation } from '@/hooks/useSpeechDictation.ts';
 import { useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
@@ -49,10 +49,15 @@ function capitalizeFirst(s: string): string {
   return trimmed.charAt(0).toLocaleUpperCase('uk-UA') + trimmed.slice(1);
 }
 
-/** Parse a decimal field to a finite number, blank/garbage → 0 (master may fill later). */
-function num(s: string): number {
-  const n = parseDecimal(s);
-  return Number.isFinite(n) ? n : 0;
+/**
+ * A field the master may still leave blank (he fills it later) — blank is 0. Anything else goes
+ * through the same reader as every money/quantity field (review P-58); garbage is NaN, which blocks
+ * the commit instead of becoming a silent 0 ₴ line.
+ */
+function num(s: string, kind: 'money' | 'quantity'): number {
+  if (s.trim() === '') return 0;
+  const n = kind === 'money' ? parseMoney(s, { allowZero: true }) : parseQuantity(s, { allowZero: true });
+  return n ?? Number.NaN;
 }
 
 interface Draft {
@@ -206,12 +211,13 @@ export function DictationSheet({
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...p } : d)));
 
   const included = drafts.filter((d) => d.include);
-  const unpriced = included.filter((d) => num(d.price) <= 0).length;
+  const unpriced = included.filter((d) => !(num(d.price, 'money') > 0)).length;
   // Empty / 0 / negative price blocks the commit end-to-end (master feedback 2026-09-04: «з пустою
   // ціною чи 0 чи мінусом числом не зберігаємо нічого»). All-or-nothing: one bad row disables the
   // whole «Додати», the top-of-review banner names how many, and the backend `@DecimalMin(inclusive
   // = false)` refuses it belt-and-braces if the button is ever bypassed.
-  const hasBad = included.some((d) => !d.name.trim() || !d.unit || num(d.price) <= 0);
+  const hasBad = included.some((d) => !d.name.trim() || !d.unit || !(num(d.price, 'money') > 0)
+    || !Number.isFinite(num(d.quantity, 'quantity')));
 
   const runParse = async () => {
     if (!online) {
@@ -246,8 +252,8 @@ export function DictationSheet({
         included.map((d) => ({
           name: d.name.trim(),
           unit: d.unit as Unit,
-          quantity: num(d.quantity),
-          unitPrice: num(d.price),
+          quantity: num(d.quantity, 'quantity'),
+          unitPrice: num(d.price, 'money'),
           type: d.type,
           // Carried from the matched catalog row; null on a genuinely new position. The estimate
           // line uses this to sort into its category on the board.
@@ -262,7 +268,7 @@ export function DictationSheet({
       invalidateEstimate();
       // Only AFTER the lines actually landed: the estimate is what he asked for, the catalog copy is
       // a bonus, and a failing copy must never look like the dictation failed.
-      const learn = included.filter((d) => !d.matched && d.saveToCatalog && num(d.price) > 0);
+      const learn = included.filter((d) => !d.matched && d.saveToCatalog && num(d.price, 'money') > 0);
       let saved = 0;
       let failed = false;
       for (const d of learn) {
@@ -271,7 +277,7 @@ export function DictationSheet({
             name: d.name.trim(),
             type: d.type,
             unit: d.unit as Unit,
-            defaultPrice: num(d.price),
+            defaultPrice: num(d.price, 'money'),
             // Master feedback 2026-09-04: «коли ми це додаємо в каталог ми маємо мати можливість
             // вказати трейд зі списка випадаючого». The picker below the tick sets `saveTrade`
             // (a system trade) OR `saveCustomTradeId` (one of his own custom trades). A custom
@@ -448,7 +454,7 @@ export function DictationSheet({
               <div className="max-h-[55dvh] space-y-2 overflow-y-auto">
                 {drafts.map((d) => {
                   const bad = d.include && (!d.name.trim() || !d.unit);
-                  const noPrice = d.include && num(d.price) <= 0;
+                  const noPrice = d.include && !(num(d.price, 'money') > 0);
                   return (
                     <div
                       key={d.key}

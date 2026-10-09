@@ -12,6 +12,7 @@ import {
 import { fromQueuedFile, toQueuedFile, type QueuedFile } from '@/lib/outbox/queuedFile.ts';
 import { useSyncStatus } from '@/lib/useOnline.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
+import type { OutboxOp } from '@/lib/outbox/types.ts';
 
 /**
  * Adding a receipt to an act without a connection (offline-act-receipts).
@@ -189,8 +190,31 @@ export async function actReceiptsStillQueued(actId: string): Promise<number> {
   const ops = await listOutbox();
   return ops.filter((op) => op.entity === ACT_RECEIPT_ENTITY
     && op.type === 'create'
-    && op.status !== 'blocked'
+    && stillOurs(op)
     && (op.payload as ActReceiptOpPayload).actId === actId).length;
+}
+
+/**
+ * Of those, the ones that ran out of attempts in TRANSPORT (review P-60): eight photo uploads timed
+ * out, which is not the server saying no. Flushing will not move them — a blocked op is never
+ * auto-retried — so the gate names them separately and sends the master to retry.
+ */
+export async function actReceiptsStuck(actId: string): Promise<number> {
+  const ops = await listOutbox();
+  return ops.filter((op) => op.entity === ACT_RECEIPT_ENTITY
+    && op.type === 'create'
+    && op.status === 'blocked' && op.blockReason === 'stuck'
+    && (op.payload as ActReceiptOpPayload).actId === actId).length;
+}
+
+/**
+ * Still the master's money on its way to the act: trying, or STUCK in transport (review P-60). Only
+ * a REFUSAL — the server answered no — is out. A stuck receipt used to be filed with the refused
+ * ones: left out of «До сплати», labelled «сервер не прийняв», and the signature went through
+ * without it; a later retry then met a SIGNED act, so the paper stayed outside it for good.
+ */
+function stillOurs(op: OutboxOp): boolean {
+  return op.status !== 'blocked' || op.blockReason === 'stuck';
 }
 
 /**
@@ -244,11 +268,11 @@ export function usePendingActReceipts(actId: string): {
         && (op.payload as ActReceiptOpPayload).actId === actId);
       const build = (
         prev: Map<string, QueuedActReceipt>,
-        want: (status: string) => boolean,
+        want: (op: OutboxOp) => boolean,
       ) => {
         const next = new Map<string, QueuedActReceipt>();
         for (const op of mine) {
-          if (!want(op.status)) continue;
+          if (!want(op)) continue;
           const payload = op.payload as ActReceiptOpPayload;
           const before = prev.get(op.entityId);
           next.set(op.entityId, {
@@ -263,8 +287,8 @@ export function usePendingActReceipts(actId: string): {
       // money the master has spent and will reach the act, so it is shown and counted. One the
       // server REFUSED will never move on its own — counting it into «До сплати» billed the client
       // for a receipt that was never going to exist, on a document he could sign at any second.
-      setQueued((prev) => build(prev, (status) => status !== 'blocked'));
-      setRejected((prev) => build(prev, (status) => status === 'blocked'));
+      setQueued((prev) => build(prev, stillOurs));
+      setRejected((prev) => build(prev, (op) => !stillOurs(op)));
     });
     return () => {
       alive = false;

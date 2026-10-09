@@ -3,10 +3,12 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { QueryClient, onlineManager } from '@tanstack/react-query';
 import axios from 'axios';
 import { clearOutbox, flushOutbox, listOutbox, outboxCount } from '@/lib/outbox/outbox.ts';
+import { outboxDb } from '@/lib/outbox/db.ts';
 import { initOutbox } from '@/lib/outbox/init.ts';
 import { actsApi } from '@/api/acts.ts';
 import {
-  ACT_RECEIPT_ENTITY, addActReceipt, dropQueuedReceipt, mergeQueuedReceipts, patchQueuedReceipt,
+  ACT_RECEIPT_ENTITY, actReceiptsStillQueued, actReceiptsStuck, addActReceipt, dropQueuedReceipt,
+  mergeQueuedReceipts, patchQueuedReceipt,
   patchQueuedReceiptFromRead, queuedReceiptRow, type ActReceiptOpPayload, type QueuedActReceipt,
 } from './offlineReceipts.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
@@ -247,5 +249,36 @@ describe('queuedReceiptRow', () => {
     const row = queuedReceiptRow('u1', { actId: 'a1', amount: 0, file: { bytes: new ArrayBuffer(2), fileName: 'r.jpg', mimeType: 'image/jpeg' } });
     expect(row.label).toBe('');
     expect(row.returnedAmount).toBe(0); // not on the create endpoint at all
+  });
+});
+
+/**
+ * Review P-60. Eight photo uploads that timed out are not the server saying no — yet a STUCK op was
+ * filed with the refused ones: out of «До сплати», labelled «сервер не прийняв», and the signature
+ * went through without it. A later retry then met a signed act, so the paper stayed outside it.
+ */
+/** The flush engine's own terminal states, written straight in — reaching them takes eight failures. */
+async function markBlocked(blockReason: 'stuck' | 'other') {
+  const [op] = await listOutbox();
+  await outboxDb.ops.where('entityId').equals(op.entityId).modify({ status: 'blocked', blockReason });
+}
+
+describe('a receipt stuck in transport', () => {
+  it('still holds the signature back, and is named as stuck — not as refused', async () => {
+    onlineManager.setOnline(false);
+    await addActReceipt('a1', { id: 'u1', amount: 120, file: photo() });
+    await markBlocked('stuck');
+
+    expect(await actReceiptsStillQueued('a1')).toBe(1);
+    expect(await actReceiptsStuck('a1')).toBe(1);
+  });
+
+  it("a real refusal no longer holds it — that one is the master's to resolve", async () => {
+    onlineManager.setOnline(false);
+    await addActReceipt('a1', { id: 'u1', amount: 120, file: photo() });
+    await markBlocked('other');
+
+    expect(await actReceiptsStillQueued('a1')).toBe(0);
+    expect(await actReceiptsStuck('a1')).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ItemForm } from './ItemForm.tsx';
@@ -22,14 +22,14 @@ const line = (over: Partial<EstimateItemResponse>): EstimateItemResponse => ({
   ...over,
 });
 
-function renderForm(initial: EstimateItemResponse) {
+function renderForm(initial: EstimateItemResponse, onSubmit = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, aUser());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   return render(
-    <ItemForm initial={initial} submitLabel="Зберегти" submitting={false} onSubmit={vi.fn()} />,
+    <ItemForm initial={initial} submitLabel="Зберегти" submitting={false} onSubmit={onSubmit} />,
     { wrapper },
   );
 }
@@ -69,5 +69,23 @@ describe('ItemForm — the position explanation', () => {
     // A textbox here would let a rename-style edit rewrite what a client already read; the field
     // is not on EstimateItemRequest at all, so anything typed would be silently dropped.
     expect(screen.queryByDisplayValue(MEANS)).toBeNull();
+  });
+});
+
+/**
+ * Review P-58: validation read the price with `parseMoney` (which takes the apostrophe as grouping)
+ * while the submit read it with `parseDecimal` — «1'200» passed validation and was sent as NaN,
+ * which went offline into the queue, printed «NaN ₴» and blocked the replay.
+ */
+describe('ItemForm — what is submitted is what was validated', () => {
+  it("sends «1'200» as 1200, never NaN", async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ description: null }), onSubmit);
+
+    fireEvent.change(screen.getByLabelText(/Ціна/), { target: { value: "1'200" } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ unitPrice: 1200, quantity: 12 });
   });
 });

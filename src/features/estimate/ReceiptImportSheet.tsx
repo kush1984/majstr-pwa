@@ -16,7 +16,7 @@ import { economyApi } from '@/api/economy.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseDecimal, roundMoney, sumMoney } from '@/lib/decimal.ts';
+import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
@@ -30,10 +30,15 @@ import type { ItemType, Unit } from '@/api/types.ts';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
-/** Parse a decimal field to a finite number, blank/garbage → 0 (master may fill later). */
-function num(s: string): number {
-  const n = parseDecimal(s);
-  return Number.isFinite(n) ? n : 0;
+/**
+ * A field the master may still leave blank (he fills it later) — blank is 0. Anything else goes
+ * through the same reader as every money/quantity field (review P-58); garbage is NaN, which blocks
+ * the commit instead of becoming a silent 0 ₴ line.
+ */
+function num(s: string, kind: 'money' | 'quantity'): number {
+  if (s.trim() === '') return 0;
+  const n = kind === 'money' ? parseMoney(s, { allowZero: true }) : parseQuantity(s, { allowZero: true });
+  return n ?? Number.NaN;
 }
 
 interface Draft {
@@ -229,8 +234,10 @@ export function ReceiptImportSheet({
   }
 
   const included = drafts.filter((d) => d.include);
-  // A row needs a name + unit; quantity/price may be 0 (master fills later).
-  const hasBad = included.some((d) => !d.name.trim() || !d.unit);
+  // A row needs a name + unit; quantity/price may be 0 (master fills later) — but never garbage,
+  // which used to become a silent 0 and, for a three-decimal price, a 400 on the whole commit.
+  const hasBad = included.some((d) => !d.name.trim() || !d.unit
+    || !Number.isFinite(num(d.quantity, 'quantity')) || !Number.isFinite(num(d.price, 'money')));
 
   const commit = async () => {
     setCommitting(true);
@@ -240,8 +247,8 @@ export function ReceiptImportSheet({
         included.map((d) => ({
           name: d.name.trim(),
           unit: d.unit as Unit,
-          quantity: num(d.quantity),
-          unitPrice: num(d.price),
+          quantity: num(d.quantity, 'quantity'),
+          unitPrice: num(d.price, 'money'),
           type: d.type,
           category: null,
         })),
@@ -256,7 +263,7 @@ export function ReceiptImportSheet({
       // into an `ObjectExpense`, so a float chain here lands a kopeck off the master's own cost
       // (review P-52/P-39).
       receiptTotal.current = sumMoney(
-        included.map((d) => roundMoney(num(d.quantity) * num(d.price))),
+        included.map((d) => roundMoney(num(d.quantity, 'quantity') * num(d.price, 'money'))),
       );
       if (receiptTotal.current > 0) setExpenseOpen(true);
       else offerToKeepPhoto();

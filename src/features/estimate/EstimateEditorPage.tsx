@@ -17,10 +17,11 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { toast } from '@/hooks/useToast.ts';
+import { flushOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import { bodyScrollLocked, scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney, formatNumber, initials } from '@/lib/format.ts';
-import { markedUpPrice, parseDecimal } from '@/lib/decimal.ts';
+import { markedUpPrice, parseMoney, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import { ESTIMATE_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
@@ -186,6 +187,18 @@ export function EstimateEditorPage() {
     scrollRowIntoView(row);
   }, [lastTouched, estimate.data, addOpen, editing, dictationOpen, receiptOpen]);
 
+  // The client signed while a sheet was open (review P-62): every one of them writes lines, and a
+  // signed estimate refuses them all with 409. Close them the moment the signature lands, rather than
+  // let the master type into a form that can no longer be saved.
+  const signedNow = estimate.data?.status === 'SIGNED';
+  useEffect(() => {
+    if (!signedNow) return;
+    setAddOpen(false);
+    setEditing(null);
+    setDictationOpen(false);
+    setReceiptOpen(false);
+  }, [signedNow]);
+
   if (estimate.isPending) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-canvas text-brand">
@@ -270,6 +283,24 @@ export function EstimateEditorPage() {
     }
   };
 
+  /**
+   * Nothing the master changed offline may be missing from what leaves the app (review P-62, the
+   * act's own rule since P-37): the PDF and the share link are rendered by the SERVER, from what it
+   * holds. Flush, and refuse while an op on this estimate — or one that waits on it — is left.
+   */
+  const estimateQueueClear = async (): Promise<boolean> => {
+    const touching = async () => (await listOutbox())
+      .filter((op) => op.entityId === id || op.deps.includes(id)).length;
+    if (await touching() === 0) return true;
+    await flushOutbox();
+    const left = await touching();
+    if (left > 0) {
+      toast.error(t('estimate.changesNotSynced', { count: left }));
+      return false;
+    }
+    return true;
+  };
+
   const onPdf = async () => {
     // The PDF is a client-facing deliverable and now requires a verified email
     // (anti-abuse). Bounce an unverified master straight to the verify modal
@@ -279,6 +310,7 @@ export function EstimateEditorPage() {
       setEmailGateOpen(true);
       return;
     }
+    if (!(await estimateQueueClear())) return;
     // Any photos to offer (linked receipts or object photos) → ask which to attach; else download straight.
     if (receipts.length > 0 || otherPhotos.length > 0) {
       setPdfSheetOpen(true);
@@ -295,6 +327,7 @@ export function EstimateEditorPage() {
       setEmailGateOpen(true);
       return;
     }
+    if (!(await estimateQueueClear())) return;
     setShareOpen(true);
   };
 
@@ -937,10 +970,12 @@ function MarkupSheet({
   // `Number('')` is 0 and `Number('15 ')` is 15 but `Number('1 5')` is NaN — so an EMPTY field read
   // as a valid «0 %» and the sheet confirmed a copy at the same prices while saying it had marked
   // them up (review P-32). A percentage has to be a figure, and 0 is not a decision.
-  const percent = parseDecimal(value);
-  // A discount cannot exceed 100 % (it would drive prices to zero or below); a markup is open-ended.
-  const max = discount ? 100 : 1000;
-  const valid = Number.isFinite(percent) && percent > 0 && percent <= max;
+  // The server's own bounds (review P-58, B-106): two decimals, a markup up to 999,99 % (what
+  // `markup_percent NUMERIC(5,2)` holds) and a discount strictly below 100 % — 100 % floored every
+  // price at 0,01 ₴. `parseDecimal` let 12,345 and 1000 through to a 400.
+  const parsed = parseMoney(value, { max: discount ? 99.99 : 999.99 });
+  const percent = parsed ?? 0;
+  const valid = parsed !== null;
 
   return (
     <Modal open={open} onClose={onClose} title={t('estimate.duplicateWithMarkup')}>
@@ -998,9 +1033,8 @@ function MarkupSheet({
  * economy and stamp provenance, which a device cannot compose. And the hint gives way to the one
  * number that answers «а скільки це дасть» — what the picked lines total now, and after.</p>
  *
- * <p>That total is computed the way the SERVER computes it: round the UNIT price to whole hryvnia,
- * then multiply by the quantity. Rounding the line totals instead would drift by a hryvnia per line,
- * on exactly the many-position sheets this feature exists for.</p>
+ * <p>That total is computed the way the SERVER computes it: round the UNIT price to the kopeck
+ * (`markedUpPrice`, B-47), multiply by the quantity, round the line, and sum the lines in kopecks.</p>
  */
 function ItemMarkupSheet({
   open, items, loading, onClose, onConfirm,
@@ -1015,13 +1049,15 @@ function ItemMarkupSheet({
   const [discount, setDiscount] = useState(false);
   const [value, setValue] = useState('15');
   // Same rule as the duplicate sheet: an empty field is not «0 %», it is «he has not answered».
-  const percent = parseDecimal(value);
-  const max = discount ? 100 : 1000;
-  const valid = Number.isFinite(percent) && percent > 0 && percent <= max;
+  const parsed = parseMoney(value, { max: discount ? 99.99 : 999.99 }); // the server's bounds (P-58)
+  const percent = parsed ?? 0;
+  const valid = parsed !== null;
   const factor = 1 + (discount ? -percent : percent) / 100;
-  const before = items.reduce((sum, i) => sum + i.lineTotal, 0);
+  // In kopecks, line by line, as the server sums stored lines (review P-66): an unrounded Σ of
+  // price × quantity printed 2 677,51 where the saved estimate then said 2 677,52.
+  const before = sumMoney(items.map((i) => i.lineTotal));
   const after = valid
-    ? items.reduce((sum, i) => sum + markedUpPrice(i.unitPrice, factor) * i.quantity, 0)
+    ? sumMoney(items.map((i) => roundMoney(markedUpPrice(i.unitPrice, factor) * i.quantity)))
     : before;
 
   return (

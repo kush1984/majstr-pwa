@@ -42,9 +42,18 @@ export const economyPortalApi = {
       .then((r) => r.data);
   },
 
-  update(projectId: string, estimateIds: string[], paymentsVisible: boolean): Promise<PortalStateResponse> {
+  /** Mints/reuses the link and sets the payments card. WHICH estimates it shows is not a pick
+   *  (review B-103): every signed estimate that counts in the object's economy. */
+  update(projectId: string, paymentsVisible: boolean): Promise<PortalStateResponse> {
     return api
-      .put<PortalStateResponse>(`/api/projects/${projectId}/portal/economy`, { estimateIds, paymentsVisible })
+      .put<PortalStateResponse>(`/api/projects/${projectId}/portal/economy`, { paymentsVisible })
+      .then((r) => r.data);
+  },
+
+  /** Closes the link: the client's URL stops working, the next publish mints a new one. */
+  revoke(projectId: string): Promise<PortalStateResponse> {
+    return api
+      .delete<PortalStateResponse>(`/api/projects/${projectId}/portal/economy`)
       .then((r) => r.data);
   },
 

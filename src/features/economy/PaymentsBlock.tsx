@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -9,6 +9,7 @@ import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { formatMoney, formatAmount, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { parseMoney, parseQuantity, roundMoney } from '@/lib/decimal.ts';
+import { newUuid } from '@/lib/uuid.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import {
@@ -32,6 +33,11 @@ import type {
   ProjectPaymentResponse,
   ProjectPaymentStatus,
 } from '@/api/types.ts';
+
+/** A figure as a field shows it — two decimals at most, what `parseMoney` reads back (review P-59). */
+function moneyField(n: number): string {
+  return String(roundMoney(n));
+}
 
 const STATUS_DOT: Record<ProjectPaymentStatus, string> = {
   PLANNED: 'border-2 border-border bg-surface',
@@ -449,9 +455,9 @@ function PaymentSheet({
   const dueWarning = dueDateWarning(dueDate, !editing, t);
 
   const submit = async () => {
-    // A planned stage may legitimately be 0 (a placeholder the master fills later), so zero is
-    // allowed and only an unreadable field is refused — never quietly rounded down to nothing.
-    const amountValue = parseMoney(amount, { allowZero: true });
+    // A stage is at least a kopeck (review P-59): the server's `@DecimalMin("0.01")` refused a 0 ₴
+    // placeholder online, and offline it became a blocked op that stranded the receipts against it.
+    const amountValue = parseMoney(amount);
     const invalid = { purpose: !purpose.trim(), amount: amountValue === null };
     if (invalid.purpose || amountValue === null) {
       setErrors(invalid);
@@ -693,14 +699,18 @@ function ReceivePaymentSheet({
   // with an EMPTY name, and an advance is exactly the money that arrives before any stage exists —
   // so the one refusal the master meets first was the one he could not see.
   const [errors, setErrors] = useState<{ label?: string; amount?: boolean }>({});
+  // One id per opening of the sheet (review P-61): a second tap after a lost response is a REPLAY
+  // the server answers with the rows it already wrote, never a second overflow.
+  const transferId = useRef(newUuid());
 
   useEffect(() => {
     if (!open) return;
+    transferId.current = newUuid();
     const initial = preselectedStageId ?? openStages[0]?.id ?? null;
     setStageId(initial);
     setLabel('');
     const stage = initial ? openStages.find((s) => s.id === initial) : null;
-    setAmount(stage ? String(stage.remaining) : '');
+    setAmount(stage ? moneyField(stage.remaining) : '');
     setDate(today());
     setRefund(false);
     setOverflow(null);
@@ -752,7 +762,7 @@ function ReceivePaymentSheet({
     };
     try {
       if (resolution === 'TRANSFER') {
-        await addTransfer.mutateAsync(req);
+        await addTransfer.mutateAsync({ req, id: transferId.current });
       } else {
         await addReceipt.mutateAsync(req);
       }
@@ -789,7 +799,7 @@ function ReceivePaymentSheet({
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => { setStageId(s.id); setAmount(String(s.remaining)); }}
+                  onClick={() => { setStageId(s.id); setAmount(moneyField(s.remaining)); }}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs font-semibold',
                     stageId === s.id ? 'border-brand bg-brand-soft text-primary' : 'border-border text-muted',

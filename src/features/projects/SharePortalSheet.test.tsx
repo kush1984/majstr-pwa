@@ -10,7 +10,7 @@ import { asInput } from '@/test/dom.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
-  economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
+  economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), revoke: vi.fn() },
   estimateShareApi: { create: vi.fn(), sendEmail: vi.fn() },
 }));
 vi.mock('@/features/clients/useClients.ts', () => ({
@@ -251,30 +251,32 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
 });
 
 describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => {
+  // The server decides what the client sees (review B-103): `visible` = signed ∧ counted.
   const economyState: PortalStateResponse = {
     url: 'https://majstr.pro/portal/index.html?e=tok',
     estimates: [
       { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
       { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: false },
+      { id: 'e3', name: 'Стара версія', status: 'SIGNED', createdAt: '2026-06-01T00:00:00Z', visible: false },
     ],
     paymentsVisible: false,
   };
 
-  it('shows only SIGNED estimates plus the payments toggle, seeded off by default', async () => {
+  it('lists what the client sees read-only — no estimate checkboxes, only the payments toggle', async () => {
     vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
     renderSheet('economy');
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-    expect(screen.queryByText('Преміум')).toBeNull(); // not signed — not shown here
-    expect(screen.getByText(/Оберіть підписані кошториси/)).toBeTruthy();
-    // Payments visibility is a signed-contract concern — offered here, unlike from Кошторис.
+    expect(screen.queryByText('Преміум')).toBeNull(); // not signed
+    expect(screen.queryByText('Стара версія')).toBeNull(); // signed, but superseded — not the deal
+    expect(screen.getByText(/Клієнт бачить усі підписані кошториси/)).toBeTruthy();
     const boxes = screen.getAllByRole('checkbox');
-    // One estimate checkbox (ticked, already visible) + the payments toggle (off by default).
-    expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
+    expect(boxes).toHaveLength(1); // the payments toggle, nothing else
+    expect(asInput(boxes[0]).checked).toBe(false);
     expect(screen.getByText('Показувати платежі клієнту')).toBeTruthy();
   });
 
-  it('publishes exactly the ticked set via the ECONOMY endpoint, never the SIGNATURE one', async () => {
+  it('publishes via the ECONOMY endpoint with only the payments flag, never the SIGNATURE one', async () => {
     vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
     vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -283,7 +285,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
 
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
-    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', ['e1'], false));
+    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', false));
     expect(portalApi.update).not.toHaveBeenCalled();
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(economyState.url);
   });
@@ -295,32 +297,31 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole('checkbox')[1]); // the payments toggle
+    fireEvent.click(screen.getAllByRole('checkbox')[0]); // the payments toggle
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
-    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', ['e1'], true));
+    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', true));
   });
 
-  it('a not-yet-signed estimate already published from Кошторис stays published, just not shown', async () => {
-    // e2 (DRAFT) is visible:true on the server — published earlier from the Кошторис tab. The
-    // signed-only picker must not silently drop it from what gets re-published.
-    vi.mocked(economyPortalApi.state).mockResolvedValue({
-      ...economyState,
-      estimates: [
-        { id: 'e1', name: 'Економ', status: 'SIGNED', createdAt: '2026-07-01T00:00:00Z', visible: true },
-        { id: 'e2', name: 'Преміум', status: 'DRAFT', createdAt: '2026-07-02T00:00:00Z', visible: true },
-      ],
-    });
-    vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
-    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+  it('closes a live link — the way the page goes away now that nothing can be unticked', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
+    vi.mocked(economyPortalApi.revoke).mockResolvedValue({ ...economyState, url: null });
     renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+    expect(screen.queryByRole('button', { name: /Прибрати все/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Закрити посилання' }));
 
-    await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalled());
-    const ids = vi.mocked(economyPortalApi.update).mock.calls[0][1];
-    expect([...ids].sort()).toEqual(['e1', 'e2']);
+    await waitFor(() => expect(economyPortalApi.revoke).toHaveBeenCalledWith('p1'));
+    expect(economyPortalApi.update).not.toHaveBeenCalled();
+  });
+
+  it('offers no «close» before a link exists', async () => {
+    vi.mocked(economyPortalApi.state).mockResolvedValue({ ...economyState, url: null });
+    renderSheet('economy');
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    expect(screen.queryByRole('button', { name: 'Закрити посилання' })).toBeNull();
   });
 
   it('a SIGNED estimate shared from its editor gets the same per-estimate link, with no payments toggle', async () => {

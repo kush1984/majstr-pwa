@@ -34,7 +34,7 @@ import { useEconomy } from '@/features/economy/useEconomy.ts';
 import { ActReceiptsSection, billedOf } from './ActReceiptsSection.tsx';
 import { flushOutbox } from '@/lib/outbox/outbox.ts';
 import {
-  actReceiptsStillQueued, dropQueuedReceiptsOfAct, mergeQueuedReceipts,
+  actReceiptsStillQueued, actReceiptsStuck, dropQueuedReceiptsOfAct, mergeQueuedReceipts,
   usePendingActReceipts,
 } from './offlineReceipts.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
@@ -642,7 +642,11 @@ export function ActEditorPage() {
     refreshQueued();
     const left = await actReceiptsStillQueued(id);
     if (left > 0) {
-      toast.error(t('acts.receiptsNotSent', { count: left }));
+      // A stuck one will not move on a flush — say so, rather than «wait for the connection».
+      const stuck = await actReceiptsStuck(id);
+      toast.error(stuck > 0
+        ? t('acts.receiptsStuck', { count: stuck })
+        : t('acts.receiptsNotSent', { count: left }));
       return false;
     }
     invalidateAct(id);

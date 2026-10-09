@@ -118,7 +118,6 @@
     "spokenText": "string"
   },
   "EconomyUpdateRequest": {
-    "estimateIds": "array",
     "paymentsVisible": "boolean"
   },
   "EstimateConsolidateRequest": {

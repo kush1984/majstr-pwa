@@ -94,6 +94,54 @@ describe('PaymentsBlock — plan vs fact (payments PLAN/FACT split, V100)', () =
     expect(req).toEqual({ purpose: 'Аванс', amount: 5000, dueDate: null, nextStage: null });
   });
 
+  // Review P-59: the server refuses a stage below 0,01; offline, a 0 ₴ stage became a blocked op
+  // that stranded every receipt recorded against it.
+  it('refuses a 0 ₴ stage instead of queueing one the server will refuse', () => {
+    renderBlock(summary());
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Запланований'));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('напр. Аванс, Фінал'), { target: { value: 'Аванс' } });
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '0' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+
+    expect(paymentsApi.add).not.toHaveBeenCalled();
+  });
+
+  // Review P-59: an optimistic 4 000,30 − 1 000,10 is 3000.2000000000003 — pre-filled, it was a
+  // figure the field's own reader refuses, and Save failed on a number nobody typed.
+  it('pre-fills a stage remaining the field can read back', () => {
+    const stage = plannedRow({ amount: 4000.3, received: 1000.1, remaining: 4000.3 - 1000.1, status: 'PARTIAL' });
+    renderBlock(summary([stage]));
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+
+    expect(within(screen.getByRole('dialog')).getByDisplayValue('3000.2')).toBeTruthy();
+  });
+
+  // Review P-61: TRANSFER writes two rows and is online-only — but it still has to carry a client id,
+  // or a retry after a lost response records the overflow a second time.
+  it('sends a TRANSFER with a client id, so a retry is a replay', async () => {
+    vi.mocked(paymentsApi.addReceipt).mockResolvedValue([]);
+    const first = plannedRow({ id: 'pay1', purpose: 'Аванс', amount: 500, remaining: 500 });
+    const second = plannedRow({ id: 'pay2', purpose: 'Фінал', amount: 5000, remaining: 5000, sortOrder: 1 });
+    renderBlock(summary([first, second]));
+
+    fireEvent.click(screen.getByText('+ Платіж'));
+    fireEvent.click(screen.getByText('Вже отримано'));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByPlaceholderText('0 ₴'), { target: { value: '700' } });
+    fireEvent.click(within(dialog).getByText('Зберегти'));
+    fireEvent.click(await screen.findByText(/Перенести різницю/));
+
+    await waitFor(() => expect(paymentsApi.addReceipt).toHaveBeenCalled());
+    const [, req, id] = vi.mocked(paymentsApi.addReceipt).mock.calls[0];
+    expect(req).toMatchObject({ resolution: 'TRANSFER', amount: 700 });
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it('"Вже отримано" with no plan stages goes straight to "Своє" and registers an unplanned receipt', async () => {
     vi.mocked(paymentsApi.addReceipt).mockResolvedValue([receipt({ planPaymentId: null, label: 'Завдаток' })]);
     renderBlock(summary());

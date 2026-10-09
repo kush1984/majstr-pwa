@@ -25,9 +25,13 @@ import {
  * "Поділитися з клієнтом" — two entry points that mint two genuinely different links, which is why
  * the scope difference is not just a display filter:
  *
- * - **From the object** (root / Економіка) — the master ticks which estimates the client will see
- *   and they all publish onto the OBJECT's one portal link, as sections of one page. Copy/email
+ * - **From the object, Кошторис tab** — the master ticks which estimates go out for signing and
+ *   they all publish onto the OBJECT's one portal link, as sections of one page. Copy/email
  *   always PUBLISH first (PUT the ticked set), so the URL matches what was just chosen.
+ * - **From the object, Економіка tab** — no picker (review B-103): the page is every signed
+ *   estimate that counts in the object's economy, so «За договором» there is the master's own
+ *   figure. The sheet lists them read-only; the master decides only the payments card, and can
+ *   close the link.
  * - **From one estimate's editor** (`singleEstimateId`) — mints that ESTIMATE's own `?t=` link
  *   instead (`estimateShareApi`). One link, one document: no picker, and the object's portal is
  *   neither read nor touched, so sharing one estimate can never add to — or quietly drop things
@@ -58,8 +62,8 @@ export function SharePortalSheet({
    * - 'portal' (SIGNATURE, Кошторис tab) — any non-SIGNED estimate, for the client to sign; never
    *   has a payments toggle. A SIGNED estimate lives only in Економіка (economy-rework iteration),
    *   so the picker excludes it here even though the server would technically accept it.
-   * - 'economy' (ECONOMY, Економіка tab) — SIGNED acts only (the server rejects anything else),
-   *   plus an opt-in payments-visibility toggle.
+   * - 'economy' (ECONOMY, Економіка tab) — every signed, counted estimate, decided by the server
+   *   (no picker), plus an opt-in payments-visibility toggle.
    *
    * Either way, when the filtered list is empty the sheet collapses to just the neutral "nothing
    * yet" message — no picker/payments/publish chrome left dangling over an empty list.
@@ -90,10 +94,8 @@ export function SharePortalSheet({
       // First-ever publish (nothing already shown, no editor-context preselect): default to the
       // obvious choice rather than an empty picker — the one pickable estimate if there's only
       // one, otherwise the most recently created one (the rest stay optional, one tap away).
-      if (initial.size === 0) {
-        const pickable = mode === 'economy'
-          ? portal.data.estimates.filter((e) => e.status === 'SIGNED')
-          : portal.data.estimates.filter((e) => e.status !== 'SIGNED');
+      if (initial.size === 0 && mode !== 'economy') {
+        const pickable = portal.data.estimates.filter((e) => e.status !== 'SIGNED');
         const defaultPick = pickable.length === 1
           ? pickable[0]
           : pickable.reduce<typeof pickable[number] | null>(
@@ -115,7 +117,7 @@ export function SharePortalSheet({
   const updateClient = useUpdateClient();
   const createClient = useCreateClient();
   const updateProject = useUpdateProject();
-  const [busy, setBusy] = useState<'copy' | 'email' | 'hide' | null>(null);
+  const [busy, setBusy] = useState<'copy' | 'email' | 'hide' | 'revoke' | null>(null);
   const [showAddEmail, setShowAddEmail] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [showClientPicker, setShowClientPicker] = useState(false);
@@ -150,8 +152,9 @@ export function SharePortalSheet({
   // An estimate already published from the OTHER context stays published either way (still
   // counted in `ticked`/`serverVisibleCount` below, computed from the unfiltered list) — this
   // picker just doesn't render or touch it here, it doesn't unpublish it.
+  // Economy: the server already answered what the client sees (signed ∧ counted, review B-103).
   const list = mode === 'economy'
-    ? allEstimates.filter((e) => e.status === 'SIGNED')
+    ? allEstimates.filter((e) => e.visible)
     : allEstimates.filter((e) => e.status !== 'SIGNED');
   const ticked = selected ?? new Set<string>();
   const serverVisibleCount = allEstimates.filter((e) => e.visible).length;
@@ -197,18 +200,20 @@ export function SharePortalSheet({
 
   // What "there is something to share" means differs per scope: a ticked set for the object's
   // link, a successfully minted URL for the estimate's own one.
-  const nothingToShare = singleEstimateId ? !singleUrl : ticked.size === 0;
+  const nothingToShare = singleEstimateId
+    ? !singleUrl
+    : mode === 'economy' ? list.length === 0 : ticked.size === 0;
 
   const paymentsTicked = paymentsOn ?? false;
   // Nothing to publish from this context's angle — just say so. Any pick/publish/payments chrome
   // below would dangle over an empty list. A single-estimate share always has its one document.
   const filteredEmpty = !singleEstimateId && !portal.isPending && !portal.isError && list.length === 0;
 
-  /** Publishes the ticked set on the link that matches `mode` — the SIGNATURE endpoint has no
-   *  payments concept at all, the ECONOMY one always carries the toggle's current value. */
+  /** Publishes on the link that matches `mode` — the SIGNATURE endpoint takes the ticked set and
+   *  has no payments concept at all; the ECONOMY one takes only the toggle's current value. */
   const publish = (ids: string[]) =>
     mode === 'economy'
-      ? economyPortalApi.update(project.id, ids, paymentsTicked)
+      ? economyPortalApi.update(project.id, paymentsTicked)
       : portalApi.update(project.id, ids);
 
   const onCopy = async () => {
@@ -268,6 +273,21 @@ export function SharePortalSheet({
       await publish([]);
       invalidateAfterShare();
       toast.success(t('portal.hiddenAll'));
+      onClose();
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Economy: nothing to untick, so the page goes away by closing its link (review B-103). */
+  const onRevoke = async () => {
+    setBusy('revoke');
+    try {
+      await economyPortalApi.revoke(project.id);
+      invalidateAfterShare();
+      toast.success(t('portal.linkClosed'));
       onClose();
     } catch (err) {
       handleError(err);
@@ -343,7 +363,7 @@ export function SharePortalSheet({
             <p className="text-sm text-muted">
               {t(singleEstimateId
                 ? 'portal.singleHint'
-                : mode === 'economy' ? 'portal.pickHintSigned' : 'portal.pickHint')}
+                : mode === 'economy' ? 'portal.economyHint' : 'portal.pickHint')}
             </p>
 
             {singleEstimateId ? (
@@ -359,6 +379,19 @@ export function SharePortalSheet({
               <div className="py-6 text-center"><Spinner /></div>
             ) : portal.isError ? (
               <p className="py-4 text-center text-sm text-muted">{t('portal.loadError')}</p>
+            ) : mode === 'economy' ? (
+              // Read-only: what the client sees is decided by the deal, not by a tick (B-103).
+              <ul className="space-y-1.5">
+                {list.map((e) => (
+                  <li key={e.id}
+                    className="flex min-h-[44px] items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+                    <span aria-hidden className="text-brand">✓</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-primary">
+                      {estimateName(e.name, e.createdAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div className="space-y-1.5">
                 {list.map((e) => (
@@ -411,7 +444,13 @@ export function SharePortalSheet({
               {t('estimate.copyLink')}
             </Button>
 
-            {!singleEstimateId && ticked.size === 0 && serverVisibleCount > 0 && (
+            {mode === 'economy' && portal.data?.url && (
+              <Button variant="secondary" fullWidth loading={busy === 'revoke'} onClick={onRevoke}>
+                {t('portal.closeLink')}
+              </Button>
+            )}
+
+            {mode === 'portal' && ticked.size === 0 && serverVisibleCount > 0 && (
               <Button variant="secondary" fullWidth loading={busy === 'hide'} onClick={onHideAll}>
                 {t('portal.hideAll')}
               </Button>
