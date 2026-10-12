@@ -22,6 +22,7 @@ import type { ActReceiptRecognizeResponse, WorkActReceiptResponse } from '@/api/
 vi.mock('@/api/acts.ts', () => ({
   actsApi: {
     addReceipt: vi.fn(),
+    get: vi.fn(),
     readReceiptQr: vi.fn(),
     recognizeStoredReceipt: vi.fn(),
     updateReceipt: vi.fn(),
@@ -121,6 +122,24 @@ describe('useReceiptBatch', () => {
     const [, id2, req2] = vi.mocked(actsApi.updateReceipt).mock.calls[1];
     expect(id2).toBe('r2');
     expect(req2).toMatchObject({ label: 'АТБ', amount: 50, issuedAt: '2026-09-02' });
+  });
+
+  it("never sends a blank label — the server's own «Чек №N» is asked for (review P-69)", async () => {
+    const r1 = serverRow('r1', 1);
+    vi.mocked(actsApi.addReceipt).mockResolvedValueOnce(r1);
+    vi.mocked(actsApi.recognizeStoredReceipt)
+      .mockResolvedValueOnce({ recognized: true, label: null, amount: 75, issuedAt: null, fiscalFn: null, fiscalId: null });
+    vi.mocked(actsApi.get).mockResolvedValue({ receipts: [r1] } as never);
+
+    const { result, seed } = renderBatch();
+    // What a drained queue leaves behind: the placeholder's empty label still in the cache.
+    seed([{ ...r1, label: '' }]);
+    await act(async () => {
+      await result.current.run([photo('a.jpg')], { withAi: true, saveToPhotos: false });
+    });
+
+    const [, , req] = vi.mocked(actsApi.updateReceipt).mock.calls[0];
+    expect(req).toMatchObject({ label: 'Чек №1', amount: 75 });
   });
 
   it('corrects a photo that fell into the queue mid-batch locally, never through a 404', async () => {

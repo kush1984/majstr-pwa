@@ -129,8 +129,10 @@ function contribution(e: CashEntryResponse) {
  * the gap between «Прийшло» and «Заробив» — and is never subtracted again.</p>
  */
 export function applyCashDelta(flow: CashFlowResponse, change: CashDelta): CashFlowResponse {
-  const out = contribution(change.removed ?? EMPTY_ROW);
-  const inc = contribution(change.added ?? EMPTY_ROW);
+  // Only what falls inside the window on screen moves its figures (review P-64): a 15 Sep row added
+  // while viewing 5–11 Oct raised that week's «Прийшло».
+  const out = contribution(inWindow(flow, change.removed) ?? EMPTY_ROW);
+  const inc = contribution(inWindow(flow, change.added) ?? EMPTY_ROW);
   const income = flow.income - out.income + inc.income;
   const expense = flow.expense - out.expense + inc.expense;
   return {
@@ -140,6 +142,23 @@ export function applyCashDelta(flow: CashFlowResponse, change: CashDelta): CashF
     refunds: flow.refunds - out.refunds + inc.refunds,
     earned: income - expense,
   };
+}
+
+/** The row, if it falls inside the window `period` covers — the same test `summaryDelta` makes. */
+function inWindow(period: { from: string; to: string }, e?: CashEntryResponse | null) {
+  return e && e.happenedOn >= period.from && e.happenedOn <= period.to ? e : null;
+}
+
+/**
+ * The list after one row moved (review P-64): out by id, back in BY DATE and only inside the
+ * window. An edit that changed the date used to stay where it was — under a day it no longer
+ * belonged to, opening a second group with the same `key={d.day}` — and a row dated outside the
+ * week was listed in it anyway.
+ */
+export function placeRow(flow: CashFlowResponse, id: string, row: CashEntryResponse | null): CashFlowResponse {
+  const rest = flow.entries.filter((e) => e.id !== id);
+  const placed = inWindow(flow, row);
+  return { ...flow, entries: placed ? insertByDay(rest, placed) : rest };
 }
 
 /** A row that contributes nothing — «no row on this side» written once instead of three times. */
@@ -264,10 +283,7 @@ export function useCashActions(period: CashPeriod) {
           readOnly: false, // his own `cash_entry`: nothing has frozen it into an act
         };
         return optimistically(
-          (flow) => applyCashDelta(
-            { ...flow, entries: insertByDay(flow.entries, row) },
-            { added: row },
-          ),
+          (flow) => applyCashDelta(placeRow(flow, id, row), { added: row }),
           { added: row },
           () => offlineMutate<void>({
             entity: 'cashEntry', entityId: id, type: 'create', payload: { req },
@@ -303,7 +319,7 @@ export function useCashActions(period: CashPeriod) {
         }));
         return optimistically(
           (flow) => applyCashDelta(
-            { ...flow, entries: flow.entries.map((e) => (e.id === vars.id && after ? after : e)) },
+            after ? placeRow(flow, vars.id, after) : flow,
             { removed: before, added: after },
           ),
           { removed: before, added: after },
@@ -353,10 +369,8 @@ export function useCashActions(period: CashPeriod) {
  * entry can legitimately belong to one and not to the other.
  */
 function summaryDelta(summary: CashSummaryResponse, change: CashDelta): CashSummaryResponse {
-  const inside = (e?: CashEntryResponse | null) =>
-    (e && e.happenedOn >= summary.from && e.happenedOn <= summary.to ? e : null);
-  const out = contribution(inside(change.removed) ?? EMPTY_ROW);
-  const inc = contribution(inside(change.added) ?? EMPTY_ROW);
+  const out = contribution(inWindow(summary, change.removed) ?? EMPTY_ROW);
+  const inc = contribution(inWindow(summary, change.added) ?? EMPTY_ROW);
   const income = summary.income - out.income + inc.income;
   const expense = summary.expense - out.expense + inc.expense;
   return {

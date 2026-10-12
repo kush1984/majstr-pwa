@@ -8,7 +8,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { formatMoney, formatAmount, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { parseMoney, parseQuantity, roundMoney } from '@/lib/decimal.ts';
+import { PAYMENT_MAX, parseMoney, parseQuantity, roundMoney } from '@/lib/decimal.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -457,7 +457,7 @@ function PaymentSheet({
   const submit = async () => {
     // A stage is at least a kopeck (review P-59): the server's `@DecimalMin("0.01")` refused a 0 ₴
     // placeholder online, and offline it became a blocked op that stranded the receipts against it.
-    const amountValue = parseMoney(amount);
+    const amountValue = parseMoney(amount, { max: PAYMENT_MAX });
     const invalid = { purpose: !purpose.trim(), amount: amountValue === null };
     if (invalid.purpose || amountValue === null) {
       setErrors(invalid);
@@ -729,7 +729,7 @@ function ReceivePaymentSheet({
 
   const doSubmit = async (resolution?: OverflowChoice) => {
     // Money actually received: 0 is not a receipt, and «1 200» is one.
-    const amountValue = parseMoney(amount);
+    const amountValue = parseMoney(amount, { max: PAYMENT_MAX });
     if (amountValue === null) {
       setErrors((p) => ({ ...p, amount: true }));
       toast.error(t('economy.receivedAmountInvalid'));
@@ -774,7 +774,7 @@ function ReceivePaymentSheet({
   };
 
   const submit = async () => {
-    const amountValue = parseMoney(amount);
+    const amountValue = parseMoney(amount, { max: PAYMENT_MAX });
     if (selectedStage && amountValue !== null) {
       const diff = amountValue - selectedStage.remaining;
       if (diff > 0.004) {
@@ -893,7 +893,7 @@ function ReceivePaymentSheet({
           onClose={() => setOverflow(null)}
           diff={overflow.diff}
           nextPurpose={overflow.nextPurpose}
-          receivedTotal={(selectedStage?.received ?? 0) + (parseMoney(amount) ?? 0)}
+          receivedTotal={(selectedStage?.received ?? 0) + (parseMoney(amount, { max: PAYMENT_MAX }) ?? 0)}
           loading={loading}
           onChoose={(choice) => void doSubmit(choice)}
         />
@@ -936,7 +936,7 @@ function EditReceiptSheet({
 
   const submit = async () => {
     if (!receipt) return;
-    const value = parseMoney(amount);
+    const value = parseMoney(amount, { max: PAYMENT_MAX });
     if (value === null) {
       toast.error(t('economy.receivedAmountInvalid'));
       return;

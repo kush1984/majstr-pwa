@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jsQR from 'jsqr';
-import { decodeQr, decodeQrFromFile, looksFiscal, resetQrDecoder } from './qr.ts';
+import { decodeQrFromFile, looksFiscal, resetQrDecoder } from './qr.ts';
 
 vi.mock('jsqr', () => ({ default: vi.fn(() => null) }));
 
@@ -43,15 +43,6 @@ function installImage(width: number, height: number) {
   URL.revokeObjectURL = vi.fn();
 }
 
-function installNative(detect: () => Promise<{ rawValue: string }[]>) {
-  (globalThis as Global).BarcodeDetector = class {
-    detect = detect;
-  };
-  resetQrDecoder();
-}
-
-const frame = {} as CanvasImageSource;
-
 beforeEach(() => {
   vi.clearAllMocks();
   delete (globalThis as Global).BarcodeDetector;
@@ -73,100 +64,6 @@ describe('looksFiscal', () => {
     expect(looksFiscal('WIFI:S:MyNet;T:WPA;P:secret;;')).toBe(false);
     expect(looksFiscal('https://example.com/promo?id=17&sm=690')).toBe(false); // no fn
     expect(looksFiscal('https://cabinet.tax.gov.ua/?fn=1&id=2&sm=3')).toBe(false); // no date
-  });
-});
-
-describe('decodeQr', () => {
-  it('prefers the native detector where the browser has one', async () => {
-    const detect = vi.fn(() => Promise.resolve([{ rawValue: FISCAL }]));
-    installNative(detect);
-    const ctx = installCanvas();
-
-    expect(await decodeQr(frame, 640, 480)).toBe(FISCAL);
-    expect(detect).toHaveBeenCalledTimes(1);
-    // The expensive path is not also walked: no pixels read, no jsqr.
-    expect(ctx.getImageData).not.toHaveBeenCalled();
-    expect(jsQR).not.toHaveBeenCalled();
-  });
-
-  it('falls back to jsqr when the native detector is absent — iOS Safari is half the phones', async () => {
-    installCanvas();
-    vi.mocked(jsQR).mockReturnValue({ data: FISCAL } as ReturnType<typeof jsQR>);
-
-    expect(await decodeQr(frame, 640, 480)).toBe(FISCAL);
-    expect(jsQR).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to jsqr when the native detector throws on a frame', async () => {
-    installNative(() => Promise.reject(new Error('detector blew up')));
-    installCanvas();
-    vi.mocked(jsQR).mockReturnValue({ data: FISCAL } as ReturnType<typeof jsQR>);
-
-    // One bad frame must not end a scan that runs many times a second.
-    expect(await decodeQr(frame, 640, 480)).toBe(FISCAL);
-    expect(jsQR).toHaveBeenCalledTimes(1);
-  });
-
-  it('a frame with no code is a null, never a throw — that is the normal case while aiming', async () => {
-    installNative(() => Promise.resolve([]));
-    installCanvas();
-    vi.mocked(jsQR).mockReturnValue(null);
-
-    await expect(decodeQr(frame, 640, 480)).resolves.toBeNull();
-  });
-
-  it('a not-yet-sized video frame is skipped before any work is done', async () => {
-    const ctx = installCanvas();
-
-    expect(await decodeQr(frame, 0, 0)).toBeNull();
-    expect(ctx.drawImage).not.toHaveBeenCalled();
-    expect(jsQR).not.toHaveBeenCalled();
-  });
-
-  it('survives an environment with no 2D canvas at all', async () => {
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-
-    await expect(decodeQr(frame, 640, 480)).resolves.toBeNull();
-    expect(jsQR).not.toHaveBeenCalled();
-  });
-
-  // A receipt prints several codes and the fiscal one is the hard one — the sparse marketing code
-  // beside it decodes first every time. Taking "the first code found" told the master his receipt
-  // was not a receipt.
-  it('picks the fiscal code out of a frame that holds several', async () => {
-    installNative(() => Promise.resolve([{ rawValue: MARKETING }, { rawValue: FISCAL }]));
-    installCanvas();
-
-    expect(await decodeQr(frame, 640, 480)).toBe(FISCAL);
-    expect(jsQR).not.toHaveBeenCalled();
-  });
-
-  it('spends one adaptive pass once a non-fiscal code proves the paper is in view', async () => {
-    installNative(() => Promise.resolve([{ rawValue: MARKETING }]));
-    installCanvas(200);
-    // The plain pass misses the dense code; thresholded against its neighbourhood it reads.
-    vi.mocked(jsQR)
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce({ data: FISCAL } as ReturnType<typeof jsQR>);
-
-    expect(await decodeQr(frame, 200, 200)).toBe(FISCAL);
-    expect(jsQR).toHaveBeenCalledTimes(2);
-  });
-
-  it('hands back the non-fiscal payload it read, so the scanner can name the wrong code', async () => {
-    installNative(() => Promise.resolve([{ rawValue: MARKETING }]));
-    installCanvas(200);
-    vi.mocked(jsQR).mockReturnValue(null);
-
-    expect(await decodeQr(frame, 200, 200)).toBe(MARKETING);
-  });
-
-  it('does not pay for the adaptive pass on an empty frame — that is most frames', async () => {
-    installCanvas(200);
-    vi.mocked(jsQR).mockReturnValue(null);
-
-    expect(await decodeQr(frame, 200, 200)).toBeNull();
-    expect(jsQR).toHaveBeenCalledTimes(1);
   });
 });
 

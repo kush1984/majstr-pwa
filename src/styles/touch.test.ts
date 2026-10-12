@@ -55,6 +55,16 @@ describe('touch-reliability base layer', () => {
    * decides his tap did not land. Tailwind's own flag is the only place this can be fixed once for
    * every `hover:` utility in the app.
    */
+  it('never lets a `:has()` selector share a list with one that does not', () => {
+    // An unsupported selector invalidates the WHOLE list it is in (review P-72): folded into the
+    // press-feedback block, `:has()` on an older phone would take every control's feedback with it.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const lists = [...withoutComments.matchAll(/([^{}]+)\{/g)].map((m) => m[1].split(',').map((s) => s.trim()));
+    const mixed = lists.filter((list) => list.some((s) => s.includes(':has(')) && list.some((s) => !s.includes(':has(')));
+    expect(lists.some((list) => list.some((s) => s.includes(':has(')))).toBe(true); // the rule exists at all
+    expect(mixed).toEqual([]);
+  });
+
   it('confines Tailwind hover utilities to devices that actually hover', () => {
     expect(tailwindConfig).toContain('hoverOnlyWhenSupported: true');
   });

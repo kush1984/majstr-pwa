@@ -1093,7 +1093,7 @@
     "sectionApply": "Порахувати",
     "sectionTitleSet": "Розгортка",
     "sectionUnit": "м",
-    "badNumber": "Впишіть число більше 0 і не більше 1000",
+    "badNumber": "Впишіть число більше 0 і не більше {{max}}",
     "sectionSource": "розгортка {{value}} м",
     "sectionSuggested": "Підставили типову розгортку — змініть, якщо профіль інший.",
     "wasteTitle": "Запас",

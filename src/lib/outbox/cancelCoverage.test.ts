@@ -46,7 +46,10 @@ function calls(): { where: string; body: string }[] {
       }
       found.push({
         where: `${file.slice(SRC.length).replace(/\\/g, '/')}:${text.slice(0, m.index).split('\n').length}`,
-        body: text.slice(m.index + m[0].length, i - 1),
+        // Comments out (review P-65): «cancel» in a comment explaining why there is none passed.
+        body: text.slice(m.index + m[0].length, i - 1)
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/[^\n]*/g, ''),
       });
     }
   }
@@ -64,7 +67,8 @@ describe('optimistic patches cancel what they overwrite', () => {
     const missing = all
       // «I patch nothing» said out loud is the exemption; anything else patches something.
       .filter(({ body }) => !body.includes('optimistic: () => undefined'))
-      .filter(({ body }) => !/\bcancel\b/.test(body))
+      // A `cancel` PROPERTY (`cancel: …` or the shorthand), not the bare word anywhere in the body.
+      .filter(({ body }) => !/(^|[\s,{])cancel\s*[:,}]/.test(body))
       .map(({ where }) => where);
     expect(missing, 'these patch the cache without cancelling the fetches in flight').toEqual([]);
   });

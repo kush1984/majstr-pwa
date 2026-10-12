@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
@@ -48,6 +48,24 @@ export function CashFlowPage() {
     }
     return cashPeriod(sent?.period ?? 'WEEK');
   });
+  // A screen left open over midnight kept showing the week it opened on (review P-72). On coming
+  // back to it, a period that WAS «this week / month / year» when last seen moves to today's; a
+  // custom range or a month drilled into from the year stays where he put it.
+  const seenAt = useRef(new Date());
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      const before = seenAt.current;
+      seenAt.current = new Date();
+      setPeriod((p) => {
+        if (p.kind === 'CUSTOM' || p.from !== cashPeriod(p.kind, before).from) return p;
+        const now = cashPeriod(p.kind);
+        return now.from === p.from ? p : now;
+      });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
   // The custom range lives beside the period, not inside it: the two fields stay filled while he
   // switches to «Місяць» and back, so a second look at the same window is one tap, not four.
   const [range, setRange] = useState<{ from: string; to: string }>(

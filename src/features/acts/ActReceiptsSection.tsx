@@ -12,8 +12,8 @@ import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
 import { photosApi } from '@/api/photos.ts';
 import { decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
-import { formatMoneyExact } from '@/lib/format.ts';
-import { parseMoney } from '@/lib/decimal.ts';
+import { formatDate, formatMoneyExact } from '@/lib/format.ts';
+import { parseMoney, sumMoney } from '@/lib/decimal.ts';
 import { ReceiptOrdinal, ReceiptPhoto } from '@/features/photos/ReceiptPhoto.tsx';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
@@ -132,7 +132,7 @@ export function ActReceiptsSection({
 
   // LEGACY rows only: a receipt whose positions were carried into the act back when that was
   // possible is billed by those lines, so its own amount is reference. Nothing creates one now.
-  const total = receipts.filter((r) => !r.itemized).reduce((sum, r) => sum + billedOf(r), 0);
+  const total = sumMoney(receipts.filter((r) => !r.itemized).map(billedOf));
   // «Priced» is about the paper, not about what survives the return: a receipt fully handed back
   // bills nothing and must not block signing, while a receipt nobody has read yet must.
   const unpriced = receipts.filter((r) => r.amount <= 0).length;
@@ -324,7 +324,7 @@ export function ActReceiptsSection({
                   {r.itemized && (
                     <p className="mt-0.5 text-xs text-muted">{t('acts.receiptItemizedBadge')}</p>
                   )}
-                  {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{r.issuedAt}</p>}
+                  {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>}
                   {/* The same paper filed on the object too (B-04). A warning both ways: the
                       object's list points here, this points back — and nothing is blocked, because
                       a shop can legitimately reprint a slip and only the master is holding it. */}

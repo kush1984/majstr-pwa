@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCashDelta, cashPeriod, monthPeriod } from './useCash.ts';
+import { applyCashDelta, cashPeriod, monthPeriod, placeRow } from './useCash.ts';
 import type { CashEntryResponse, CashFlowResponse } from '@/api/types.ts';
 
 /**
@@ -141,5 +141,43 @@ describe('applyCashDelta', () => {
 
     expect(after.refunds).toBe(0);
     expect(after.income).toBe(0);
+  });
+
+  it('moves nothing for a row dated outside the window on screen (review P-64)', () => {
+    const week = { ...totals({ income: 5000, earned: 5000 }), from: '2026-10-05', to: '2026-10-11' };
+    const after = applyCashDelta(week, { added: entry({ id: 'x', amount: 700, happenedOn: '2026-09-15' }) });
+    expect(after.income).toBe(5000);
+  });
+
+  it('an edit that moves a row out of the window takes its money out, and nothing in', () => {
+    const row = entry({ id: 'e1', amount: 900, happenedOn: '2026-09-10' });
+    const after = applyCashDelta(totals({ income: 900, earned: 900 }),
+      { removed: row, added: { ...row, happenedOn: '2026-10-02' } });
+    expect(after.income).toBe(0);
+  });
+});
+
+/** Review P-64: the list the screen groups by day must stay ordered — two groups for one day
+ *  are two React children under one key. */
+describe('placeRow', () => {
+  const a = entry({ id: 'a', happenedOn: '2026-09-20' });
+  const b = entry({ id: 'b', happenedOn: '2026-09-12' });
+  const c = entry({ id: 'c', happenedOn: '2026-09-03' });
+
+  it('inserts a back-dated row under its own day, newest day first', () => {
+    const out = placeRow(flow([a, c]), 'n', entry({ id: 'n', happenedOn: '2026-09-12' }));
+    expect(out.entries.map((e) => e.id)).toEqual(['a', 'n', 'c']);
+  });
+
+  it('re-sorts an edit that changed the date instead of leaving it in place', () => {
+    const out = placeRow(flow([a, b, c]), 'a', { ...a, happenedOn: '2026-09-01' });
+    expect(out.entries.map((e) => e.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('lists nothing dated outside the window, and an edit moving out takes the row off', () => {
+    expect(placeRow(flow([a]), 'x', entry({ id: 'x', happenedOn: '2026-10-15' })).entries)
+      .toEqual([a]);
+    expect(placeRow(flow([a, b]), 'b', { ...b, happenedOn: '2026-08-31' }).entries.map((e) => e.id))
+      .toEqual(['a']);
   });
 });

@@ -154,10 +154,14 @@ export function useReceiptBatch(actId: string, projectId: string) {
       const typedLabel = entry.queued
         ? (before.label.trim() || null) // the queued payload is the only place his label can be
         : (now.label !== before.label ? now.label : null);
+      // Never blank (review P-69): after a queue drain the cache can still hold the placeholder's
+      // `''` and the read may carry none, and `@NotBlank` refused the whole PATCH — the amount read
+      // off the paper went with it. The server's own «Чек №N» is then asked for, not invented.
+      const label = [typedLabel, read.label, now.label].map((l) => l?.trim() ?? '').find((l) => l !== '')
+        ?? (await actsApi.get(actId)).receipts.find((r) => r.id === before.id)?.label
+        ?? '';
       await actsApi.updateReceipt(actId, before.id, {
-        // Never blank: `now.label` is the server's own «Чек №N», which `@NotBlank` accepts and a
-        // placeholder's `''` did not.
-        label: typedLabel ?? read.label?.trim() ?? now.label,
+        label,
         amount: now.amount > 0 ? now.amount : read.amount,
         issuedAt: now.issuedAt ?? read.issuedAt,
         returnedAmount: now.returnedAmount,

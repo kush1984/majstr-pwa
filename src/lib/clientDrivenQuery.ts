@@ -36,7 +36,7 @@ export const CLIENT_DRIVEN_QUERY = {
  * lost by waiting — the flush invalidates everything it changed when it finishes, which is a
  * better-informed refetch than this one would have been.</p>
  */
-function outboxBusy(): boolean {
+export function outboxBusy(): boolean {
   const status = getSyncStatus();
   // `runnable`, not `pending`: an op waiting behind a blocked one stays pending until the master
   // resolves the sync sheet, and a gate on it shut this refetch app-wide for that long — a SIGNED

@@ -1,3 +1,5 @@
+import { roundMoney } from './decimal.ts';
+
 /**
  * Display formatters. All money in the app is computed by the backend
  * (BigDecimal) and arrives as a JSON number; the client only formats it.
@@ -23,7 +25,8 @@ const number3 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 3 });
  * first place — without ever showing a figure the master cannot find on his own paper.</p>
  */
 export function formatMoney(value: number | null | undefined): string {
-  const n = value ?? 0;
+  // Rounded to the kopeck first (review P-66): −0,004 printed «-0 ₴».
+  const n = roundMoney(value ?? 0) || 0;
   return `${(hasKopecks(n) ? number2 : number0).format(n)} ₴`;
 }
 
@@ -40,7 +43,7 @@ export function formatMoneyExact(value: number | null | undefined): string {
 /** "61 070" — the same rule without the glyph, for a row inside a list whose currency is already
  *  established by a header above it (e.g. a compact payments row). */
 export function formatAmount(value: number | null | undefined): string {
-  const n = value ?? 0;
+  const n = roundMoney(value ?? 0) || 0;
   return (hasKopecks(n) ? number2 : number0).format(n);
 }
 

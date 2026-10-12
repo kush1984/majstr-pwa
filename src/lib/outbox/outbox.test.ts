@@ -55,6 +55,54 @@ describe('outbox engine', () => {
     expect(await outboxCount()).toBe(0);
   });
 
+  it('an edit of a create whose POST is in the air waits for it to land (review P-68)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    let entered: () => void = () => {};
+    const inTheAir = new Promise<void>((r) => { entered = r; });
+    const order: string[] = [];
+    registerOutboxHandler('cashEntry', async () => { entered(); await gate; order.push('POST landed'); });
+    await enqueue({ entityId: 'c1', entity: 'cashEntry', type: 'create', payload: {}, deps: [] });
+
+    const flushing = flushOutbox();
+    await inTheAir;
+    const patched = patchPendingCreate('cashEntry', 'c1', (p) => p).then((ok) => { order.push('patch answered'); return ok; });
+    release();
+    await flushing;
+
+    expect(await patched).toBe(false); // drained — the caller's ordinary write is right now
+    expect(order).toEqual(['POST landed', 'patch answered']);
+  });
+
+  it('a second flush while one runs waits for it, then sends what was queued meanwhile (review P-63)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => { release = r; });
+    let entered: () => void = () => {};
+    const inTheAir = new Promise<void>((r) => { entered = r; });
+    const sent: string[] = [];
+    registerOutboxHandler('project', async (op) => {
+      if (op.entityId === 'p1') { entered(); await gate; }
+      sent.push(op.entityId);
+    });
+    await enqueue({ entityId: 'p1', entity: 'project', type: 'create', payload: {}, deps: [] });
+
+    const first = flushOutbox();
+    await inTheAir;
+    // Queued while p1 is in the air — the running pass may already have read the queue.
+    await enqueue({ entityId: 'p2', entity: 'project', type: 'create', payload: {}, deps: [] });
+    const second = flushOutbox();
+    let secondDone = false;
+    void second.then(() => { secondDone = true; });
+    await Promise.resolve();
+    expect(secondDone).toBe(false); // it waits — it never answers «nothing synced» early
+    release();
+
+    await first;
+    await second;
+    expect(sent).toEqual(['p1', 'p2']);
+    expect(await outboxCount()).toBe(0);
+  });
+
   it('leaves an op with no registered handler untouched (a newer build may own it)', async () => {
     await enqueue({ entityId: 'x1', entity: 'unknown-entity', type: 'create', payload: {}, deps: [] });
     const result = await flushOutbox();
@@ -325,29 +373,29 @@ describe('reaching a create that has not replayed yet', () => {
     expect(await outboxCount()).toBe(1);
   });
 
-  it('refuses to touch an op whose request is already in the air', async () => {
+  it('never touches an op whose request is already in the air — it waits for it to land', async () => {
     // Review P-31. The flush sends a snapshot and deletes the op only once the handler resolves,
     // so between those two moments an edit folded into the payload would change nothing the server
     // will ever see, and a drop would leave the row ON the server with nothing left to delete it.
+    // Review P-68: answering at once let the caller's PATCH/DELETE race that POST, so the two that
+    // hand the caller an ordinary write wait for the flush first.
     let release = () => {};
     const sent = new Promise<void>((resolve) => { release = resolve; });
-    let seenDuringFlight: { patched: boolean; dropped: boolean; droppedAll: boolean } | null = null;
-
-    registerOutboxHandler('inflight', async () => {
-      seenDuringFlight = {
-        patched: await patchPendingCreate('inflight', 'x1', (p) => p),
-        dropped: await dropPendingCreate('inflight', 'x1'),
-        droppedAll: await dropPendingEntity('inflight', 'x1'),
-      };
-      await sent;
-    });
+    let entered = () => {};
+    const inTheAir = new Promise<void>((resolve) => { entered = resolve; });
+    registerOutboxHandler('inflight', async () => { entered(); await sent; });
     await enqueue({ entityId: 'x1', entity: 'inflight', type: 'create', payload: {}, deps: [] });
 
     const flush = flushOutbox();
+    await inTheAir;
+    const dropped = await dropPendingCreate('inflight', 'x1');
+    const patched = patchPendingCreate('inflight', 'x1', (p) => p);
+    const droppedAll = dropPendingEntity('inflight', 'x1');
     release();
     await flush;
 
-    expect(seenDuringFlight).toEqual({ patched: false, dropped: false, droppedAll: false });
+    expect({ patched: await patched, dropped, droppedAll: await droppedAll })
+      .toEqual({ patched: false, dropped: false, droppedAll: false });
     expect(await outboxCount()).toBe(0); // and the op itself landed
   });
 });

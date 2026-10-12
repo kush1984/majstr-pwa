@@ -106,11 +106,6 @@ function members(body: string): Map<string, Field> {
 }
 
 const declared = interfaces();
-// A dotted key — «ApplyTemplatesRequest.TemplatePick» — is a NESTED backend record, recorded by the
-// snapshot since review B-46 so a required field added to one reddens the backend's own test. This
-// reader matches top-level request types by name, so those entries are simply not among `shared`;
-// checking them here would need a name map from each nested record to the interface we call it, and
-// the drift they exist to catch is already caught one repo over.
 /**
  * What the backend calls an interface we name differently.
  *

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -87,5 +89,30 @@ describe('session-replay masks', () => {
     expect(maskedAncestorOf('Квартира на Зубрівській')).not.toBeNull();
     expect(maskedAncestorOf(/Зубрівська 12/)).not.toBeNull();
     expect(maskedAncestorOf('Олена Петренко')).not.toBeNull();
+    // …and the money on it, which sits outside the text block (review P-67).
+    expect(maskedAncestorOf(/61\s070/)).not.toBeNull();
   });
+});
+
+/**
+ * The screens too large to render here, asserted on their SOURCE (review P-67): each one's own
+ * outer element must carry the class, because a missing one fails silently.
+ */
+describe('session-replay masks — the big screens', () => {
+  const src = (path: string) => readFileSync(resolve(process.cwd(), 'src', path), 'utf8');
+  const cases: [string, string, RegExp][] = [
+    ['act editor — the whole screen', 'features/acts/ActEditorPage.tsx', /<div className="ph-mask mx-auto max-w-2xl/],
+    ['client banner', 'features/estimate/EstimateEditorPage.tsx', /function ClientBanner[\s\S]{0,600}className="ph-mask/],
+    ['summary card', 'features/estimate/EstimateEditorPage.tsx', /function SummaryCard[\s\S]{0,1500}ph-mask/],
+    ['notes', 'features/notes/NotesSheet.tsx', /className="ph-mask rounded-card/],
+    ['cash screen', 'features/cash/CashFlowPage.tsx', /<div className="ph-mask min-h-dvh/],
+    ['home cash strip', 'features/cash/CashHomeStrip.tsx', /className="ph-mask mb-6/],
+    ['info popover', 'components/InfoPopover.tsx', /'ph-mask fixed/],
+    ['action menu', 'components/ActionMenu.tsx', /'ph-mask fixed/],
+  ];
+  for (const [what, path, pattern] of cases) {
+    it(`masks the ${what}`, () => {
+      expect(src(path)).toMatch(pattern);
+    });
+  }
 });

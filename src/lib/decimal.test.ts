@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  markedUpPrice, parseMoney, parseQuantity, roundMoney, roundQuantity, sumMoney,
+  markedUpPrice, parseMoney, parseQuantity, PAYMENT_MAX, roundMoney, roundQuantity, sumMoney,
 } from './decimal.ts';
 
 /**
@@ -56,9 +56,18 @@ describe('parseMoney', () => {
     expect(parseMoney('  350  ')).toBe(350);
   });
 
+  it('reads «,5», «5.» and «+5» the way the server does, and a payment up to 100 000 000 (review P-66)', () => {
+    expect(parseMoney(',5')).toBe(0.5);
+    expect(parseMoney('.5')).toBe(0.5);
+    expect(parseMoney('5.')).toBe(5);
+    expect(parseMoney('+5')).toBe(5);
+    expect(parseMoney('100000000', { max: PAYMENT_MAX })).toBe(100_000_000);
+    expect(parseMoney('100000000,01', { max: PAYMENT_MAX })).toBeNull();
+  });
+
   it('answers null rather than zero on everything it cannot read', () => {
     for (const raw of ['', '12а', '-5', '−5', '1.200,50', '12.345', '0,004', '1e5', '0x10',
-      'Infinity', 'NaN', '100000000', ',5', '1,2,3']) {
+      'Infinity', 'NaN', '100000000', ',', '.', '+', '++5', '1,2,3']) {
       expect(parseMoney(raw), raw).toBeNull();
     }
   });
@@ -92,6 +101,11 @@ describe('roundQuantity', () => {
     expect(roundQuantity(0.1 + 0.2)).toBe(0.3);
     expect(roundQuantity(12.3456)).toBe(12.346);
     expect(roundQuantity(12.3454)).toBe(12.345);
+  });
+
+  it('answers 0, never NaN, below half a thousandth (review P-66)', () => {
+    expect(roundQuantity(1e-7)).toBe(0);
+    expect(roundQuantity(-1e-9)).toBe(0);
   });
 
   it('rounds HALF_UP away from zero, like the server', () => {

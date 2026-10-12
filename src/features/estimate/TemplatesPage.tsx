@@ -27,6 +27,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
 import { newUuid } from '@/lib/uuid.ts';
+import { dropPendingEntity, listOutbox } from '@/lib/outbox/outbox.ts';
 import { scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
 import { ITEM_TYPE_OPTIONS, UNIT_OPTIONS } from '@/features/catalog/catalogItemSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
@@ -121,6 +122,21 @@ export function TemplatesPage() {
     } catch (err) {
       toast.error(toAppError(err).message);
     }
+  };
+
+  /**
+   * Undo a create the master walked straight back out of (review P-72). Positions typed and removed
+   * offline are still queued as a POST and a DELETE each, which replayed in full only for the
+   * bundle to be deleted after them — those go first, unsent. And a refused delete says so, rather
+   * than leaving an empty bundle on «Мої шаблони» with nothing on screen to explain it.
+   */
+  const abandonCreate = async (templateId: string) => {
+    const queued = (await listOutbox())
+      .filter((op) => op.entity === 'templateItem' && op.deps.includes(templateId));
+    for (const itemId of new Set(queued.map((op) => op.entityId))) {
+      await dropPendingEntity('templateItem', itemId);
+    }
+    deleteTemplate.mutate(templateId, { onError: (e) => toast.error(toAppError(e).message) });
   };
 
   return (
@@ -238,7 +254,7 @@ export function TemplatesPage() {
             const abandoned = empty && justCreated.current === editing.id;
             justCreated.current = null;
             setEditing(null);
-            if (abandoned) deleteTemplate.mutate(editing.id);
+            if (abandoned) void abandonCreate(editing.id);
           }}
         />
       )}

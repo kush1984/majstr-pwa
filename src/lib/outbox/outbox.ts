@@ -204,6 +204,22 @@ export async function enqueueLatest(op: NewOutboxOp): Promise<void> {
 const inFlight = new Set<number>();
 
 /**
+ * When the entity's create is in the air, wait for that flush to finish (review P-68). Answering
+ * `false` straight away sent the caller's PATCH or DELETE alongside the POST it depends on — a
+ * 404 on a row that existed a moment later, or a delete that landed before the row did. After the
+ * wait the create has either landed (the caller's ordinary write is now right) or is back in the
+ * queue as an op this edit can still fold into.
+ */
+async function waitForCreateInFlight(entity: string, entityId: string): Promise<void> {
+  const creates = await outboxDb.ops
+    .where('entityId')
+    .equals(entityId)
+    .filter((o) => o.entity === entity && o.type === 'create')
+    .toArray();
+  if (running && creates.some((o) => o.seq !== undefined && inFlight.has(o.seq))) await running;
+}
+
+/**
  * Edit a create that has not replayed yet, in place.
  *
  * <p>Deliberately NOT a queued `update` op: the entity has no server id, so an update would replay
@@ -211,13 +227,15 @@ const inFlight = new Set<number>();
  * it is what the row always was, as far as the server will ever know.</p>
  *
  * <p>Returns false when the op is gone (it drained between the read and the write), which is the
- * caller's cue that this is now an ordinary online edit.</p>
+ * caller's cue that this is now an ordinary online edit. A create still in the air is waited for
+ * first, so that edit never races it.</p>
  */
 export async function patchPendingCreate(
   entity: string,
   entityId: string,
   patch: (payload: unknown) => unknown,
 ): Promise<boolean> {
+  await waitForCreateInFlight(entity, entityId);
   return outboxDb.transaction('rw', outboxDb.ops, async () => {
     const op = await outboxDb.ops
       .where('entityId')
@@ -258,10 +276,11 @@ export async function dropPendingCreate(entity: string, entityId: string): Promi
  * heard of — a 404 the master then had to resolve in the sync sheet, for a row he had already
  * thrown away. The ops after a create are statements ABOUT it, so they go with it.</p>
  *
- * <p>Returns false when there is no pending create (it drained, or its POST is in the air), which
- * is the caller's cue to delete the row the ordinary online way.</p>
+ * <p>Returns false when there is no pending create (it drained — a POST in the air is waited for
+ * first), which is the caller's cue to delete the row the ordinary online way.</p>
  */
 export async function dropPendingEntity(entity: string, entityId: string): Promise<boolean> {
+  await waitForCreateInFlight(entity, entityId);
   const removed = await outboxDb.transaction('rw', outboxDb.ops, async () => {
     const ops = await outboxDb.ops
       .where('entityId')
@@ -375,7 +394,13 @@ export async function discardForeignOps(ownerId: string | null): Promise<number>
   }
 }
 
-let flushing = false;
+/** The flush in progress, if any (review P-63): a second caller AWAITS it instead of being told
+ *  «nothing synced» while the first pass is still sending — the act's sign gate read that zero as
+ *  «flushed» and went on to check a queue the running flush had not reached yet. */
+let running: Promise<FlushResult> | null = null;
+/** One follow-up pass shared by everyone who asked while `running` was in the air: an op queued
+ *  after that flush read the queue would otherwise wait for the next trigger. */
+let followUp: Promise<FlushResult> | null = null;
 
 
 /**
@@ -383,9 +408,19 @@ let flushing = false;
  * flush. Each op is tried at most once per flush; deps still in the queue (pending OR failed)
  * hold their dependents back. Concurrency-guarded so overlapping triggers don't double-send.
  */
-export async function flushOutbox(): Promise<FlushResult> {
-  if (flushing) return { synced: 0, failed: 0, blocked: 0 };
-  flushing = true;
+export function flushOutbox(): Promise<FlushResult> {
+  if (running) {
+    followUp ??= running.then(() => {
+      followUp = null;
+      return flushOutbox();
+    });
+    return followUp;
+  }
+  running = runFlush().finally(() => { running = null; });
+  return running;
+}
+
+async function runFlush(): Promise<FlushResult> {
   setSyncing(true);
   let synced = 0;
   let blocked = 0;
@@ -459,7 +494,6 @@ export async function flushOutbox(): Promise<FlushResult> {
       }
     }
   } finally {
-    flushing = false;
     setSyncing(false);
     await refreshPending(); // publish the post-flush queue size
   }

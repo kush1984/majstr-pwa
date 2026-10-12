@@ -102,44 +102,6 @@ async function nativeAll(source: CanvasImageSource): Promise<string[]> {
   }
 }
 
-/**
- * Decode a QR code from anything drawable, or null when the frame holds none.
- *
- * <p>A frame with no code is the NORMAL case — this runs many times a second while the master aims
- * the phone — so a miss is a null, never an exception, and a decoder that throws is treated as a
- * miss too: one bad frame must not end a scan.</p>
- *
- * <p>Cheap by design, in the order the cost rises. The adaptive pass runs ONLY once some code has
- * already decoded and it was not fiscal: that is the frame where the paper is demonstrably in view
- * and the code we want is the one that did not decode, which is the only frame worth the extra
- * pass.</p>
- */
-export async function decodeQr(
-  source: CanvasImageSource,
-  width: number,
-  height: number,
-): Promise<string | null> {
-  if (width <= 0 || height <= 0) return null;
-
-  const fromNative = preferFiscal(await nativeAll(source));
-  if (fromNative && looksFiscal(fromNative)) return fromNative;
-
-  const data = pixels(source, width, height);
-  if (!data) return fromNative;
-
-  // `dontInvert` is the default; receipts print black-on-white, and asking jsqr to also try the
-  // inverted image doubles the per-frame cost for a case that does not occur on paper.
-  const plain = scan(data);
-  if (plain && looksFiscal(plain)) return plain;
-
-  const other = fromNative ?? plain;
-  if (other) {
-    const deep = scan(adaptive(data, radiusFor(data), 1.05));
-    if (deep && looksFiscal(deep)) return deep;
-  }
-  return other;
-}
-
 /** RGBA pixels for jsqr, or null when this environment has no 2D canvas (jsdom, mostly). */
 function pixels(source: CanvasImageSource, width: number, height: number): ImageData | null {
   try {

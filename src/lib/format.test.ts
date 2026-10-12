@@ -53,6 +53,11 @@ describe('formatDate', () => {
  * the number of decimals is ours.</p>
  */
 describe('formatMoney', () => {
+  it('never prints «-0 ₴» for a sub-kopeck negative (review P-66)', () => {
+    expect(formatMoney(-0.004)).not.toContain('-');
+    expect(formatMoney(-0.004)).not.toContain('−');
+  });
+
   // \s already covers every separator uk-UA might group with - NBSP and NARROW NBSP
   // are both in ECMAScript WhiteSpace - so which one the ICU picked is not this test's business.
   const digits = (s: string) => s.replace(/\s/g, '');

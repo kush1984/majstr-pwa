@@ -62,7 +62,8 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
             </span>
           )}
           {project.latestEstimateTotal != null && (
-            <span className="whitespace-nowrap text-sm font-bold text-primary">
+            // Outside the card's masked text block, so it carries its own (review P-67).
+            <span className="ph-mask whitespace-nowrap text-sm font-bold text-primary">
               {formatMoney(project.latestEstimateTotal)}
             </span>
           )}

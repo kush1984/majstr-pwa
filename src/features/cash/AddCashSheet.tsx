@@ -6,7 +6,7 @@ import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
-import { parseMoney } from '@/lib/decimal.ts';
+import { PAYMENT_MAX, parseMoney } from '@/lib/decimal.ts';
 import {
   CASH_EXPENSE_CATEGORIES, CASH_INCOME_CATEGORIES, CASH_OBJECT_EXPENSE_CATEGORIES,
   type CashCategory, type CashDirection, type CashEntryRequest, type CashEntryResponse,
@@ -103,7 +103,7 @@ export function AddCashSheet({
    * in a toast over a screen he has already left.</p>
    */
   const submit = async () => {
-    const value = parseMoney(amount);
+    const value = parseMoney(amount, { max: PAYMENT_MAX });
     if (value == null) {
       setError(t('cash.amountInvalid'));
       return;

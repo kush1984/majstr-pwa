@@ -171,9 +171,11 @@ export function patchQueuedReceiptFromRead(
       issuedAt: payload.issuedAt ?? read.issuedAt,
       // NOT three-valued, unlike the three above: the identity belongs to the PHOTO, so there is
       // no «he changed it meanwhile» to preserve — but a read that found no code must not erase
-      // one a previous rung did.
-      fiscalFn: read.fiscalFn ?? payload.fiscalFn ?? null,
-      fiscalId: read.fiscalId ?? payload.fiscalId ?? null,
+      // one a previous rung did. And it is a PAIR (review P-72): taken whole from one source, never
+      // fn from this read and id from the last, which named a receipt that does not exist.
+      ...(read.fiscalFn && read.fiscalId
+        ? { fiscalFn: read.fiscalFn, fiscalId: read.fiscalId }
+        : { fiscalFn: payload.fiscalFn ?? null, fiscalId: payload.fiscalId ?? null }),
     };
   });
 }

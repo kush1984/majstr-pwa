@@ -74,7 +74,9 @@ export function AddItemSheet({
                   // The branch he tapped it in. A position two trades both ship is stored once,
                   // under whichever claimed the name first, so without this the line arrives filed
                   // under the other trade — and carries its folder heading into the estimate.
-                  trade: item.filedUnder ?? undefined,
+                  // Only when it DIFFERS (review P-70): naming the item's own trade made the server
+                  // re-file it into the library's folder, over one the master had renamed.
+                  trade: item.filedUnder && item.filedUnder !== item.trade ? item.filedUnder : undefined,
                 }));
                 await batch.mutateAsync(items);
                 onAdded?.(items.map((x) => x.id));

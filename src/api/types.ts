@@ -2188,7 +2188,7 @@ export interface CashSummaryResponse {
   income: number;
   expense: number;
   earned: number;
-  /** false = nothing moved this week, and the home strip does not render at all. */
+  /** false = nothing moved this MONTH (the strip's window), and the home strip does not render. */
   hasEntries: boolean;
 }
 

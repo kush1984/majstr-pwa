@@ -43,9 +43,8 @@ const cancelEconomy = (qc: QueryClient, objectId: string) => () =>
   qc.cancelQueries({ queryKey: economyKeys.economy(objectId) });
 
 /**
- * The economy tab's data — panels + payments are FREE-visible, so this is always fetched
- * (unlike the expense journal below, which stays PRO-gated). `internals` comes back null for
- * FREE; the section renders the lock teaser for that part only.
+ * The economy tab's data — panels + payments are FREE-visible, so this is always fetched.
+ * `internals` comes back null for FREE.
  */
 export function useEconomy(objectId: string) {
   return useQuery({
@@ -193,6 +192,7 @@ export function useAddReceipt(objectId: string) {
     networkMode: 'always',
     mutationFn: async (req: PaymentReceiptRequest) => {
       const id = newUuid();
+      let landed = false;
       const result = await offlineMutate<PaymentReceiptResponse[]>({
         entity: 'payment-receipt', entityId: id, type: 'create', payload: { objectId, req },
         // The targeted stage is a dep, not just the object: a stage added in the same offline
@@ -201,7 +201,10 @@ export function useAddReceipt(objectId: string) {
         deps: req.planPaymentId ? [objectId, req.planPaymentId] : [objectId],
         online: () => paymentsApi.addReceipt(objectId, req, id),
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => {
+          landed = true;
+          void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+        },
         optimistic: () => {
           const label = req.label?.trim() || null;
           const refund = req.materialRefund === true;
@@ -250,7 +253,10 @@ export function useAddReceipt(objectId: string) {
       // the same stage back-to-back could otherwise reopen "Отримати платіж" while the sheet
       // still shows pre-mutation numbers, under-detecting a real overflow (money-critical: the
       // client's own overflow check is what decides whether the confirm dialog even shows).
-      await qc.refetchQueries({ queryKey: economyKeys.economy(objectId), type: 'active' });
+      // Only once the server HAS it (review P-65): after queueing, the refetch came back with the
+      // server's figures — which do not contain the queued receipt — straight over the optimistic
+      // patch, and the money the master had just entered left the screen.
+      if (landed) await qc.refetchQueries({ queryKey: economyKeys.economy(objectId), type: 'active' });
       return result;
     },
   });

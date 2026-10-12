@@ -165,11 +165,11 @@ describe('ObjectEconomySection', () => {
     expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
     // «Прибуток» is GONE from the object, not hidden behind a flag: the formula subtracted
     // expenses no screen lets a master enter against an object, so it read ≈ «За договором» for
-    // everyone. Earnings live in «Мої гроші». Asserted on the two labels the card DID carry, since
-    // `queryByText('Заробіток')` named a string that is no longer in any bundle — an assertion
-    // that can never fail is not a guard (review P-52).
-    expect(screen.queryByText('Витрати')).toBeNull();
-    expect(screen.queryByText('+ Витрата')).toBeNull();
+    // everyone. Earnings live in «Мої гроші». Asserted on the FIGURES the fixture carries (review
+    // P-71): every label tried before named a string in no bundle, and an assertion that can never
+    // fail is not a guard (P-52).
+    expect(screen.queryByText(/10\s500/)).toBeNull(); // internals.profit
+    expect(screen.queryByText(/3\s500/)).toBeNull(); // internals.expenses
     // The teaser must NOT show for PRO.
     expect(screen.queryByText(/у PRO$/)).toBeNull();
   });

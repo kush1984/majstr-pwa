@@ -54,18 +54,24 @@ export function markedUpPrice(price: number, factor: number): number {
  * signed act, an advance into nothing, a quantity into a position that vanished. A figure nobody
  * typed may never reach a document, so an unreadable field says so and blocks Save instead.
  *
- * Accepts «1 200», «1 200,50», «12,5» (space, thin space and apostrophe are grouping, not data);
- * refuses «0,004», «12.345», «1.200,50», «−5», «1e5», «0x10», «Infinity» and 100 000 000.
+ * Accepts «1 200», «1 200,50», «12,5» (space, thin space and apostrophe are grouping, not data),
+ * and «,5», «5.» and «+5» the way the server's own number reader does (review P-66); refuses
+ * «0,004», «12.345», «1.200,50», «−5», «1e5», «0x10», «Infinity» and, by default, 100 000 000 —
+ * a payment or a cash row passes {@link PAYMENT_MAX}, where the server takes it.
  */
 export function parseMoney(
   raw: string,
   { max = 99_999_999.99, allowZero = false }: { max?: number; allowZero?: boolean } = {},
 ): number | null {
   const s = raw.trim().replace(/[\s\u00a0\u202f']/g, '');
-  if (!/^\d{1,11}([.,]\d{1,2})?$/.test(s)) return null;
+  if (!/^\+?(\d{1,11}([.,]\d{0,2})?|[.,]\d{1,2})$/.test(s)) return null;
   const n = Number(s.replace(',', '.'));
   return (allowZero ? n >= 0 : n >= 0.01) && n <= max ? n : null;
 }
+
+/** The ceiling the server puts on a payment stage, a payment and a cash row (`@DecimalMax("100000000")`),
+ *  one kopeck above the estimate lines' 99 999 999,99. */
+export const PAYMENT_MAX = 100_000_000;
 
 /**
  * A quantity at the scale the server stores it — three decimals, HALF_UP, by the same string
@@ -74,6 +80,9 @@ export function parseMoney(
  */
 export function roundQuantity(n: number): number {
   const a = Math.abs(Number(n.toPrecision(15)));
+  // Below half a thousandth the answer is 0 — and JS writes such numbers in exponent form, which
+  // the string trick below turns into NaN (review P-66), the guard `roundMoney` already has.
+  if (a < 0.0005) return 0;
   const r = Number(`${Math.round(Number(`${a}e3`))}e-3`);
   return n < 0 ? -r : r;
 }
@@ -87,7 +96,7 @@ export function parseQuantity(
   { max = 9_999_999.999, allowZero = false }: { max?: number; allowZero?: boolean } = {},
 ): number | null {
   const s = raw.trim().replace(/[\s\u00a0\u202f']/g, '');
-  if (!/^\d{1,10}([.,]\d{1,3})?$/.test(s)) return null;
+  if (!/^\+?(\d{1,10}([.,]\d{0,3})?|[.,]\d{1,3})$/.test(s)) return null;
   const n = Number(s.replace(',', '.'));
   return (allowZero ? n >= 0 : n >= 0.001) && n <= max ? n : null;
 }

@@ -49,6 +49,8 @@ interface AskLabels {
   applySet: string;
   suggested: string;
   remembered: string;
+  /** The refusal names THIS question's bound (review P-72) — «≤ 1000» was wrong for two of three. */
+  bad: string;
 }
 
 /**
@@ -389,7 +391,12 @@ export function MaterialCalculatorPage() {
    */
   const remember = useMutation({
     mutationFn: (req: MaterialParamsRequest) => materialsApi.saveParams(id, req),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['materials', id] }),
+    onSuccess: () => {
+      // A cleared answer moves no query-string field, so the effect that drops the hand-typed
+      // quantities never saw it (review P-72): they stayed, typed against figures now gone.
+      setEdited({});
+      return qc.invalidateQueries({ queryKey: ['materials', id] });
+    },
     onError: () => toast.error(t('materials.paramsNotSaved')),
   });
   const rememberedHonestly = !remember.isPending && !remember.isError;
@@ -563,7 +570,7 @@ export function MaterialCalculatorPage() {
             )}
             {perimeterError && (
               <p id="perimeter-error" className="mt-1 text-xs text-danger">
-                {t('materials.badNumber')}
+                {t('materials.badNumber', { max: MAX_FIGURE.PERIMETER })}
               </p>
             )}
           </div>
@@ -589,6 +596,7 @@ export function MaterialCalculatorPage() {
             applySet: t('materials.recalculate'),
             suggested: t('materials.sectionSuggested'),
             remembered: t('materials.paramsRemembered'),
+            bad: t('materials.badNumber', { max: MAX_FIGURE.SECTION }),
           }}
         />
 
@@ -612,6 +620,7 @@ export function MaterialCalculatorPage() {
             applySet: t('materials.recalculate'),
             suggested: t('materials.thicknessSuggested'),
             remembered: t('materials.paramsRemembered'),
+            bad: t('materials.badNumber', { max: MAX_FIGURE.THICKNESS }),
           }}
         />
 
@@ -767,7 +776,7 @@ function PerPositionAsk({
               />
               {errors[p.estimateItemId] && (
                 <p id={`${fieldId}-error`} className="mt-1 text-xs text-danger">
-                  {t('materials.badNumber')}
+                  {labels.bad}
                 </p>
               )}
             </div>
@@ -815,6 +824,10 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
   useEffect(() => {
     if (stored) setDraft({ ...stored });
   }, [stored]);
+  // What the fields show: the edits, or — on the render before the effect above copies them in —
+  // the stored answers themselves. Reading `draft` alone flashed «не вдалося завантажити» for one
+  // frame every time the card opened (review P-72).
+  const shown = draft ?? stored ?? null;
 
   const save = useMutation({
     /**
@@ -848,7 +861,7 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
   ];
   if (fields.length === 0) return null;
 
-  const value = (key: string) => draft?.[key] ?? '';
+  const value = (key: string) => shown?.[key] ?? '';
 
   /**
    * The same bands the server states (`MaterialPrefs`, review B-19), asked here so a refusal lands
@@ -861,9 +874,15 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
   const invalid = (key: string, raw: string): boolean => {
     const text = raw.trim();
     if (text === '') return false;
-    if (key === 'GKL_SHEET') return !/^\d{1,5}\s*[x×*]\s*\d{1,5}$/.test(text);
-    const n = parseDecimal(text);
-    if (!Number.isFinite(n)) return true;
+    // The server's own readers, character for character (review P-72): it lower-cases the sheet
+    // («1200X2500» is fine) and bounds each side; a number is `new BigDecimal`, so «1 2», «0x10»
+    // and a coat count of «2.0004» — which rounding here turned into 2 — are refused there.
+    if (key === 'GKL_SHEET') {
+      const m = /^(\d{1,5})\s*[x×*]\s*(\d{1,5})$/i.exec(text);
+      return !m || [m[1], m[2]].some((side) => Number(side) < 500 || Number(side) > 4000);
+    }
+    if (!/^\d+([.,]\d+)?$/.test(text)) return true;
+    const n = Number(text.replace(',', '.'));
     if (key === 'PAINT_COVERAGE') return n < 3 || n > 20;
     if (key === 'PAINT_COATS') return n < 1 || n > 4 || !Number.isInteger(n);
     if (key === 'TILE_JOINT_MM') return n < 1 || n > 20;
@@ -907,7 +926,7 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
             <div className="py-3">
               <Spinner />
             </div>
-          ) : prefs.isError || !draft ? (
+          ) : prefs.isError || !shown ? (
             // Never a form: empty fields over a failed GET read as «no habits stored», and one tap
             // on «Зберегти» would have made that true (review P-23).
             <ErrorState
@@ -932,7 +951,7 @@ function Habits({ trades, onSaved }: { trades: string[]; onSaved: () => void }) 
                       value={value(f.key)}
                       aria-invalid={errors[f.key] ? true : undefined}
                       onChange={(e) => {
-                        setDraft((prev) => ({ ...(prev ?? {}), [f.key]: e.target.value }));
+                        setDraft((prev) => ({ ...(prev ?? stored ?? {}), [f.key]: e.target.value }));
                         setErrors((prev) => ({ ...prev, [f.key]: false }));
                       }}
                     />

@@ -661,6 +661,7 @@
     "paymentsReceivedCount_one": "✓ Received · {{count}} payment",
     "paymentsReceivedCount_few": "✓ Received · {{count}} payments",
     "paymentsReceivedCount_many": "✓ Received · {{count}} payments",
+    "paymentsReceivedCount_other": "✓ Received · {{count}} payments",
     "paymentsNextLabel": "Next payment",
     "paymentsExpandAll": "All payments ({{count}})",
     "paymentsCollapseAll": "Collapse",
@@ -1089,7 +1090,7 @@
     "sectionApply": "Calculate",
     "sectionTitleSet": "Developed width",
     "sectionUnit": "m",
-    "badNumber": "Enter a number greater than 0 and no more than 1000",
+    "badNumber": "Enter a number greater than 0 and no more than {{max}}",
     "sectionSource": "developed width {{value}} m",
     "sectionSuggested": "A typical width is filled in — change it if your profile differs.",
     "wasteTitle": "Waste allowance",
@@ -1830,7 +1831,8 @@
     "empty": "No new questions",
     "newQuestions_one": "{{count}} new question",
     "newQuestions_few": "{{count}} new questions",
-    "newQuestions_many": "{{count}} new questions"
+    "newQuestions_many": "{{count}} new questions",
+    "newQuestions_other": "{{count}} new questions"
   },
   "email": {
     "bannerTitle": "Confirm your email",

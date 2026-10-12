@@ -5,6 +5,7 @@ import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
   WorkActReceiptRequest,
+  WorkActResponse,
   WorkActStatus,
   WorkActUpdateRequest,
 } from '@/api/types.ts';
@@ -148,11 +149,20 @@ export function useSignActOffline(id: string, projectId: string) {
 }
 
 export function useUpdateActReceipt(id: string, projectId: string) {
+  const qc = useQueryClient();
   const invalidate = useActWriter(id, projectId);
   return useMutation({
     mutationFn: ({ receiptId, req }: { receiptId: string; req: WorkActReceiptRequest }) =>
       actsApi.updateReceipt(id, receiptId, req),
-    onSuccess: invalidate,
+    onSuccess: (saved) => {
+      // Written into the cache, not only invalidated (review P-68): the receipt batch decides
+      // «he already answered this» from this cache, and an invalidate alone left the old row there
+      // until the refetch landed — a read finishing in that window overwrote what he had just typed.
+      qc.setQueryData<WorkActResponse>(actKey(id), (act) => (act
+        ? { ...act, receipts: act.receipts.map((r) => (r.id === saved.id ? saved : r)) }
+        : act));
+      invalidate();
+    },
   });
 }
 

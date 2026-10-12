@@ -29,9 +29,21 @@ const MAX_SUGGESTIONS = 10;
  * `onClick` beside this — which a browser fires only for a real tap, never for a scroll. The list
  * survives the gap because `onBlur` closes it on a 150 ms timer rather than immediately.</p>
  */
-const beforeBlur = (run: () => void) => (e: ReactPointerEvent<HTMLButtonElement>) => {
-  if (e.pointerType !== 'mouse') return;
-  e.preventDefault();
+const beforeBlur = (done: { current: boolean }, run: () => void) =>
+  (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType !== 'mouse') return;
+    e.preventDefault();
+    done.current = true;
+    run();
+  };
+
+/** The `onClick` half: a mouse press already acted on pointerdown, so its click is not a second
+ *  pick (review P-72) — only a tap, a pen, or the keyboard reaches `run` here. */
+const onTap = (done: { current: boolean }, run: () => void) => () => {
+  if (done.current) {
+    done.current = false;
+    return;
+  }
   run();
 };
 
@@ -71,6 +83,7 @@ export function CatalogAutocomplete({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mouseActed = useRef(false);
 
   const suggestions = useMemo<CatalogItemResponse[]>(() => {
     if (term.length < 1) return [];
@@ -172,8 +185,8 @@ export function CatalogAutocomplete({
               <li key={item.id} role="option" aria-selected={active === i}>
                 <button
                   type="button"
-                  onPointerDown={beforeBlur(() => pick(item))}
-                  onClick={() => pick(item)}
+                  onPointerDown={beforeBlur(mouseActed, () => pick(item))}
+                  onClick={onTap(mouseActed, () => pick(item))}
                   onMouseEnter={() => setActive(i)}
                   className={cn(
                     'flex w-full items-center gap-2 px-3 py-2.5 text-left',
@@ -208,8 +221,8 @@ export function CatalogAutocomplete({
             <li role="option" aria-selected={active === suggestions.length}>
               <button
                 type="button"
-                onPointerDown={beforeBlur(() => setOpen(false))}
-                onClick={() => setOpen(false)}
+                onPointerDown={beforeBlur(mouseActed, () => setOpen(false))}
+                onClick={onTap(mouseActed, () => setOpen(false))}
                 onMouseEnter={() => setActive(suggestions.length)}
                 className={cn(
                   'flex w-full items-center gap-2 border-t border-border px-3 py-2.5 text-left text-sm',

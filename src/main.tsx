@@ -6,6 +6,8 @@ import { registerSW } from 'virtual:pwa-register';
 import { markUpdateReady } from '@/lib/swUpdate.ts';
 import { offlinePersister, shouldDehydrateQuery } from '@/lib/offlinePersist.ts';
 import { initOutbox } from '@/lib/outbox/init.ts';
+import { outboxBusy } from '@/lib/clientDrivenQuery.ts';
+import { dropLegacyStorage } from '@/lib/legacyStorage.ts';
 import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
@@ -48,6 +50,8 @@ const WEEK_MS = 1000 * 60 * 60 * 24 * 7;
 const UPDATE_CHECK_MS = 1000 * 60 * 60;
 /** Offline-cache schema version — bump ONLY on an incompatible change to cached DTO shapes. */
 const CACHE_SCHEMA = 'v1';
+dropLegacyStorage();
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -62,6 +66,11 @@ const queryClient = new QueryClient({
       retry: shouldRetryQuery,
       retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,
+      // Reconnect is the queue's own trigger (review P-65): the flush and this refetch race, and a
+      // GET answering first wrote the server's state — without the queued ops — over the optimistic
+      // cache, the same race P-42 closed for focus. The flush invalidates what it changed when it
+      // finishes, so waiting for it loses nothing.
+      refetchOnReconnect: () => !outboxBusy(),
     },
     mutations: {
       // NEVER let a mutation sit PAUSED offline. The default ('online') silently parks it until

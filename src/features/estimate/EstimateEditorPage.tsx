@@ -1239,6 +1239,12 @@ function MobileSummarySheet({ est }: { est: EstimateResponse }) {
  * <p>White/60 like the rest of the secondary lines here — a difference between two prices, not an
  * earning to celebrate in green.</p>
  */
+/** Whether the `lg:` layout is the one on screen — asked once per mount, a resize is not a view. */
+function isDesktop(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(min-width: 1024px)').matches;
+}
+
 export function CrewMarginLine({ est, counts = false }: {
   est: EstimateResponse;
   /**
@@ -1296,9 +1302,9 @@ export function TypeBreakdown({ items, type, subtotal, label }: {
   // markup (from different source estimates), and a single netted row would hide one against the
   // other — "we already know which is which" is the whole point of naming them separately.
   const frozenLines = items.filter((i) => i.type === type && i.unit === 'PERCENT' && i.baseOriginLabel);
-  const frozenMarkup = frozenLines.filter((i) => i.lineTotal > 0).reduce((s, i) => s + i.lineTotal, 0);
-  const frozenDiscount = frozenLines.filter((i) => i.lineTotal < 0).reduce((s, i) => s + i.lineTotal, 0);
-  const base = Math.round((subtotal - adjust - frozenMarkup - frozenDiscount) * 100) / 100;
+  const frozenMarkup = sumMoney(frozenLines.filter((i) => i.lineTotal > 0).map((i) => i.lineTotal));
+  const frozenDiscount = sumMoney(frozenLines.filter((i) => i.lineTotal < 0).map((i) => i.lineTotal));
+  const base = roundMoney(subtotal - adjust - frozenMarkup - frozenDiscount);
   return (
     <div className="mb-2.5">
       <div className="flex justify-between text-[13px] text-white/75">
@@ -1413,7 +1419,9 @@ function SummaryCard({
         {formatMoney(est.total)}
       </div>
       <AdjustNote items={est.items} />
-      <CrewMarginLine est={est} />
+      {/* The desktop card reports being seen only where it IS the visible copy (review P-72): the
+          phone sheet does so on phones, and nothing did on a desktop. */}
+      <CrewMarginLine est={est} counts={isDesktop()} />
     </div>
   );
 }

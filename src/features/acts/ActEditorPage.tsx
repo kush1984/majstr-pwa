@@ -216,11 +216,14 @@ export function ActEditorPage() {
    * discovering that from a 409 on the next Save is finding out too late.</p>
    */
   const wasSigned = useRef(false);
+  const selfSigning = useRef(false);
+  const handingOver = useRef(false); // see `once` below
   useEffect(() => {
     if (!seeded || isNew) return;
     if (signed && !wasSigned.current) {
       wasSigned.current = true;
-      if (dirtyRef.current) toast.info(t('acts.signedWhileEditing'));
+      // Our own signature is not news; edits the master had not saved when the CLIENT signed are.
+      if (unsavedRef.current && !selfSigning.current) toast.info(t('acts.signedWhileEditing'));
       setSeeded(false); // the effect below re-reads the server's own figures
     }
     if (!signed) wasSigned.current = false;
@@ -493,9 +496,13 @@ export function ActEditorPage() {
   const skipLeaveGuard = useRef(false);
   const leaveBlocker = useLeaveGuard(dirty, skipLeaveGuard);
   // Read by the «client signed while you were editing» effect above, which must not re-run every
-  // time a digit is typed.
-  const dirtyRef = useRef(false);
-  dirtyRef.current = dirty;
+  // time a digit is typed (review P-63). NOT `dirty`: that one is false the moment the act reads
+  // SIGNED, so the toast could never fire. This asks only whether the form drifted from what was
+  // last saved, and is written in an effect declared AFTER that one — so on the render where the
+  // status flips, the signature effect still reads the value from before it.
+  const unsaved = seeded && !isNew && savedSnapshot !== null && currentSnapshot !== savedSnapshot;
+  const unsavedRef = useRef(false);
+  useEffect(() => { unsavedRef.current = unsaved; }, [unsaved]);
 
   // At least one line with a quantity — the gate for signing (mirrors the backend's empty-act
   // guard: a SIGNED act is immutable and undeletable, so an empty one must never get that far).
@@ -653,13 +660,28 @@ export function ActEditorPage() {
     return true;
   };
 
-  const onSign = async () => {
+  /**
+   * One handover at a time (review P-63): a second tap during the pre-sign flush and save ran a
+   * second save and a second sign, and the master read a 409 right after «підписано».
+   */
+  const once = (fn: () => Promise<void>) => async () => {
+    if (handingOver.current) return;
+    handingOver.current = true;
+    try {
+      await fn();
+    } finally {
+      handingOver.current = false;
+    }
+  };
+
+  const onSign = once(async () => {
     if (!signerName.trim()) return;
     if (invalid) {
       toast.error(t('acts.fixFields'));
       return;
     }
     if (!(await queuedReceiptsClear())) return;
+    selfSigning.current = true;
     try {
       // Persist current edits first so the signed act reflects the screen (creating it, if this is
       // still «/acts/new» — the master may fill an act and sign it in one sitting).
@@ -682,9 +704,10 @@ export function ActEditorPage() {
         void navigate(routes.act(actId), { replace: true });
       }
     } catch (err) {
+      selfSigning.current = false;
       toast.error(toAppError(err).message);
     }
-  };
+  });
 
   /**
    * Both doors that hand the act to someone ELSE go through the same gate (review P-37).
@@ -713,11 +736,11 @@ export function ActEditorPage() {
     }
   };
 
-  const onShare = async () => {
+  const onShare = once(async () => {
     if (await beforeHandingOver()) setShareOpen(true);
-  };
+  });
 
-  const onPdf = async () => {
+  const onPdf = once(async () => {
     if (!(await beforeHandingOver())) return;
     try {
       // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
@@ -725,7 +748,7 @@ export function ActEditorPage() {
     } catch (err) {
       toast.error(toAppError(err).message);
     }
-  };
+  });
 
   // Off-estimate work is work the client never signed for, so say it once — whichever way the row
   // is created (typed by hand or taken from the catalog).
@@ -755,7 +778,10 @@ export function ActEditorPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-28 pt-2 sm:px-6">
+    // `ph-mask` on the whole editor (review P-67): positions, group totals, additional works,
+    // receipts, «Разом / До сплати» and the advance are all the master's money and his client's
+    // deal. Masking piecemeal left four of those recorded; the screen has nothing a replay needs.
+    <div className="ph-mask mx-auto max-w-2xl px-4 pb-28 pt-2 sm:px-6">
       {/* Top bar: «Зберегти» and «Поділитися» on the screen itself (master feedback — hunting for
           Save in the FAB after every edit was the loudest complaint). STATIC, not sticky (round 2):
           no other screen pins its header, and the sticky variant shipped with a non-existent

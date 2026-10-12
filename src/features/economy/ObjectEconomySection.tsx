@@ -8,6 +8,7 @@ import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFre
 import { upgradeApi } from '@/api/upgrade.ts';
 import { track } from '@/lib/posthog.ts';
 import { formatMoney, formatMoneyExact, formatNumber } from '@/lib/format.ts';
+import { sumMoney } from '@/lib/decimal.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
@@ -231,8 +232,7 @@ function EstimatesSummaryPanel({ panels }: { panels: SignedEstimatePanelResponse
   const { t } = useTranslation();
   const counted = panels.filter((p) => p.countedInEconomy);
   if (counted.length === 0) return null;
-  const sum = (pick: (p: SignedEstimatePanelResponse) => number) =>
-    counted.reduce((s, p) => s + pick(p), 0);
+  const sum = (pick: (p: SignedEstimatePanelResponse) => number) => sumMoney(counted.map(pick));
   return (
     <div className="rounded-card border border-brand-soft-2 bg-brand-soft p-3">
       <h3 className="text-[13px] font-bold text-primary">{t('economy.summaryTitle')}</h3>
@@ -376,8 +376,8 @@ function MaterialsAxis({ materials, objectId }: {
  *       sees.</li>
  *   <li><b>PRO only, one lock teaser:</b> the Σ summary panel and the payment schedule, behind a
  *       SINGLE gate — temporarily open to FREE too, see {@link TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY}.
- *       Прибуток/Витрати (+ the expense journal) used to be a third piece here but is parked for
- *       now — see {@code INTERNALS_ENABLED} above.</li>
+ *       Прибуток/Витрати and the expense journal are gone from the object for good — earnings
+ *       live in «Мої гроші».</li>
  * </ul>
  * Owner-only; nothing here reaches the client (see PublicPortalView instead).
  */
