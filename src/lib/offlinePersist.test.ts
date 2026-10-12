@@ -3,8 +3,9 @@ import {
   QueryClient,
   defaultShouldDehydrateQuery,
   dehydrate,
+  hydrate,
 } from '@tanstack/react-query';
-import { shouldDehydrateQuery } from './offlinePersist.ts';
+import { markRestoredStale, shouldDehydrateQuery } from './offlinePersist.ts';
 
 /**
  * Guards the offline read cache against the bug that made it erase itself.
@@ -71,5 +72,38 @@ describe('shouldDehydrateQuery', () => {
     const query = qc.getQueryCache().find({ queryKey: ['clients'] })!;
 
     expect(shouldDehydrateQuery(query)).toBe(true);
+  });
+});
+
+/**
+ * A snapshot restored seconds after it was written still reads as fresh, and the write that came
+ * after it is not in it — `journey.spec` caught «Обʼєкти» showing an empty list for an object the
+ * server had, for as long as the screen stayed open.
+ */
+describe('markRestoredStale', () => {
+  it('makes a restored query stale even when its snapshot is younger than staleTime', async () => {
+    const before = new QueryClient();
+    await before.fetchQuery({ queryKey: ['projects', 'list', 'all'], queryFn: () => Promise.resolve([]) });
+    const snapshot = dehydrate(before);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
+    hydrate(qc, snapshot);
+    const query = qc.getQueryCache().find({ queryKey: ['projects', 'list', 'all'] })!;
+    expect(query.isStaleByTime(30_000)).toBe(false); // the trap: fresh by the clock
+
+    await markRestoredStale(qc);
+
+    expect(query.state.isInvalidated).toBe(true);
+    expect(query.state.data).toEqual([]); // the data stays on screen until the answer arrives
+  });
+
+  it('fetches nothing by itself', async () => {
+    const qc = new QueryClient();
+    let calls = 0;
+    await qc.fetchQuery({ queryKey: ['catalog'], queryFn: () => { calls += 1; return Promise.resolve(['x']); } });
+
+    await markRestoredStale(qc);
+
+    expect(calls).toBe(1);
   });
 });

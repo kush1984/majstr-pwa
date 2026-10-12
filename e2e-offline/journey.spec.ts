@@ -65,17 +65,21 @@ test('офлайн: рефреш на глибокому маршруті + ро
   // Nothing may hang on a spinner: the page reached a real, terminal state.
   await expect(page.locator('text=Сервіс тимчасово недоступний')).toHaveCount(0);
 
-  // ---- 2. The login page must render offline too ---------------------------
+  // ---- 2. Another route opened cold, offline, must boot the shell too -------
+  // A signed-in master sent to /login is redirected home — offline as well — so what this step
+  // proves is that a SECOND cold navigation is served by the service worker, from the cache.
   await page.goto('/login');
-  await expect(page.getByRole('button', { name: 'Увійти' })).toBeVisible({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
+  await expect(page.getByRole('status')).toContainText('Офлайн', { timeout: 20_000 });
+  await expect(page.getByText('Обʼєкт Офлайн').first()).toBeVisible();
 
   // ---- 3. Author something offline → it queues ------------------------------
   await page.goto(projectUrl);
-  await page.getByRole('button', { name: 'Новий кошторис' }).click().catch(() => undefined);
-  // The sync banner must show pending work (the outbox picked the write up).
-  await expect(page.getByRole('status')).toContainText(/Очікують синхронізації|Офлайн/, {
-    timeout: 20_000,
-  });
+  await page.getByRole('button', { name: '+ Новий', exact: true }).click();
+  await page.getByRole('button', { name: 'Порожній', exact: true }).click();
+  // The estimate opens at once from its client id, and the sync banner counts the queued create.
+  await expect(page).toHaveURL(/\/estimates\//, { timeout: 20_000 });
+  await expect(page.getByRole('status')).toContainText('Не синхронізовано', { timeout: 20_000 });
 
   // ---- 4. Back online → the queue drains ------------------------------------
   await context.setOffline(false);

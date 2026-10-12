@@ -4,7 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { registerSW } from 'virtual:pwa-register';
 import { markUpdateReady } from '@/lib/swUpdate.ts';
-import { offlinePersister, shouldDehydrateQuery } from '@/lib/offlinePersist.ts';
+import { markRestoredStale, offlinePersister, shouldDehydrateQuery } from '@/lib/offlinePersist.ts';
 import { initOutbox } from '@/lib/outbox/init.ts';
 import { outboxBusy } from '@/lib/clientDrivenQuery.ts';
 import { dropLegacyStorage } from '@/lib/legacyStorage.ts';
@@ -140,6 +140,7 @@ createRoot(document.getElementById('root')!).render(
           // see `shouldDehydrateQuery` for why the default made the offline cache self-destruct.
           dehydrateOptions: { shouldDehydrateQuery },
         }}
+        onSuccess={() => markRestoredStale(queryClient)}
       >
         <App />
       </PersistQueryClientProvider>

@@ -1,6 +1,7 @@
 import { get, set, del } from 'idb-keyval';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { removeOldestQuery } from '@tanstack/react-query-persist-client';
+import type { QueryClient } from '@tanstack/react-query';
 
 /**
  * Offline read cache (Phase 0 of offline-first). The TanStack Query cache is persisted to
@@ -57,4 +58,23 @@ export function clearPersistedCache(): Promise<void> {
   } catch {
     return Promise.resolve();
   }
+}
+
+/**
+ * Run once the snapshot is restored, BEFORE any screen subscribes: every restored query becomes
+ * stale, so whatever is mounted asks the server once.
+ *
+ * <p>A restored query keeps the `dataUpdatedAt` it was saved with, and the snapshot is written up
+ * to `throttleTime` behind the cache. Reopen the app within `staleTime` of that snapshot and the
+ * last write is missing from it while the data still counts as fresh — nothing refetches, and
+ * nothing ever will on a screen that stays mounted (focus refetch is off). The object just created
+ * was absent from «Обʼєкти» for as long as the master looked at it. A cold start more than
+ * `staleTime` later already refetched on mount; this makes a quick one behave the same.</p>
+ *
+ * <p>`refetchType: 'none'` marks without fetching, so nothing is refetched that is not on screen,
+ * and the mount fetch is the same one a later cold start makes — offline it fails fast and the
+ * restored data stays.</p>
+ */
+export function markRestoredStale(client: QueryClient): Promise<void> {
+  return client.invalidateQueries({ refetchType: 'none' });
 }
