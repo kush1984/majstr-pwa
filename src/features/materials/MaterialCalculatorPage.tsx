@@ -34,9 +34,7 @@ interface AskedPosition {
 /** What this screen last put into the fields itself — a field still holding it is untouched. */
 interface Filled {
   perimeter: string;
-  sections: Record<string, string>;
-  thicknesses: Record<string, string>;
-  steps: Record<string, string>;
+  perPosition: PerPositionFields;
 }
 
 /** The two variants of every word on a parameter card: still asking, or showing what he answered. */
@@ -97,8 +95,55 @@ const MAX_FIGURE: Record<ParameterKind, number> = {
   SECTION: 5, // metres of розгортка per metre of profile
   THICKNESS: 150, // millimetres
   STEP: 500, // millimetres between the pipes of a loop (V152)
+  LENGTH: 100, // metres of a riser (V168)
+  REINFORCEMENT: 300, // kg of rebar per m³ of concrete (V168)
+  CHASE_SECTION: 200, // cm² — a chase's width × depth (V168)
 };
-type ParameterKind = 'PERIMETER' | 'SECTION' | 'THICKNESS' | 'STEP';
+type ParameterKind =
+  | 'PERIMETER'
+  | 'SECTION'
+  | 'THICKNESS'
+  | 'STEP'
+  | 'LENGTH'
+  | 'REINFORCEMENT'
+  | 'CHASE_SECTION';
+type PositionKind = Exclude<ParameterKind, 'PERIMETER'>;
+
+/**
+ * Every question asked per POSITION, in the order its card stands on the screen. Each rides as its
+ * OWN query param and its own key of the PATCH (`key`) — one line can be asked two of them, and a
+ * shared map would answer one with the other's number. `prefill`: whether the norm's suggestion is
+ * put into the field VISIBLY (V137); a короб's розгортка keeps showing it as a hint only, and a
+ * rebar ratio carries none at all (V168).
+ */
+type PerPositionKey =
+  | 'sections'
+  | 'thicknesses'
+  | 'steps'
+  | 'lengths'
+  | 'reinforcements'
+  | 'chaseSections';
+type PerPositionFields = Record<PerPositionKey, Record<string, string>>;
+const PER_POSITION: { key: PerPositionKey; basis: PositionKind; prefill: boolean }[] = [
+  { key: 'sections', basis: 'SECTION', prefill: false },
+  { key: 'thicknesses', basis: 'THICKNESS', prefill: true },
+  { key: 'steps', basis: 'STEP', prefill: true },
+  { key: 'lengths', basis: 'LENGTH', prefill: true },
+  { key: 'reinforcements', basis: 'REINFORCEMENT', prefill: true },
+  { key: 'chaseSections', basis: 'CHASE_SECTION', prefill: true },
+];
+/** The DOM id prefix each card's fields carry — the first three kept, so nothing that finds them moves. */
+const ID_PREFIX: Record<PositionKind, string> = {
+  SECTION: 'section',
+  THICKNESS: 'thickness',
+  STEP: 'step',
+  LENGTH: 'length',
+  REINFORCEMENT: 'reinforcement',
+  CHASE_SECTION: 'chaseSection',
+};
+function emptyFields<T>(): Record<PerPositionKey, Record<string, T>> {
+  return { sections: {}, thicknesses: {}, steps: {}, lengths: {}, reinforcements: {}, chaseSections: {} };
+}
 
 function figure(raw: string, kind: ParameterKind): number | null {
   const value = parseDecimal(raw);
@@ -262,15 +307,10 @@ export function MaterialCalculatorPage() {
   const [perimeterInput, setPerimeterInput] = useState('');
   const [perimeter, setPerimeter] = useState<number | undefined>(undefined);
   const [perimeterError, setPerimeterError] = useState(false);
-  const [sectionInputs, setSectionInputs] = useState<Record<string, string>>({});
-  const [sectionErrors, setSectionErrors] = useState<Record<string, boolean>>({});
-  const [sections, setSections] = useState<string | undefined>(undefined);
-  const [thicknessInputs, setThicknessInputs] = useState<Record<string, string>>({});
-  const [thicknessErrors, setThicknessErrors] = useState<Record<string, boolean>>({});
-  const [thicknesses, setThicknesses] = useState<string | undefined>(undefined);
-  const [stepInputs, setStepInputs] = useState<Record<string, string>>({});
-  const [stepErrors, setStepErrors] = useState<Record<string, boolean>>({});
-  const [steps, setSteps] = useState<string | undefined>(undefined);
+  // One field set, error set and applied query value per question asked per POSITION.
+  const [inputs, setInputs] = useState<PerPositionFields>(() => emptyFields<string>());
+  const [inputErrors, setInputErrors] = useState(() => emptyFields<boolean>());
+  const [applied, setApplied] = useState<Partial<Record<PerPositionKey, string>>>({});
   const [seeded, setSeeded] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -281,12 +321,9 @@ export function MaterialCalculatorPage() {
       id,
       waste,
       perimeter ?? null,
-      sections ?? null,
-      thicknesses ?? null,
-      steps ?? null,
+      ...PER_POSITION.map((k) => applied[k.key] ?? null),
     ],
-    queryFn: () =>
-      materialsApi.calculate(id, { wastePercent: waste, perimeter, sections, thicknesses, steps }),
+    queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter, ...applied }),
     enabled: Boolean(id),
     // Every parameter change is a NEW key, so the whole screen used to collapse into a full-page
     // spinner — controls, figures and all — on each tap of the waste steps. Keeping the last answer
@@ -296,7 +333,7 @@ export function MaterialCalculatorPage() {
 
   // The server re-rounds on every parameter change, so a figure typed against the old numbers
   // would silently claim to be «what the master left on the screen». Drop the overrides instead.
-  useEffect(() => setEdited({}), [waste, perimeter, sections, thicknesses, steps]);
+  useEffect(() => setEdited({}), [waste, perimeter, applied]);
 
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
@@ -318,25 +355,23 @@ export function MaterialCalculatorPage() {
    * must count as filled before a suggestion may fill it.
    */
   const fresh = calc.isFetchedAfterMount && !calc.isPlaceholderData;
-  const filled = useRef<Filled>({ perimeter: '', sections: {}, thicknesses: {}, steps: {} });
+  const filled = useRef<Filled>({ perimeter: '', perPosition: emptyFields<string>() });
   useEffect(() => {
     if (!fresh || !data) return;
-    const answers = data.answers ?? { sections: {}, thicknesses: {} };
-    const perimeterNext = answers.perimeter != null ? String(answers.perimeter) : '';
-    const sectionsNext = strings(answers.sections);
-    const thicknessesNext = strings(answers.thicknesses);
-    const stepsNext = strings(answers.steps ?? {});
+    const answers = data.answers;
+    const perimeterNext = answers?.perimeter != null ? String(answers.perimeter) : '';
+    const next = emptyFields<string>();
+    for (const { key } of PER_POSITION) next[key] = strings(answers?.[key] ?? {});
     const before = filled.current;
     setPerimeterInput((prev) => (prev === '' || prev === before.perimeter ? perimeterNext : prev));
-    setSectionInputs((prev) => reseed(prev, before.sections, sectionsNext));
-    setThicknessInputs((prev) => reseed(prev, before.thicknesses, thicknessesNext));
-    setStepInputs((prev) => reseed(prev, before.steps, stepsNext));
-    filled.current = {
-      perimeter: perimeterNext,
-      sections: sectionsNext,
-      thicknesses: thicknessesNext,
-      steps: stepsNext,
-    };
+    setInputs((prev) => {
+      const out = { ...prev };
+      for (const { key } of PER_POSITION) {
+        out[key] = reseed(prev[key], before.perPosition[key], next[key]);
+      }
+      return out;
+    });
+    filled.current = { perimeter: perimeterNext, perPosition: next };
     setSeeded(true);
   }, [data, fresh]);
 
@@ -346,17 +381,18 @@ export function MaterialCalculatorPage() {
   // them to correct the figure that was refused.
   const [asked, setAsked] = useState<{
     perimeter: boolean;
-    section: AskedPosition[];
-    thickness: AskedPosition[];
-    step: AskedPosition[];
-  }>({ perimeter: false, section: [], thickness: [], step: [] });
+    positions: Record<PerPositionKey, AskedPosition[]>;
+  }>({
+    perimeter: false,
+    positions: { sections: [], thicknesses: [], steps: [], lengths: [], reinforcements: [], chaseSections: [] },
+  });
   useEffect(() => {
     if (!data) return;
+    const positions = {} as Record<PerPositionKey, AskedPosition[]>;
+    for (const { key, basis } of PER_POSITION) positions[key] = parameterPositions(data, basis);
     setAsked({
       perimeter: data.parameters.some((p) => p.parameter === 'PERIMETER') || data.perimeter != null,
-      section: parameterPositions(data, 'SECTION'),
-      thickness: parameterPositions(data, 'THICKNESS'),
-      step: parameterPositions(data, 'STEP'),
+      positions,
     });
   }, [data]);
 
@@ -369,9 +405,7 @@ export function MaterialCalculatorPage() {
    * always taken this from the ANSWER, via `sources`.
    */
   const perimeterAnswered = perimeter != null || data?.answers?.perimeter != null;
-  const sectionPositions = asked.section;
-  const thicknessPositions = asked.thickness;
-  const stepPositions = asked.step;
+  const askedPositions = asked.positions;
 
   /*
    * The suggestion is PRE-FILLED and not applied (V137). «Штукатурка стін (до 2 см)» names a bound
@@ -383,35 +417,22 @@ export function MaterialCalculatorPage() {
    */
   useEffect(() => {
     if (!seeded) return; // his stored answer first — a suggestion only fills what is still empty
-    setThicknessInputs((prev) => {
-      const next = { ...prev };
+    setInputs((prev) => {
       let changed = false;
-      for (const p of thicknessPositions) {
-        if (p.suggested == null || prev[p.estimateItemId] !== undefined) continue;
-        next[p.estimateItemId] = String(p.suggested);
-        // Ours, not his: a later stored answer may replace it (see `reseed`).
-        filled.current.thicknesses[p.estimateItemId] = next[p.estimateItemId];
-        changed = true;
+      const out = { ...prev };
+      for (const { key, prefill } of PER_POSITION) {
+        if (!prefill) continue;
+        for (const p of askedPositions[key]) {
+          if (p.suggested == null || prev[key][p.estimateItemId] !== undefined) continue;
+          out[key] = { ...out[key], [p.estimateItemId]: String(p.suggested) };
+          // Ours, not his: a later stored answer may replace it (see `reseed`).
+          filled.current.perPosition[key][p.estimateItemId] = String(p.suggested);
+          changed = true;
+        }
       }
-      return changed ? next : prev;
+      return changed ? out : prev;
     });
-  }, [thicknessPositions, seeded]);
-
-  // A loop spacing has an honest suggestion too (V152), and it is pre-filled the same visible way.
-  useEffect(() => {
-    if (!seeded) return;
-    setStepInputs((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const p of stepPositions) {
-        if (p.suggested == null || prev[p.estimateItemId] !== undefined) continue;
-        next[p.estimateItemId] = String(p.suggested);
-        filled.current.steps[p.estimateItemId] = next[p.estimateItemId];
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [stepPositions, seeded]);
+  }, [askedPositions, seeded]);
 
   /*
    * Tapping «Порахувати» is what makes an answer his, so that is where it is remembered — not on
@@ -459,21 +480,85 @@ export function MaterialCalculatorPage() {
     if (value !== stored) remember.mutate({ perimeter: value });
   };
 
-  const applyPerPosition = (
-    kind: 'sections' | 'thicknesses' | 'steps',
-    inputs: Record<string, string>,
-    setErrors: (errors: Record<string, boolean>) => void,
-    setValue: (value: string | undefined) => void,
-  ) => {
-    const question: ParameterKind =
-      kind === 'sections' ? 'SECTION' : kind === 'thicknesses' ? 'THICKNESS' : 'STEP';
-    const { value, errors } = encoded(inputs, question);
-    setErrors(errors);
+  const applyPerPosition = (key: PerPositionKey, question: PositionKind) => {
+    const { value, errors } = encoded(inputs[key], question);
+    setInputErrors((prev) => ({ ...prev, [key]: errors }));
     if (Object.keys(errors).length > 0) return;
-    setValue(value);
-    const changed = changedOnly(numbers(inputs, question), data?.answers?.[kind]);
+    setApplied((prev) => ({ ...prev, [key]: value }));
+    const changed = changedOnly(numbers(inputs[key], question), data?.answers?.[key]);
     if (Object.keys(changed).length === 0) return;
-    remember.mutate({ [kind]: changed });
+    remember.mutate({ [key]: changed });
+  };
+
+  /** Every word of one question's card — static keys, so the translation scan still sees them. */
+  const askLabels = (basis: PositionKind): AskLabels => {
+    const common = {
+      applySet: t('materials.recalculate'),
+      remembered: t('materials.paramsRemembered'),
+      bad: t('materials.badNumber', { max: MAX_FIGURE[basis] }),
+    };
+    switch (basis) {
+      case 'SECTION':
+        return {
+          ...common,
+          title: t('materials.sectionTitle'),
+          titleSet: t('materials.sectionTitleSet'),
+          hint: t('materials.sectionHint'),
+          unit: t('materials.sectionUnit'),
+          apply: t('materials.sectionApply'),
+          suggested: t('materials.sectionSuggested'),
+        };
+      case 'THICKNESS':
+        return {
+          ...common,
+          title: t('materials.thicknessTitle'),
+          titleSet: t('materials.thicknessTitleSet'),
+          hint: t('materials.thicknessHint'),
+          unit: t('materials.thicknessUnit'),
+          apply: t('materials.thicknessApply'),
+          suggested: t('materials.thicknessSuggested'),
+        };
+      case 'STEP':
+        return {
+          ...common,
+          title: t('materials.stepTitle'),
+          titleSet: t('materials.stepTitleSet'),
+          hint: t('materials.stepHint'),
+          unit: t('materials.stepUnit'),
+          apply: t('materials.stepApply'),
+          suggested: t('materials.stepSuggested'),
+        };
+      case 'LENGTH':
+        return {
+          ...common,
+          title: t('materials.lengthTitle'),
+          titleSet: t('materials.lengthTitleSet'),
+          hint: t('materials.lengthHint'),
+          unit: t('materials.lengthUnit'),
+          apply: t('materials.lengthApply'),
+          suggested: t('materials.lengthSuggested'),
+        };
+      case 'REINFORCEMENT':
+        return {
+          ...common,
+          title: t('materials.reinforcementTitle'),
+          titleSet: t('materials.reinforcementTitleSet'),
+          hint: t('materials.reinforcementHint'),
+          unit: t('materials.reinforcementUnit'),
+          apply: t('materials.reinforcementApply'),
+          suggested: t('materials.reinforcementSuggested'),
+        };
+      case 'CHASE_SECTION':
+        return {
+          ...common,
+          title: t('materials.chaseSectionTitle'),
+          titleSet: t('materials.chaseSectionTitleSet'),
+          hint: t('materials.chaseSectionHint'),
+          unit: t('materials.chaseSectionUnit'),
+          apply: t('materials.chaseSectionApply'),
+          suggested: t('materials.chaseSectionSuggested'),
+        };
+    }
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -616,75 +701,22 @@ export function MaterialCalculatorPage() {
           </div>
         )}
 
-        <PerPositionAsk
-          idPrefix="section"
-          positions={sectionPositions}
-          inputs={sectionInputs}
-          errors={sectionErrors}
-          onInput={(itemId, value) => setSectionInputs((prev) => ({ ...prev, [itemId]: value }))}
-          onApply={() =>
-            applyPerPosition('sections', sectionInputs, setSectionErrors, setSections)
-          }
-          busy={remember.isPending}
-          rememberedHonestly={rememberedHonestly}
-          labels={{
-            title: t('materials.sectionTitle'),
-            titleSet: t('materials.sectionTitleSet'),
-            hint: t('materials.sectionHint'),
-            unit: t('materials.sectionUnit'),
-            apply: t('materials.sectionApply'),
-            applySet: t('materials.recalculate'),
-            suggested: t('materials.sectionSuggested'),
-            remembered: t('materials.paramsRemembered'),
-            bad: t('materials.badNumber', { max: MAX_FIGURE.SECTION }),
-          }}
-        />
-
-        <PerPositionAsk
-          idPrefix="thickness"
-          positions={thicknessPositions}
-          inputs={thicknessInputs}
-          errors={thicknessErrors}
-          onInput={(itemId, value) => setThicknessInputs((prev) => ({ ...prev, [itemId]: value }))}
-          onApply={() =>
-            applyPerPosition('thicknesses', thicknessInputs, setThicknessErrors, setThicknesses)
-          }
-          busy={remember.isPending}
-          rememberedHonestly={rememberedHonestly}
-          labels={{
-            title: t('materials.thicknessTitle'),
-            titleSet: t('materials.thicknessTitleSet'),
-            hint: t('materials.thicknessHint'),
-            unit: t('materials.thicknessUnit'),
-            apply: t('materials.thicknessApply'),
-            applySet: t('materials.recalculate'),
-            suggested: t('materials.thicknessSuggested'),
-            remembered: t('materials.paramsRemembered'),
-            bad: t('materials.badNumber', { max: MAX_FIGURE.THICKNESS }),
-          }}
-        />
-
-        <PerPositionAsk
-          idPrefix="step"
-          positions={stepPositions}
-          inputs={stepInputs}
-          errors={stepErrors}
-          onInput={(itemId, value) => setStepInputs((prev) => ({ ...prev, [itemId]: value }))}
-          onApply={() => applyPerPosition('steps', stepInputs, setStepErrors, setSteps)}
-          busy={remember.isPending}
-          rememberedHonestly={rememberedHonestly}
-          labels={{
-            title: t('materials.stepTitle'),
-            titleSet: t('materials.stepTitleSet'),
-            hint: t('materials.stepHint'),
-            unit: t('materials.stepUnit'),
-            apply: t('materials.stepApply'),
-            applySet: t('materials.recalculate'),
-            suggested: t('materials.stepSuggested'),
-            remembered: t('materials.paramsRemembered'),
-            bad: t('materials.badNumber', { max: MAX_FIGURE.STEP }),
-          }}
-        />
+        {PER_POSITION.map(({ key, basis }) => (
+          <PerPositionAsk
+            key={key}
+            idPrefix={ID_PREFIX[basis]}
+            positions={askedPositions[key]}
+            inputs={inputs[key]}
+            errors={inputErrors[key]}
+            onInput={(itemId, value) =>
+              setInputs((prev) => ({ ...prev, [key]: { ...prev[key], [itemId]: value } }))
+            }
+            onApply={() => applyPerPosition(key, basis)}
+            busy={remember.isPending}
+            rememberedHonestly={rememberedHonestly}
+            labels={askLabels(basis)}
+          />
+        ))}
 
         {!calc.isError && data && <Habits trades={data.coverage.trades} onSaved={afterNormChange} />}
 
@@ -1207,14 +1239,25 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
   // at our suggestion is visibly wrong here rather than hidden inside a total — it is the one
   // number on this row the estimate could not supply. `basis` decides the unit: a millimetre
   // rendered as a metre is the mistake the server-side rename of this field was guarding against.
-  const param =
-    source.param == null
-      ? ''
-      : source.basis === 'SECTION'
-        ? ` × ${t('materials.sectionSource', { value: formatNumber(source.param, 3) })}`
-        : source.basis === 'THICKNESS'
-          ? ` × ${t('materials.thicknessSource', { value: formatNumber(source.param, 3) })}`
-          : '';
+  const figureText = source.param == null ? '' : formatNumber(source.param, 3);
+  const multiplier = (): string => {
+    switch (source.basis) {
+      case 'SECTION':
+        return t('materials.sectionSource', { value: figureText });
+      case 'THICKNESS':
+        return t('materials.thicknessSource', { value: figureText });
+      case 'LENGTH':
+        return t('materials.lengthSource', { value: figureText });
+      case 'REINFORCEMENT':
+        return t('materials.reinforcementSource', { value: figureText });
+      case 'CHASE_SECTION':
+        return t('materials.chaseSectionSource', { value: figureText });
+      default:
+        return '';
+    }
+  };
+  const factor = source.param == null ? '' : multiplier();
+  const param = factor ? ` × ${factor}` : '';
   // A spacing DIVIDES (V152), so it stands after the coefficient: «20 м² × 975 ÷ крок 150 мм».
   const divisor =
     source.param != null && source.basis === 'STEP'

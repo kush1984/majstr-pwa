@@ -652,6 +652,82 @@ describe('MaterialCalculatorPage', () => {
   });
 
   /**
+   * V168: a rebar ratio is the design's number, so the card asks with an EMPTY field — no suggestion
+   * pre-filled — and the answer rides as its own query param and its own key of the PATCH.
+   */
+  it('asks a rebar ratio with no suggestion and remembers it under its own key', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'REINFORCEMENT',
+            materialName: 'Арматура',
+            estimateItemId: 'e1',
+            positionName: 'Фундаментна плита',
+            suggested: null,
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібне армування')).toBeTruthy();
+    const field = screen.getByLabelText<HTMLInputElement>('Фундаментна плита, кг/м³');
+    expect(field.value).toBe('');
+    fireEvent.change(field, { target: { value: '120' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        reinforcements: 'e1:120',
+      }),
+    );
+    await waitFor(() =>
+      expect(saveParams).toHaveBeenCalledWith('est-1', { reinforcements: { e1: 120 } }),
+    );
+  });
+
+  it('writes a chase section as its own factor on the arithmetic line', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [
+          {
+            materialId: 'm-gyp',
+            name: 'Гіпс будівельний',
+            unit: 'KG',
+            baseQuantity: 20,
+            quantity: 20,
+            wastePercent: 0,
+            sources: [
+              {
+                estimateItemId: 'e1',
+                name: 'Закладення штроб',
+                unit: 'LINEAR_METER',
+                quantity: 50,
+                qtyPerUnit: 0.1,
+                normId: 'n-gyp',
+                ownNorm: false,
+                basis: 'CHASE_SECTION',
+                param: 4,
+                amount: 20,
+              },
+            ],
+          },
+        ],
+        parameters: [],
+        answers: { perimeter: null, sections: {}, thicknesses: {}, chaseSections: { e1: 4 } },
+      }),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+    expect(await screen.findByText(/× переріз 4 см²/)).toBeTruthy();
+  });
+
+  /**
    * The other device, which is the whole point: the server has the answer, so the first calculation
    * already used it — the request carries no parameter of its own, the card asks nothing, and his
    * figure is in the field where it can be corrected.

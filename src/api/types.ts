@@ -1923,7 +1923,16 @@ export interface MaterialPrefsRequest {
  * section the master typed (V131), the area times the layer thickness he typed (V137), or — the one
  * that DIVIDES — the area over the loop spacing he typed (`STEP`, V152: «20 м² × 975 ÷ 150 мм»).
  */
-export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION' | 'THICKNESS' | 'STEP';
+export type NormBasis =
+  | 'QUANTITY'
+  | 'PERIMETER'
+  | 'SECTION'
+  | 'THICKNESS'
+  | 'STEP'
+  /** V168: a riser's length in metres, a concrete's rebar ratio in kg/m³, a chase's section in cm². */
+  | 'LENGTH'
+  | 'REINFORCEMENT'
+  | 'CHASE_SECTION';
 
 /**
  * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
@@ -1989,7 +1998,8 @@ export interface MaterialCoverage {
  * names it and the screen asks once per position rather than once per material.
  */
 export interface MissingParameter {
-  /** `PERIMETER`, `SECTION`, `THICKNESS` or `STEP`; a string so another is not a breaking change. */
+  /** `PERIMETER`, `SECTION`, `THICKNESS`, `STEP` or (V168) `LENGTH`, `REINFORCEMENT`, `CHASE_SECTION`;
+   *  a string so another is not a breaking change. */
   parameter: string;
   materialName: string;
   /** Set for the per-position questions, absent for `PERIMETER`. */
@@ -2020,6 +2030,10 @@ export interface StoredMaterialParams {
   thicknesses: Record<string, number>;
   /** A loop spacing in millimetres (V152). Optional: a snapshot restored from before it has none. */
   steps?: Record<string, number>;
+  /** V168 — metres, kg/m³, cm². Optional for the same reason. */
+  lengths?: Record<string, number>;
+  reinforcements?: Record<string, number>;
+  chaseSections?: Record<string, number>;
 }
 
 export interface MaterialCalculationResponse {
@@ -2050,6 +2064,9 @@ export interface MaterialParamsRequest {
   sections?: Record<string, number>;
   thicknesses?: Record<string, number>;
   steps?: Record<string, number>;
+  lengths?: Record<string, number>;
+  reinforcements?: Record<string, number>;
+  chaseSections?: Record<string, number>;
 }
 
 /** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */

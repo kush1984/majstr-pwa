@@ -222,7 +222,10 @@
     "qtyPerUnit": "number"
   },
   "MaterialParamsRequest": {
+    "chaseSections": "object?",
+    "lengths": "object?",
     "perimeter": "number?",
+    "reinforcements": "object?",
     "sections": "object?",
     "steps": "object?",
     "thicknesses": "object?"

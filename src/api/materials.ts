@@ -24,7 +24,8 @@ const base = (estimateId: string) => `/api/estimates/${estimateId}/materials`;
 export const materialsApi = {
   calculate(
     estimateId: string,
-    // `sections` (metres), `thicknesses` and `steps` (MILLIMETRES) are per POSITION and each rides as one
+    // `sections` (metres), `thicknesses` and `steps` (MILLIMETRES), `lengths` (metres), `reinforcements`
+    // (kg/m³) and `chaseSections` (cm², V168) are per POSITION and each rides as one
     // compact scalar — «uuid:0.4,uuid:1.2» — because `client.ts` has no paramsSerializer, so a
     // repeated param would go out as `sections[]=`. Two params and not one map: a single position
     // can be asked both questions, and a shared map would answer one with the other's number.
@@ -34,6 +35,9 @@ export const materialsApi = {
       sections?: string;
       thicknesses?: string;
       steps?: string;
+      lengths?: string;
+      reinforcements?: string;
+      chaseSections?: string;
     } = {},
   ): Promise<MaterialCalculationResponse> {
     return api
