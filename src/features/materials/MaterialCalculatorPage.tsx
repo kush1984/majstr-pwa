@@ -36,6 +36,7 @@ interface Filled {
   perimeter: string;
   sections: Record<string, string>;
   thicknesses: Record<string, string>;
+  steps: Record<string, string>;
 }
 
 /** The two variants of every word on a parameter card: still asking, or showing what he answered. */
@@ -95,8 +96,9 @@ const MAX_FIGURE: Record<ParameterKind, number> = {
   PERIMETER: 1000, // metres
   SECTION: 5, // metres of розгортка per metre of profile
   THICKNESS: 150, // millimetres
+  STEP: 500, // millimetres between the pipes of a loop (V152)
 };
-type ParameterKind = 'PERIMETER' | 'SECTION' | 'THICKNESS';
+type ParameterKind = 'PERIMETER' | 'SECTION' | 'THICKNESS' | 'STEP';
 
 function figure(raw: string, kind: ParameterKind): number | null {
   const value = parseDecimal(raw);
@@ -266,14 +268,25 @@ export function MaterialCalculatorPage() {
   const [thicknessInputs, setThicknessInputs] = useState<Record<string, string>>({});
   const [thicknessErrors, setThicknessErrors] = useState<Record<string, boolean>>({});
   const [thicknesses, setThicknesses] = useState<string | undefined>(undefined);
+  const [stepInputs, setStepInputs] = useState<Record<string, string>>({});
+  const [stepErrors, setStepErrors] = useState<Record<string, boolean>>({});
+  const [steps, setSteps] = useState<string | undefined>(undefined);
   const [seeded, setSeeded] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
 
   const calc = useQuery({
-    queryKey: ['materials', id, waste, perimeter ?? null, sections ?? null, thicknesses ?? null],
+    queryKey: [
+      'materials',
+      id,
+      waste,
+      perimeter ?? null,
+      sections ?? null,
+      thicknesses ?? null,
+      steps ?? null,
+    ],
     queryFn: () =>
-      materialsApi.calculate(id, { wastePercent: waste, perimeter, sections, thicknesses }),
+      materialsApi.calculate(id, { wastePercent: waste, perimeter, sections, thicknesses, steps }),
     enabled: Boolean(id),
     // Every parameter change is a NEW key, so the whole screen used to collapse into a full-page
     // spinner — controls, figures and all — on each tap of the waste steps. Keeping the last answer
@@ -283,7 +296,7 @@ export function MaterialCalculatorPage() {
 
   // The server re-rounds on every parameter change, so a figure typed against the old numbers
   // would silently claim to be «what the master left on the screen». Drop the overrides instead.
-  useEffect(() => setEdited({}), [waste, perimeter, sections, thicknesses]);
+  useEffect(() => setEdited({}), [waste, perimeter, sections, thicknesses, steps]);
 
   const data = calc.data;
   const materials = useMemo(() => data?.materials ?? [], [data]);
@@ -305,18 +318,25 @@ export function MaterialCalculatorPage() {
    * must count as filled before a suggestion may fill it.
    */
   const fresh = calc.isFetchedAfterMount && !calc.isPlaceholderData;
-  const filled = useRef<Filled>({ perimeter: '', sections: {}, thicknesses: {} });
+  const filled = useRef<Filled>({ perimeter: '', sections: {}, thicknesses: {}, steps: {} });
   useEffect(() => {
     if (!fresh || !data) return;
     const answers = data.answers ?? { sections: {}, thicknesses: {} };
     const perimeterNext = answers.perimeter != null ? String(answers.perimeter) : '';
     const sectionsNext = strings(answers.sections);
     const thicknessesNext = strings(answers.thicknesses);
+    const stepsNext = strings(answers.steps ?? {});
     const before = filled.current;
     setPerimeterInput((prev) => (prev === '' || prev === before.perimeter ? perimeterNext : prev));
     setSectionInputs((prev) => reseed(prev, before.sections, sectionsNext));
     setThicknessInputs((prev) => reseed(prev, before.thicknesses, thicknessesNext));
-    filled.current = { perimeter: perimeterNext, sections: sectionsNext, thicknesses: thicknessesNext };
+    setStepInputs((prev) => reseed(prev, before.steps, stepsNext));
+    filled.current = {
+      perimeter: perimeterNext,
+      sections: sectionsNext,
+      thicknesses: thicknessesNext,
+      steps: stepsNext,
+    };
     setSeeded(true);
   }, [data, fresh]);
 
@@ -328,13 +348,15 @@ export function MaterialCalculatorPage() {
     perimeter: boolean;
     section: AskedPosition[];
     thickness: AskedPosition[];
-  }>({ perimeter: false, section: [], thickness: [] });
+    step: AskedPosition[];
+  }>({ perimeter: false, section: [], thickness: [], step: [] });
   useEffect(() => {
     if (!data) return;
     setAsked({
       perimeter: data.parameters.some((p) => p.parameter === 'PERIMETER') || data.perimeter != null,
       section: parameterPositions(data, 'SECTION'),
       thickness: parameterPositions(data, 'THICKNESS'),
+      step: parameterPositions(data, 'STEP'),
     });
   }, [data]);
 
@@ -349,6 +371,7 @@ export function MaterialCalculatorPage() {
   const perimeterAnswered = perimeter != null || data?.answers?.perimeter != null;
   const sectionPositions = asked.section;
   const thicknessPositions = asked.thickness;
+  const stepPositions = asked.step;
 
   /*
    * The suggestion is PRE-FILLED and not applied (V137). «Штукатурка стін (до 2 см)» names a bound
@@ -373,6 +396,22 @@ export function MaterialCalculatorPage() {
       return changed ? next : prev;
     });
   }, [thicknessPositions, seeded]);
+
+  // A loop spacing has an honest suggestion too (V152), and it is pre-filled the same visible way.
+  useEffect(() => {
+    if (!seeded) return;
+    setStepInputs((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const p of stepPositions) {
+        if (p.suggested == null || prev[p.estimateItemId] !== undefined) continue;
+        next[p.estimateItemId] = String(p.suggested);
+        filled.current.steps[p.estimateItemId] = next[p.estimateItemId];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [stepPositions, seeded]);
 
   /*
    * Tapping «Порахувати» is what makes an answer his, so that is where it is remembered — not on
@@ -421,19 +460,20 @@ export function MaterialCalculatorPage() {
   };
 
   const applyPerPosition = (
-    kind: 'sections' | 'thicknesses',
+    kind: 'sections' | 'thicknesses' | 'steps',
     inputs: Record<string, string>,
     setErrors: (errors: Record<string, boolean>) => void,
     setValue: (value: string | undefined) => void,
   ) => {
-    const question: ParameterKind = kind === 'sections' ? 'SECTION' : 'THICKNESS';
+    const question: ParameterKind =
+      kind === 'sections' ? 'SECTION' : kind === 'thicknesses' ? 'THICKNESS' : 'STEP';
     const { value, errors } = encoded(inputs, question);
     setErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setValue(value);
     const changed = changedOnly(numbers(inputs, question), data?.answers?.[kind]);
     if (Object.keys(changed).length === 0) return;
-    remember.mutate(kind === 'sections' ? { sections: changed } : { thicknesses: changed });
+    remember.mutate({ [kind]: changed });
   };
 
   // A corrected norm changes the base, and rounding up to a package does not commute with scaling —
@@ -621,6 +661,28 @@ export function MaterialCalculatorPage() {
             suggested: t('materials.thicknessSuggested'),
             remembered: t('materials.paramsRemembered'),
             bad: t('materials.badNumber', { max: MAX_FIGURE.THICKNESS }),
+          }}
+        />
+
+        <PerPositionAsk
+          idPrefix="step"
+          positions={stepPositions}
+          inputs={stepInputs}
+          errors={stepErrors}
+          onInput={(itemId, value) => setStepInputs((prev) => ({ ...prev, [itemId]: value }))}
+          onApply={() => applyPerPosition('steps', stepInputs, setStepErrors, setSteps)}
+          busy={remember.isPending}
+          rememberedHonestly={rememberedHonestly}
+          labels={{
+            title: t('materials.stepTitle'),
+            titleSet: t('materials.stepTitleSet'),
+            hint: t('materials.stepHint'),
+            unit: t('materials.stepUnit'),
+            apply: t('materials.stepApply'),
+            applySet: t('materials.recalculate'),
+            suggested: t('materials.stepSuggested'),
+            remembered: t('materials.paramsRemembered'),
+            bad: t('materials.badNumber', { max: MAX_FIGURE.STEP }),
           }}
         />
 
@@ -1153,6 +1215,11 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
         : source.basis === 'THICKNESS'
           ? ` × ${t('materials.thicknessSource', { value: formatNumber(source.param, 3) })}`
           : '';
+  // A spacing DIVIDES (V152), so it stands after the coefficient: «20 м² × 975 ÷ крок 150 мм».
+  const divisor =
+    source.param != null && source.basis === 'STEP'
+      ? ` ÷ ${t('materials.stepSource', { value: formatNumber(source.param, 3) })}`
+      : '';
   const busy = save.isPending || restore.isPending;
 
   const submit = () => {
@@ -1169,7 +1236,8 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
       <p className="text-xs text-muted">
         {source.name ?? ''}
         {basis}: {quantity}
-        {param} × {formatNumber(source.qtyPerUnit, 3)} ={' '}
+        {param} × {formatNumber(source.qtyPerUnit, 3)}
+        {divisor} ={' '}
         {formatNumber(source.amount, 3)}
         {source.ownNorm && (
           <span className="ml-1 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-medium text-brand-700">

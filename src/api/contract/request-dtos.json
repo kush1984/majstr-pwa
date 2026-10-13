@@ -224,6 +224,7 @@
   "MaterialParamsRequest": {
     "perimeter": "number?",
     "sections": "object?",
+    "steps": "object?",
     "thicknesses": "object?"
   },
   "MaterialPrefsRequest": {

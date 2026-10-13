@@ -1920,9 +1920,10 @@ export interface MaterialPrefsRequest {
 
 /**
  * What `qtyPerUnit` multiplies: the line's own quantity, the room's perimeter, the length times the
- * section the master typed (V131), or the area times the layer thickness he typed (V137).
+ * section the master typed (V131), the area times the layer thickness he typed (V137), or — the one
+ * that DIVIDES — the area over the loop spacing he typed (`STEP`, V152: «20 м² × 975 ÷ 150 мм»).
  */
-export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION' | 'THICKNESS';
+export type NormBasis = 'QUANTITY' | 'PERIMETER' | 'SECTION' | 'THICKNESS' | 'STEP';
 
 /**
  * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
@@ -1943,7 +1944,7 @@ export interface MaterialSourceLine {
   /**
    * The third factor of the two per-position bases, and `basis` says what unit it is in: METRES for
    * a SECTION («12 м.п. × переріз 0,4 м × 2,2»), MILLIMETRES for a THICKNESS («20 м² × 15 мм ×
-   * 0,95»). Absent everywhere else. It is not called `section` any more (V137) — a field named
+   * 0,95») and for a STEP, where it DIVIDES («20 м² × 975 ÷ 150 мм»). Absent everywhere else. It is not called `section` any more (V137) — a field named
    * after one of its two meanings is how a millimetre gets rendered as a metre.
    */
   param?: number | null;
@@ -1988,10 +1989,10 @@ export interface MaterialCoverage {
  * names it and the screen asks once per position rather than once per material.
  */
 export interface MissingParameter {
-  /** `PERIMETER`, `SECTION` or `THICKNESS`; a string so a fourth is not a breaking change. */
+  /** `PERIMETER`, `SECTION`, `THICKNESS` or `STEP`; a string so another is not a breaking change. */
   parameter: string;
   materialName: string;
-  /** Set for `SECTION` and `THICKNESS`, absent for `PERIMETER`. */
+  /** Set for the per-position questions, absent for `PERIMETER`. */
   estimateItemId?: string | null;
   positionName?: string | null;
   /**
@@ -2017,6 +2018,8 @@ export interface StoredMaterialParams {
   /** Keyed by estimate item id. */
   sections: Record<string, number>;
   thicknesses: Record<string, number>;
+  /** A loop spacing in millimetres (V152). Optional: a snapshot restored from before it has none. */
+  steps?: Record<string, number>;
 }
 
 export interface MaterialCalculationResponse {
@@ -2046,6 +2049,7 @@ export interface MaterialParamsRequest {
   perimeter?: number;
   sections?: Record<string, number>;
   thicknesses?: Record<string, number>;
+  steps?: Record<string, number>;
 }
 
 /** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */

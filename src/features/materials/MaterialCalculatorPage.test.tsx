@@ -576,6 +576,82 @@ describe('MaterialCalculatorPage', () => {
   });
 
   /**
+   * V152: an underfloor loop's spacing is asked like a thickness — pre-filled, confirmed by a tap,
+   * remembered on the estimate — but it DIVIDES, and the arithmetic line has to say so or «× 150»
+   * would read as 150 times the pipe.
+   */
+  it('asks the loop spacing, remembers it, and shows it dividing', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [],
+        parameters: [
+          {
+            parameter: 'STEP',
+            materialName: 'Труба для теплої підлоги',
+            estimateItemId: 'e1',
+            positionName: 'Тепла підлога',
+            suggested: 150,
+          },
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('Потрібен крок укладання труби')).toBeTruthy();
+    expect(await screen.findByDisplayValue('150')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Тепла підлога, мм'), { target: { value: '100' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    await waitFor(() =>
+      expect(calculate).toHaveBeenCalledWith('est-1', {
+        wastePercent: 10,
+        perimeter: undefined,
+        sections: undefined,
+        thicknesses: undefined,
+        steps: 'e1:100',
+      }),
+    );
+    await waitFor(() => expect(saveParams).toHaveBeenCalledWith('est-1', { steps: { e1: 100 } }));
+  });
+
+  it('writes a spacing after the coefficient, as a division', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [
+          {
+            materialId: 'm-ufh',
+            name: 'Труба для теплої підлоги',
+            unit: 'LINEAR_METER',
+            baseQuantity: 130,
+            quantity: 130,
+            wastePercent: 0,
+            sources: [
+              {
+                estimateItemId: 'e1',
+                name: 'Тепла підлога',
+                unit: 'M2',
+                quantity: 20,
+                qtyPerUnit: 975,
+                normId: 'n-ufh',
+                ownNorm: false,
+                basis: 'STEP',
+                param: 150,
+                amount: 130,
+              },
+            ],
+          },
+        ],
+        parameters: [],
+        answers: { perimeter: null, sections: {}, thicknesses: {}, steps: { e1: 150 } },
+      }),
+    );
+    renderPage();
+
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+    expect(await screen.findByText(/975\s*÷ крок 150 мм/)).toBeTruthy();
+  });
+
+  /**
    * The other device, which is the whole point: the server has the answer, so the first calculation
    * already used it — the request carries no parameter of its own, the card asks nothing, and his
    * figure is in the field where it can be corrected.
