@@ -9,10 +9,10 @@ test('гість на "/" бачить лендінг; CTA ведуть на /re
   await expect(page).toHaveURL('http://localhost:5173/');
 
   // Hero is the marketing page, not the app / a login redirect.
-  await expect(page.getByRole('heading', { name: /Професійний кошторис/ })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Порахуй роботу.');
 
   // Primary CTA → register; nav "Увійти" → login.
-  const cta = page.getByRole('link', { name: 'Почати безкоштовно' }).first();
+  const cta = page.getByRole('link', { name: /Спробувати безкоштовно/ }).first();
   await expect(cta).toHaveAttribute('href', '/register');
   await expect(page.getByRole('link', { name: 'Увійти' })).toHaveAttribute('href', '/login');
 

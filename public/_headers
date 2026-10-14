@@ -11,6 +11,7 @@
 #   - Google Fonts:  fonts.googleapis.com (CSS) + fonts.gstatic.com (font files)
 #   - PostHog (EU):  eu.i.posthog.com (ingest) + eu-assets.i.posthog.com (recorder/array scripts)
 #   - Sentry:        *.ingest.sentry.io / *.ingest.de.sentry.io (error ingest)
+#   - Inline:        the boot-screen script in index.html, allowed by its sha256 hash.
 #   - API:           same-origin /api in prod, so 'self' covers it. If the API ever moves
 #                    to its own origin, the report-only phase will surface it — add it then.
 # monobank checkout is a top-level navigation (window.location), not a form/XHR, so it is
@@ -18,6 +19,6 @@
 # Before enforcing, also consider adding X-Frame-Options: DENY (frame-ancestors below is
 # the CSP equivalent but is not enforced while this header is Report-Only).
 /*
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-yyiHqnMgRGAFkFTrg0kXHkXmcMM3GtIlBRCHlrXAfxM=' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

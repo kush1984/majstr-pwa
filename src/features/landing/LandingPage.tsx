@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { routes } from '@/lib/config.ts';
@@ -6,21 +6,23 @@ import { config } from '@/lib/config.ts';
 import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 
 /**
- * Public marketing landing — what a logged-OUT visitor sees at "/". Pure
- * presentation: no API calls, so it paints instantly without the backend.
- * Visual identity is its own (graphite + warm paper + construction yellow,
- * technical-drawing feel) via the `landing-*` Tailwind palette — deliberately
- * distinct from the in-app theme. Reproduces docs reference majstr-landing.html.
+ * Public marketing landing — what a logged-OUT visitor sees at "/". Pure presentation: no API
+ * calls, so it paints instantly without the backend. Its own `landing-*` palette (warm ink, paper,
+ * the brand orange) keeps it apart from the in-app theme.
+ *
+ * <p>Every phone on the page is a REAL screen of the app (`public/landing/shot-*.webp`, re-shot by
+ * `npm run landing:shots` against fixtures), in a CSS frame. The page is a promise the app has to
+ * keep, so it shows the app, not an illustration of one.</p>
  */
 export function LandingPage() {
   return (
-    <div className="min-h-dvh bg-landing-paper font-sans text-landing-ink antialiased">
+    <div className="min-h-dvh overflow-x-hidden bg-white font-sans text-landing-ink antialiased">
       <LandingNav />
       <Hero />
-      <TradesStrip />
-      <ProblemSolution />
       <Features />
       <HowItWorks />
+      <Audience />
+      <Control />
       <Faq />
       <FinalCTA />
       <LandingFooter />
@@ -28,312 +30,279 @@ export function LandingPage() {
   );
 }
 
-/** Construction-yellow monospace label that opens most sections. */
-function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span
-      className={
-        'font-mono text-xs font-semibold uppercase tracking-[0.18em] text-landing-amber-deep ' +
-        (className ?? '')
-      }
-    >
-      {children}
-    </span>
-  );
-}
+/** The screens, all 390 × 844 at 3× (1170 × 2532). */
+const SHOT = { w: 1170, h: 2532 };
+
+const CTA_CLASS =
+  'inline-flex items-center justify-center gap-2 rounded-xl bg-landing-amber px-6 py-3.5 text-base font-semibold text-white shadow-[0_8px_20px_-8px_rgba(224,108,0,0.6)] transition hover:-translate-y-px hover:bg-landing-amber-deep';
 
 function Wordmark({ light = false }: { light?: boolean }) {
   return (
-    <div
+    <span
       className={
-        'flex items-center gap-2.5 text-xl font-extrabold tracking-tight ' +
-        (light ? 'text-landing-paper' : 'text-landing-ink')
+        'flex items-center gap-2 text-xl font-extrabold tracking-tight ' +
+        (light ? 'text-white' : 'text-landing-ink')
       }
     >
-      <span className="grid h-[30px] w-[30px] place-items-center rounded-[7px] bg-landing-ink font-mono text-[17px] font-extrabold text-landing-amber">
+      <span
+        className={
+          'grid h-8 w-8 place-items-center rounded-lg text-[17px] font-extrabold ' +
+          (light ? 'bg-white text-landing-amber' : 'bg-landing-amber text-white')
+        }
+        aria-hidden
+      >
         M
       </span>
-      Majstr
-    </div>
+      Majstr.pro
+    </span>
   );
 }
 
 function LandingNav() {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const links = [
+    { href: '#features', label: t('landing.navFeatures') },
+    { href: '#how', label: t('landing.navHow') },
+    { href: '#faq', label: t('landing.navFaq') },
+  ];
   return (
-    <nav className="sticky top-0 z-50 border-b border-landing-line bg-landing-paper/[0.86] backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between px-6">
+    <nav className="sticky top-0 z-50 border-b border-landing-line/60 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-[1160px] items-center justify-between gap-4 px-4 sm:px-6">
         <Wordmark />
-        <Link
-          to={routes.login}
-          className="rounded-lg bg-landing-ink px-[18px] py-[9px] text-sm font-semibold text-white transition-colors hover:bg-landing-ink-2"
-        >
-          {t('landing.navSignIn')}
-        </Link>
+        <div className="hidden items-center gap-8 text-sm font-medium text-landing-muted lg:flex">
+          {links.map((l) => (
+            <a key={l.href} href={l.href} className="hover:text-landing-ink">
+              {l.label}
+            </a>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* «Увійти» is always on screen: masters open the landing to get INTO their account too. */}
+          <Link
+            to={routes.login}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-landing-ink hover:text-landing-amber-deep"
+          >
+            {t('landing.navSignIn')}
+          </Link>
+          <Link to={routes.register} className={CTA_CLASS + ' hidden !px-5 !py-2.5 !text-sm lg:inline-flex'}>
+            {t('landing.ctaTry')}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls="landing-menu"
+            aria-label={t('landing.navMenu')}
+            className="grid h-10 w-10 place-items-center rounded-lg text-landing-ink lg:hidden"
+          >
+            <Icon name={open ? 'close' : 'menu'} />
+          </button>
+        </div>
       </div>
+      {open && (
+        <div id="landing-menu" className="border-t border-landing-line/60 bg-white px-4 py-2 lg:hidden">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block py-3 text-base font-medium text-landing-ink"
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+      )}
     </nav>
+  );
+}
+
+/** A real screen of the app in a CSS phone frame. */
+function Phone({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={
+        'rounded-[2.2rem] bg-landing-ink p-[7px] shadow-[0_30px_60px_-24px_rgba(58,37,25,0.55)] ' +
+        (className ?? '')
+      }
+    >
+      <img
+        src={src}
+        alt={alt}
+        width={SHOT.w}
+        height={SHOT.h}
+        className="block h-auto w-full rounded-[1.8rem] bg-white"
+        loading="lazy"
+        decoding="async"
+      />
+    </div>
   );
 }
 
 function Hero() {
   const { t } = useTranslation();
+  const checks = [t('landing.heroCheck1'), t('landing.heroCheck2'), t('landing.heroCheck3'), t('landing.heroCheck4')];
   return (
-    <header className="relative overflow-hidden px-6 pb-16 pt-[72px]">
-      <div className="mx-auto grid max-w-[1120px] items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
-        <div>
-          <Eyebrow>{t('landing.heroEyebrow')}</Eyebrow>
-          <h1 className="my-[18px] text-[33px] font-extrabold leading-[1.04] tracking-[-0.025em] sm:text-[40px] lg:text-[54px]">
-            {t('landing.heroTitlePre')}
-            <span className="relative whitespace-normal after:absolute after:inset-x-[-2px] after:bottom-[6px] after:-z-[1] after:h-[14px] after:-skew-x-6 after:bg-landing-amber/85 after:content-[''] lg:whitespace-nowrap">
-              {t('landing.heroTitleHl')}
-            </span>
+    // `relative` here and NOT on the inner column at lg: the photo is absolute against the whole
+    // header, so it runs to the screen's right edge instead of stopping at the content width.
+    <header className="relative overflow-hidden">
+      <div className="relative mx-auto max-w-[1160px] px-4 pb-14 pt-8 sm:px-6 lg:static lg:min-h-[620px] lg:pb-20 lg:pt-16">
+        <div className="relative z-[1] lg:max-w-[48%]">
+          <span className="inline-block rounded-full bg-landing-amber/10 px-3 py-1 text-xs font-semibold text-landing-amber-deep">
+            {t('landing.heroBadge')}
+          </span>
+          <h1 className="mb-4 mt-4 text-[34px] font-extrabold leading-[1.08] tracking-[-0.025em] sm:text-[44px] lg:text-[52px]">
+            {t('landing.heroLine1')}
+            <br />
+            <span className="text-landing-amber">{t('landing.heroLine2')}</span>
+            <br />
+            {t('landing.heroLine3')}
           </h1>
-          <p className="mb-[30px] max-w-[30em] text-[19px] text-landing-muted">
-            {t('landing.heroLede')}
-          </p>
-          <div className="flex flex-wrap items-center gap-3.5">
-            <Link
-              to={routes.register}
-              className="inline-flex items-center gap-2 rounded-[10px] bg-landing-ink px-[26px] py-3.5 text-base font-semibold text-white transition hover:-translate-y-px hover:bg-landing-ink-2"
-            >
-              {t('landing.ctaPrimary')}
+          <p className="max-w-[32em] text-[17px] text-landing-muted sm:text-lg">{t('landing.heroLede')}</p>
+          <ul className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 sm:max-w-[30em]">
+            {checks.map((c) => (
+              <li key={c} className="flex items-start gap-2 text-sm font-medium leading-snug">
+                <Check />
+                {c}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8">
+            <Link to={routes.register} className={CTA_CLASS + ' w-full sm:w-auto'}>
+              {t('landing.ctaTry')} <span aria-hidden>→</span>
             </Link>
-            <a
-              href="#how"
-              className="inline-flex items-center gap-2 rounded-[10px] border-[1.5px] border-landing-line px-[26px] py-3.5 text-base font-semibold text-landing-ink transition hover:border-landing-ink"
-            >
-              {t('landing.ctaHow')}
-            </a>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-[13.5px] text-landing-muted">
-            <span className="h-[7px] w-[7px] rounded-full bg-[#3fa650] shadow-[0_0_0_3px_rgba(63,166,80,0.18)]" />
-            {t('landing.heroNote')}
+            <p className="mt-3 text-sm text-landing-muted">{t('landing.heroNote')}</p>
           </div>
         </div>
 
-        <PhoneMockup />
+        {/* ONE image for every width (a hidden <img> is still downloaded): under the CTA with rounded
+            corners on a phone, so the button is on screen without scrolling; the right half of the
+            header, edge to edge, on a wide screen. */}
+        <div className="relative mt-8 aspect-[4/3] overflow-hidden rounded-3xl lg:absolute lg:inset-y-0 lg:right-0 lg:mt-0 lg:aspect-auto lg:w-[54%] lg:rounded-none">
+          <img
+            src="/landing/hero-960.webp"
+            srcSet={HERO_WIDTHS.map((w) => `/landing/hero-${w}.webp ${w}w`).join(', ')}
+            sizes="(min-width: 1024px) 54vw, calc(100vw - 32px)"
+            alt={t('landing.heroPhotoAlt')}
+            width={1536}
+            height={1024}
+            fetchPriority="high"
+            decoding="async"
+            // Face and phone sit in the right two-thirds of the frame, so the crop keeps that side.
+            className="h-full w-full object-cover object-[72%_45%]"
+          />
+          {/* The photo's left edge melts into the page, so the text beside it never sits on a busy
+              background. */}
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 hidden w-2/5 bg-gradient-to-r from-white via-white/70 to-transparent lg:block"
+            aria-hidden
+          />
+          <HeroAccent />
+        </div>
       </div>
     </header>
   );
 }
 
-function PhoneMockup() {
+/** The widths `npm run landing:photos` writes for the hero (scripts/landing-photos.ts). */
+const HERO_WIDTHS = [640, 960, 1280, 1536];
+
+/**
+ * «Кошторис за 5 хвилин» with an arrow at the phone in the photo — TEXT and SVG over the image,
+ * never baked into it, so it stays sharp on any screen. Everything is placed in % of the photo
+ * box: the `object-[72%_45%]` crop keeps the phone at about (57 %, 59 %) of that box on a phone, a
+ * tablet and a desktop alike, so the arrow is drawn to end just short of it. The arrow stretches
+ * with the box (`preserveAspectRatio="none"`) while its stroke does not.
+ */
+function HeroAccent() {
   const { t } = useTranslation();
   return (
-    <div className="relative order-first flex justify-center lg:order-none">
-      {/* faint technical grid behind the phone, faded out at the edges */}
-      <div
-        className="pointer-events-none absolute -inset-10 z-0 opacity-40"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgb(var(--l-line)) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--l-line)) 1px, transparent 1px)',
-          backgroundSize: '26px 26px',
-          WebkitMaskImage: 'radial-gradient(circle at center, #000 35%, transparent 72%)',
-          maskImage: 'radial-gradient(circle at center, #000 35%, transparent 72%)',
-        }}
-      />
-      <div className="relative z-[1] w-[288px] rounded-[34px] bg-landing-ink p-[11px] shadow-[0_30px_60px_-20px_rgba(58,37,25,0.5)]">
-        <div className="overflow-hidden rounded-[24px] bg-white">
-          <div className="bg-landing-ink px-[18px] pb-3.5 pt-4 text-white">
-            <div className="text-[15px] font-bold">{t('landing.mockupCo')}</div>
-            <div className="mt-0.5 font-mono text-xs text-[#9fb0c0]">{t('landing.mockupPhone')}</div>
-          </div>
-          <div className="px-[18px] py-4">
-            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-landing-amber-deep">
-              {t('landing.mockupObjLabel')}
-            </div>
-            <div className="mb-0.5 mt-1 text-[15px] font-bold">{t('landing.mockupObjName')}</div>
-            <div className="mb-3.5 text-xs text-landing-muted">{t('landing.mockupObjAddr')}</div>
-            <MockRow name={t('landing.mockupRow1')} amount={t('landing.mockupRow1Amt')} />
-            <MockRow name={t('landing.mockupRow2')} amount={t('landing.mockupRow2Amt')} />
-            <MockRow name={t('landing.mockupRow3')} amount={t('landing.mockupRow3Amt')} />
-            <div className="mt-3 flex items-center justify-between border-t-2 border-landing-ink pt-3">
-              <span className="text-sm font-extrabold">{t('landing.mockupTotal')}</span>
-              <span className="font-mono text-[18px] font-extrabold">{t('landing.mockupTotalAmt')}</span>
-            </div>
-            <div className="mt-3.5 rounded-[10px] bg-landing-amber px-3 py-[11px] text-center text-[13px] font-bold text-landing-ink">
-              {t('landing.mockupSign')}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MockRow({ name, amount }: { name: string; amount: string }) {
-  return (
-    <div className="flex justify-between border-t border-[#eee] py-2 text-[12.5px]">
-      <span className="text-landing-ink">{name}</span>
-      <span className="whitespace-nowrap font-mono font-semibold">{amount}</span>
-    </div>
-  );
-}
-
-function TradesStrip() {
-  const { t } = useTranslation();
-  // The nine trades the default catalogue actually ships (Trade enum, minus GENERAL/OTHER).
-  const trades = [
-    t('landing.tradeTile'),
-    t('landing.tradeElectric'),
-    t('landing.tradePlumb'),
-    t('landing.tradePaint'),
-    t('landing.tradeBuilder'),
-    t('landing.tradeDrywall'),
-    t('landing.tradeFloor'),
-    t('landing.tradeDemo'),
-    t('landing.tradeMetal'),
-  ];
-  return (
-    <div className="border-y border-landing-line bg-white">
-      <div className="mx-auto max-w-[1120px] px-6 py-5">
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          {trades.map((trade) => (
-            <span
-              key={trade}
-              className="flex items-center gap-2 font-mono text-[13px] font-medium text-landing-ink"
-            >
-              <b className="text-landing-amber-deep">//</b>
-              {trade}
-            </span>
-          ))}
-        </div>
-        <p className="mt-3 text-center font-mono text-[11px] text-landing-muted">
-          {t('landing.tradesNote')}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function SectionHead({
-  eyebrow,
-  title,
-  subtitle,
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <div className="mb-12 max-w-[34em]">
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="my-3.5 text-[32px] font-extrabold leading-[1.1] tracking-[-0.02em] sm:text-[38px]">
-        {title}
-      </h2>
-      {subtitle && <p className="text-lg text-landing-muted">{subtitle}</p>}
-    </div>
-  );
-}
-
-function ProblemSolution() {
-  const { t } = useTranslation();
-  const bad = [t('landing.bad1'), t('landing.bad2'), t('landing.bad3'), t('landing.bad4')];
-  const good = [t('landing.good1'), t('landing.good2'), t('landing.good3'), t('landing.good4')];
-  return (
-    <section className="px-6 py-16 sm:py-[84px]">
-      <div className="mx-auto max-w-[1120px]">
-        <SectionHead
-          eyebrow={t('landing.problemEyebrow')}
-          title={t('landing.problemTitle')}
-          subtitle={t('landing.problemSubtitle')}
-        />
-        <div className="grid overflow-hidden rounded-2xl border border-landing-line md:grid-cols-2">
-          <div className="bg-white px-[30px] py-[34px] sm:px-9 sm:py-[38px]">
-            <div className="mb-5 font-mono text-xs font-semibold uppercase tracking-[0.12em] text-[#a85432]">
-              {t('landing.badTag')}
-            </div>
-            {bad.map((item) => (
-              <PsItem key={item} tone="bad" symbol="✕">
-                {item}
-              </PsItem>
-            ))}
-          </div>
-          <div className="bg-landing-ink px-[30px] py-[34px] text-landing-paper sm:px-9 sm:py-[38px]">
-            <div className="mb-5 font-mono text-xs font-semibold uppercase tracking-[0.12em] text-landing-amber">
-              {t('landing.goodTag')}
-            </div>
-            {good.map((item) => (
-              <PsItem key={item} tone="good" symbol="✓">
-                {item}
-              </PsItem>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PsItem({
-  tone,
-  symbol,
-  children,
-}: {
-  tone: 'bad' | 'good';
-  symbol: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-3 py-2.5 text-[15.5px]">
-      <span
-        className={
-          'mt-px grid h-5 w-5 flex-shrink-0 place-items-center rounded-[5px] text-[13px] font-extrabold ' +
-          (tone === 'bad'
-            ? 'bg-[#eaddd0] text-[#a85432]'
-            : 'bg-landing-amber/[0.18] text-landing-amber')
-        }
+    <div className="pointer-events-none absolute inset-0 text-landing-amber-deep" aria-hidden>
+      <p
+        className="absolute left-[6%] top-[7%] max-w-[50%] -rotate-[7deg] text-[26px] font-semibold leading-[1.05] sm:text-[34px] lg:left-[12%] lg:top-[11%] lg:max-w-none lg:whitespace-nowrap lg:text-[40px]"
+        style={{ fontFamily: '"Caveat", "Segoe Print", "Bradley Hand", cursive' }}
       >
-        {symbol}
-      </span>
-      {children}
+        {t('landing.heroAccent')}
+      </p>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="absolute left-[18%] top-[31%] h-[22%] w-[33%] lg:left-[24%] lg:top-[24%] lg:h-[29%] lg:w-[27%]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M2 4 C 40 2, 80 30, 96 94" vectorEffect="non-scaling-stroke" />
+        <path d="M84 80 L 96 96 L 99 76" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
+  );
+}
+
+function SectionTitle({ children, sub }: { children: ReactNode; sub?: string }) {
+  return (
+    <div className="mb-8 max-w-[40em]">
+      <h2 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[32px]">{children}</h2>
+      {sub && <p className="mt-2 text-landing-muted">{sub}</p>}
     </div>
   );
 }
 
 function Features() {
   const { t } = useTranslation();
-  // `pro` marks what a FREE plan genuinely can't reach, so a master who signs up doesn't
-  // hit an unannounced paywall. The truly-paid feature is photo recognition/import (02 —
-  // SKETCH/RECEIPT/ESTIMATE import, the only LLM-calling flows). Заміри (01) and Економіка
-  // (04) are PRO in the permanent plan but currently opened to FREE
-  // (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY) — so their badge is driven off that flag and
-  // snaps back to PRO automatically when the temp unlock is reverted. Keep this the FOURTH
-  // consumer of the flag in sync with the other three (see tempFreeUnlocks.ts).
-  const measurementsAndEconomyPro = !TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY;
-  const feats = [
-    { n: '01', title: t('landing.feature1Title'), text: t('landing.feature1Text'), pro: measurementsAndEconomyPro },
-    { n: '02', title: t('landing.feature2Title'), text: t('landing.feature2Text'), pro: true },
-    { n: '03', title: t('landing.feature3Title'), text: t('landing.feature3Text'), pro: false },
-    { n: '04', title: t('landing.feature4Title'), text: t('landing.feature4Text'), pro: measurementsAndEconomyPro },
+  // `pro` marks what a FREE plan genuinely can't reach, so a master who signs up doesn't hit an
+  // unannounced paywall. Заміри are PRO in the permanent plan but currently opened to FREE
+  // (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY), so the badge follows that flag and snaps back when
+  // the unlock is reverted — keep this consumer in sync with the others (see tempFreeUnlocks.ts).
+  // The other five cards are FREE on every plan.
+  const measurementsPro = !TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY;
+  const feats: Array<{ icon: IconName; title: string; text: string; pro: boolean }> = [
+    { icon: 'estimate', title: t('landing.feat1Title'), text: t('landing.feat1Text'), pro: false },
+    { icon: 'ruler', title: t('landing.feat2Title'), text: t('landing.feat2Text'), pro: measurementsPro },
+    { icon: 'link', title: t('landing.feat3Title'), text: t('landing.feat3Text'), pro: false },
+    { icon: 'box', title: t('landing.feat4Title'), text: t('landing.feat4Text'), pro: false },
+    { icon: 'act', title: t('landing.feat5Title'), text: t('landing.feat5Text'), pro: false },
+    { icon: 'wallet', title: t('landing.feat6Title'), text: t('landing.feat6Text'), pro: false },
   ];
   return (
-    <section className="px-6 pb-16 sm:pb-[84px]">
-      <div className="mx-auto max-w-[1120px]">
-        <SectionHead
-          eyebrow={t('landing.featuresEyebrow')}
-          title={t('landing.featuresTitle')}
-          subtitle={t('landing.featuresSubtitle')}
-        />
-        <div className="grid gap-5 sm:grid-cols-2">
+    <section id="features" className="scroll-mt-20 px-4 pb-16 sm:px-6 lg:pb-20">
+      <div className="mx-auto max-w-[1160px]">
+        <SectionTitle>{t('landing.featuresTitle')}</SectionTitle>
+        {/* A phone gets a list: icon, title, one line — a grid of six would lose the descriptions. */}
+        <ul className="divide-y divide-landing-line/60 overflow-hidden rounded-2xl border border-landing-line/60 sm:grid sm:grid-cols-2 sm:gap-4 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 lg:grid-cols-3 xl:grid-cols-6">
           {feats.map((f) => (
-            <div
-              key={f.n}
-              className="rounded-[14px] border border-landing-line bg-white p-[30px] transition hover:-translate-y-0.5 hover:border-landing-ink"
+            <li
+              key={f.title}
+              className="flex items-start gap-3 bg-white p-4 sm:flex-col sm:rounded-2xl sm:border sm:border-landing-line/60 sm:p-5 sm:shadow-[0_6px_20px_-14px_rgba(58,37,25,0.35)]"
             >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[13px] font-bold text-landing-amber-deep">{f.n}</span>
-                {f.pro && (
-                  <span className="rounded-full border border-landing-line px-2 py-0.5 font-mono text-[10px] font-bold tracking-wider text-landing-muted">
-                    {t('landing.proBadge')}
-                  </span>
-                )}
+              <span className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-landing-amber/10 text-landing-amber-deep sm:h-12 sm:w-12">
+                <Icon name={f.icon} />
+              </span>
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold">
+                  {f.title}
+                  {f.pro && (
+                    <span className="rounded-full border border-landing-line px-1.5 py-px text-[10px] font-bold tracking-wider text-landing-muted">
+                      {t('landing.proBadge')}
+                    </span>
+                  )}
+                </h3>
+                <p className="mt-1 text-sm leading-snug text-landing-muted">{f.text}</p>
               </div>
-              <h3 className="mb-2.5 mt-3.5 text-xl font-bold tracking-[-0.01em]">{f.title}</h3>
-              <p className="text-[15px] text-landing-muted">{f.text}</p>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );
@@ -341,39 +310,140 @@ function Features() {
 
 function HowItWorks() {
   const { t } = useTranslation();
-  const steps = [
-    { n: '1', title: t('landing.step1Title'), text: t('landing.step1Text') },
-    { n: '2', title: t('landing.step2Title'), text: t('landing.step2Text') },
-    { n: '3', title: t('landing.step3Title'), text: t('landing.step3Text') },
+  const steps: Array<{ icon: IconName; title: string; text: string }> = [
+    { icon: 'box', title: t('landing.step1Title'), text: t('landing.step1Text') },
+    { icon: 'estimate', title: t('landing.step2Title'), text: t('landing.step2Text') },
+    { icon: 'link', title: t('landing.step3Title'), text: t('landing.step3Text') },
+    { icon: 'sign', title: t('landing.step4Title'), text: t('landing.step4Text') },
   ];
   return (
-    <section id="how" className="px-6 pb-16 sm:pb-[84px]">
-      <div className="mx-auto max-w-[1120px]">
-        <div className="rounded-[20px] bg-landing-ink px-7 py-11 text-landing-paper sm:px-12 sm:py-[60px]">
-          <Eyebrow className="!text-landing-amber">{t('landing.stepsEyebrow')}</Eyebrow>
-          <h2 className="my-3.5 mb-11 text-[28px] font-extrabold tracking-[-0.02em] text-white sm:text-[36px]">
-            {t('landing.stepsTitle')}
-          </h2>
-          <div className="grid gap-9 md:grid-cols-3 md:gap-[30px]">
-            {steps.map((s, i) => (
-              <div key={s.n} className="relative">
-                <div className="mb-[18px] grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-landing-amber font-mono text-sm font-extrabold text-landing-ink">
-                  {s.n}
-                </div>
-                <h4 className="mb-2.5 text-[19px] font-bold">{s.title}</h4>
-                <p className="text-[14.5px] text-[#a9b8c6]">{s.text}</p>
-                {i < steps.length - 1 && (
-                  <span
-                    aria-hidden
-                    className="absolute left-1.5 top-auto text-xl font-bold text-landing-amber md:left-auto md:right-[-22px] md:top-1.5"
-                  >
-                    <span className="md:hidden">↓</span>
-                    <span className="hidden md:inline">→</span>
-                  </span>
-                )}
+    <section id="how" className="scroll-mt-20 bg-landing-paper/50 px-4 py-16 sm:px-6 lg:py-20">
+      <div className="mx-auto max-w-[1160px]">
+        <SectionTitle sub={t('landing.stepsSubtitle')}>{t('landing.stepsTitle')}</SectionTitle>
+        <ol className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+          {steps.map((s, i) => (
+            <li key={s.title} className="flex gap-4 lg:flex-col">
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-landing-amber text-sm font-extrabold text-white">
+                  {i + 1}
+                </span>
+                <span className="hidden h-9 w-9 place-items-center rounded-full bg-white text-landing-amber-deep lg:grid">
+                  <Icon name={s.icon} small />
+                </span>
               </div>
+              <div>
+                <h3 className="text-lg font-bold">{s.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-landing-muted">{s.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function Audience() {
+  const { t } = useTranslation();
+  // The nine trades the default catalogue ships (Trade enum minus GENERAL/OTHER) — they are search
+  // queries too («кошторис електрика»), so they stay on the page as visible text.
+  const trades = [
+    t('landing.tradeTile'), t('landing.tradeElectric'), t('landing.tradePlumb'),
+    t('landing.tradePaint'), t('landing.tradeBuilder'), t('landing.tradeDrywall'),
+    t('landing.tradeFloor'), t('landing.tradeDemo'), t('landing.tradeMetal'),
+  ];
+  const cards = [
+    {
+      title: t('landing.forMasterTitle'),
+      points: [t('landing.forMaster1'), t('landing.forMaster2'), t('landing.forMaster3')],
+      shot: '/landing/shot-editor.webp',
+      alt: t('landing.shotEditorAlt'),
+      align: 'top',
+    },
+    {
+      title: t('landing.forForemanTitle'),
+      points: [t('landing.forForeman1'), t('landing.forForeman2'), t('landing.forForeman3')],
+      shot: '/landing/shot-margin.webp',
+      alt: t('landing.shotMarginAlt'),
+      align: 'bottom',
+    },
+    {
+      title: t('landing.forClientTitle'),
+      points: [t('landing.forClient1'), t('landing.forClient2'), t('landing.forClient3')],
+      shot: '/landing/shot-portal.webp',
+      alt: t('landing.shotPortalAlt'),
+      align: 'bottom',
+    },
+  ];
+  return (
+    <section className="px-4 py-16 sm:px-6 lg:py-20">
+      <div className="mx-auto max-w-[1160px]">
+        <SectionTitle sub={t('landing.audienceSubtitle')}>{t('landing.audienceTitle')}</SectionTitle>
+        <div className="grid gap-5 md:grid-cols-3">
+          {cards.map((c) => (
+            <article
+              key={c.title}
+              className="overflow-hidden rounded-2xl border border-landing-line/60 bg-white shadow-[0_6px_20px_-14px_rgba(58,37,25,0.35)]"
+            >
+              {/* Part of the phone only — the part the card is about: the crew line and the «Підписати»
+                  button sit at the BOTTOM of their screens. */}
+              <div
+                className={
+                  'flex h-[240px] overflow-hidden bg-landing-paper/60 px-10 ' +
+                  (c.align === 'bottom' ? 'items-end' : 'items-start pt-6')
+                }
+              >
+                <Phone src={c.shot} alt={c.alt} className="w-full" />
+              </div>
+              <div className="p-5">
+                <h3 className="text-lg font-bold">{c.title}</h3>
+                <ul className="mt-3 space-y-2">
+                  {c.points.map((p) => (
+                    <li key={p} className="flex items-start gap-2 text-sm leading-snug text-landing-muted">
+                      <Check />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="mt-8 text-sm text-landing-muted">
+          <span className="font-semibold text-landing-ink">{t('landing.tradesNote')}</span>{' '}
+          {trades.join(' · ')}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Control() {
+  const { t } = useTranslation();
+  const points = [t('landing.control1'), t('landing.control2'), t('landing.control3')];
+  return (
+    <section className="px-4 pb-16 sm:px-6 lg:pb-20">
+      <div className="mx-auto grid max-w-[1160px] items-center gap-10 overflow-hidden rounded-3xl bg-landing-paper/60 px-5 py-10 sm:px-10 lg:grid-cols-2 lg:py-12">
+        <div className="flex justify-center gap-4">
+          <Phone src="/landing/shot-share.webp" alt={t('landing.shotShareAlt')} className="w-[44%] max-w-[210px]" />
+          <Phone
+            src="/landing/shot-money.webp"
+            alt={t('landing.shotMoneyAlt')}
+            className="mt-10 w-[44%] max-w-[210px]"
+          />
+        </div>
+        <div>
+          <h2 className="text-[26px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[32px]">
+            {t('landing.controlTitle')}
+          </h2>
+          <ul className="mt-6 space-y-3">
+            {points.map((p) => (
+              <li key={p} className="flex items-start gap-2 text-base">
+                <Check />
+                {p}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </div>
     </section>
@@ -381,41 +451,40 @@ function HowItWorks() {
 }
 
 /**
- * Visible FAQ — an accordion of the questions a master actually asks. The text here
- * is mirrored WORD-FOR-WORD by the FAQPage JSON-LD in index.html (same seven Q/A, in
- * Ukrainian, the default render language): structured data that describes content not
- * visible on the page is a policy violation, so change one and change the other in the
- * same commit. Accordions are an allowed FAQ pattern — the answers are in the DOM even
- * while collapsed, so crawlers and no-JS-off renderers still read them.
+ * Visible FAQ — an accordion of the questions a master actually asks. The text here is mirrored
+ * WORD-FOR-WORD by the FAQPage JSON-LD in index.html (same eight Q/A, in Ukrainian, the default
+ * render language): structured data that describes content not visible on the page is a policy
+ * violation, so change one and change the other in the same commit. Accordions are an allowed FAQ
+ * pattern — the answers are in the DOM even while collapsed, so crawlers still read them.
  */
+export const FAQ_COUNT = 8;
+
 function Faq() {
   const { t } = useTranslation();
-  const items = [1, 2, 3, 4, 5, 6, 7].map((n) => ({
-    q: t(`landing.faqQ${n}`),
-    a: t(`landing.faqA${n}`),
+  const items = Array.from({ length: FAQ_COUNT }, (_, i) => ({
+    q: t(`landing.faqQ${i + 1}`),
+    a: t(`landing.faqA${i + 1}`),
   }));
   return (
-    <section className="px-6 pb-16 sm:pb-[84px]">
+    <section id="faq" className="scroll-mt-20 px-4 pb-16 sm:px-6 lg:pb-20">
       <div className="mx-auto max-w-[760px]">
-        <SectionHead eyebrow={t('landing.faqEyebrow')} title={t('landing.faqTitle')} />
+        <SectionTitle>{t('landing.faqTitle')}</SectionTitle>
         <div className="space-y-3">
           {items.map((item) => (
             <details
               key={item.q}
-              className="group rounded-[14px] border border-landing-line bg-white px-[22px] py-1 transition open:border-landing-ink"
+              className="group rounded-2xl border border-landing-line/60 bg-white px-5 py-1 transition open:border-landing-amber/60"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-[18px] text-[17px] font-bold tracking-[-0.01em] marker:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold marker:hidden">
                 {item.q}
                 <span
                   aria-hidden
-                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border border-landing-line font-mono text-landing-amber-deep transition group-open:rotate-45"
+                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md bg-landing-amber/10 text-landing-amber-deep transition group-open:rotate-45"
                 >
                   +
                 </span>
               </summary>
-              <p className="pb-[18px] pr-8 text-[15px] leading-relaxed text-landing-muted">
-                {item.a}
-              </p>
+              <p className="pb-4 pr-8 text-[15px] leading-relaxed text-landing-muted">{item.a}</p>
             </details>
           ))}
         </div>
@@ -427,20 +496,17 @@ function Faq() {
 function FinalCTA() {
   const { t } = useTranslation();
   return (
-    <section className="px-6 py-20 text-center sm:py-24">
-      <div className="mx-auto max-w-[1120px]">
-        <Eyebrow>{t('landing.finalEyebrow')}</Eyebrow>
-        <h2 className="mx-auto mb-[18px] mt-3.5 max-w-[18em] text-[32px] font-extrabold leading-[1.08] tracking-[-0.025em] sm:text-[44px]">
-          {t('landing.finalTitle')}
-        </h2>
-        <p className="mx-auto mb-8 max-w-[30em] text-[19px] text-landing-muted">
-          {t('landing.finalText')}
-        </p>
+    <section className="px-4 pb-12 sm:px-6">
+      <div className="mx-auto flex max-w-[1160px] flex-col items-start gap-6 rounded-3xl bg-landing-amber px-6 py-8 text-white sm:px-10 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-2xl font-extrabold tracking-[-0.02em] sm:text-3xl">{t('landing.finalTitle')}</h2>
+          <p className="mt-1 text-white/90">{t('landing.finalText')}</p>
+        </div>
         <Link
           to={routes.register}
-          className="inline-flex items-center gap-2 rounded-[10px] bg-landing-ink px-[26px] py-3.5 text-base font-semibold text-white transition hover:-translate-y-px hover:bg-landing-ink-2"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-landing-amber-deep transition hover:-translate-y-px sm:w-auto"
         >
-          {t('landing.ctaPrimary')}
+          {t('landing.ctaTry')} <span aria-hidden>→</span>
         </Link>
       </div>
     </section>
@@ -450,10 +516,10 @@ function FinalCTA() {
 function LandingFooter() {
   const { t } = useTranslation();
   return (
-    <footer className="border-t border-landing-line bg-white px-6 py-10">
-      <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-[18px]">
-        <Wordmark />
-        <div className="font-mono text-sm text-landing-muted">
+    <footer className="border-t border-landing-line/60 px-4 py-8 sm:px-6">
+      <div className="mx-auto flex max-w-[1160px] flex-col gap-3 text-sm text-landing-muted md:flex-row md:items-center md:justify-between">
+        <span>{t('landing.footerCopyright')}</span>
+        <div>
           {t('landing.footerSupport')}{' '}
           <a href={`mailto:${config.supportEmail}`} className="text-landing-ink hover:text-landing-amber-deep">
             {config.supportEmail}
@@ -466,14 +532,89 @@ function LandingFooter() {
             {config.supportPhone}
           </a>
         </div>
-        <div className="flex items-center gap-3 font-mono text-sm text-landing-muted">
-          <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
-            {t('privacy.footerLink')}
-          </Link>
-          <span aria-hidden>·</span>
-          <span>{t('landing.footerCopyright')}</span>
-        </div>
+        <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
+          {t('privacy.footerLink')}
+        </Link>
       </div>
     </footer>
+  );
+}
+
+function Check() {
+  return (
+    <span
+      aria-hidden
+      className="mt-px grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-landing-amber text-[11px] font-extrabold text-white"
+    >
+      ✓
+    </span>
+  );
+}
+
+type IconName = 'estimate' | 'ruler' | 'link' | 'box' | 'act' | 'wallet' | 'sign' | 'menu' | 'close';
+
+/** Line icons drawn inline — the landing ships no icon library. */
+function Icon({ name, small = false }: { name: IconName; small?: boolean }) {
+  const paths: Record<IconName, ReactNode> = {
+    estimate: (
+      <>
+        <rect x="5" y="3" width="14" height="18" rx="2" />
+        <path d="M9 8h6M9 12h6M9 16h4" />
+      </>
+    ),
+    ruler: (
+      <>
+        <path d="M3 17 17 3l4 4L7 21z" />
+        <path d="m7 13 2 2M10 10l2 2M13 7l2 2" />
+      </>
+    ),
+    link: (
+      <>
+        <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" />
+        <path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
+      </>
+    ),
+    box: (
+      <>
+        <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" />
+        <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+      </>
+    ),
+    act: (
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+        <path d="M14 3v5h5M9 14l2 2 4-4" />
+      </>
+    ),
+    wallet: (
+      <>
+        <rect x="3" y="6" width="18" height="14" rx="2" />
+        <path d="M3 10h18M16 15h2M6 6l9-3 1 3" />
+      </>
+    ),
+    sign: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8 12 3 3 5-6" />
+      </>
+    ),
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    close: <path d="M6 6l12 12M18 6 6 18" />,
+  };
+  const size = small ? 18 : 22;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {paths[name]}
+    </svg>
   );
 }

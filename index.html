@@ -74,7 +74,7 @@
     </script>
 
     <!-- Structured data: FAQ. Mirrors the VISIBLE FAQ accordion in
-         src/features/landing/LandingPage.tsx word-for-word (uk.json faqQ1..faqA7, the
+         src/features/landing/LandingPage.tsx word-for-word (uk.json faqQ1..faqA8, the
          default render language). Structured data must describe on-page content — change
          one, change the other in the same commit. -->
     <script type="application/ld+json">
@@ -138,21 +138,52 @@
             "@type": "Answer",
             "text": "Так. З підписаного кошторису формується акт, який клієнт підписує окремим посиланням онлайн; до акта можна додати чеки за матеріали."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "Це застосунок з App Store чи Google Play?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Ні. Majstr — це PWA: відкриваєш сайт і додаєш на головний екран. Працює на Android, iPhone і комп'ютері, оновлюється сам."
+          }
         }
       ]
     }
     </script>
 
+    <!-- Boot screen. #root carries a static copy of the landing for crawlers (see the comment in
+         <body>), and _redirects / the service worker / start_url serve this same file on EVERY path —
+         so every app launch painted the landing's text until the bundle mounted. Anyone who is not a
+         fresh visitor on "/" (another path, or a stored token — keys from src/lib/tokens.ts) gets the
+         `app-boot` class, which turns that copy into a plain logo screen. The copy stays in the HTML,
+         so a visitor and a crawler on "/" are served the same thing; React replaces #root's content
+         on mount, after which the class matches nothing. Private mode may throw on localStorage —
+         then nothing changes. The script's hash is in public/_headers (CSP script-src): change one
+         byte, recompute it. -->
+    <script>(function(){if(location.pathname!=='/'){document.documentElement.classList.add('app-boot');return}try{if(localStorage.getItem('majstr.accessToken')||localStorage.getItem('majstr.refreshToken'))document.documentElement.classList.add('app-boot')}catch(e){}})();</script>
+    <style>
+      .app-boot, .app-boot body { background: #f9fafb; }
+      .app-boot #root > main > * { display: none !important; }
+      .app-boot #root > main {
+        max-width: none !important;
+        padding: 0 !important;
+        min-height: 100vh;
+        min-height: 100dvh;
+        background: url(/logo.svg) center / 72px 72px no-repeat;
+      }
+    </style>
+
     <!-- Theme + manifest -->
     <meta name="theme-color" content="#F26B1F" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 
-    <!-- Inter — UI typeface (good Cyrillic coverage). Preconnect so the
+    <!-- Inter — UI typeface (good Cyrillic coverage); Caveat — the landing's hand-written accent only
+         (a face is downloaded only where a rule uses it). Preconnect so the
          font request starts before CSS is parsed. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
 
@@ -171,24 +202,39 @@
          guarantees crawlers and no-JS clients still get the real copy + headings. -->
     <div id="root">
       <main style="max-width:780px;margin:0 auto;padding:56px 24px;font-family:Inter,system-ui,sans-serif;color:#1a120b;line-height:1.55">
-        <p style="font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.18em;font-size:12px;color:#c2560f;margin:0 0 12px">Кошториси для майстрів</p>
-        <h1 style="font-size:36px;font-weight:800;line-height:1.12;margin:0 0 16px">Кошторис клієнту за 5 хвилин</h1>
-        <p style="font-size:18px;color:#4a3b2e;margin:0 0 24px">Каталог робіт із цінами, заміри об'єкта з розрахунком площ і портал, де клієнт бачить і погоджує кошторис онлайн.</p>
+        <p style="font-size:13px;font-weight:600;color:#c2560f;margin:0 0 12px">PWA для майстрів і бригадирів</p>
+        <h1 style="font-size:36px;font-weight:800;line-height:1.12;margin:0 0 16px">Порахуй роботу. Надішли кошторис. Отримай підпис.</h1>
+        <p style="font-size:18px;color:#4a3b2e;margin:0 0 24px">Majstr — інструмент для майстрів і бригадирів. Від замірів до підпису клієнта — в одному телефоні.</p>
         <p style="margin:0 0 32px">
-          <a href="/register" style="display:inline-block;background:#F26B1F;color:#fff;font-weight:600;text-decoration:none;padding:12px 22px;border-radius:10px">Почати безкоштовно</a>
+          <a href="/register" style="display:inline-block;background:#F26B1F;color:#fff;font-weight:600;text-decoration:none;padding:12px 22px;border-radius:10px">Спробувати безкоштовно</a>
           <a href="/login" style="margin-left:16px;color:#1a120b;font-weight:600;text-decoration:underline">Увійти</a>
         </p>
-        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Що всередині</h2>
+        <p style="color:#8a7a6b;font-size:14px;margin:0 0 8px">Безкоштовно · 2 об'єкти · Без банківської картки</p>
+        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Все, що потрібно для роботи</h2>
         <ul style="padding-left:20px;color:#4a3b2e;margin:0">
-          <li style="margin-bottom:8px"><strong>Каталог 1000+ робіт із ринковими цінами</strong> та 120+ готових шаблонів під типові роботи.</li>
-          <li style="margin-bottom:8px"><strong>Клієнт погоджує кошторис онлайн</strong> — відкриває посилання з телефона й підписує, без реєстрації.</li>
-          <li style="margin-bottom:8px"><strong>Заміри об'єкта</strong> (PRO) — кімнати, стіни, стелі зі скосами, перегородки, відкоси; площа підставляється в позиції.</li>
-          <li style="margin-bottom:8px"><strong>Фото ескізу, чека чи прайсу</strong> (PRO) — позиції та заміри вносяться самі, ти лише звіряєш.</li>
-          <li style="margin-bottom:8px"><strong>Гроші по об'єкту</strong> (PRO) — що підписано, що прийнято актами, що заплачено; з бригадою — твоя націнка над цінами бригади.</li>
+          <li style="margin-bottom:8px"><strong>Кошториси</strong> — створюй професійні кошториси за шаблонами або з нуля.</li>
+          <li style="margin-bottom:8px"><strong>Заміри</strong> — розраховуй площі та обсяги прямо на об'єкті.</li>
+          <li style="margin-bottom:8px"><strong>Посилання клієнту</strong> — надсилай кошторис онлайн і отримуй підпис.</li>
+          <li style="margin-bottom:8px"><strong>Матеріали</strong> — калькулятор і список покупок для закупівлі.</li>
+          <li style="margin-bottom:8px"><strong>Акти робіт</strong> — фіксуй виконані роботи та надсилай на підпис.</li>
+          <li style="margin-bottom:8px"><strong>Мої гроші</strong> — скільки прийшло, витратив і заробив — за тиждень чи місяць, по всіх об'єктах разом.</li>
         </ul>
-        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Для кого</h2>
-        <p style="color:#4a3b2e;margin:0">Плитка · Електрика · Сантехніка · Маляр · Будівництво · Гіпсокартон · Підлоги · Демонтаж · Металоконструкції</p>
-        <p style="color:#8a7a6b;font-size:14px;margin-top:28px">Безкоштовно: 2 об'єкти — портал, підпис, PDF і фото. Без картки.</p>
+        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Як це працює?</h2>
+        <ol style="padding-left:20px;color:#4a3b2e;margin:0">
+          <li style="margin-bottom:8px"><strong>Створи об'єкт</strong> — Додай адресу, клієнта та обери тип кошторису.</li>
+          <li style="margin-bottom:8px"><strong>Додай роботи</strong> — Використовуй готові шаблони або шукай у каталозі.</li>
+          <li style="margin-bottom:8px"><strong>Надішли клієнту</strong> — Поділись посиланням або PDF. Клієнт перегляне і підпише онлайн.</li>
+          <li style="margin-bottom:8px"><strong>Отримай підпис</strong> — Клієнт підписує з телефона. Далі — акти робіт і облік оплат.</li>
+        </ol>
+        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Для кожного, хто будує і ремонтує</h2>
+        <p style="color:#4a3b2e;margin:0 0 8px">Приватний майстер, бригадир, клієнт.</p>
+        <p style="color:#4a3b2e;margin:0">Каталоги й шаблони під твій напрям: Плитка · Електрика · Сантехніка · Маляр · Будівництво · Гіпсокартон · Підлоги · Демонтаж · Металоконструкції</p>
+        <h2 style="font-size:22px;font-weight:700;margin:36px 0 12px">Професійний вигляд і повний контроль</h2>
+        <ul style="padding-left:20px;color:#4a3b2e;margin:0">
+          <li style="margin-bottom:8px">Працює без інтернету — навіть у підвалі</li>
+          <li style="margin-bottom:8px">Синхронізується, щойно з'явиться зв'язок</li>
+          <li style="margin-bottom:8px">Підписаний кошторис ніхто не змінить</li>
+        </ul>
       </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>
