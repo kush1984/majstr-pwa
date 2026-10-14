@@ -89,3 +89,36 @@ describe('ItemForm — what is submitted is what was validated', () => {
     expect(onSubmit.mock.calls[0][0]).toMatchObject({ unitPrice: 1200, quantity: 12 });
   });
 });
+
+/** The line's amount while he types, by the rounding the server stores it with. */
+describe('ItemForm — the live line sum', () => {
+  const sum = () => screen.getByTestId('line-sum').textContent ?? '';
+
+  it('shows quantity × price and follows the typing', () => {
+    renderForm(line({}));
+    expect(sum()).toMatch(/^Сума: 3\s120\s₴$/);
+
+    fireEvent.change(screen.getByLabelText(/Кількість/), { target: { value: '2,5' } });
+    expect(sum()).toMatch(/^Сума: 650\s₴$/);
+  });
+
+  it('rounds half up to the kopeck', () => {
+    renderForm(line({ quantity: 0.125, unitPrice: 1 }));
+    expect(sum()).toMatch(/^Сума: 0,13\s₴$/);
+  });
+
+  it('shows nothing — not «0 ₴» — while a field is empty or not a number', () => {
+    renderForm(line({}));
+    fireEvent.change(screen.getByLabelText(/Кількість/), { target: { value: '' } });
+    expect(sum()).toBe('');
+
+    fireEvent.change(screen.getByLabelText(/Кількість/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/Ціна/), { target: { value: 'abc' } });
+    expect(sum()).toBe('');
+  });
+
+  it('leaves a «%» line to its own preview', () => {
+    renderForm(line({ unit: 'PERCENT', quantity: 10, unitPrice: 0, percentBaseKind: 'TOTAL' }));
+    expect(screen.queryByTestId('line-sum')).toBeNull();
+  });
+});

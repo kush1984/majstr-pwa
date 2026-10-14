@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -13,7 +14,7 @@ import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
 import { cn } from '@/lib/cn.ts';
 import { useSpeechDictation } from '@/hooks/useSpeechDictation.ts';
 import { useCreateCatalogItem } from '@/features/catalog/useCatalog.ts';
-import { useInvalidateEstimate } from './useEstimate.ts';
+import { noticeSentChange, useInvalidateEstimate } from './useEstimate.ts';
 import { TradeBadge } from '@/components/TradeBadge.tsx';
 import { useMe } from '@/features/auth/useMe.ts';
 import { track } from '@/lib/posthog.ts';
@@ -165,6 +166,7 @@ export function DictationSheet({
   onAdded?: (ids: string[]) => void;
 }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const invalidateEstimate = useInvalidateEstimate(estimateId);
   const { online } = useOnlineGuard(); // the parse is a model call — no offline path
   const { data: me } = useMe(); // master's own trades + custom trades — feed the save-to-catalog picker
@@ -265,6 +267,7 @@ export function DictationSheet({
       // Tell the editor about them so it can green-highlight + scroll (see `markTouched`).
       const newIds = updated.items.slice(-included.length).map((r) => r.id);
       onAdded?.(newIds);
+      noticeSentChange(qc, estimateId);
       invalidateEstimate();
       // Only AFTER the lines actually landed: the estimate is what he asked for, the catalog copy is
       // a bonus, and a failing copy must never look like the dictation failed.

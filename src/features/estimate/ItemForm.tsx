@@ -168,6 +168,15 @@ export function ItemForm({
     .map((s) => s.lineTotal ?? 0);
   const totalBaseSum = sumMoney(totalBase);
   const baseAmount = baseKind === 'TOTAL' ? totalBaseSum : (baseLine?.lineTotal ?? 0);
+  // The line's amount as the server will store it (quantity × price, HALF_UP to kopecks), live
+  // while he types. Null — not «0 ₴» — while either field is empty or not yet a number.
+  const lineSum = (() => {
+    if (isPercent) return null;
+    const q = parseQuantity(watch('quantity'), { allowZero: true });
+    const p = parseMoney(watch('unitPrice'), { allowZero: true });
+    return q == null || p == null ? null : roundMoney(q * p);
+  })();
+
   const percentPreview = (() => {
     // roundMoney, not Math.round (review P-66): Math.round ties toward +∞, so a negative «%» line
     // previewed a kopeck off what the server then stored (12 345,50 × −5 % → −617,27 vs −617,28).
@@ -356,6 +365,14 @@ export function ItemForm({
           </FormField>
         )}
       </div>
+
+      {/* Always takes its line, filled or not: appearing mid-typing would shove the form's buttons
+          around under the thumb while the numeric keypad is open. */}
+      {!isPercent && (
+        <p className="-mt-1 min-h-5 text-sm text-muted" data-testid="line-sum">
+          {lineSum != null && t('estimate.lineSumPreview', { sum: formatMoney(lineSum) })}
+        </p>
+      )}
 
       {isPercent && isFrozen && (
         // Frozen (consolidated) line: no live base picker — there is nothing left to point at,

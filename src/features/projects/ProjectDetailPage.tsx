@@ -491,7 +491,12 @@ export function ProjectDetailPage() {
         </>
       )}
 
-      <MessagesSection projectId={id} />
+      <MessagesSection
+        projectId={id}
+        onGetChatLink={
+          isTerminalStage(p.stage) ? undefined : guard(() => setChatLinkOpen(true))
+        }
+      />
 
       <ChatLinkSheet
         open={chatLinkOpen}

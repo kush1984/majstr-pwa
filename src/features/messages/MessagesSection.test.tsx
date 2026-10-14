@@ -166,3 +166,28 @@ describe('MessagesSection', () => {
     expect(messagesApi.markRead).not.toHaveBeenCalled();
   });
 });
+
+/** An empty block explains where messages come from, and hands out the link they come through. */
+describe('MessagesSection — empty', () => {
+  it('says what will appear here and offers the chat link', async () => {
+    vi.mocked(messagesApi.listForProject).mockResolvedValue([]);
+    const onGetChatLink = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MessagesSection projectId="p1" onGetChatLink={onGetChatLink} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/питання клієнта з порталу/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Отримати посилання на чат →' }));
+    expect(onGetChatLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no link where there is none to hand out', async () => {
+    renderSection([]);
+
+    expect(await screen.findByText(/питання клієнта з порталу/)).toBeTruthy();
+    expect(screen.queryByText('Отримати посилання на чат →')).toBeNull();
+  });
+});

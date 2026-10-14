@@ -6,6 +6,8 @@ import { newUuid } from '@/lib/uuid.ts';
 import { markedUpPrice, roundMoney } from '@/lib/decimal.ts';
 import { track } from '@/lib/posthog.ts';
 import { isNetworkError, offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import i18n from '@/lib/i18n.ts';
+import { toast } from '@/hooks/useToast.ts';
 import { enqueue } from '@/lib/outbox/outbox.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
@@ -131,6 +133,30 @@ function patchEstimate(qc: QueryClient, estimateId: string, edit: (items: Estima
     old ? recompute({ ...old, items: edit(old.items) }) : old);
 }
 
+/** Estimates already told about in this session — the hint is said once, not on every edit. */
+const toldSentChange = new Set<string>();
+
+/**
+ * After a line of a SENT estimate changes: the client reads the change at the same link (B-86 keeps
+ * him from signing the old figures), so there is nothing to re-send and nothing to be afraid of.
+ * Without saying so, masters re-sent the link or avoided editing at all.
+ *
+ * <p>Read off the cached estimate, so every door that changes a line — the form, the catalog,
+ * delete, markup, reorder, dictation, a receipt — calls this one function. DRAFT and SIGNED say
+ * nothing. Offline the change waits in the queue, so that text does not promise it is live.</p>
+ */
+export function noticeSentChange(qc: QueryClient, estimateId: string): void {
+  const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, estimateId]);
+  if (est?.status !== 'SENT' || toldSentChange.has(estimateId)) return;
+  toldSentChange.add(estimateId);
+  toast.info(i18n.t(onlineManager.isOnline() ? 'estimate.sentChangeLive' : 'estimate.sentChangeQueued'));
+}
+
+/** Tests only: a fresh session. */
+export function resetSentChangeNotice(): void {
+  toldSentChange.clear();
+}
+
 export function useEstimate(id: string) {
   return useQuery({
     ...CLIENT_DRIVEN_QUERY,
@@ -223,6 +249,7 @@ export function useAddItem(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always', // run offline (default 'online' pauses it) so offlineMutate can queue
     mutationFn: (req: EstimateItemRequest): Promise<EstimateItemResponse> => {
       const id = newUuid();
@@ -268,6 +295,7 @@ export function useAddItemFromCatalog(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: (args: { catalogItemId: string; req: EstimateItemFromCatalogRequest }) => {
       const id = newUuid();
@@ -300,6 +328,7 @@ export function useAddItemsFromCatalogBatch(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: (items: BatchCatalogItemEntry[]) => {
       const withIds = items.map((e) => ({ ...e, id: e.id ?? newUuid() }));
@@ -364,6 +393,7 @@ export function useUpdateItem(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: ({ itemId, req }: { itemId: string; req: EstimateItemRequest }): Promise<void> => {
       return offlineMutate<void>({
@@ -398,6 +428,7 @@ export function useReorderItems(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: (arranged: EstimateItemResponse[]): Promise<void> => {
       const req: EstimateItemsOrderRequest = {
@@ -423,6 +454,7 @@ export function useRemoveItem(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: (itemId: string): Promise<void> => {
       return offlineMutate<void>({
@@ -450,6 +482,7 @@ export function useDeleteItems(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: (itemIds: string[]): Promise<void> => {
       return offlineMutate<void>({
@@ -485,6 +518,7 @@ export function useMarkUpItems(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
   return useMutation({
+    onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: async (req: EstimateItemsMarkupRequest): Promise<void> => {
       const factor = 1 + (req.discount ? -req.percent : req.percent) / 100;

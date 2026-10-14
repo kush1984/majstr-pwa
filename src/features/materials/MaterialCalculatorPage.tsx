@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/Button.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
@@ -314,6 +315,23 @@ export function MaterialCalculatorPage() {
   const [seeded, setSeeded] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
+  /*
+   * The cards whose field he has TYPED into since their last «Порахувати» — the figures below were
+   * computed without what is now on screen. Our own pre-filled suggestions do not count: they were
+   * never applied, and the card already says so.
+   */
+  const [dirty, setDirty] = useState<ReadonlySet<string>>(() => new Set());
+  const [confirmStale, setConfirmStale] = useState(false);
+  const markDirty = (card: string) =>
+    setDirty((prev) => (prev.has(card) ? prev : new Set(prev).add(card)));
+  const clearDirty = (card: string) =>
+    setDirty((prev) => {
+      if (!prev.has(card)) return prev;
+      const next = new Set(prev);
+      next.delete(card);
+      return next;
+    });
+  const stale = dirty.size > 0;
 
   const calc = useQuery({
     queryKey: [
@@ -466,6 +484,7 @@ export function MaterialCalculatorPage() {
     const stored = data?.answers?.perimeter ?? 0;
     if (raw === '') {
       setPerimeterError(false);
+      clearDirty('perimeter');
       setPerimeter(undefined);
       if (stored !== 0) remember.mutate({ perimeter: 0 });
       return;
@@ -476,6 +495,7 @@ export function MaterialCalculatorPage() {
       return;
     }
     setPerimeterError(false);
+    clearDirty('perimeter');
     setPerimeter(value);
     if (value !== stored) remember.mutate({ perimeter: value });
   };
@@ -484,6 +504,7 @@ export function MaterialCalculatorPage() {
     const { value, errors } = encoded(inputs[key], question);
     setInputErrors((prev) => ({ ...prev, [key]: errors }));
     if (Object.keys(errors).length > 0) return;
+    clearDirty(key);
     setApplied((prev) => ({ ...prev, [key]: value }));
     const changed = changedOnly(numbers(inputs[key], question), data?.answers?.[key]);
     if (Object.keys(changed).length === 0) return;
@@ -680,13 +701,20 @@ export function MaterialCalculatorPage() {
                   id="perimeter"
                   inputMode="decimal"
                   value={perimeterInput}
-                  onChange={(e) => setPerimeterInput(e.target.value)}
+                  onChange={(e) => {
+                    setPerimeterInput(e.target.value);
+                    markDirty('perimeter');
+                  }}
                   placeholder="0"
                   aria-invalid={perimeterError || undefined}
                   aria-describedby={perimeterError ? 'perimeter-error' : undefined}
                 />
               </div>
-              <Button variant="secondary" onClick={applyPerimeter} disabled={remember.isPending}>
+              <Button
+                variant={dirty.has('perimeter') ? 'primary' : 'secondary'}
+                onClick={applyPerimeter}
+                disabled={remember.isPending}
+              >
                 {perimeterAnswered ? t('materials.recalculate') : t('materials.perimeterApply')}
               </Button>
             </div>
@@ -708,9 +736,11 @@ export function MaterialCalculatorPage() {
             positions={askedPositions[key]}
             inputs={inputs[key]}
             errors={inputErrors[key]}
-            onInput={(itemId, value) =>
-              setInputs((prev) => ({ ...prev, [key]: { ...prev[key], [itemId]: value } }))
-            }
+            onInput={(itemId, value) => {
+              setInputs((prev) => ({ ...prev, [key]: { ...prev[key], [itemId]: value } }));
+              markDirty(key);
+            }}
+            changed={dirty.has(key)}
             onApply={() => applyPerPosition(key, basis)}
             busy={remember.isPending}
             rememberedHonestly={rememberedHonestly}
@@ -756,6 +786,10 @@ export function MaterialCalculatorPage() {
           )
         )}
 
+        {stale && materials.length > 0 && (
+          <p className="mb-2 text-xs text-muted">{t('materials.staleParams')}</p>
+        )}
+
         {materials.length > 0 && (
           <div className="overflow-hidden rounded-card border border-border bg-surface">
             {materials.map((line) => (
@@ -793,13 +827,26 @@ export function MaterialCalculatorPage() {
                 toShoppingList.isPending || nothingPicked || badRows.size > 0
                 || calc.isPlaceholderData || calc.isFetching
               }
-              onClick={() => toShoppingList.mutate()}
+              onClick={() => (stale ? setConfirmStale(true) : toShoppingList.mutate())}
             >
               🛒 {t('materials.toShoppingList')}
             </Button>
           </div>
         </div>
       )}
+
+      {/* Not a block: the figures may well be what he wants. Asked once per tap, then sent as is. */}
+      <ConfirmDialog
+        open={confirmStale}
+        title={t('materials.staleConfirmTitle')}
+        message={t('materials.staleConfirmText')}
+        confirmLabel={t('materials.staleConfirmAction')}
+        onConfirm={() => {
+          setConfirmStale(false);
+          toShoppingList.mutate();
+        }}
+        onClose={() => setConfirmStale(false)}
+      />
     </div>
   );
 }
@@ -818,6 +865,7 @@ function PerPositionAsk({
   errors,
   onInput,
   onApply,
+  changed,
   busy,
   rememberedHonestly,
   labels,
@@ -828,6 +876,8 @@ function PerPositionAsk({
   errors: Record<string, boolean>;
   onInput: (estimateItemId: string, value: string) => void;
   onApply: () => void;
+  /** He typed into this card since its last apply — the button becomes the screen's main action. */
+  changed: boolean;
   /** A save is in the air — a second tap would race it with the figures it is replacing. */
   busy: boolean;
   /** False while a save is pending or after it failed: «Запамʼятали» must not claim what failed. */
@@ -882,7 +932,13 @@ function PerPositionAsk({
       {pending
         ? suggested && <p className="mt-2 text-[11px] text-muted">{labels.suggested}</p>
         : rememberedHonestly && <p className="mt-2 text-[11px] text-muted">{labels.remembered}</p>}
-      <Button variant="secondary" fullWidth className="mt-2" onClick={onApply} disabled={busy}>
+      <Button
+        variant={changed ? 'primary' : 'secondary'}
+        fullWidth
+        className="mt-2"
+        onClick={onApply}
+        disabled={busy}
+      >
         {pending ? labels.apply : labels.applySet}
       </Button>
     </div>

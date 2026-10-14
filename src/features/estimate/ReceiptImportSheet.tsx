@@ -24,7 +24,7 @@ import { cn } from '@/lib/cn.ts';
 import { ReceiptOrdinal, ReceiptPhoto } from '@/features/photos/ReceiptPhoto.tsx';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
-import { useInvalidateEstimate } from './useEstimate.ts';
+import { noticeSentChange, useInvalidateEstimate } from './useEstimate.ts';
 import { UNITS } from '@/api/types.ts';
 import type { ItemType, Unit } from '@/api/types.ts';
 
@@ -255,6 +255,7 @@ export function ReceiptImportSheet({
       );
       // The estimate total changed, so the object list, dashboard and economy are stale
       // too — use the shared set, not just this estimate.
+      noticeSentChange(qc, estimateId);
       invalidateEstimate();
       toast.success(t('receipt.added', { count: included.length }));
       // The receipts are also the master's real cost — offer to log them as ONE object expense

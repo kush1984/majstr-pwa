@@ -1019,3 +1019,50 @@ describe('MaterialCalculatorPage', () => {
     expect(screen.queryByLabelText(/Плитка/)).toBeFalsy();
   });
 });
+
+/**
+ * A parameter typed but not applied leaves the figures below computed from the OLD one. The screen
+ * says so, the card's own button becomes the main action, and the shopping list asks once rather
+ * than refusing — the old figures may be exactly what he wants.
+ */
+describe('MaterialCalculatorPage — a changed, unapplied parameter', () => {
+  const asksPerimeter = () =>
+    calculate.mockResolvedValue(
+      answer({ parameters: [{ parameter: 'PERIMETER', materialName: 'Профіль UD 27×28' }] }),
+    );
+  const STALE = /Параметри змінено — натисніть «Перерахувати»/;
+
+  it('says the figures are stale and asks before sending them to the list', async () => {
+    asksPerimeter();
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Периметр, м.п.'), { target: { value: '16' } });
+
+    expect(screen.getByText(STALE)).toBeTruthy();
+    fireEvent.click(screen.getByText(/У список покупок/));
+    expect(screen.getByText('Кількості порахувані зі старих параметрів. Додати як є?')).toBeTruthy();
+    expect(toShoppingList).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Додати як є'));
+    await waitFor(() => expect(toShoppingList).toHaveBeenCalledTimes(1));
+  });
+
+  it('is calm again once the parameter is applied', async () => {
+    asksPerimeter();
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Периметр, м.п.'), { target: { value: '16' } });
+    fireEvent.click(screen.getByText('Порахувати'));
+
+    await waitFor(() => expect(screen.queryByText(STALE)).toBeNull());
+    await waitFor(() => expect(screen.getByText(/У список покупок/).closest('button')?.disabled).toBeFalsy());
+    fireEvent.click(screen.getByText(/У список покупок/));
+    await waitFor(() => expect(toShoppingList).toHaveBeenCalledTimes(1));
+  });
+
+  it('says nothing while nothing was typed', async () => {
+    asksPerimeter();
+    renderPage();
+    await screen.findByLabelText('Периметр, м.п.');
+
+    expect(screen.queryByText(STALE)).toBeNull();
+  });
+});

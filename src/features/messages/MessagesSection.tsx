@@ -19,7 +19,14 @@ import { MessageAttachments } from './MessageAttachments.tsx';
  * <p>The highlight is driven by nothing but `isRead`, so the row visibly goes plain, and a toast
  * confirms it: tapping something that only changes a colour reads as nothing having happened.</p>
  */
-export function MessagesSection({ projectId }: { projectId: string }) {
+export function MessagesSection({
+  projectId,
+  onGetChatLink,
+}: {
+  projectId: string;
+  /** Opens the chat-link sheet; absent where there is no link to hand out (a closed object). */
+  onGetChatLink?: () => void;
+}) {
   const { t } = useTranslation();
   const q = useProjectMessages(projectId);
   const { mutate: markRead } = useMarkMessagesRead(projectId);
@@ -57,6 +64,16 @@ export function MessagesSection({ projectId }: { projectId: string }) {
         <div className="rounded-card border border-dashed border-border bg-surface/60 p-5 text-center">
           <div className="mb-1 text-2xl">💬</div>
           <p className="text-sm text-muted">{t('messages.empty')}</p>
+          {/* A quiet link, not a button: this block must not compete with the screen's main actions. */}
+          {onGetChatLink && (
+            <button
+              type="button"
+              onClick={onGetChatLink}
+              className="mt-2 text-sm font-semibold text-brand"
+            >
+              {t('messages.getChatLink')}
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
