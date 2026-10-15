@@ -1,0 +1,530 @@
+{
+  "rows": [
+    {
+      "id": "bath",
+      "label": "Ванна 2×1,7 м, стіни до стелі (17,1 м²), плитка 300×600",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 17.1,
+        "format": "T300X600",
+        "layout": "STRAIGHT",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка 300×600 мм",
+          "unit": "M2",
+          "quantity": 18.9,
+          "packages": 105,
+          "packageName": "плитка"
+        },
+        {
+          "name": "Клей для плитки цементний C1",
+          "unit": "KG",
+          "quantity": 150,
+          "packages": 6,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "10 м² плитки 300×300 на підлогу",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 10,
+        "format": "T300X300",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка 300×300 мм",
+          "unit": "M2",
+          "quantity": 11.07,
+          "packages": 123,
+          "packageName": "плитка"
+        },
+        {
+          "name": "Клей для плитки цементний C1",
+          "unit": "KG",
+          "quantity": 75,
+          "packages": 3,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "10 м² плитки 300×300 по діагоналі",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 10,
+        "format": "T300X300",
+        "layout": "DIAGONAL",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка 300×300 мм",
+          "unit": "M2",
+          "quantity": 11.61,
+          "packages": 129,
+          "packageName": "плитка"
+        },
+        {
+          "name": "Клей для плитки цементний C1",
+          "unit": "KG",
+          "quantity": 75,
+          "packages": 3,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "6 м² кабанчика на кухонний фартух",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 6,
+        "format": "METRO",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка «кабанчик»",
+          "unit": "M2",
+          "quantity": 7,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Клей для плитки цементний C1",
+          "unit": "KG",
+          "quantity": 50,
+          "packages": 2,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "20 м² керамограніту 600×600",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 20,
+        "format": "T600X600",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка 600×600 мм",
+          "unit": "M2",
+          "quantity": 22.32,
+          "packages": 62,
+          "packageName": "плитка"
+        },
+        {
+          "name": "Клей для плитки еластичний C2",
+          "unit": "KG",
+          "quantity": 200,
+          "packages": 8,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "35 м² плитки 600×1200 у ванній і на кухні",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 35,
+        "format": "T600X1200",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Плитка 600×1200 мм",
+          "unit": "M2",
+          "quantity": 38.88,
+          "packages": 54,
+          "packageName": "плитка"
+        },
+        {
+          "name": "Клей для плитки еластичний C2",
+          "unit": "KG",
+          "quantity": 350,
+          "packages": 14,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 10,
+          "packages": 2,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 6,
+          "packages": 3,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "4 м² мозаїки у душовій",
+      "calculator": "TILE",
+      "inputs": {
+        "area": 4,
+        "format": "MOSAIC",
+        "wastePercent": 15
+      },
+      "materials": [
+        {
+          "name": "Мозаїка",
+          "unit": "M2",
+          "quantity": 5,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Клей для плитки еластичний C2",
+          "unit": "KG",
+          "quantity": 25,
+          "packages": 1,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        },
+        {
+          "name": "Затирка для швів цементна",
+          "unit": "KG",
+          "quantity": 4,
+          "packages": 2,
+          "packageName": "пачка"
+        }
+      ]
+    },
+    {
+      "label": "Стеля 18 м², периметр 17 м",
+      "calculator": "DRYWALL",
+      "inputs": {
+        "area": 18,
+        "work": "CEILING",
+        "perimeter": 17,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Лист ГКЛ 1200×2500",
+          "unit": "M2",
+          "quantity": 21,
+          "packages": 7,
+          "packageName": "лист"
+        },
+        {
+          "name": "Профіль CD 60×27",
+          "unit": "LINEAR_METER",
+          "quantity": 58,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Профіль UD 27×28",
+          "unit": "LINEAR_METER",
+          "quantity": 20,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "З'єднувач однорівневий (краб)",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Подовжувач профілю CD",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Підвіс прямий",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Саморіз TN25",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Дюбель-цвях 6×40",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Саморіз LN 3,5×11",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        }
+      ]
+    },
+    {
+      "label": "Обшивка стін 30 м²",
+      "calculator": "DRYWALL",
+      "inputs": {
+        "area": 30,
+        "work": "WALL",
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Лист ГКЛ 1200×2500",
+          "unit": "M2",
+          "quantity": 33,
+          "packages": 11,
+          "packageName": "лист"
+        },
+        {
+          "name": "Профіль CD 60×27",
+          "unit": "LINEAR_METER",
+          "quantity": 66,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Профіль UD 27×28",
+          "unit": "LINEAR_METER",
+          "quantity": 24,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Підвіс прямий",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Саморіз TN25",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Дюбель-цвях 6×40",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Саморіз LN 3,5×11",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        }
+      ]
+    },
+    {
+      "label": "Перегородка 12 м², один шар",
+      "calculator": "DRYWALL",
+      "inputs": {
+        "area": 12,
+        "work": "PARTITION",
+        "layers": 1,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Лист ГКЛ 1200×2500",
+          "unit": "M2",
+          "quantity": 15,
+          "packages": 5,
+          "packageName": "лист"
+        },
+        {
+          "name": "Профіль стійковий CW",
+          "unit": "LINEAR_METER",
+          "quantity": 14,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Профіль напрямний UW",
+          "unit": "LINEAR_METER",
+          "quantity": 5,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Саморіз TN25",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Стрічка ущільнювальна",
+          "unit": "LINEAR_METER",
+          "quantity": 7,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Дюбель-цвях 6×40",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        }
+      ]
+    },
+    {
+      "label": "Перегородка 12 м², два шари",
+      "calculator": "DRYWALL",
+      "inputs": {
+        "area": 12,
+        "work": "PARTITION",
+        "layers": 2,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Лист ГКЛ 1200×2500",
+          "unit": "M2",
+          "quantity": 27,
+          "packages": 9,
+          "packageName": "лист"
+        },
+        {
+          "name": "Профіль стійковий CW",
+          "unit": "LINEAR_METER",
+          "quantity": 14,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Профіль напрямний UW",
+          "unit": "LINEAR_METER",
+          "quantity": 5,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Саморіз TN25",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Саморіз TN35",
+          "unit": "PIECE",
+          "quantity": 1000,
+          "packages": 1,
+          "packageName": "упаковка"
+        },
+        {
+          "name": "Стрічка ущільнювальна",
+          "unit": "LINEAR_METER",
+          "quantity": 7,
+          "packages": null,
+          "packageName": null
+        },
+        {
+          "name": "Дюбель-цвях 6×40",
+          "unit": "PIECE",
+          "quantity": 100,
+          "packages": 1,
+          "packageName": "упаковка"
+        }
+      ]
+    }
+  ]
+}

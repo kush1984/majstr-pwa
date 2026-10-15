@@ -135,7 +135,9 @@
     "finalTitle": "Ready to try?",
     "finalText": "Create your first project today.",
     "footerSupport": "Support:",
-    "footerCopyright": "© 2026 Majstr.pro"
+    "footerCopyright": "© 2026 Majstr.pro",
+    "footerCalcTile": "Tile calculator",
+    "footerCalcDrywall": "Drywall calculator"
   },
   "units": {
     "M2": "m²",

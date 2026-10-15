@@ -1,10 +1,7 @@
 import { z } from 'zod';
 import i18n from '@/lib/i18n.ts';
 
-/** "1 234,5" / "1234.5" → 1234.5 (up to 3 decimals, matching backend quantity). */
-export function parseDecimal(s: string): number {
-  return Math.round(Number(s.replace(',', '.').replace(/\s/g, '')) * 1000) / 1000;
-}
+export { parseDecimal } from './parseDecimal.ts';
 
 /**
  * Round to the scale money is STORED at, HALF_UP away from zero — the server's `MONEY_SCALE`.

@@ -1,5 +1,6 @@
-# majstr.pro — only the public landing ("/") and the privacy policy ("/privacy")
-# are meant to be indexed. Everything below is either an auth-gated app view with
+# majstr.pro — the public landing ("/"), the privacy policy ("/privacy") and the
+# two calculator pages (/kalkulyator-plytky, /kalkulyator-gipsokartonu) are meant to
+# be indexed. Everything below is either an auth-gated app view with
 # no public content, or a tokenised client portal that must NEVER be indexed (it
 # carries the client's personal data and the estimate/act totals).
 #

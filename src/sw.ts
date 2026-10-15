@@ -34,8 +34,15 @@ precacheAndRoute(self.__WB_MANIFEST);
  *
  * `/api/**` is denied so a same-origin API navigation is never answered with the app shell.
  */
+/**
+ * The public calculator pages are their OWN documents, not routes of the app: without these entries
+ * the worker would answer a returning visitor's /kalkulyator-plytky with the cached SPA shell, and
+ * he would land on the landing page instead of the calculator he searched for.
+ */
+const NAVIGATION_DENYLIST = [/^\/api\//, /^\/kalkulyator-plytky/, /^\/kalkulyator-gipsokartonu/];
+
 registerRoute(
-  new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/api\//] }),
+  new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: NAVIGATION_DENYLIST }),
 );
 
 // ---------- push ----------

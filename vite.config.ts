@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
+import { seoCalcTables } from './scripts/seo-pages-plugin.ts';
 
 // App version for the Profile "Версія застосунку" row — read from package.json
 // at build time so it never drifts from the published version.
@@ -15,7 +16,21 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  // The SPA plus two STATIC pages (the public calculators): real HTML at build time, so a bot that
+  // runs no JavaScript reads every word and every figure. Each lands in dist/ under its own name —
+  // Cloudflare Pages serves /kalkulyator-plytky from kalkulyator-plytky.html — and src/sw.ts keeps
+  // its navigation fallback OFF them.
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'kalkulyator-plytky': path.resolve(__dirname, 'kalkulyator-plytky.html'),
+        'kalkulyator-gipsokartonu': path.resolve(__dirname, 'kalkulyator-gipsokartonu.html'),
+      },
+    },
+  },
   plugins: [
+    seoCalcTables(__dirname),
     react(),
     VitePWA({
       // injectManifest gives us a custom service worker (src/sw.ts) so we can

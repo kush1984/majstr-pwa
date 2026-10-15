@@ -351,6 +351,22 @@
     "name": "string?",
     "text": "string?"
   },
+  "PublicMaterialCalcRequest": {
+    "calculator": "string",
+    "inputs": "object"
+  },
+  "PublicMaterialCalcRequest.Inputs": {
+    "area": "number",
+    "boxArea": "number?",
+    "format": "string?",
+    "jointMm": "number?",
+    "layers": "number?",
+    "layout": "string?",
+    "ownNorm": "number?",
+    "perimeter": "number?",
+    "wastePercent": "number?",
+    "work": "string?"
+  },
   "PushSubscribeRequest": {
     "auth": "string",
     "endpoint": "string",
@@ -422,7 +438,7 @@
   },
   "SignRequest": {
     "clientName": "string",
-    "clientPhone": "string",
+    "clientPhone": "string?",
     "version": "number"
   },
   "SketchCommitRequest": {

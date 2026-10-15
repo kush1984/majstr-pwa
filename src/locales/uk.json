@@ -135,7 +135,9 @@
     "finalTitle": "Готовий спробувати?",
     "finalText": "Створи свій перший об'єкт уже сьогодні.",
     "footerSupport": "Підтримка:",
-    "footerCopyright": "© 2026 Majstr.pro"
+    "footerCopyright": "© 2026 Majstr.pro",
+    "footerCalcTile": "Калькулятор плитки",
+    "footerCalcDrywall": "Калькулятор гіпсокартону"
   },
   "units": {
     "M2": "м²",

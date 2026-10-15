@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Калькулятор гіпсокартону та профілю — листи, профіль, кріплення | Majstr</title>
+    <meta name="description" content="Порахуйте листи ГКЛ, профіль CD/UD або CW/UW, підвіси й саморізи для стелі, обшивки стіни чи перегородки. З поясненням розрахунку." />
+    <link rel="canonical" href="https://majstr.pro/kalkulyator-gipsokartonu" />
+    <meta property="og:title" content="Калькулятор гіпсокартону та профілю" />
+    <meta property="og:description" content="Листи ГКЛ, профіль, підвіси й саморізи для стелі, стіни чи перегородки." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://majstr.pro/kalkulyator-gipsokartonu" />
+    <meta property="og:site_name" content="Majstr" />
+    <meta property="og:locale" content="uk_UA" />
+    <meta property="og:image" content="https://majstr.pro/og/og-gipsokartonu.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор гіпсокартону та профілю" />
+    <meta name="twitter:description" content="Листи ГКЛ, профіль, підвіси й саморізи для стелі, стіни чи перегородки." />
+    <meta name="twitter:image" content="https://majstr.pro/og/og-gipsokartonu.png" />
+    <meta name="theme-color" content="#F26B1F" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Калькулятор гіпсокартону та профілю",
+      "url": "https://majstr.pro/kalkulyator-gipsokartonu",
+      "inLanguage": "uk",
+      "description": "Листи ГКЛ, профіль, підвіси й кріплення для стелі, обшивки стіни чи перегородки — за нормами застосунку Majstr.",
+      "isPartOf": { "@type": "WebSite", "name": "Majstr", "url": "https://majstr.pro/" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Majstr", "item": "https://majstr.pro/" },
+        { "@type": "ListItem", "position": 2, "name": "Калькулятор гіпсокартону", "item": "https://majstr.pro/kalkulyator-gipsokartonu" }
+      ]
+    }
+    </script>
+</head>
+<body data-calculator="DRYWALL" class="seo-page">
+  <header class="seo-header">
+    <a href="/" class="seo-logo"><span aria-hidden="true">M</span>Majstr.pro</a>
+    <a href="/login" class="seo-signin">Увійти</a>
+  </header>
+
+  <main class="seo-main">
+    <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор гіпсокартону</nav>
+    <h1>Калькулятор гіпсокартону та профілю</h1>
+    <p class="seo-lede">Скільки листів ГКЛ, профілю, підвісів і саморізів потрібно на стелю, обшивку стіни чи перегородку. Рахуємо тими ж нормами, що й застосунок Majstr.</p>
+
+    <form id="calc" class="seo-calc" novalidate>
+      <fieldset>
+        <legend>Що робимо</legend>
+        <label><input type="radio" name="work" value="CEILING" checked /> Стеля</label>
+        <label><input type="radio" name="work" value="WALL" /> Обшивка стіни</label>
+        <label><input type="radio" name="work" value="PARTITION" /> Перегородка</label>
+      </fieldset>
+      <label>Площа, м²
+        <input name="area" inputmode="decimal" autocomplete="off" placeholder="напр. 18" required />
+      </label>
+      <label data-for="CEILING">Периметр кімнати, м
+        <input name="perimeter" inputmode="decimal" autocomplete="off" placeholder="напр. 17" />
+        <small>Профіль UD іде по периметру стелі, тому його кількість залежить від периметра, а не від площі.</small>
+      </label>
+      <fieldset data-for="PARTITION">
+        <legend>Шари ГКЛ з кожного боку</legend>
+        <label><input type="radio" name="layers" value="1" checked /> Один</label>
+        <label><input type="radio" name="layers" value="2" /> Два</label>
+      </fieldset>
+      <fieldset>
+        <legend>Запас</legend>
+        <label><input type="radio" name="wastePercent" value="5" /> 5 %</label>
+        <label><input type="radio" name="wastePercent" value="10" checked /> 10 %</label>
+        <label><input type="radio" name="wastePercent" value="15" /> 15 %</label>
+      </fieldset>
+      <button type="submit">Порахувати</button>
+      <p class="seo-error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="seo-result" aria-live="polite" hidden></section>
+
+    <section>
+      <h2>Як ми рахуємо</h2>
+      <p><b>Листи ГКЛ</b> рахуємо за площею, стандартний лист 1200×2500 мм — це 3 м². На стелю й обшивку стіни йде один шар. Для перегородки обшивка з двох боків, і можна обрати один чи два шари з кожного боку: другий шар — це вдвічі більше листів і довші саморізи.</p>
+      <p><b>Каркас стелі</b> — несучий профіль CD на прямих підвісах, з'єднаний крабами й подовжувачами. Напрямний профіль UD кріпиться по периметру кімнати, тому для стелі потрібен периметр. <b>Обшивка стіни</b> — той самий CD на підвісах із UD зверху й знизу. <b>Перегородка</b> — стійковий профіль CW у напрямних UW з ущільнювальною стрічкою.</p>
+      <p><b>Кріплення</b>: саморізи TN для листа, LN («клопи») для з'єднання профілю, дюбель-цвяхи для кріплення до основи — на метр квадратний за типовим кроком.</p>
+      <p><b>Стрічка-серпянка і шпаклівка для швів</b> тут не рахуються: їх рахують за довжиною стиків, а не за площею. Застосунок рахує їх за довжиною стиків у кошторисі.</p>
+      <p><b>Запас</b> покриває підрізку й обрізки. Наприкінці все округлюємо <b>вгору</b> до цілих листів і упаковок.</p>
+    </section>
+
+    <section>
+      <h2>Таблиця для типових випадків</h2>
+      <!--SEO_TABLE:DRYWALL-->
+      <p class="seo-small">Профіль продають по 3–4 м. Скільки штук купити, залежить від висоти стелі й розмірів кімнати — у застосунку це видно в списку покупок.</p>
+    </section>
+
+    <section class="seo-cta">
+      <h2>Порахуй увесь об'єкт — з кошторисом і списком покупок</h2>
+      <p>У Majstr калькулятор матеріалів рахує з робіт кошторису: каркас, шви, шпаклівка, фарба — усе разом, і відразу в список покупок.</p>
+      <a href="/register" class="seo-cta-button">Спробувати безкоштовно →</a>
+      <p class="seo-own-hint">Збережи свої норми — і застосунок рахуватиме під тебе на кожному об'єкті.</p>
+    </section>
+
+    <p class="seo-note">Розрахунок орієнтовний. Норма конкретного продукту може відрізнятися — дивіться упаковку.</p>
+  </main>
+
+  <footer class="seo-footer">
+    <span>© 2026 Majstr.pro</span>
+    <a href="/kalkulyator-plytky">Калькулятор плитки</a>
+    <a href="/privacy">Політика конфіденційності</a>
+  </footer>
+
+  <script type="module" src="/src/seo/calcPage.ts"></script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Калькулятор плитки онлайн — скільки плитки, клею й затирки купити</title>
+    <meta name="description" content="Скільки плитки купити — у м², штуках і коробках, прямо чи по діагоналі. І до неї клей (C1 або C2), затирка й ґрунтовка за форматом і швом, з поясненням розрахунку." />
+    <link rel="canonical" href="https://majstr.pro/kalkulyator-plytky" />
+    <meta property="og:title" content="Калькулятор плитки онлайн — скільки плитки, клею й затирки купити" />
+    <meta property="og:description" content="Плитка в м², штуках і коробках, а до неї клей, затирка і ґрунт — за площею, форматом і швом." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://majstr.pro/kalkulyator-plytky" />
+    <meta property="og:site_name" content="Majstr" />
+    <meta property="og:locale" content="uk_UA" />
+    <meta property="og:image" content="https://majstr.pro/og/og-plytky.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор плитки онлайн — скільки плитки, клею й затирки купити" />
+    <meta name="twitter:description" content="Плитка в м², штуках і коробках, клей, затирка і ґрунт — за площею, форматом і швом." />
+    <meta name="twitter:image" content="https://majstr.pro/og/og-plytky.png" />
+    <meta name="theme-color" content="#F26B1F" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Калькулятор плитки онлайн — скільки плитки, клею й затирки купити",
+      "url": "https://majstr.pro/kalkulyator-plytky",
+      "inLanguage": "uk",
+      "description": "Скільки плитки, клею, затирки й ґрунтовки купити за площею, форматом плитки, швом і укладанням — за нормами застосунку Majstr.",
+      "isPartOf": { "@type": "WebSite", "name": "Majstr", "url": "https://majstr.pro/" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Majstr", "item": "https://majstr.pro/" },
+        { "@type": "ListItem", "position": 2, "name": "Калькулятор плитки", "item": "https://majstr.pro/kalkulyator-plytky" }
+      ]
+    }
+    </script>
+</head>
+<body data-calculator="TILE" class="seo-page">
+  <header class="seo-header">
+    <a href="/" class="seo-logo"><span aria-hidden="true">M</span>Majstr.pro</a>
+    <a href="/login" class="seo-signin">Увійти</a>
+  </header>
+
+  <main class="seo-main">
+    <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор плитки</nav>
+    <h1>Калькулятор плитки онлайн — скільки плитки, клею й затирки купити</h1>
+    <p class="seo-lede">Скільки плитки купити: площа стін чи підлоги плюс запас на підрізку, з округленням угору до цілих плиток і коробок. Приклад: ванна 2×1,7 м, висота 2,5 м, плитка на всіх стінах до стелі, і за ванною теж, мінус двері 0,7×2,0 м — це 7,4 × 2,5 − 1,4 = 17,1 м². Для плитки 300×600, укладання прямо і запасу 10 % треба: <!--SEO_EXAMPLE:bath-->. Підставте свої розміри нижче — рахуємо тими ж нормами, що й застосунок Majstr.</p>
+
+    <form id="calc" class="seo-calc" novalidate>
+      <label>Площа, м²
+        <input name="area" inputmode="decimal" autocomplete="off" placeholder="напр. 12,5" required />
+      </label>
+      <label>Формат плитки
+        <select name="format">
+          <option value="T100X100">100×100</option>
+          <option value="T200X200">200×200</option>
+          <option value="T300X300" selected>300×300</option>
+          <option value="T300X600">300×600</option>
+          <option value="T600X600">600×600</option>
+          <option value="T600X1200">600×1200</option>
+          <option value="T800X1600">800×1600</option>
+          <option value="T1200X2400">1200×2400</option>
+          <option value="MOSAIC">Мозаїка</option>
+          <option value="METRO">Кабанчик, «цегла»</option>
+        </select>
+      </label>
+      <fieldset>
+        <legend>Укладання</legend>
+        <label><input type="radio" name="layout" value="STRAIGHT" checked /> Прямо</label>
+        <label><input type="radio" name="layout" value="DIAGONAL" /> По діагоналі</label>
+        <small>По діагоналі більше підрізки — додаємо 5 % до вашого запасу.</small>
+      </fieldset>
+      <label>М² в коробці <span class="seo-optional">(необов'язково)</span>
+        <input name="boxArea" inputmode="decimal" autocomplete="off" placeholder="напр. 1,44" />
+        <small>Є на коробці — тоді порахуємо й коробки.</small>
+      </label>
+      <label>Ширина шва, мм
+        <input name="jointMm" inputmode="decimal" autocomplete="off" placeholder="2,5" />
+        <small>Порожнє — шов, на який розрахована норма.</small>
+      </label>
+      <fieldset>
+        <legend>Запас</legend>
+        <label><input type="radio" name="wastePercent" value="5" /> 5 %</label>
+        <label><input type="radio" name="wastePercent" value="10" checked /> 10 %</label>
+        <label><input type="radio" name="wastePercent" value="15" /> 15 %</label>
+      </fieldset>
+      <button type="submit">Порахувати</button>
+      <p class="seo-error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="seo-result" aria-live="polite" hidden></section>
+
+    <section>
+      <h2>Як ми рахуємо</h2>
+      <p><b>Плитка</b> — це площа, яку вона закриває, плюс запас. Кількість плиток рахуємо за площею однієї плитки вибраного формату, коробки — за м², що написані на коробці. Мозаїку, кабанчик і плитку-дошку рахуємо в м²: розмір у них буває різний. Укладання по діагоналі додає 5 % — стільки ж, скільки ми закладаємо на діагональ для ламінату.</p>
+      <p><b>Клей</b> залежить від формату плитки. Дрібну й середню плитку кладуть на цементний клей класу C1 за EN 12004 і зубчастий шпатель меншого розміру. Від 600×600 і для широкого формату потрібен еластичний клей класу C2 і більша гребінка, а клей наносять і на основу, і на плитку, тому витрата на метр квадратний більша.</p>
+      <p><b>Затирка</b> залежить від формату й ширини шва: що дрібніша плитка і що ширший шов, то більше затирки на метр. Норма розрахована на шов, указаний у технічних листах виробників для такого формату. Якщо ви ставите інший шов, кількість перераховується пропорційно. Широкі шви від 5 мм (клінкер «під цеглу», камінь) у цьому калькуляторі не перераховуються.</p>
+      <p><b>Ґрунтовка</b> глибокого проникнення — окремий крок перед укладанням, на всю площу.</p>
+      <p><b>Запас</b> покриває підрізку, бій і нерівності основи. Наприкінці все округлюємо <b>вгору</b> до цілих упаковок: пів мішка в магазині не продають, а нестача зупиняє роботу.</p>
+      <p>Норми — з технічних листів виробників і практики майстрів. Конкретний продукт може мати свою витрату: дивіться упаковку.</p>
+    </section>
+
+    <section>
+      <h2>Таблиця для типових випадків</h2>
+      <!--SEO_TABLE:TILE-->
+    </section>
+
+    <section class="seo-cta">
+      <h2>Порахуй увесь об'єкт — з кошторисом і списком покупок</h2>
+      <p>У Majstr калькулятор матеріалів рахує з робіт кошторису: плитка, стяжка, гіпсокартон, фарба — усе разом, і відразу в список покупок.</p>
+      <a href="/register" class="seo-cta-button">Спробувати безкоштовно →</a>
+      <p class="seo-own-hint">Збережи свої норми — і застосунок рахуватиме під тебе на кожному об'єкті.</p>
+    </section>
+
+    <p class="seo-note">Розрахунок орієнтовний. Норма конкретного продукту може відрізнятися — дивіться упаковку.</p>
+  </main>
+
+  <footer class="seo-footer">
+    <span>© 2026 Majstr.pro</span>
+    <a href="/kalkulyator-gipsokartonu">Калькулятор гіпсокартону</a>
+    <a href="/privacy">Політика конфіденційності</a>
+  </footer>
+
+  <script type="module" src="/src/seo/calcPage.ts"></script>
+</body>
+</html>

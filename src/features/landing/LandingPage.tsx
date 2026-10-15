@@ -532,9 +532,18 @@ function LandingFooter() {
             {config.supportPhone}
           </a>
         </div>
-        <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
-          {t('privacy.footerLink')}
-        </Link>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {/* Separate documents, not app routes — a <Link> would land in the SPA's catch-all. */}
+          <a href="/kalkulyator-plytky" className="text-landing-ink hover:text-landing-amber-deep">
+            {t('landing.footerCalcTile')}
+          </a>
+          <a href="/kalkulyator-gipsokartonu" className="text-landing-ink hover:text-landing-amber-deep">
+            {t('landing.footerCalcDrywall')}
+          </a>
+          <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
+            {t('privacy.footerLink')}
+          </Link>
+        </div>
       </div>
     </footer>
   );

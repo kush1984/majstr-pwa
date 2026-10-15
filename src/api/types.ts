@@ -1974,6 +1974,9 @@ export interface CalculatedMaterialLine {
   packageSize?: number | null;
   packageName?: string | null;
   packages?: number | null;
+  /** The m² in one box of tile — only when someone typed it (the public calculator); else absent. */
+  boxSize?: number | null;
+  boxes?: number | null;
   sources: MaterialSourceLine[];
 }
 

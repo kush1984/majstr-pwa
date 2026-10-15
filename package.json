@@ -1,7 +1,7 @@
 {
   "name": "majstr-pwa",
   "private": true,
-  "version": "1.53.2",
+  "version": "1.54.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,9 @@
     "test:watch": "vitest",
     "landing:shots": "node scripts/landing-shots.ts",
     "landing:photos": "node scripts/landing-photos.ts",
+    "og:images": "node scripts/og-images.ts",
+    "seo:snapshot": "node scripts/seo-snapshot.ts",
+    "seo:check": "node scripts/seo-snapshot.ts --check",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
