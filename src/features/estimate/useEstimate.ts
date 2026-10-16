@@ -10,7 +10,7 @@ import i18n from '@/lib/i18n.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { enqueue } from '@/lib/outbox/outbox.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
-import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
+import { CLIENT_DRIVEN_QUERY, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import { MATERIALS_AVAILABILITY_KEY } from '@/features/materials/useMaterialsAvailability.ts';
 import type {
   BatchCatalogItemEntry,
@@ -163,6 +163,8 @@ export function useEstimate(id: string) {
     queryKey: [...ESTIMATE_KEY, id],
     queryFn: () => estimatesApi.get(id),
     enabled: Boolean(id),
+    // The client may be signing right now — see awaitingClientInterval.
+    refetchInterval: (query) => awaitingClientInterval(query.state.data?.status),
   });
 }
 

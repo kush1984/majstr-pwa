@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
-import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
+import { CLIENT_DRIVEN_QUERY, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
@@ -35,6 +35,8 @@ export function useAct(id: string, enabled = true) {
     queryKey: actKey(id),
     queryFn: () => actsApi.get(id),
     enabled: enabled && Boolean(id),
+    // The client may be signing right now — see awaitingClientInterval.
+    refetchInterval: (query) => awaitingClientInterval(query.state.data?.status),
   });
 }
 

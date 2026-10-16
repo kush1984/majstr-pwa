@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { CLIENT_DRIVEN_QUERY } from './clientDrivenQuery.ts';
+import { AWAITING_CLIENT_POLL_MS, CLIENT_DRIVEN_QUERY, awaitingClientInterval } from './clientDrivenQuery.ts';
 import {
   clearOutbox, enqueue, flushOutbox, getSyncStatus, registerOutboxHandler, setOutboxErrorClassifier,
 } from './outbox/outbox.ts';
@@ -69,5 +69,24 @@ describe('CLIENT_DRIVEN_QUERY', () => {
 
     await vi.waitFor(() => expect(getSyncStatus().pending).toBe(0));
     expect(shouldRefetch()).toBe(true);
+  });
+});
+
+describe('awaitingClientInterval — the open screen asks again while the client holds the pen', () => {
+  it('polls a SENT estimate or act, and stops the moment it is signed', () => {
+    expect(awaitingClientInterval('SENT')).toBe(AWAITING_CLIENT_POLL_MS);
+    expect(awaitingClientInterval('SIGNED')).toBe(false);
+    expect(awaitingClientInterval('DRAFT')).toBe(false);
+    expect(awaitingClientInterval('REJECTED')).toBe(false);
+    expect(awaitingClientInterval(undefined)).toBe(false);
+  });
+
+  it('does not poll while the outbox is mid-air — the GET would land over his queued lines', async () => {
+    await enqueue({
+      entityId: 'i2', entity: 'estimateItem', type: 'create', payload: {}, deps: [],
+    });
+    await vi.waitFor(() => expect(getSyncStatus().pending).toBe(1));
+
+    expect(awaitingClientInterval('SENT')).toBe(false);
   });
 });

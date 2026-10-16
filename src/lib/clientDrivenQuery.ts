@@ -22,6 +22,23 @@ export const CLIENT_DRIVEN_QUERY = {
   refetchOnWindowFocus: () => !outboxBusy(),
 } as const;
 
+/** How often an open screen asks again while the CLIENT holds the pen. */
+export const AWAITING_CLIENT_POLL_MS = 15_000;
+
+/**
+ * Poll while the document waits for the client, and only then (`refetchInterval` for an estimate
+ * or an act). Focus and push do not cover the master who simply keeps the estimate on screen while
+ * the client signs on his own phone — no focus changes, and push needs a permission plenty of
+ * masters never gave — so the page sat on «Надіслано» until he reloaded it.
+ *
+ * <p>SENT only: sharing is what makes a document signable, and it sets SENT; a SIGNED one stops
+ * asking. The interval pauses with the tab (react-query's default) and while the outbox is mid-air,
+ * for the reason `outboxBusy` gives.</p>
+ */
+export function awaitingClientInterval(status: string | undefined): number | false {
+  return status === 'SENT' && !outboxBusy() ? AWAITING_CLIENT_POLL_MS : false;
+}
+
 /**
  * Whether the queue is mid-air — the one state in which a focus refetch must NOT fire.
  *
