@@ -335,7 +335,9 @@ export function useAddItemsFromCatalogBatch(estimateId: string) {
       return offlineMutate<void>({
         entity: 'estimateItemsFromCatalogBatch', entityId: withIds[0].id, type: 'create',
         payload: { estimateId, items: withIds },
-        deps: [estimateId],
+        // The catalog positions too: one created from a search moments ago may still be queued,
+        // and a line naming it must not reach the server first (a dep not in the queue is no wait).
+        deps: [estimateId, ...withIds.map((e) => e.catalogItemId)],
         online: async () => { await estimatesApi.addItemsFromCatalogBatch(estimateId, withIds); },
         cancel: cancelEstimate(qc, estimateId),
         onOnlineSuccess: invalidate,

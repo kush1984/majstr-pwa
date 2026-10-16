@@ -13,6 +13,8 @@ import { cn } from '@/lib/cn.ts';
 import { useCatalog } from './useCatalog.ts';
 import { TradeLevel } from './TradeLevel.tsx';
 import { toTradeTree, type BranchRow, type TradeBranch } from './catalogTree.ts';
+import { CatalogItemForm } from './CatalogItemForm.tsx';
+import { CreateFromSearch, shouldOfferCreate } from './CreateFromSearch.tsx';
 import type { CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
 
 type TypeFilter = ItemType | 'ALL';
@@ -87,6 +89,9 @@ export function CatalogPicker({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  // The name the master searched for, did not find, and chose to create — the list gives way to the
+  // position form until he saves or goes back.
+  const [creating, setCreating] = useState<string | null>(null);
 
   const blocked = useMemo(
     () => new Set((disabledNames ?? []).map((n) => n.trim().toLowerCase())),
@@ -138,6 +143,25 @@ export function CatalogPicker({
     setBranchOf((was) => new Map(was).set(item.id, item.filedUnder));
   };
 
+  const offerCreate = searching && !isPending && shouldOfferCreate(q, (data ?? []).map((i) => i.name));
+
+  /**
+   * The position he just created from the search lands where a pick lands. With nothing else in
+   * the basket it is applied straight away — the reason he searched; with other positions already
+   * ticked it joins them, because applying it alone would close the sheet over his selection.
+   */
+  const created = (item: CatalogItemResponse) => {
+    setCreating(null);
+    setQ('');
+    const row: BranchRow = { ...item, filedUnder: item.customTradeId ? null : item.trade };
+    if (single || selected.size === 0) {
+      void run([row], !single);
+      return;
+    }
+    toggle(row);
+    toast.success(t('catalog.createFromSearch.addedToBasket', { name: item.name }));
+  };
+
   const run = async (items: BranchRow[], announce: boolean) => {
     if (items.length === 0 || busy) return;
     setBusy(true);
@@ -166,6 +190,27 @@ export function CatalogPicker({
     true,
   );
 
+  if (creating !== null) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setCreating(null)}
+          className="mb-3 min-h-11 text-sm font-semibold text-brand"
+        >
+          {t('catalog.createFromSearch.back')}
+        </button>
+        <CatalogItemForm
+          initial={null}
+          defaultName={creating}
+          defaultType={typeFilter === 'MATERIAL' ? 'MATERIAL' : 'WORK'}
+          defaultTradeKey={branches.length === 1 ? branches[0].key : undefined}
+          onDone={(saved) => (saved ? created(saved) : setCreating(null))}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-3 flex gap-2">
@@ -190,9 +235,14 @@ export function CatalogPicker({
           // from a search that matched nothing, which is what the message below actually means.
           <OfflineNotCached compact what={t('offline.dataCatalog')} />
         ) : filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
+          offerCreate ? (
+            <CreateFromSearch query={q} prominent onCreate={() => setCreating(q.trim())} />
+          ) : (
+            <p className="py-6 text-center text-sm text-muted">{t('estimate.catalogEmptyResult')}</p>
+          )
         ) : (
-          branches.map((branch) => (
+          <>
+          {branches.map((branch) => (
             <TradeBranchNode
               key={branch.key}
               branch={branch}
@@ -213,7 +263,11 @@ export function CatalogPicker({
               busy={busy}
               onRow={(item) => (single ? void run([item], false) : toggle(item))}
             />
-          ))
+          ))}
+          {offerCreate && (
+            <CreateFromSearch query={q} prominent={false} onCreate={() => setCreating(q.trim())} />
+          )}
+          </>
         )}
       </div>
 

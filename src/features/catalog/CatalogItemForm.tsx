@@ -11,7 +11,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { customTradeKey, parseCustomTradeKey, type TradeKey } from './tradeKey.ts';
-import type { CatalogItemRequest, CatalogItemResponse, Trade } from '@/api/types.ts';
+import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
 import {
   catalogItemSchema,
   parsePrice,
@@ -39,12 +39,19 @@ function itemTradeKey(item: { trade: Trade | null; customTradeId: string | null 
 export function CatalogItemForm({
   initial,
   defaultTradeKey,
+  defaultName,
+  defaultType,
   onDone,
 }: {
   initial: CatalogItemResponse | null;
   /** Pre-select this trade on create (the catalog's active trade filter). */
   defaultTradeKey?: TradeKey;
-  onDone: () => void;
+  /** Pre-fill the name on create — what the master just searched for and did not find. */
+  defaultName?: string;
+  /** Pre-select the type on create (the active «Роботи / Матеріали» filter). */
+  defaultType?: ItemType;
+  /** `saved` is the position just CREATED; absent after an edit or a delete. */
+  onDone: (saved?: CatalogItemResponse) => void;
 }) {
   const { t } = useTranslation();
   const isEdit = Boolean(initial);
@@ -97,8 +104,8 @@ export function CatalogItemForm({
           defaultPrice: String(initial.defaultPrice),
         }
       : {
-          name: '',
-          type: 'WORK',
+          name: defaultName?.trim() ?? '',
+          type: defaultType ?? 'WORK',
           unit: 'PIECE',
           category: '',
           newCategory: '',
@@ -144,11 +151,12 @@ export function CatalogItemForm({
       if (isEdit && initial) {
         await update.mutateAsync({ id: initial.id, req });
         toast.success(t('estimate.saved'));
+        onDone();
       } else {
-        await create.mutateAsync(req);
+        const saved = await create.mutateAsync(req);
         toast.success(t('catalog.savedToCatalog'));
+        onDone(saved);
       }
-      onDone();
     } catch (err) {
       toast.error(toAppError(err).message);
     }

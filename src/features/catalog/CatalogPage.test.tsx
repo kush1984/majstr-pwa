@@ -230,7 +230,7 @@ describe('CatalogPage — trade is a level, not a filter', () => {
     expect(screen.queryByText('Укладання плитки')).toBeNull();
   });
 
-  it('a search that matches nothing says so — it does not offer «Стартовий набір»', async () => {
+  it('a search that matches nothing offers to create it — not «Стартовий набір»', async () => {
     // The onboarding over a full catalog would read as «your catalog is empty», which it is not.
     vi.mocked(catalogApi.list).mockResolvedValue(twoTrades);
     renderPage();
@@ -240,8 +240,13 @@ describe('CatalogPage — trade is a level, not a filter', () => {
       target: { value: 'ламінат' },
     });
 
-    expect(await screen.findByText(/Нічого не знайдено/)).toBeTruthy();
+    expect(await screen.findByText(/Такої позиції ще немає в каталозі/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Стартовий набір' })).toBeNull();
+
+    // The form opens with the searched name already in it — no FAB, no typing it twice.
+    fireEvent.click(screen.getByRole('button', { name: /Додати «ламінат» як нову позицію/ }));
+    // By its label, not findByDisplayValue: that walks every field of a 900-position page.
+    await waitFor(() => expect(screen.getByLabelText(/Назва/)).toHaveProperty('value', 'ламінат'));
   });
 
   it('«Видалити все» means the whole catalog under the TYPE filter, not what search left on screen', async () => {

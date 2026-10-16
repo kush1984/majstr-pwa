@@ -1374,7 +1374,14 @@
     "deleteAllMessage": "This removes {{count}} position(s) — everything the catalog holds under the type filter (All / Works / Materials). Search does not affect it. Estimates do not change; templates for these positions will give a zero price.",
     "nothingFound": "Nothing found — try another name",
     "deleted": "Deleted: {{count}}",
-    "actionsMenu": "Catalog actions"
+    "actionsMenu": "Catalog actions",
+    "createFromSearch": {
+      "empty": "There is no such position in the catalog yet.",
+      "cta": "Add «{{name}}» as a new position",
+      "row": "Create «{{name}}» — no such position yet",
+      "back": "← Back to the catalog",
+      "addedToBasket": "«{{name}}» added to the selection"
+    }
   },
   "measure": {
     "proTitle": "Object measurements — in PRO",

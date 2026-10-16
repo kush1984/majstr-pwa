@@ -328,3 +328,53 @@ describe('CatalogPicker — the pick remembers which branch it came from', () =>
     expect(vi.mocked(onPick).mock.calls[0][0][0].filedUnder).toBe('DRYWALL');
   });
 });
+
+describe('CatalogPicker — create from a search that found nothing', () => {
+  it('offers to create the searched name, and the new position is picked as soon as it is saved', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(bigCatalog());
+    vi.mocked(catalogApi.create).mockImplementation((req, id) => Promise.resolve(
+      anItem({ id: id ?? 'new', name: req.name, type: req.type, unit: req.unit, defaultPrice: req.defaultPrice }),
+    ));
+    const { onPick } = renderPicker();
+
+    fireEvent.change(await screen.findByPlaceholderText(/Пошук у каталозі/), {
+      target: { value: 'Плитка на фартух' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Додати «Плитка на фартух» як нову позицію/ }));
+
+    // The form opens with what he typed already in it; he adds the unit and the price.
+    expect(screen.getByDisplayValue('Плитка на фартух')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Ціна/), { target: { value: '650' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+
+    await waitFor(() => expect(onPick).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(onPick).mock.calls[0][0].map((r) => r.name)).toEqual(['Плитка на фартух']);
+    expect(vi.mocked(catalogApi.create).mock.calls[0][0]).toMatchObject({ name: 'Плитка на фартух', defaultPrice: 650 });
+  });
+
+  it('offers it quietly under similar hits, and not at all when the exact name exists', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(bigCatalog());
+    renderPicker();
+    const search = await screen.findByPlaceholderText(/Пошук у каталозі/);
+
+    fireEvent.change(search, { target: { value: 'Фарбування' } });
+    expect(await screen.findByRole('button', { name: /Створити «Фарбування»/ })).toBeTruthy();
+    expect(screen.getAllByTestId('catalog-row').length).toBeGreaterThan(0);
+
+    // Case and spaces do not make a new name.
+    fireEvent.change(search, { target: { value: '  фарбування   СТІН ' } });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Створити/ })).toBeNull());
+  });
+
+  it('back to the catalog leaves the search as it was and creates nothing', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue(bigCatalog());
+    const { onPick } = renderPicker();
+    fireEvent.change(await screen.findByPlaceholderText(/Пошук у каталозі/), { target: { value: 'Монтаж люка' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Додати «Монтаж люка»/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Назад до каталогу/ }));
+
+    expect(screen.getByDisplayValue('Монтаж люка')).toBeTruthy();
+    expect(catalogApi.create).not.toHaveBeenCalled();
+    expect(onPick).not.toHaveBeenCalled();
+  });
+});

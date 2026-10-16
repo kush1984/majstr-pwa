@@ -24,6 +24,7 @@ import {
   useDeleteCatalogItems,
 } from './useCatalog.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
+import { CreateFromSearch, shouldOfferCreate } from './CreateFromSearch.tsx';
 import { CatalogBoard } from './CatalogBoard.tsx';
 import { TradeLevel, tradeBranchLabel } from './TradeLevel.tsx';
 import { toTradeTree, tradeKeyOf } from './catalogTree.ts';
@@ -70,6 +71,8 @@ export function CatalogPage() {
 
   // `undefined` = modal closed; `null` = create; an item = edit.
   const [editing, setEditing] = useState<CatalogItemResponse | null | undefined>(undefined);
+  // The name a create was started FROM (a search that did not find it); null = an ordinary create.
+  const [createName, setCreateName] = useState<string | null>(null);
   // "Add new from library" flow: a count opens the confirm; `nothingNew` opens the info dialog.
   const [pendingNewCount, setPendingNewCount] = useState<number | null>(null);
   const [nothingNew, setNothingNew] = useState(false);
@@ -94,6 +97,11 @@ export function CatalogPage() {
     [data, filter],
   );
   const searching = q.trim().length > 0;
+  const offerCreate = searching && shouldOfferCreate(q, (data ?? []).map((i) => i.name));
+  const createFromSearch = () => {
+    setCreateName(q.trim());
+    setEditing(null);
+  };
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return needle === '' ? underType : underType.filter((i) => i.name.toLowerCase().includes(needle));
@@ -190,7 +198,11 @@ export function CatalogPage() {
       ) : underType.length > 0 && visible.length === 0 ? (
         // A search that matched nothing is NOT an empty catalog — the onboarding below would offer
         // «Стартовий набір» over a catalog that is already full.
-        <p className="py-10 text-center text-sm text-muted">{t('catalog.nothingFound')}</p>
+        offerCreate ? (
+          <CreateFromSearch query={q} prominent onCreate={createFromSearch} />
+        ) : (
+          <p className="py-10 text-center text-sm text-muted">{t('catalog.nothingFound')}</p>
+        )
       ) : underType.length === 0 ? (
         // Nothing to show — whether the catalog is genuinely empty OR the type filter matched
         // none. Same onboarding either way ON PURPOSE: it carries «Стартовий набір», the master's
@@ -314,6 +326,10 @@ export function CatalogPage() {
             })}
           </div>
 
+          {offerCreate && picked === null && (
+            <CreateFromSearch query={q} prominent={false} onCreate={createFromSearch} />
+          )}
+
           {picked !== null && (
             /* Sticky INSIDE the list, and `ml-8` clears the checkbox column so the bar is the width
                of a POSITION card, not the full row — same as the estimate selection bar. The bottom
@@ -398,15 +414,25 @@ export function CatalogPage() {
 
       <Modal
         open={editing !== undefined}
-        onClose={() => setEditing(undefined)}
+        onClose={() => {
+          setEditing(undefined);
+          setCreateName(null);
+        }}
         title={editing ? t('catalog.editItemTitle') : t('catalog.newItemTitle')}
       >
         {/* keyed so the form fully resets between create/edit targets */}
         <CatalogItemForm
-          key={editing?.id ?? 'new'}
+          key={editing?.id ?? `new:${createName ?? ''}`}
           initial={editing ?? null}
           defaultTradeKey={defaultTradeKey}
-          onDone={() => setEditing(undefined)}
+          defaultName={editing ? undefined : createName ?? undefined}
+          defaultType={filter === 'MATERIAL' ? 'MATERIAL' : undefined}
+          onDone={(saved) => {
+            setEditing(undefined);
+            setCreateName(null);
+            // Created from a search: clear it, or the list keeps saying it is not there.
+            if (saved && createName !== null) setQ('');
+          }}
         />
       </Modal>
 
