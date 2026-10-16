@@ -137,7 +137,9 @@
     "footerSupport": "Підтримка:",
     "footerCopyright": "© 2026 Majstr.pro",
     "footerCalcTile": "Калькулятор плитки",
-    "footerCalcDrywall": "Калькулятор гіпсокартону"
+    "footerCalcDrywall": "Калькулятор гіпсокартону",
+    "footerYoutube": "Majstr на YouTube",
+    "footerTelegram": "Majstr у Telegram"
   },
   "units": {
     "M2": "м²",
@@ -1679,6 +1681,8 @@
     "help": "Допомога",
     "telegram": "Канал у Telegram",
     "telegramSub": "Новини про останні оновлення та обговорення застосунку",
+    "youtube": "Канал на YouTube",
+    "youtubeSub": "Відео: як скласти кошторис, надіслати клієнту й отримати підпис",
     "supportEmail": "Написати в підтримку",
     "supportPhone": "Зателефонувати в підтримку",
     "appVersion": "Версія застосунку",

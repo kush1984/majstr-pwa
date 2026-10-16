@@ -137,7 +137,9 @@
     "footerSupport": "Support:",
     "footerCopyright": "© 2026 Majstr.pro",
     "footerCalcTile": "Tile calculator",
-    "footerCalcDrywall": "Drywall calculator"
+    "footerCalcDrywall": "Drywall calculator",
+    "footerYoutube": "Majstr on YouTube",
+    "footerTelegram": "Majstr on Telegram"
   },
   "units": {
     "M2": "m²",
@@ -1673,6 +1675,8 @@
     "help": "Help",
     "telegram": "Telegram channel",
     "telegramSub": "Release news and app discussion",
+    "youtube": "YouTube channel",
+    "youtubeSub": "Videos: how to build an estimate, send it and get it signed",
     "supportEmail": "Email support",
     "supportPhone": "Call support",
     "appVersion": "App version",

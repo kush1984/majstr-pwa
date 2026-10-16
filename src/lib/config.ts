@@ -38,6 +38,8 @@ export const config = {
   supportPhone: import.meta.env.VITE_SUPPORT_PHONE || '+380978938990',
   // Telegram channel — release news + open discussion. Same `||` rule as the contacts above.
   telegramUrl: import.meta.env.VITE_TELEGRAM_URL || 'https://t.me/majstr_pro',
+  // YouTube channel — the landing footer links it beside Telegram. Same `||` rule.
+  youtubeUrl: import.meta.env.VITE_YOUTUBE_URL || 'https://www.youtube.com/@majstrpro',
 
   // Sentry error reporting. Empty DSN → Sentry stays disabled (the local/dev
   // default), so it never gets in the way until prod sets a real DSN.

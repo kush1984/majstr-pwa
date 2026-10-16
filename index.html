@@ -50,10 +50,10 @@
     }
     </script>
     <!-- Structured data: the publisher, so brand queries resolve to the site. This is
-         the app's entity signal ("Бренд як сутність"). NOTE: no `sameAs` yet — it must
-         list ONLY real, live profiles; a fabricated/empty sameAs is a broken entity
-         signal, worse than none. Add it (LinkedIn / GitHub org / Facebook / Instagram)
-         the moment those profiles exist. -->
+         the app's entity signal ("Бренд як сутність"). `sameAs` lists ONLY real, live
+         profiles — a fabricated/empty one is a broken entity signal, worse than none:
+         the YouTube channel and the Telegram channel (both live, 2026-10-16). Add others
+         (LinkedIn / Facebook / Instagram) the moment those profiles exist, not before. -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -63,6 +63,7 @@
       "logo": "https://majstr.pro/icons/icon-512.png",
       "description": "Застосунок для майстрів-підрядників і бригад: каталог робіт із ринковими цінами, готові шаблони, заміри об'єкта, портал клієнта з онлайн-підписом, акти виконаних робіт і гроші по об'єкту: договір, акти, оплати.",
       "email": "support@majstr.pro",
+      "sameAs": ["https://www.youtube.com/@majstrpro", "https://t.me/majstr_pro"],
       "foundingDate": "2026",
       "areaServed": "UA",
       "knowsLanguage": ["uk"],

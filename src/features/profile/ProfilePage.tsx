@@ -344,6 +344,13 @@ export function ProfilePage() {
           external
         />
         <ContactRow
+          icon="▶️"
+          title={t('profile.youtube')}
+          sub={t('profile.youtubeSub')}
+          href={config.youtubeUrl}
+          external
+        />
+        <ContactRow
           icon="✉️"
           title={t('profile.supportEmail')}
           sub={config.supportEmail}

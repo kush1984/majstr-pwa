@@ -558,6 +558,33 @@ function LandingFooter() {
             {t('privacy.footerLink')}
           </Link>
         </div>
+        {/* -ml: the 44 px tap target is wider than the icon, so the icon lines up with the text above. */}
+        <div className="-ml-2.5 flex items-center gap-1 md:ml-0">
+          <a
+            href={config.youtubeUrl}
+            target="_blank"
+            rel="noopener"
+            aria-label={t('landing.footerYoutube')}
+            title={t('landing.footerYoutube')}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-landing-ink hover:text-landing-amber-deep"
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="currentColor">
+              <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.8 15.1V8.9l5.8 3.1-5.8 3.1Z" />
+            </svg>
+          </a>
+          <a
+            href={config.telegramUrl}
+            target="_blank"
+            rel="noopener"
+            aria-label={t('landing.footerTelegram')}
+            title={t('landing.footerTelegram')}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-landing-ink hover:text-landing-amber-deep"
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">
+              <path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.5 1 12c-1.1-.3-1.1-1.1.2-1.6L20.5 3c.9-.3 1.7.2 1.4 1.3Z" />
+            </svg>
+          </a>
+        </div>
       </div>
     </footer>
   );

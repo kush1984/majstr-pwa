@@ -64,4 +64,6 @@ Majstr (majstr.pro) — інструмент для майстрів і бриг
 ## Контакти
 
 - Пошта підтримки: support@majstr.pro
+- YouTube-канал (відео-інструкції): https://www.youtube.com/@majstrpro
+- Telegram-канал (новини й обговорення): https://t.me/majstr_pro
 - Політика конфіденційності: https://majstr.pro/privacy
