@@ -356,23 +356,20 @@ function Audience() {
     {
       title: t('landing.forMasterTitle'),
       points: [t('landing.forMaster1'), t('landing.forMaster2'), t('landing.forMaster3')],
-      shot: '/landing/shot-editor.webp',
-      alt: t('landing.shotEditorAlt'),
-      align: 'top',
+      photo: { name: 'card-master', widths: [640, 960], position: 'object-[50%_55%]' },
+      photoAlt: t('landing.forMasterPhotoAlt'),
     },
     {
       title: t('landing.forForemanTitle'),
       points: [t('landing.forForeman1'), t('landing.forForeman2'), t('landing.forForeman3')],
-      shot: '/landing/shot-margin.webp',
-      alt: t('landing.shotMarginAlt'),
-      align: 'bottom',
+      photo: { name: 'card-brigadir', widths: [640, 960, 1280], position: 'object-[50%_40%]' },
+      photoAlt: t('landing.forForemanPhotoAlt'),
     },
     {
       title: t('landing.forClientTitle'),
       points: [t('landing.forClient1'), t('landing.forClient2'), t('landing.forClient3')],
-      shot: '/landing/shot-portal.webp',
-      alt: t('landing.shotPortalAlt'),
-      align: 'bottom',
+      photo: { name: 'card-client', widths: [640], position: 'object-[50%_30%]' },
+      photoAlt: t('landing.forClientPhotoAlt'),
     },
   ];
   return (
@@ -385,16 +382,21 @@ function Audience() {
               key={c.title}
               className="overflow-hidden rounded-2xl border border-landing-line/60 bg-white shadow-[0_6px_20px_-14px_rgba(58,37,25,0.35)]"
             >
-              {/* Part of the phone only — the part the card is about: the crew line and the «Підписати»
-                  button sit at the BOTTOM of their screens. */}
-              <div
-                className={
-                  'flex h-[240px] overflow-hidden bg-landing-paper/60 px-10 ' +
-                  (c.align === 'bottom' ? 'items-end' : 'items-start pt-6')
-                }
-              >
-                <Phone src={c.shot} alt={c.alt} className="w-full" />
-              </div>
+              {/* The owner's photo (design/landing → `npm run landing:photos`): 16:10 in one column — a
+                  240 px strip across a tablet cut the phone out of the shot — and a level 240 px in the
+                  three-card row. `widths` are what the script could make (it never upscales; the
+                  originals run 694-1536 px), `position` keeps each face and phone in the crop. */}
+              <img
+                src={`/landing/${c.photo.name}-640.webp`}
+                srcSet={c.photo.widths.map((w) => `/landing/${c.photo.name}-${w}.webp ${w}w`).join(', ')}
+                sizes="(min-width: 768px) 360px, calc(100vw - 32px)"
+                width={640}
+                height={427}
+                loading="lazy"
+                decoding="async"
+                alt={c.photoAlt}
+                className={`aspect-[16/10] w-full object-cover ${c.photo.position} md:aspect-auto md:h-[240px]`}
+              />
               <div className="p-5">
                 <h3 className="text-lg font-bold">{c.title}</h3>
                 <ul className="mt-3 space-y-2">
@@ -424,12 +426,24 @@ function Control() {
   return (
     <section className="px-4 pb-16 sm:px-6 lg:pb-20">
       <div className="mx-auto grid max-w-[1160px] items-center gap-10 overflow-hidden rounded-3xl bg-landing-paper/60 px-5 py-10 sm:px-10 lg:grid-cols-2 lg:py-12">
-        <div className="flex justify-center gap-4">
-          <Phone src="/landing/shot-share.webp" alt={t('landing.shotShareAlt')} className="w-[44%] max-w-[210px]" />
+        {/* The owner's blurred site photo (pro-bg) behind the two real screens — decorative, so alt="". */}
+        <div className="relative flex justify-center gap-4 overflow-hidden rounded-2xl px-4 py-8">
+          <img
+            src="/landing/pro-bg-640.webp"
+            srcSet="/landing/pro-bg-640.webp 640w, /landing/pro-bg-960.webp 960w"
+            sizes="(min-width: 1024px) 540px, calc(100vw - 72px)"
+            width={640}
+            height={636}
+            loading="lazy"
+            decoding="async"
+            alt=""
+            className="absolute inset-0 -z-0 h-full w-full object-cover"
+          />
+          <Phone src="/landing/shot-share.webp" alt={t('landing.shotShareAlt')} className="relative w-[44%] max-w-[210px]" />
           <Phone
             src="/landing/shot-money.webp"
             alt={t('landing.shotMoneyAlt')}
-            className="mt-10 w-[44%] max-w-[210px]"
+            className="relative mt-10 w-[44%] max-w-[210px]"
           />
         </div>
         <div>
