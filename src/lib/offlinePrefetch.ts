@@ -27,7 +27,9 @@ import { CASH_KEY, CASH_SUMMARY_KEY, cashPeriod } from '@/features/cash/useCash.
 import { messagesKey } from '@/features/messages/useMessages.ts';
 import { PHOTOS_KEY } from '@/features/photos/usePhotos.ts';
 import { economyKeys } from '@/features/economy/useEconomy.ts';
-import type { ProjectResponse } from '@/api/types.ts';
+import type { ProjectResponse, WorkActResponse } from '@/api/types.ts';
+import { actsApi } from '@/api/acts.ts';
+import { actKey, actsKey, progressKey } from '@/features/acts/useActs.ts';
 
 /**
  * Warm the offline cache with EVERYTHING the master might open on site ("download it all ahead").
@@ -136,6 +138,16 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: ['project-estimates', p.id], queryFn: () => estimatesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: NOTES_KEY(p.id), queryFn: () => notesApi.list(p.id) }));
+    // Acts (review P0-6): the editor waits for ONE act and for the object's progress, so both are
+    // what must be on the device — an act never opened online used to be a screen with no way out.
+    perProject.push(async () => {
+      await qc.prefetchQuery({ queryKey: actsKey(p.id), queryFn: () => actsApi.list(p.id) });
+      const acts = qc.getQueryData<WorkActResponse[]>(actsKey(p.id)) ?? [];
+      await Promise.all(acts.map((a) =>
+        qc.prefetchQuery({ queryKey: actKey(a.id), queryFn: () => actsApi.get(a.id) })));
+    });
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: progressKey(p.id), queryFn: () => actsApi.progress(p.id) }));
     // The shopping list is the ONE screen used with no signal at all — if it is not cached, the
     // feature does not exist in the shop, which is the only place it matters.
     perProject.push(() =>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
@@ -36,6 +36,7 @@ export function NewObjectPage() {
   const [clientDraft, setClientDraft] = useState<ClientDraft>(emptyClientDraft);
   const [project, setProject] = useState({ name: '', address: '' });
   const [busy, setBusy] = useState(false);
+  const createdClient = useRef<{ id: string | undefined } | undefined>(undefined);
 
   const submit = async () => {
     if (busy) return;
@@ -55,11 +56,12 @@ export function NewObjectPage() {
 
     setBusy(true);
     try {
-      const clientId = await resolveClientId(clientDraft, createClient);
+      // A client made by an attempt whose object then failed is reused, not made again (P0-4).
+      createdClient.current ??= { id: await resolveClientId(clientDraft, createClient) };
       const proj = await createProject.mutateAsync({
         name: project.name.trim(),
         address: project.address.trim(),
-        clientId,
+        clientId: createdClient.current.id,
       });
       void navigate(routes.project(proj.id), { replace: true });
     } catch (err) {

@@ -69,3 +69,35 @@ describe('NewEstimatePage — optional client', () => {
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/estimates/e1', { replace: true }));
   });
 });
+
+describe('NewEstimatePage — a retry after a failed estimate (review P0-4)', () => {
+  it('makes ONE object and ONE client however many times «Створити» is pressed', async () => {
+    vi.mocked(clientsApi.create).mockResolvedValue({
+      id: 'c5', fullName: 'Олег', phone: '0991112233', email: null, address: null, clientType: 'PERSON',
+      taxId: null, legalName: null, legalAddress: null, signatoryTitle: null, signatoryName: null, createdAt: '',
+    });
+    vi.mocked(projectsApi.create).mockResolvedValue(proj);
+    vi.mocked(estimatesApi.createForProject)
+      .mockRejectedValueOnce(new Error('estimate failed'))
+      .mockResolvedValueOnce({ id: 'e1' } as never);
+
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Хата' } });
+    fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Новий' }));
+    fireEvent.change(container.querySelector('#cp-name')!, { target: { value: 'Олег' } });
+    fireEvent.change(container.querySelector('#cp-phone')!, { target: { value: '0991112233' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
+    await waitFor(() => expect(estimatesApi.createForProject).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Створити' })).not.toHaveProperty('disabled', true));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/estimates/e1', { replace: true }));
+
+    expect(clientsApi.create).toHaveBeenCalledTimes(1);
+    expect(projectsApi.create).toHaveBeenCalledTimes(1);
+    expect(estimatesApi.createForProject).toHaveBeenCalledTimes(2);
+    expect(estimatesApi.createForProject).toHaveBeenLastCalledWith('p1', { name: undefined }, expect.any(String));
+  });
+});

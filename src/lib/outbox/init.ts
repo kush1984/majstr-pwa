@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { initSyncStatus, registerOutboxHandler, setOutboxErrorClassifier, shouldRefetchAfterFlush, startOutboxSync } from './outbox.ts';
+import { flushOutbox, initSyncStatus, registerOutboxHandler, releaseBlockedTemplateLines, setOutboxErrorClassifier, shouldRefetchAfterFlush, startOutboxSync } from './outbox.ts';
+import { isTemplateLine } from './templateLine.ts';
 import { clientsApi } from '@/api/clients.ts';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
@@ -80,7 +81,18 @@ export function initOutbox(qc: QueryClient): () => void {
   // Estimate line items — the op's entityId is the ITEM id; the estimate id rides the payload.
   registerOutboxHandler('estimateItem', async (op) => {
     const p = op.payload as { estimateId: string; req?: EstimateItemRequest };
-    if (op.type === 'create') {
+    if (op.type === 'create' && isTemplateLine(p.req)) {
+      // A bundle line applied offline (quantity 0) — the manual door refuses it, this one is what
+      // the online application amounts to (review P0-5).
+      await estimatesApi.addTemplateLine(p.estimateId, {
+        type: p.req!.type,
+        name: p.req!.name,
+        category: p.req!.category,
+        unit: p.req!.unit,
+        unitPrice: p.req!.unitPrice,
+        sortOrder: p.req!.sortOrder,
+      }, op.entityId);
+    } else if (op.type === 'create') {
       await estimatesApi.addItem(p.estimateId, p.req!, op.entityId);
     } else if (op.type === 'update') {
       await estimatesApi.updateItem(p.estimateId, op.entityId, p.req!);
@@ -404,6 +416,8 @@ export function initOutbox(qc: QueryClient): () => void {
   });
 
   initSyncStatus(); // publish the queued-op count (leftovers from a prior offline session)
+  // Bundle lines an older build left blocked (review P0-5) can land now — release them and go.
+  void releaseBlockedTemplateLines().then((n) => { if (n > 0) void flushOutbox(); });
   // On reconnect, replay the queue; refetch when the flush landed or was refused AND nothing that
   // can still land is left (`shouldRefetchAfterFlush`). A refusal must send the screen back to the
   // server's own figures, with the sync sheet explaining why (review P-47); a merely failing op

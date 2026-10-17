@@ -593,6 +593,17 @@ export interface EstimateItemsOrderRequest {
   items: { id: string; category?: string | null }[];
 }
 
+/** One line of a bundle applied offline (`POST /api/estimates/{id}/items/template-line`): no
+ *  quantity — it is 0, as the online application leaves it — and a price that may be 0. */
+export interface TemplateLineRequest {
+  type: ItemType;
+  name: string;
+  category?: string;
+  unit: Unit;
+  unitPrice: number;
+  sortOrder?: number;
+}
+
 export interface EstimateItemRequest {
   type: ItemType;
   name: string;

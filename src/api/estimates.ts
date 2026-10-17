@@ -8,6 +8,7 @@ import type {
   EstimateItemsMarkupRequest,
   EstimateItemFromCatalogRequest,
   EstimateItemRequest,
+  TemplateLineRequest,
   EstimateItemResponse,
   EstimateItemsOrderRequest,
   EstimateResponse,
@@ -87,6 +88,14 @@ export const estimatesApi = {
   addItem(estimateId: string, req: EstimateItemRequest, id?: string): Promise<EstimateItemResponse> {
     return api
       .post<EstimateItemResponse>(`/api/estimates/${estimateId}/items`, req,
+        id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
+      .then((r) => r.data);
+  },
+
+  /** One line of a bundle applied offline — quantity 0, price may be 0 (review P0-5). */
+  addTemplateLine(estimateId: string, req: TemplateLineRequest, id?: string): Promise<EstimateItemResponse> {
+    return api
+      .post<EstimateItemResponse>(`/api/estimates/${estimateId}/items/template-line`, req,
         id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
       .then((r) => r.data);
   },

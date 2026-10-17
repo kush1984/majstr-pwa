@@ -846,6 +846,8 @@
     "signed": "Act signed",
     "saved": "Act saved",
     "loadError": "Could not load the act",
+    "offlineNotCachedTitle": "No connection",
+    "offlineNotCached": "No connection — the act will open as soon as you are back online.",
     "deleteTitle": "Delete the act?",
     "deleteConfirm": "The act will be deleted permanently.",
     "newAct": "+ New act",

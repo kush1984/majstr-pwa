@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import 'fake-indexeddb/auto';
 import '@/lib/i18n.ts';
 import { clearOutbox } from '@/lib/outbox/outbox.ts';
@@ -749,5 +749,20 @@ describe('ActEditorPage — an unreadable field is refused, never rounded to zer
 
     fireEvent.click(screen.getAllByText(/^Зберегти/)[0]);
     await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
+  });
+});
+
+describe('ActEditorPage — offline, an act never opened on this device (review P0-6)', () => {
+  afterEach(() => onlineManager.setOnline(true));
+
+  it('says why and keeps a way out, instead of a spinner with no «←»', async () => {
+    onlineManager.setOnline(false);
+    const { router } = renderEditor();
+
+    expect(await screen.findByText(/акт відкриється, щойно з'явиться мережа/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Спробувати знову' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
+    await waitFor(() => expect(router.state.location.pathname).not.toBe('/acts/a1'));
   });
 });

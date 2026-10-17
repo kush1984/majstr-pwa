@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
@@ -45,6 +45,10 @@ export function NewEstimatePage() {
   const [clientDraft, setClientDraft] = useState<ClientDraft>(emptyClientDraft);
   const [project, setProject] = useState({ name: '', address: '' });
   const [estName, setEstName] = useState('');
+  // What an attempt already created (review P0-4). The client and the object are made BEFORE the
+  // estimate, so a retry after a failed estimate made a SECOND object and client — and on FREE the
+  // cap counts every object ever made, so that cost the master one of his two for good.
+  const created = useRef<{ client?: { id: string | undefined }; projectId?: string }>({});
   const [busy, setBusy] = useState(false);
   // Empty estimate vs. start from templates (positions pre-filled, prices from the master's
   // catalog). The picker hands back every chosen bundle — with the positions ticked inside it,
@@ -61,7 +65,8 @@ export function NewEstimatePage() {
 
   const submit = async () => {
     if (busy) return;
-    if (atProjectLimit) {
+    // The object already exists from the attempt that failed — the cap has nothing left to say.
+    if (atProjectLimit && !created.current.projectId) {
       toast.error(t('limits.objectsHint', { max: limits.data?.maxProjects }));
       return;
     }
@@ -78,12 +83,14 @@ export function NewEstimatePage() {
 
     setBusy(true);
     try {
-      const clientId = await resolveClientId(clientDraft, createClient);
-      const proj = await createProject.mutateAsync({
+      const done = created.current;
+      done.client ??= { id: await resolveClientId(clientDraft, createClient) };
+      done.projectId ??= (await createProject.mutateAsync({
         name: project.name.trim(),
         address: project.address.trim(),
-        clientId,
-      });
+        clientId: done.client.id,
+      })).id;
+      const proj = { id: done.projectId };
       // Import path: the object exists now; the wizard fills the estimate from a file/photo.
       if (importMode) {
         void navigate(routes.importEstimate(proj.id), { replace: true });
@@ -107,6 +114,12 @@ export function NewEstimatePage() {
       toast.error(err instanceof TemplateNotCachedError
         ? t('offline.templateNotCached')
         : toAppError(err).message);
+      // The bundle failed but the object is there: take him to it, where the estimate can be made
+      // again — not back to a form whose «Створити» would make another object.
+      if (templates.length > 0 && created.current.projectId) {
+        void navigate(routes.project(created.current.projectId), { replace: true });
+        return;
+      }
       setBusy(false);
     }
   };

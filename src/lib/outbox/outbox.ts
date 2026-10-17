@@ -1,4 +1,5 @@
 import { onlineManager } from '@tanstack/react-query';
+import { isTemplateLine } from './templateLine.ts';
 import { outboxDb } from './db.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -310,6 +311,25 @@ export function listOutbox(): Promise<OutboxOp[]> {
 /** Ops the server permanently rejected (need a "PRO or delete" decision). */
 export function listBlockedOps(): Promise<OutboxOp[]> {
   return outboxDb.ops.where('status').equals('blocked').toArray();
+}
+
+/**
+ * Release the bundle lines a build before 1.56.1 queued through the MANUAL door (review P0-5): the
+ * server refused their quantity of 0 and they sat blocked for good, holding «Надіслати» and the PDF
+ * behind «дочекайтесь зв'язку». They now replay through the template-line door, so unblocking them
+ * is all it takes. Returns how many were released.
+ */
+export async function releaseBlockedTemplateLines(): Promise<number> {
+  const released = await outboxDb.ops.where('status').equals('blocked')
+    .filter((op) => op.entity === 'estimateItem' && op.type === 'create'
+      && isTemplateLine((op.payload as { req?: { quantity?: unknown; unit?: string } }).req))
+    .modify((op) => {
+      op.status = 'pending';
+      op.attempts = 0;
+      op.blockReason = undefined;
+    });
+  if (released > 0) await refreshPending();
+  return released;
 }
 
 /** Un-block every blocked op (e.g. after the master upgrades to PRO) and flush again. */

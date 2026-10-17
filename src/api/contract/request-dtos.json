@@ -462,6 +462,14 @@
   "TemplateItemsOrderRequest": {
     "itemIds": "array"
   },
+  "TemplateLineRequest": {
+    "category": "string?",
+    "name": "string",
+    "sortOrder": "number?",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
+  },
   "TemplateTradeRequest": {
     "customTradeId": "string?",
     "trade": "string?"

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
+import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
@@ -141,6 +144,7 @@ export function ActEditorPage() {
   const scopeEstimate = searchParams.get('scope');
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const online = useOnline();
 
   // «/acts/new»: the act has no server row yet — «Зберегти» is what creates it (master feedback:
   // «кожен раз коли ми натиснули Новий акт і повернулись назад, то акт вже створюється»). Its
@@ -514,11 +518,36 @@ export function ActEditorPage() {
     return additional.some((a) => num(a.quantity) > 0 && a.name.trim() !== '');
   }, [qty, additional, actLines, showMaterials]);
 
-  if ((!isNew && act.isPending) || (Boolean(projectId) && progress.isPending)) {
-    return <div className="py-16 text-center text-brand"><Spinner /></div>;
-  }
-  if (!isNew && !act.data) {
-    return <p className="py-10 text-center text-sm text-muted">{t('acts.loadError')}</p>;
+  // Every state below keeps a way OUT (review P0-6): this is a full-screen route, and in the
+  // installed PWA on an iPhone a spinner or an error with no «←» could only be left by killing the
+  // app. Without the act there is no object to go back to, so history (or the objects list) it is.
+  const goBack = () => {
+    if (projectId) void navigate(routes.project(projectId) + '?tab=acts');
+    else if (window.history.length > 1) void navigate(-1);
+    else void navigate(routes.projects);
+  };
+  const waitingForAct = !isNew && !act.data;
+  const waitingForProgress = Boolean(projectId) && !progress.data;
+  if (waitingForAct || waitingForProgress) {
+    const failed = (waitingForAct && act.isError) || (waitingForProgress && progress.isError);
+    return (
+      <div>
+        <div className="mb-3 flex items-center gap-2">
+          <button type="button" onClick={goBack} aria-label={t('common.back')}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-lg text-primary">←</button>
+        </div>
+        {!online ? (
+          // Offline a query never made on this device is PAUSED, not failed — it would spin forever.
+          <EmptyState icon="📶" title={t('acts.offlineNotCachedTitle')} text={t('acts.offlineNotCached')}
+            action={<Button onClick={() => { void act.refetch(); void progress.refetch(); }}>{t('common.retry')}</Button>} />
+        ) : failed ? (
+          <ErrorState error={act.error ?? progress.error} title={t('acts.loadError')}
+            onRetry={() => { void act.refetch(); void progress.refetch(); }} />
+        ) : (
+          <div className="py-16 text-center text-brand"><Spinner /></div>
+        )}
+      </div>
+    );
   }
 
   const toggleLine = (line: ActProgressLine) => {
