@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { Modal } from './Modal.tsx';
 
@@ -58,5 +58,66 @@ describe('Modal', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * System «Назад» closes the sheet, not the screen (review P1-1): each open modal has a history
+ * entry, Back leaves the TOP one only, a typed-into form asks first, and react-router's own state
+ * keys survive our entry.
+ */
+describe('Modal — system back', () => {
+  const back = () => act(() => { window.history.back(); });
+
+  it('Back closes the sheet and leaves the screen where it is', async () => {
+    const onClose = vi.fn();
+    render(<Modal open onClose={onClose} title="Шторка"><p>body</p></Modal>);
+
+    back();
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
+  it('with a sheet opened from a sheet, Back closes only the top one', async () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    render(
+      <>
+        <Modal open onClose={outer} title="Перша"><p>1</p></Modal>
+        <Modal open onClose={inner} title="Друга"><p>2</p></Modal>
+      </>,
+    );
+
+    back();
+
+    await waitFor(() => expect(inner).toHaveBeenCalledOnce());
+    expect(outer).not.toHaveBeenCalled();
+  });
+
+  it('a typed-into form asks «Скасувати зміни?» on Back and on the backdrop', async () => {
+    const onClose = vi.fn();
+    render(<Modal open onClose={onClose} title="Форма"><input aria-label="Назва" /></Modal>);
+    fireEvent.input(screen.getByLabelText('Назва'), { target: { value: 'Кухня' } });
+
+    back();
+    expect(await screen.findByText('Скасувати зміни?')).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Продовжити редагування' }));
+    expect(screen.queryByText('Скасувати зміни?')).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[0]); // the backdrop
+    fireEvent.click(await screen.findByRole('button', { name: 'Скасувати зміни' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('closing from the UI takes its entry back out, and the router keys survive it', async () => {
+    window.history.replaceState({ usr: null, key: 'k1', idx: 3 }, '');
+    const { rerender } = render(<Modal open onClose={() => {}} title="Шторка"><p>x</p></Modal>);
+    expect(window.history.state).toMatchObject({ key: 'k1', idx: 3 });
+
+    rerender(<Modal open={false} onClose={() => {}} title="Шторка"><p>x</p></Modal>);
+
+    await waitFor(() => expect(window.history.state).toEqual({ usr: null, key: 'k1', idx: 3 }));
   });
 });

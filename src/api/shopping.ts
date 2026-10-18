@@ -1,4 +1,5 @@
 import { api, ensureAccessToken } from './client.ts';
+import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type {
   ShoppingListItemRequest,
@@ -56,7 +57,7 @@ export const shoppingApi = {
       headers: { Authorization: `Bearer ${access ?? ''}` },
     });
     if (!resp.ok) {
-      throw new Error(`Shopping list PDF request failed: ${resp.status}`);
+      throw await httpError(resp);
     }
     return resp.blob();
   },

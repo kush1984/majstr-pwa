@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
@@ -54,5 +54,21 @@ describe('ActShareSheet', () => {
   it('does not publish while closed', () => {
     render(<ActShareSheet actId="a1" open={false} onClose={vi.fn()} />, { wrapper });
     expect(actPortalApi.publish).not.toHaveBeenCalled();
+  });
+});
+
+describe('ActShareSheet — a failed publish (review P1-9)', () => {
+  it('stays open with «Спробувати ще раз» instead of closing, and a retry publishes again', async () => {
+    vi.mocked(actPortalApi.publish)
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 500, data: { status: 500, message: 'x' } } })
+      .mockResolvedValueOnce({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
+    const onClose = vi.fn();
+    render(<ActShareSheet actId="a1" open onClose={onClose} />, { wrapper });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Спробувати ще раз' }));
+
+    expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
+    expect(actPortalApi.publish).toHaveBeenCalledTimes(2);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

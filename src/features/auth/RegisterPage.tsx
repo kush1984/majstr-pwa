@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { clearSessionDrafts, readSessionDraft, writeSessionDraft } from '@/lib/sessionDraft.ts';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,6 +21,9 @@ import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import { getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 
+const REGISTER_DRAFT = 'register';
+type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
+
 export function RegisterPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -28,7 +32,9 @@ export function RegisterPage() {
   // Custom trade names are collected locally and created alongside the account on submit —
   // there's no user yet to attach them to individually (unlike ProfileEditModal, which saves
   // each one instantly through its own endpoint).
-  const [customTrades, setCustomTrades] = useState<string[]>([]);
+  // The half-filled form survives a reload (review P1-2) — everything but the password and consent.
+  const [draft] = useState(() => readSessionDraft<RegisterDraft>(REGISTER_DRAFT));
+  const [customTrades, setCustomTrades] = useState<string[]>(draft?.customTrades ?? []);
   const [addingCustomTrade, setAddingCustomTrade] = useState(false);
   const [newCustomTradeName, setNewCustomTradeName] = useState('');
   const {
@@ -37,20 +43,43 @@ export function RegisterPage() {
     setError,
     setValue,
     getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      email: '',
+      email: draft?.email ?? '',
       password: '',
-      fullName: '',
-      trades: [],
-      customTrades: [],
-      phone: '',
-      companyName: '',
+      fullName: draft?.fullName ?? '',
+      trades: draft?.trades ?? [],
+      customTrades: draft?.customTrades ?? [],
+      phone: draft?.phone ?? '',
+      companyName: draft?.companyName ?? '',
       consent: false,
-      promoCode: '',
+      promoCode: draft?.promoCode ?? '',
     },
+  });
+
+  useEffect(() => {
+    const sub = watch((v) => writeSessionDraft(REGISTER_DRAFT, {
+      email: v.email, fullName: v.fullName, phone: v.phone, companyName: v.companyName,
+      trades: v.trades, customTrades: v.customTrades, promoCode: v.promoCode,
+    }));
+    return () => sub.unsubscribe();
+  }, [watch]);
+
+  // «Назва компанії» follows the name until the master types his own (review P1-16): most register
+  // as themselves, and a sixth required field to retype the same words was a step on the way in.
+  // The documents already print whatever is here, so his name is what they show — as before, when
+  // he typed it himself.
+  const companyEdited = useRef(Boolean(draft?.companyName && draft.companyName !== draft.fullName));
+  const fullNameField = register('fullName', {
+    onChange: (e: { target: { value: string } }) => {
+      if (!companyEdited.current) setValue('companyName', e.target.value);
+    },
+  });
+  const companyField = register('companyName', {
+    onChange: () => { companyEdited.current = true; },
   });
 
   const syncCustomTrades = (next: string[]) => {
@@ -75,6 +104,7 @@ export function RegisterPage() {
 
   useEffect(() => {
     if (register$.isSuccess) {
+      clearSessionDrafts(REGISTER_DRAFT);
       void navigate(routes.home, { replace: true });
     }
   }, [register$.isSuccess, navigate]);
@@ -151,7 +181,7 @@ export function RegisterPage() {
             id="fullName"
             autoComplete="name"
             invalid={Boolean(errors.fullName)}
-            {...register('fullName')}
+            {...fullNameField}
           />
         </FormField>
 
@@ -161,7 +191,9 @@ export function RegisterPage() {
             <span className="ml-0.5 text-red-500" aria-hidden>*</span>
             <span className="ml-2 font-normal text-gray-500">{t('auth.chooseSeveral')}</span>
           </legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {/* Two columns from the narrowest phone up (review P1-16): eleven trades in one column were
+              a whole screen of scrolling before the account even existed. */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {TRADE_VALUES.map((value) => (
               <Checkbox
                 key={value}
@@ -250,12 +282,13 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField label={t('auth.companyName')} htmlFor="companyName" required error={errors.companyName?.message}>
+        <FormField label={t('auth.companyName')} htmlFor="companyName" required error={errors.companyName?.message}
+          hint={t('auth.companyNameHint')}>
           <Input
             id="companyName"
             autoComplete="organization"
             invalid={Boolean(errors.companyName)}
-            {...register('companyName')}
+            {...companyField}
           />
         </FormField>
 

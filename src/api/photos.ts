@@ -1,4 +1,5 @@
 import { api, ensureAccessToken } from './client.ts';
+import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type { PhotoSource, PhotoVisibility, ProjectPhotoFolderResponse, ProjectPhotoResponse } from './types.ts';
 
@@ -81,7 +82,7 @@ export const photosApi = {
     const resp = await fetch(`${config.apiBaseUrl}${fileUrl}`, {
       headers: { Authorization: `Bearer ${access ?? ''}` },
     });
-    if (!resp.ok) throw new Error(`Photo request failed: ${resp.status}`);
+    if (!resp.ok) throw await httpError(resp);
     return resp.blob();
   },
 

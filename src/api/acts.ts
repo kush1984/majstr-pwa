@@ -1,4 +1,5 @@
 import { api, ensureAccessToken } from './client.ts';
+import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type {
   ActReceiptRecognizeResponse,
@@ -161,7 +162,7 @@ export const actsApi = {
       headers: { Authorization: `Bearer ${access ?? ''}` },
     });
     if (!resp.ok) {
-      throw new Error(`PDF request failed: ${resp.status}`);
+      throw await httpError(resp);
     }
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);

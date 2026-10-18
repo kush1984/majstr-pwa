@@ -20,7 +20,7 @@ import { useLeaveGuard } from '@/hooks/useLeaveGuard.ts';
 import { toAppError } from '@/api/errors.ts';
 import { track } from '@/lib/posthog.ts';
 import { actsApi } from '@/api/acts.ts';
-import { openPdfTab } from '@/lib/openPdfTab.ts';
+import { reservePdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatMoneyExact, formatAmount } from '@/lib/format.ts';
 import { parseMoney, parseQuantity, roundMoney, roundQuantity, sumMoney } from '@/lib/decimal.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
@@ -523,7 +523,9 @@ export function ActEditorPage() {
   // app. Without the act there is no object to go back to, so history (or the objects list) it is.
   const goBack = () => {
     if (projectId) void navigate(routes.project(projectId) + '?tab=acts');
-    else if (window.history.length > 1) void navigate(-1);
+    // The ROUTER's index, not `history.length`: that counts other sites and the entries an open
+    // sheet pushes (review P1-1), so «back» could leave the app or land on nothing.
+    else if (((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0) void navigate(-1);
     else void navigate(routes.projects);
   };
   const waitingForAct = !isNew && !act.data;
@@ -770,10 +772,15 @@ export function ActEditorPage() {
   });
 
   const onPdf = once(async () => {
-    if (!(await beforeHandingOver())) return;
+    // Reserved BEFORE the save: on iOS the first await spends the tap, and a tab opened after it is
+    // dropped without a word (review P1-18). Closed again if the save does not let us through.
+    const tab = reservePdfTab();
+    if (!(await beforeHandingOver())) {
+      tab.cancel();
+      return;
+    }
     try {
-      // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
-      await openPdfTab(() => actsApi.fetchPdf(id));
+      await tab.open(() => actsApi.fetchPdf(id), `akt-${act.data?.number ?? ''}.pdf`);
     } catch (err) {
       toast.error(toAppError(err).message);
     }
@@ -810,12 +817,10 @@ export function ActEditorPage() {
     // `ph-mask` on the whole editor (review P-67): positions, group totals, additional works,
     // receipts, «Разом / До сплати» and the advance are all the master's money and his client's
     // deal. Masking piecemeal left four of those recorded; the screen has nothing a replay needs.
-    <div className="ph-mask mx-auto max-w-2xl px-4 pb-28 pt-2 sm:px-6">
-      {/* Top bar: «Зберегти» and «Поділитися» on the screen itself (master feedback — hunting for
-          Save in the FAB after every edit was the loudest complaint). STATIC, not sticky (round 2):
-          no other screen pins its header, and the sticky variant shipped with a non-existent
-          `bg-app` class — a transparent strip that scrolled-past lines showed through. Deep in the
-          scroll the FAB still carries Save. */}
+    <div className="ph-mask mx-auto max-w-2xl px-4 pb-44 pt-2 sm:px-6">
+      {/* Top bar: back, title, «Поділитися». STATIC, not sticky (round 2): no other screen pins its
+          header. «Зберегти» lives in the bar pinned to the BOTTOM instead (review P1-15) — in reach of
+          the thumb at any depth of a long act, with its own spinner. */}
       <div className="mb-3 flex items-center gap-2">
         <button type="button" onClick={() => navigate(routes.project(projectId) + '?tab=acts')}
           aria-label={t('common.back')}
@@ -833,13 +838,6 @@ export function ActEditorPage() {
           {act.data && (
             <button type="button" onClick={() => void onShare()} aria-label={t('acts.share')}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
-          )}
-          {!signed && (
-            <Button className="px-3 py-2"
-              loading={create.isPending || updateHeader.isPending || replaceItems.isPending}
-              onClick={() => void onSave()}>
-              {dirty ? t('common.save') + ' •' : t('common.save')}
-            </Button>
           )}
         </div>
       </div>
@@ -1160,7 +1158,8 @@ export function ActEditorPage() {
       {/* Actions — a speed-dial FAB so the master reaches Save/Sign/Share/PDF/Delete from anywhere on a
           long editor without scrolling to the bottom. Ordered so the primary Save sits nearest the
           thumb and the destructive Delete sits farthest from it. */}
-      <Fab ariaLabel={t('acts.actionsMenu')} position="bottom-6 right-4 lg:bottom-8 lg:right-8">
+      <Fab ariaLabel={t('acts.actionsMenu')}
+        position={signed ? 'bottom-6 right-4 lg:bottom-8 lg:right-8' : 'bottom-24 right-4 lg:bottom-28 lg:right-8'}>
         {(close) => (
           <>
             {/* Delete / PDF / share all address a server row — an unsaved new act has none. */}
@@ -1191,12 +1190,21 @@ export function ActEditorPage() {
                 setSignOpen(true);
               })())} />
             )}
-            {!signed && (
-              <FabAction icon="💾" label={t('common.save')} onClick={() => close(() => void onSave())} />
-            )}
           </>
         )}
       </Fab>
+
+      {!signed && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
+          <div className="mx-auto max-w-2xl">
+            <Button fullWidth
+              loading={create.isPending || updateHeader.isPending || replaceItems.isPending}
+              onClick={() => void onSave()}>
+              {dirty ? t('common.save') + ' •' : t('common.save')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Modal open={signOpen} onClose={() => setSignOpen(false)} title={t('acts.signTitle')}>
         <div className="space-y-3">

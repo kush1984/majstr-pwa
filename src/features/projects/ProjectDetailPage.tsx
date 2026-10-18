@@ -21,7 +21,7 @@ import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
 import { routes } from '@/lib/config.ts';
-import { CLIENT_DRIVEN_QUERY } from '@/lib/clientDrivenQuery.ts';
+import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
@@ -107,6 +107,9 @@ export function ProjectDetailPage() {
     queryKey: ['project-estimates', id],
     queryFn: () => estimatesApi.listForProject(id),
     enabled: Boolean(id),
+    // While any estimate waits for the client, the object screen asks again by itself — the same
+    // rule as the open estimate (review P1-14); it stops once nothing here is SENT.
+    refetchInterval: (query) => anyAwaitingClientInterval(query.state.data),
   });
   const limits = usePlanLimits();
 

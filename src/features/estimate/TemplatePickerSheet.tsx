@@ -60,11 +60,15 @@ export function TemplatePickerSheet({
   onClose,
   onPick,
   applying = false,
+  confirmLabel,
 }: {
   open: boolean;
   onClose: () => void;
   onPick: (picks: TemplatePick[]) => void;
   applying?: boolean;
+  /** The confirm button's words for `count` picks. Default «Створити кошторис (N)» — right where a
+   *  pick creates the estimate; the new-estimate form only RETURNS the pick, so it says «Обрати (N)». */
+  confirmLabel?: (count: number) => string;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -249,7 +253,7 @@ export function TemplatePickerSheet({
           {chosen.length > 0 && (
             <div className="sticky bottom-0 -mx-1 bg-surface pt-2 pb-1">
               <Button fullWidth loading={applying} onClick={() => onPick(chosen)}>
-                {t('templates.applyCount', { count: chosen.length })}
+                {confirmLabel ? confirmLabel(chosen.length) : t('templates.applyCount', { count: chosen.length })}
               </Button>
             </div>
           )}

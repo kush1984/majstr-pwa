@@ -9,6 +9,8 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
+import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
+import { markShared } from '@/features/projects/markShared.ts';
 import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
@@ -72,6 +74,7 @@ export function SharePortalSheet({
 )) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const nativeShare = canShareNatively();
   // Object-level share only — a single-estimate share has no set to seed from, so it never asks.
   const portal = useQuery({
     queryKey: ['portal', project.id, mode],
@@ -117,7 +120,7 @@ export function SharePortalSheet({
   const updateClient = useUpdateClient();
   const createClient = useCreateClient();
   const updateProject = useUpdateProject();
-  const [busy, setBusy] = useState<'copy' | 'email' | 'hide' | 'revoke' | null>(null);
+  const [busy, setBusy] = useState<'share' | 'copy' | 'email' | 'hide' | 'revoke' | null>(null);
   const [showAddEmail, setShowAddEmail] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [showClientPicker, setShowClientPicker] = useState(false);
@@ -134,18 +137,34 @@ export function SharePortalSheet({
   // that mints/reuses server state, not a cacheable read.
   const [singleUrl, setSingleUrl] = useState<string | null>(null);
   const [minting, setMinting] = useState(false);
+  // A failed mint used to leave the spinner turning forever (review P1-9): now it offers a retry,
+  // which bumps this and re-runs the effect.
+  const [mintError, setMintError] = useState(false);
+  const [mintAttempt, setMintAttempt] = useState(0);
   useEffect(() => {
-    if (!open || !singleEstimateId) { setSingleUrl(null); return; }
+    if (!open || !singleEstimateId) { setSingleUrl(null); setMintError(false); return; }
     let alive = true;
     setMinting(true);
+    setMintError(false);
+    // Minting does NOT flip DRAFT→SENT any more — only a share/copy/email does (review P1-9).
     estimateShareApi.create(singleEstimateId)
       .then((link) => { if (alive) setSingleUrl(link.url); })
       // Minting is what trips the plan / verify gates, so a failure here must land in the same
       // place a failed publish does rather than leaving an empty sheet open.
-      .catch((err) => { if (alive) handleErrorRef.current(err); })
+      .catch((err) => { if (alive) { setMintError(true); handleErrorRef.current(err); } })
       .finally(() => { if (alive) setMinting(false); });
     return () => { alive = false; };
-  }, [open, singleEstimateId]);
+  }, [open, singleEstimateId, mintAttempt]);
+
+  // The object's link as last published from THIS sheet, and for which pick — so a share right
+  // after a copy does not publish again, and a changed pick never shares a stale set.
+  const [published, setPublished] = useState<{ key: string; url: string } | null>(null);
+  // Shown when the clipboard refused or the system share was blocked, so the master can still copy
+  // the link by hand (the single-estimate sheet always shows it).
+  const [showUrl, setShowUrl] = useState(false);
+  useEffect(() => {
+    if (!open) { setPublished(null); setShowUrl(false); }
+  }, [open]);
 
   const email = client.data?.email ?? null;
   const allEstimates = portal.data?.estimates ?? [];
@@ -216,26 +235,77 @@ export function SharePortalSheet({
       ? economyPortalApi.update(project.id, paymentsTicked)
       : portalApi.update(project.id, ids);
 
+  const selectionKey = mode === 'economy' ? String(paymentsTicked) : [...ticked].sort().join(',');
+  const serverKey = portal.data
+    ? (mode === 'economy'
+      ? String(portal.data.paymentsVisible)
+      : portal.data.estimates.filter((e) => e.visible).map((e) => e.id).sort().join(','))
+    : null;
+  /** A link that already shows exactly what is picked — sharable without another publish. */
+  const readyUrl: string | null = singleEstimateId
+    ? singleUrl
+    : published?.key === selectionKey
+      ? published.url
+      : serverKey === selectionKey ? portal.data?.url ?? null : null;
+
+  /** Publishes the current pick and remembers the URL for it. */
+  const publishNow = async (): Promise<string> => {
+    const state = await publish([...ticked]);
+    const url = state.url ?? '';
+    setPublished({ key: selectionKey, url });
+    invalidateAfterShare();
+    return url;
+  };
+
+  const shareScope = singleEstimateId ? 'estimate' : 'object';
+
+  /** The link LEFT the app: only now does a DRAFT become SENT, and only now is it counted. */
+  const afterLinkLeft = async (channel: 'link' | 'share') => {
+    track('estimate_shared', { scope: shareScope, channel });
+    if (mode !== 'economy') {
+      // The link is out either way; a failed mark must not read as a failed share.
+      await markShared(qc, shareScope, singleEstimateId ?? project.id).catch(() => {});
+    }
+  };
+
+  const shareText = t(mode === 'economy' ? 'portal.shareTextEconomy' : 'portal.shareTextEstimate');
+
+  const onShare = async () => {
+    setBusy('share');
+    try {
+      const url = readyUrl ?? await publishNow();
+      const outcome = await shareNatively(url, shareText);
+      if (outcome === 'shared') {
+        await afterLinkLeft('share');
+        onClose();
+      } else if (outcome === 'blocked') {
+        // The publish spent the tap (iOS): the link is ready now, one more tap shares it.
+        setShowUrl(true);
+        toast.info(t('portal.shareTapAgain'));
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onCopy = async () => {
     setBusy('copy');
     try {
       // Clipboard can legitimately fail (no permission, non-secure context,
       // Safari focus rules) while the portal itself published fine — never
       // show "скопійовано" unless it actually landed in the clipboard.
-      const { copied, value } = await copyWhenReady(async () => {
-        if (singleEstimateId) return singleUrl ?? '';
-        const state = await publish([...ticked]);
-        return state.url ?? '';
-      });
-      invalidateAfterShare();
+      const { copied, value } = await copyWhenReady(async () => readyUrl ?? publishNow());
       if (copied && value) {
         // Only on a link that actually reached the clipboard. The sheet MINTS the single-estimate
         // link when it opens, so counting the open would repeat the very lie the backend funnel's
         // estimate half still tells («опублікував АБО просто відкрив шторку»).
-        track('estimate_shared', { scope: singleEstimateId ? 'estimate' : 'object', channel: 'link' });
+        await afterLinkLeft('link');
         toast.success(t('estimate.linkCopied'));
         onClose();
       } else {
+        setShowUrl(true);
         toast.error(t('estimate.linkCopyFailed'));
       }
     } catch (err) {
@@ -370,7 +440,11 @@ export function SharePortalSheet({
               // One link, one estimate — no picker, because there is nothing to choose. The URL
               // itself is shown: on a phone the master usually pastes it into a messenger, and
               // seeing it is what makes "this opens only that кошторис" believable.
-              minting || !singleUrl ? (
+              mintError && !minting ? (
+                <Button variant="secondary" fullWidth onClick={() => setMintAttempt((n) => n + 1)}>
+                  {t('portal.mintRetry')}
+                </Button>
+              ) : minting || !singleUrl ? (
                 <div className="py-6 text-center text-brand"><Spinner /></div>
               ) : (
                 <Input readOnly value={singleUrl} onFocus={(e) => e.currentTarget.select()} />
@@ -428,14 +502,27 @@ export function SharePortalSheet({
               </label>
             )}
 
+            {!singleEstimateId && showUrl && readyUrl && (
+              <Input readOnly value={readyUrl} onFocus={(e) => e.currentTarget.select()} />
+            )}
+
+            {/* On a phone the system share (Viber / Telegram / SMS) leads; copy stays as the
+                fallback. A desktop keeps the old order (review P1-8). */}
+            {nativeShare && (
+              <Button fullWidth disabled={nothingToShare} loading={busy === 'share'} onClick={onShare}>
+                {t('estimate.shareNative')}
+              </Button>
+            )}
+
             {email && (
-              <Button fullWidth disabled={nothingToShare} loading={busy === 'email'} onClick={onEmail}>
+              <Button fullWidth variant={nativeShare ? 'secondary' : 'primary'} disabled={nothingToShare}
+                loading={busy === 'email'} onClick={onEmail}>
                 {t('estimate.sendToEmail', { email })}
               </Button>
             )}
 
             <Button
-              variant={email ? 'secondary' : 'primary'}
+              variant={email || nativeShare ? 'secondary' : 'primary'}
               fullWidth
               disabled={nothingToShare}
               loading={busy === 'copy'}

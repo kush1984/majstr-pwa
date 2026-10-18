@@ -1,12 +1,24 @@
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
+import { Button } from '@/components/Button.tsx';
+import {
+  closeModalEntry,
+  dropModalEntry,
+  isFormEdit,
+  openModalEntry,
+  restoreModalEntry,
+} from '@/lib/modalHistory.ts';
 
 /**
  * Responsive modal: a bottom sheet on mobile (slides up, rounded top),
  * a centred dialog on desktop. Closes on backdrop click or Escape.
+ *
+ * <p>System «Назад» closes the sheet rather than the screen (see `modalHistory.ts`), and once a
+ * field in it has been typed into, a backdrop tap or «Назад» asks «Скасувати зміни?» first — the
+ * ✕ and the sheet's own buttons stay deliberate and ask nothing (review P1-1).</p>
  *
  * <p>Rendered into `document.body` through a portal, which is not a detail. `position: fixed` is
  * resolved against the nearest ancestor carrying a transform, filter or containment — so a modal
@@ -44,6 +56,37 @@ export function Modal({
   mask?: boolean;
 }) {
   const { t } = useTranslation();
+  const dirty = useRef(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // Callers pass an inline `onClose`; the history entry must live as long as the modal is OPEN,
+  // not as long as one render's callback, so it reads the latest one through a ref.
+  const latest = useRef({ onClose, dismissable });
+  useEffect(() => { latest.current = { onClose, dismissable }; }, [onClose, dismissable]);
+
+  useEffect(() => {
+    if (!open) return;
+    dirty.current = false;
+    setConfirmDiscard(false);
+    const id = openModalEntry(() => {
+      if (!latest.current.dismissable || dirty.current) {
+        restoreModalEntry(id);
+        if (latest.current.dismissable) setConfirmDiscard(true);
+        return;
+      }
+      dropModalEntry(id);
+      latest.current.onClose();
+    });
+    return () => closeModalEntry(id);
+  }, [open]);
+
+  const requestDismiss = () => {
+    if (dirty.current) setConfirmDiscard(true);
+    else onClose();
+  };
+  const markDirty = (e: { target: EventTarget | null }) => {
+    if (isFormEdit(e.target)) dirty.current = true;
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -94,7 +137,7 @@ export function Modal({
         type="button"
         aria-label={t('common.close')}
         className="absolute inset-0 bg-black/40"
-        onClick={dismissable ? onClose : undefined}
+        onClick={dismissable ? requestDismiss : undefined}
         disabled={!dismissable}
       />
       <div
@@ -103,6 +146,8 @@ export function Modal({
           size === 'lg' ? 'max-w-xl' : 'max-w-md',
           mask && 'ph-mask',
         )}
+        onInputCapture={markDirty}
+        onChangeCapture={markDirty}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-bold text-primary">{title}</h2>
@@ -119,6 +164,18 @@ export function Modal({
         </div>
         {children}
       </div>
+      {/* Over the whole dialog, not inside the panel: the panel scrolls, and an overlay inside it
+          would scroll away with the content. */}
+      {confirmDiscard && (
+        <div role="alertdialog" aria-label={t('common.discardChangesTitle')}
+          className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-5">
+          <div className="w-full max-w-xs space-y-3 rounded-2xl bg-surface p-5 text-center shadow-card-lg">
+            <p className="text-base font-bold text-primary">{t('common.discardChangesTitle')}</p>
+            <Button fullWidth onClick={() => setConfirmDiscard(false)}>{t('common.keepEditing')}</Button>
+            <Button fullWidth variant="secondary" onClick={onClose}>{t('common.discardChanges')}</Button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );

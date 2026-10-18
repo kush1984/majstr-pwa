@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { clearSessionDrafts, useSessionDraft } from '@/lib/sessionDraft.ts';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
@@ -33,8 +34,9 @@ export function NewObjectPage() {
   const limits = usePlanLimits();
   const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
 
-  const [clientDraft, setClientDraft] = useState<ClientDraft>(emptyClientDraft);
-  const [project, setProject] = useState({ name: '', address: '' });
+  // Kept in the tab's session until the object is created (review P1-2).
+  const [clientDraft, setClientDraft] = useSessionDraft<ClientDraft>('newObject.client', emptyClientDraft);
+  const [project, setProject] = useSessionDraft('newObject.project', { name: '', address: '' });
   const [busy, setBusy] = useState(false);
   const createdClient = useRef<{ id: string | undefined } | undefined>(undefined);
 
@@ -63,6 +65,7 @@ export function NewObjectPage() {
         address: project.address.trim(),
         clientId: createdClient.current.id,
       });
+      clearSessionDrafts('newObject.');
       void navigate(routes.project(proj.id), { replace: true });
     } catch (err) {
       toast.error(toAppError(err).message);

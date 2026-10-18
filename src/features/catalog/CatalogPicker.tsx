@@ -221,6 +221,7 @@ export function CatalogPicker({
         ))}
       </div>
       <Input
+        type="search"
         placeholder={t('estimate.searchCatalog')}
         value={q}
         onChange={(e) => setQ(e.target.value)}

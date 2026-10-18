@@ -57,10 +57,10 @@ interface EventMap {
   /** `scope` is NOT cosmetic: `'estimate'` is the per-estimate `?t=` link from the estimate
    *  editor, `'object'` is a published set on the object portal (`?p=`/`?e=`). Merged into one
    *  event they hide exactly the distinction the backend funnel had to be fixed to see. */
-  estimate_shared: { scope: 'estimate' | 'object'; channel: 'link' | 'email' };
+  estimate_shared: { scope: 'estimate' | 'object'; channel: 'link' | 'share' | 'email' };
   act_created: undefined;
   /** Act sharing (`?a=`) is its own event, never a third `scope` on `estimate_shared`. */
-  act_shared: { channel: 'link' | 'email' };
+  act_shared: { channel: 'link' | 'share' | 'email' };
   /** Only the OFFLINE signature — the one a master performs in their own browser. A portal
    *  signature happens in the client's browser and is deliberately not measured, so this event
    *  must never be read as "acts signed". */

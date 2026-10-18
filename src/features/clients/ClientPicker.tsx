@@ -159,6 +159,7 @@ export function ClientPicker({
       ) : (
         <div>
           <Input
+            type="search"
             placeholder={t('estimate.searchClient')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

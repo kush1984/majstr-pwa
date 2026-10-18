@@ -2,6 +2,7 @@
 // query cache (idb-keyval) use it — so provide a fake implementation for every test. Individual
 // outbox tests still clear the queue in their own beforeEach.
 import 'fake-indexeddb/auto';
+import { afterEach } from 'vitest';
 import { configure } from '@testing-library/react';
 
 /**
@@ -126,3 +127,7 @@ if (typeof URL.revokeObjectURL !== 'function') {
 if (typeof Element.prototype.scrollIntoView !== 'function') {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// A form draft (review P1-2) lives in sessionStorage, which jsdom keeps for the whole FILE — one
+// test's half-typed object would otherwise greet the next one.
+afterEach(() => { try { sessionStorage.clear(); } catch { /* no storage */ } });

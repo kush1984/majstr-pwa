@@ -145,3 +145,32 @@ describe('RegisterPage — duplicate email', () => {
     expect(navigateMock).toHaveBeenCalledWith(routes.login, { state: { email: 'a@b.com' } });
   });
 });
+
+describe('RegisterPage — the company name follows the name (review P1-16)', () => {
+  it('copies the full name into «Назва компанії» until the master types his own', () => {
+    const { container } = renderPage();
+    const fullName = container.querySelector('#fullName')!;
+    const company = container.querySelector<HTMLInputElement>('#companyName')!;
+
+    fireEvent.change(fullName, { target: { value: 'Іван Петренко' } });
+    expect(company.value).toBe('Іван Петренко');
+
+    fireEvent.change(company, { target: { value: 'ФОП Петренко' } });
+    fireEvent.change(fullName, { target: { value: 'Іван Петренко-Мельник' } });
+    expect(company.value).toBe('ФОП Петренко');
+  });
+});
+
+describe('RegisterPage — a draft survives a reload, the password never does (review P1-2)', () => {
+  it('restores the typed fields and leaves the password empty', () => {
+    const first = renderPage();
+    fireEvent.change(first.container.querySelector('#fullName')!, { target: { value: 'Іван Петренко' } });
+    fireEvent.change(first.container.querySelector('#password')!, { target: { value: 'secret-pass-1' } });
+    first.unmount();
+
+    expect(sessionStorage.getItem('majstr.draft.register')).not.toContain('secret-pass-1');
+    const again = renderPage();
+    expect(again.container.querySelector('#fullName')).toHaveProperty('value', 'Іван Петренко');
+    expect(again.container.querySelector('#password')).toHaveProperty('value', '');
+  });
+});

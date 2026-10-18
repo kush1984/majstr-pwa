@@ -245,8 +245,8 @@ describe('ShoppingListPage', () => {
     expect(qty().value).toBe('12');
 
     fireEvent.change(qty(), { target: { value: '7' } });
-    // Backdrop and ✕ share this label; either one abandons the edit.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[0]);
+    // The ✕ abandons the edit outright (the backdrop would ask «Скасувати зміни?» first, review P1-1).
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[1]);
 
     fireEvent.click(screen.getByText('Профіль CD'));
     // The modal is never unmounted. Keyed on the row id alone the draft survived the cancel, so the

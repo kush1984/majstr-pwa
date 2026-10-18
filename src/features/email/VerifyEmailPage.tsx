@@ -45,11 +45,16 @@ export function VerifyEmailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Opened from the mail app, the link lands in ITS browser — signed out, so «home» there is the
+  // landing page, and the master is sent somewhere he never meant to go (review P1-15). Signed in,
+  // home is his app; signed out, the page says the one thing left to do and stays.
+  const signedIn = tokens.hasAny();
+
   useEffect(() => {
-    if (state !== 'success') return;
-    const t = setTimeout(() => navigate(routes.home, { replace: true }), 3500);
+    if (state !== 'success' || !signedIn) return;
+    const t = setTimeout(() => { void navigate(routes.home, { replace: true }); }, 3500);
     return () => clearTimeout(t);
-  }, [state, navigate]);
+  }, [state, navigate, signedIn]);
 
   const onResend = async () => {
     try {
@@ -68,6 +73,14 @@ export function VerifyEmailPage() {
           <Spinner size="lg" />
           <p className="text-sm text-muted">{t('email.verifying')}</p>
         </div>
+      </AuthShell>
+    );
+  }
+
+  if (state === 'success' && !signedIn) {
+    return (
+      <AuthShell title={t('email.successTitle')}>
+        <p className="text-center text-sm text-muted">{t('email.successReturnToApp')}</p>
       </AuthShell>
     );
   }

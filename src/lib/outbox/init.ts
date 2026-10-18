@@ -14,6 +14,7 @@ import { economyApi } from '@/api/economy.ts';
 import { paymentsApi } from '@/api/payments.ts';
 import { cashApi } from '@/api/cash.ts';
 import { actsApi } from '@/api/acts.ts';
+import { estimateShareApi, portalApi } from '@/api/portal.ts';
 import { fromQueuedFile } from './queuedFile.ts';
 import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
 import type {
@@ -351,6 +352,13 @@ export function initOutbox(qc: QueryClient): () => void {
   // Positions added in the same offline session are NOT deps: the server keeps any position an
   // arrangement does not mention (appending it after the rest), so an order that lands first is
   // harmless.
+  // «Надіслано» after the link left the app (review P1-9) — the share happened offline, or the mark
+  // itself hit a blip. Idempotent on the server, so a replay of an already-landed mark is harmless.
+  registerOutboxHandler('shareMarkSent', async (op) => {
+    const p = op.payload as { scope: 'estimate' | 'object' };
+    await (p.scope === 'estimate' ? estimateShareApi.markSent(op.entityId) : portalApi.markSent(op.entityId));
+  });
+
   registerOutboxHandler('templateItemOrder', async (op) => {
     const p = op.payload as { req: TemplateItemsOrderRequest };
     await estimateTemplatesApi.reorderItems(op.entityId, p.req);

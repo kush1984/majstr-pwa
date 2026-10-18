@@ -33,6 +33,7 @@ export function EstimateNextStep({
   onMaterials,
   showMaterials,
   onPdf,
+  pdfLoading = false,
 }: {
   status: EstimateStatus;
   /** When the client signed it; absent on anything but a SIGNED estimate. */
@@ -43,6 +44,8 @@ export function EstimateNextStep({
   /** False only when the server says nothing can be calculated for this estimate's trades (V129). */
   showMaterials: boolean;
   onPdf: () => void;
+  /** The PDF is being made — the row says so and ignores a second tap (review P1-17). */
+  pdfLoading?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -87,21 +90,44 @@ export function EstimateNextStep({
         {showMaterials && (
           <SecondaryAction icon="🧮" label={t('estimate.nextStep.materials')} onClick={onMaterials} />
         )}
-        <SecondaryAction icon="📄" label={t('estimate.nextStep.pdf')} onClick={onPdf} />
+        <SecondaryAction icon="📄" label={pdfLoading ? t('estimate.nextStep.pdfLoading') : t('estimate.nextStep.pdf')}
+          onClick={onPdf} disabled={pdfLoading} />
       </div>
     </section>
   );
 }
 
-function SecondaryAction({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function SecondaryAction({ icon, label, onClick, disabled = false }: {
+  icon: string; label: string; onClick: () => void; disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-1 text-left text-sm font-semibold text-brand active:bg-surface-sunken"
+      disabled={disabled}
+      aria-busy={disabled}
+      className="flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-1 text-left text-sm font-semibold text-brand active:bg-surface-sunken disabled:opacity-60"
     >
       <span className="text-base leading-none">{icon}</span>
       {label}
     </button>
+  );
+}
+
+/**
+ * In place of «Кошторис готовий?» while a DRAFT still sums to 0 — straight out of a bundle every
+ * quantity is 0, and the block used to offer to send the client an estimate for 0 ₴ (review P1-11).
+ * Says how many lines still need a quantity and takes the master to the first of them.
+ */
+export function FillQuantitiesHint({ count, onGo }: { count: number; onGo: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <section data-testid="estimate-fill-quantities" className="mt-4 rounded-card border border-border bg-surface p-4">
+      <h2 className="text-[15px] font-bold leading-snug text-primary">{t('estimate.nextStep.fillTitle', { count })}</h2>
+      <p className="mt-1 text-xs leading-snug text-muted">{t('estimate.nextStep.fillHint')}</p>
+      <Button fullWidth variant="secondary" className="mt-3.5 min-h-[48px] text-[15px] font-semibold" onClick={onGo}>
+        {t('estimate.nextStep.fillGo')}
+      </Button>
+    </section>
   );
 }

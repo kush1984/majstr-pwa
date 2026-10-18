@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
-import { CLIENT_DRIVEN_QUERY, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
+import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import type {
   WorkActCreateRequest,
   WorkActItemsRequest,
@@ -21,6 +21,8 @@ export function useActs(projectId: string) {
     queryKey: actsKey(projectId),
     queryFn: () => actsApi.list(projectId),
     enabled: Boolean(projectId),
+    // An act the client may be confirming right now (review P1-14) — see awaitingClientInterval.
+    refetchInterval: (query) => anyAwaitingClientInterval(query.state.data),
   });
 }
 

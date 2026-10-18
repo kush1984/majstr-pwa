@@ -10,6 +10,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
+import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
 import { actPortalApi } from '@/api/portal.ts';
 
 /**
@@ -23,7 +24,10 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   const qc = useQueryClient();
   const [url, setUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const [busy, setBusy] = useState<'copy' | 'email' | null>(null);
+  const [busy, setBusy] = useState<'share' | 'copy' | 'email' | null>(null);
+  const [publishError, setPublishError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const nativeShare = canShareNatively();
   // Every caller passes an inline `onClose`, so a dependency on it re-ran the publish on each parent
   // render — and the publish itself invalidates the act, which re-renders the parent: a PUT per
   // refetch for as long as the sheet stayed open, each taking the row lock a portal signature needs
@@ -32,9 +36,10 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
-    if (!open) { setUrl(null); return; }
+    if (!open) { setUrl(null); setPublishError(false); return; }
     let alive = true;
     setPublishing(true);
+    setPublishError(false);
     actPortalApi.publish(actId)
       .then((s) => {
         if (!alive) return;
@@ -45,10 +50,24 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         void qc.invalidateQueries({ queryKey: ['act', actId] });
         void qc.invalidateQueries({ queryKey: ['acts'] });
       })
-      .catch((err) => { if (alive) { toast.error(toAppError(err).message); onCloseRef.current(); } })
+      // A failed publish offers a retry instead of shutting the sheet the master just opened.
+      .catch((err) => { if (alive) { toast.error(toAppError(err).message); setPublishError(true); } })
       .finally(() => { if (alive) setPublishing(false); });
     return () => { alive = false; };
-  }, [open, actId, qc]);
+  }, [open, actId, qc, attempt]);
+
+  const onShare = async () => {
+    if (!url) return;
+    setBusy('share');
+    try {
+      // The URL is already published, so nothing is awaited before the share: the tap's activation
+      // is still there on iOS.
+      if (await shareNatively(url, t('acts.shareText')) === 'shared') {
+        track('act_shared', { channel: 'share' });
+        onClose();
+      }
+    } finally { setBusy(null); }
+  };
 
   const onCopy = async () => {
     setBusy('copy');
@@ -84,12 +103,21 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
           {t('acts.shareHint')}
           <InfoPopover text={t('acts.shareLegalInfo')} />
         </p>
-        {publishing || !url ? (
+        {publishError && !publishing ? (
+          <Button variant="secondary" fullWidth onClick={() => setAttempt((n) => n + 1)}>
+            {t('portal.mintRetry')}
+          </Button>
+        ) : publishing || !url ? (
           <div className="py-6 text-center text-brand"><Spinner /></div>
         ) : (
           <>
             <Input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-            <Button fullWidth loading={busy === 'copy'} onClick={() => void onCopy()}>{t('estimate.copyLink')}</Button>
+            {/* A phone leads with the system share; copy stays as the fallback (review P1-8). */}
+            {nativeShare && (
+              <Button fullWidth loading={busy === 'share'} onClick={() => void onShare()}>{t('estimate.shareNative')}</Button>
+            )}
+            <Button fullWidth variant={nativeShare ? 'secondary' : 'primary'} loading={busy === 'copy'}
+              onClick={() => void onCopy()}>{t('estimate.copyLink')}</Button>
             <div className="flex gap-2">
               <Button variant="secondary" fullWidth loading={busy === 'email'} onClick={() => void onEmail()}>
                 {t('acts.shareEmail')}

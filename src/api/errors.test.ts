@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { AxiosError } from 'axios';
 import { onlineManager } from '@tanstack/react-query';
 import i18n from '@/lib/i18n.ts';
-import { toAppError } from './errors.ts';
+import { HttpStatusError, toAppError } from './errors.ts';
 
 afterEach(() => onlineManager.setOnline(true));
 
@@ -46,5 +46,24 @@ describe('a request that never got an answer', () => {
 
     expect(failure.message).toBe('Ліміт обʼєктів для FREE');
     expect(failure.code).toBe('LIMIT_EXCEEDED');
+  });
+});
+
+describe('toAppError — no technical text in front of a master (review P1-22)', () => {
+  it('a failed fetch-based request (PDF, photo) reads like any other server error', () => {
+    const plain = toAppError(new HttpStatusError(500));
+    expect(plain.message).not.toMatch(/request failed|HTTP/i);
+    expect(plain.status).toBe(500);
+
+    const coded = toAppError(new HttpStatusError(403, 'Підтвердіть email', 'EMAIL_NOT_VERIFIED'));
+    expect(coded).toMatchObject({ message: 'Підтвердіть email', code: 'EMAIL_NOT_VERIFIED', status: 403 });
+  });
+
+  it('«Failed to fetch» / «Load failed» become the network message, coded NETWORK', () => {
+    for (const raw of ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.']) {
+      const e = toAppError(new TypeError(raw));
+      expect(e.code).toBe('NETWORK');
+      expect(e.message).not.toBe(raw);
+    }
   });
 });

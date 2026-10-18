@@ -84,6 +84,8 @@ describe('NewEstimatePage — a retry after a failed estimate (review P0-4)', ()
     const { container } = renderPage();
     fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Хата' } });
     fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
+    // The client is one folded row until asked for (review P1-9).
+    fireEvent.click(screen.getByRole('button', { name: /Клієнт — необов'язково/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Новий' }));
     fireEvent.change(container.querySelector('#cp-name')!, { target: { value: 'Олег' } });
     fireEvent.change(container.querySelector('#cp-phone')!, { target: { value: '0991112233' } });
@@ -99,5 +101,16 @@ describe('NewEstimatePage — a retry after a failed estimate (review P0-4)', ()
     expect(projectsApi.create).toHaveBeenCalledTimes(1);
     expect(estimatesApi.createForProject).toHaveBeenCalledTimes(2);
     expect(estimatesApi.createForProject).toHaveBeenLastCalledWith('p1', { name: undefined }, expect.any(String));
+  });
+});
+
+describe('NewEstimatePage — the object comes first (review P1-9)', () => {
+  it('shows the object fields above a folded, optional client', () => {
+    const { container } = renderPage();
+    const name = container.querySelector('#pr-name')!;
+    const clientRow = screen.getByRole('button', { name: /Клієнт — необов'язково/ });
+    // DOCUMENT_POSITION_FOLLOWING: the client row comes after the object's name field.
+    expect(name.compareDocumentPosition(clientRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Новий' })).toBeNull();
   });
 });

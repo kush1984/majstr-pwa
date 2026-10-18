@@ -1,5 +1,8 @@
 {
   "common": {
+    "discardChangesTitle": "Discard changes?",
+    "keepEditing": "Keep editing",
+    "discardChanges": "Discard changes",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -12,7 +15,7 @@
     "all": "All",
     "newEstimate": "New estimate",
     "newObject": "New object",
-    "addEstimate": "Object & estimate",
+    "addEstimate": "New estimate",
     "add": "Add",
     "later": "Later",
     "name": "Name",
@@ -254,7 +257,9 @@
     "dataEstimate": "This estimate",
     "dataProject": "This object",
     "dataMeasurements": "Measurements",
-    "dataNotes": "Notes"
+    "dataNotes": "Notes",
+    "dataActs": "Acts",
+    "dataEconomy": "The object economy"
   },
   "sync": {
     "pending": "Not synced: {{n}}",
@@ -291,7 +296,8 @@
       "payment-receipt": "Received payment",
       "shoppingItem": "Shopping row",
       "shoppingClear": "Hiding bought rows",
-      "cashEntry": "Cash-flow entry"
+      "cashEntry": "Cash-flow entry",
+      "shareMarkSent": "«Sent» mark"
     },
     "reviewStuckBody": "These changes ({{n}}) could not be sent — the app ran out of retries. Check your connection and try again, or delete them.",
     "reasonStuck": "could not be sent — out of retries",
@@ -320,7 +326,8 @@
     "retryAfter": " in {{seconds}} s",
     "wrongCredentials": "Wrong email or password",
     "emailAlreadyRegistered": "This email is already registered",
-    "emailTakenLogin": "This email is already registered — Log in"
+    "emailTakenLogin": "This email is already registered — Log in",
+    "companyNameHint": "You can change it later in your profile."
   },
   "reset": {
     "forgotTitle": "Reset password",
@@ -356,10 +363,10 @@
     "metricCompletedHint": "totalling {{amount}}",
     "createFirstTitle": "Create your first estimate",
     "createFirstText": "Add an object, a client and items — in a few minutes you'll have a ready estimate for the client.",
-    "createFirstAction": "Create first estimate",
+    "createFirstAction": "New estimate",
     "recentProjects": "Recent active objects",
     "quickActions": "Quick actions",
-    "quickNewEstimate": "Object & estimate",
+    "quickNewEstimate": "New estimate",
     "quickNewEstimateSub": "For a new client",
     "quickAddCatalog": "Add to catalog",
     "quickAddCatalogSub": "Work or material",
@@ -378,7 +385,7 @@
     "loadErrorTitle": "Couldn't load objects",
     "loadErrorText": "Check your connection and try again.",
     "emptyTitle": "No objects yet",
-    "emptyText": "Create your first estimate — the object and client are added right in the flow.",
+    "emptyText": "Tap «New estimate» — the object and client are filled in right there.",
     "noneFoundTitle": "Nothing found",
     "noneFoundText": "This filter is empty for now.",
     "detailLabel": "Object",
@@ -425,7 +432,8 @@
     "deleteObjectDone": "Object deleted"
   },
   "estimate": {
-    "newTitle": "Object & estimate",
+    "shareNative": "📤 Share (Viber, Telegram, SMS)",
+    "newTitle": "New estimate",
     "client": "Client",
     "newClient": "+ New client",
     "chooseExisting": "Pick an existing one",
@@ -536,7 +544,12 @@
       "showLink": "🔗 Show the link",
       "createAct": "✅ Create a work act",
       "materials": "Materials to buy",
-      "pdf": "Save PDF"
+      "pdf": "Save PDF",
+      "pdfLoading": "Making the PDF…",
+      "fillTitle_one": "Fill in the quantity of {{count}} position",
+      "fillTitle_other": "Fill in the quantity of {{count}} positions",
+      "fillHint": "While the estimate sums to 0, there is nothing to send the client.",
+      "fillGo": "Go to the first one"
     },
     "menuRename": "Rename",
     "menuSelect": "Delete positions",
@@ -642,7 +655,8 @@
     "percentReattachCta": "Link again",
     "percentFrozenBase": "Base amount, ₴",
     "percentFrozenTitle": "Carried over from a consolidation",
-    "percentFrozenHint": "Frozen when estimates were consolidated — there is no live base any more. The percent and amount are editable directly."
+    "percentFrozenHint": "Frozen when estimates were consolidated — there is no live base any more. The percent and amount are editable directly.",
+    "clientOptional": "Client — optional"
   },
   "economy": {
     "addendumBadge": "extra works from an act",
@@ -784,6 +798,7 @@
     "folderCount": "{{n}} photo(s)"
   },
   "acts": {
+    "shareText": "Work acceptance act to confirm:",
     "emptyTitle": "No acts yet",
     "emptyHint": "Add at least one position to the act before signing.",
     "leaveTitle": "Unsaved changes",
@@ -934,7 +949,8 @@
     "receiptNothingToRead": "Everything is filled in already — there is nothing left to read.",
     "receiptSaveToPhotosRoom": "The gallery has room for {{room}} of {{count}} — the act itself keeps every receipt.",
     "receiptIncomplete": "The amount was not read — type it in.",
-    "receiptIncompleteDate": "The date was not read — type it in if you need it."
+    "receiptIncompleteDate": "The date was not read — type it in if you need it.",
+    "newActNeedsConnection": "A new act needs an internet connection."
   },
   "notes": {
     "title": "Notes",
@@ -1670,7 +1686,9 @@
     "unsavedTitle": "Save changes?",
     "unsavedMessage": "This template has unsaved changes. Save them, or close without saving?",
     "discard": "Don't save",
-    "removeItem": "Remove position"
+    "removeItem": "Remove position",
+    "pickCount": "Choose ({{count}})",
+    "chosenCount": "Templates: {{count}}"
   },
   "profile": {
     "title": "Profile",
@@ -1914,7 +1932,8 @@
     "failedTitle": "Couldn't confirm",
     "noTokenText": "The link has no token. Reopen the email or request a new one.",
     "failedText": "The link may be expired or already used.",
-    "sendNewLetter": "Send a new email"
+    "sendNewLetter": "Send a new email",
+    "successReturnToApp": "Email confirmed ✓ Go back to the Majstr app."
   },
   "validation": {
     "enterEmail": "Enter your email",
@@ -2007,6 +2026,10 @@
     "pageEmpty": "Enter a page number"
   },
   "portal": {
+    "shareTextEstimate": "Estimate to review and sign:",
+    "shareTextEconomy": "Project page — estimates and payments:",
+    "shareTapAgain": "The link is ready — tap «Share» again.",
+    "mintRetry": "Try again",
     "sheetTitle": "Client portal",
     "pickHint": "Pick the estimates the client will see. They all share one page — each is signed separately.",
     "economyHint": "The client sees every signed estimate of the object that counts in its economy, line by line. A newly signed one appears here by itself.",

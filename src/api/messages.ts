@@ -1,4 +1,5 @@
 import { api, ensureAccessToken } from './client.ts';
+import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type { MessageView } from './types.ts';
 
@@ -47,7 +48,7 @@ export const messagesApi = {
       `${config.apiBaseUrl}/api/projects/${projectId}/messages/${messageId}/files/${fileId}`,
       { headers: { Authorization: `Bearer ${access ?? ''}` } },
     );
-    if (!resp.ok) throw new Error(`Attachment request failed: ${resp.status}`);
+    if (!resp.ok) throw await httpError(resp);
     return URL.createObjectURL(await resp.blob());
   },
 };

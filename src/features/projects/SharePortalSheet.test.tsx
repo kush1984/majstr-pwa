@@ -7,12 +7,14 @@ import { SharePortalSheet } from './SharePortalSheet.tsx';
 import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
 import { asInput } from '@/test/dom.ts';
+import { isHandheld } from '@/lib/deviceInput.ts';
 
 vi.mock('@/api/portal.ts', () => ({
-  portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn() },
+  portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
   economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), revoke: vi.fn() },
-  estimateShareApi: { create: vi.fn(), sendEmail: vi.fn() },
+  estimateShareApi: { create: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
 }));
+vi.mock('@/lib/deviceInput.ts', () => ({ isHandheld: vi.fn(() => false) }));
 vi.mock('@/features/clients/useClients.ts', () => ({
   useClient: () => ({ data: { id: 'c1', fullName: 'Клієнт', phone: '+380', email: 'client@x.ua' } }),
   useCreateClient: () => ({ isPending: false }),
@@ -27,7 +29,10 @@ vi.mock('@/features/clients/ClientPicker.tsx', () => ({
   resolveClientId: vi.fn(),
 }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(isHandheld).mockReturnValue(false);
+});
 
 const project = {
   id: 'p1', name: 'Квартира', address: 'вул. Тестова 1', clientId: 'c1',
@@ -192,6 +197,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
         { id: 'e1', name: 'Економ', status: 'SENT', createdAt: '2026-07-01T00:00:00Z', visible: true },
         { id: 'e2', name: 'Преміум', status: 'SIGNED', createdAt: '2026-07-02T00:00:00Z', visible: true },
       ],
+      url: null, // no live link yet, so the copy has to publish
     });
     vi.mocked(portalApi.update).mockResolvedValue(state);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -277,7 +283,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
   });
 
   it('publishes via the ECONOMY endpoint with only the payments flag, never the SIGNATURE one', async () => {
-    vi.mocked(economyPortalApi.state).mockResolvedValue(economyState);
+    vi.mocked(economyPortalApi.state).mockResolvedValue({ ...economyState, url: null });
     vi.mocked(economyPortalApi.update).mockResolvedValue(economyState);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
     renderSheet('economy');
@@ -344,5 +350,82 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
     expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
     expect(screen.queryByText(/Оберіть підписані кошториси/)).toBeNull();
+  });
+});
+
+/**
+ * Opening the sheet changes no status: DRAFT → SENT only once the link really left the app — shared,
+ * copied or emailed (review P1-9). A cancelled system share marks nothing.
+ */
+describe('SharePortalSheet — «Надіслано» only after the action', () => {
+  const link = { url: 'https://majstr.pro/portal/index.html?t=tok', expiresAt: null };
+
+  it('minting marks nothing; a copy marks the estimate sent', async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(link as never);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSingle('e2');
+    await screen.findByDisplayValue(link.url);
+    expect(estimateShareApi.markSent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(estimateShareApi.markSent).toHaveBeenCalledWith('e2'));
+  });
+
+  it('on a phone, the system share leads; a cancelled share marks nothing, a completed one does', async () => {
+    vi.mocked(isHandheld).mockReturnValue(true);
+    const share = vi.fn().mockRejectedValueOnce(new DOMException('cancelled', 'AbortError'))
+      .mockResolvedValueOnce(undefined);
+    Object.assign(navigator, { share });
+    vi.mocked(estimateShareApi.create).mockResolvedValue(link as never);
+    renderSingle('e2');
+    await screen.findByDisplayValue(link.url);
+
+    const shareButton = screen.getByRole('button', { name: /Поділитися/ });
+    fireEvent.click(shareButton);
+    await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: link.url }));
+    expect(estimateShareApi.markSent).not.toHaveBeenCalled();
+
+    fireEvent.click(shareButton);
+    await waitFor(() => expect(estimateShareApi.markSent).toHaveBeenCalledWith('e2'));
+    Reflect.deleteProperty(navigator, 'share');
+  });
+
+  it('copying the object portal publishes, then marks the OBJECT sent', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue({ ...state, url: null });
+    vi.mocked(portalApi.update).mockResolvedValue(state);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    renderSheet();
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+    expect(portalApi.markSent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(portalApi.markSent).toHaveBeenCalledWith('p1'));
+  });
+
+  it('a failed mint offers «Спробувати ще раз» instead of an endless spinner', async () => {
+    vi.mocked(estimateShareApi.create)
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 500, data: { status: 500, message: 'x' } } })
+      .mockResolvedValueOnce(link as never);
+    renderSingle('e2');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Спробувати ще раз' }));
+
+    expect(await screen.findByDisplayValue(link.url)).toBeTruthy();
+    expect(estimateShareApi.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('when the clipboard refuses, the object link is shown to copy by hand', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue(state);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+    renderSheet();
+    await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    expect(await screen.findByDisplayValue(state.url ?? '')).toBeTruthy();
+    expect(portalApi.markSent).not.toHaveBeenCalled();
   });
 });

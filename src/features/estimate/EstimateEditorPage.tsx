@@ -15,7 +15,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
-import { openPdfTab } from '@/lib/openPdfTab.ts';
+import { reservePdfTab, type PdfTab } from '@/lib/openPdfTab.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { flushOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import { bodyScrollLocked, scrollRowIntoView } from '@/lib/scrollRowIntoView.ts';
@@ -30,7 +30,7 @@ import { useProject } from '@/features/projects/useProjects.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
-import { EstimateNextStep } from './EstimateNextStep.tsx';
+import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
 import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
@@ -260,12 +260,12 @@ export function EstimateEditorPage() {
 
   // The actual download, given the receipts the master chose to attach ([] = none). Shared by the
   // direct path (no receipts) and the picker sheet.
-  const runPdf = async (receiptIds: string[]) => {
+  const runPdf = async (receiptIds: string[], tab: PdfTab = reservePdfTab()) => {
     setPdfLoading(true);
     try {
-      // Reserved-tab helper (openPdfTab) — window.open() after the awaited fetch silently fails on
-      // iOS Safari; the helper reserves the tab synchronously and fills it once the blob is ready.
-      await openPdfTab(() => estimatesApi.fetchPdf(id, receiptIds));
+      // The tab is reserved in the tap itself (see reservePdfTab) — window.open() after an await
+      // silently fails on iOS Safari.
+      await tab.open(() => estimatesApi.fetchPdf(id, receiptIds), 'koshtorys.pdf');
       setPdfSheetOpen(false);
     } catch (err) {
       const failure = toAppError(err);
@@ -302,21 +302,31 @@ export function EstimateEditorPage() {
   };
 
   const onPdf = async () => {
+    // One PDF at a time — a second tap while it is being made used to open a second tab (P1-17).
+    if (pdfLoading) return;
+    // Reserved on the FIRST line: the checks below await, and on iOS that spends the tap (P1-18).
+    const tab = reservePdfTab();
     // The PDF is a client-facing deliverable and now requires a verified email
     // (anti-abuse). Bounce an unverified master straight to the verify modal
     // instead of firing a doomed request — but ask the server first, because a
     // cached `false` outlives a verification done in the mail app's browser.
     if (!(await ensureEmailVerified())) {
+      tab.cancel();
       setEmailGateOpen(true);
       return;
     }
-    if (!(await estimateQueueClear())) return;
-    // Any photos to offer (linked receipts or object photos) → ask which to attach; else download straight.
+    if (!(await estimateQueueClear())) {
+      tab.cancel();
+      return;
+    }
+    // Any photos to offer (linked receipts or object photos) → ask which to attach; else download
+    // straight. The sheet's own button is a fresh tap and reserves its own tab.
     if (receipts.length > 0 || otherPhotos.length > 0) {
+      tab.cancel();
       setPdfSheetOpen(true);
       return;
     }
-    await runPdf([]);
+    await runPdf([], tab);
   };
 
   const onShare = async () => {
@@ -406,6 +416,8 @@ export function EstimateEditorPage() {
     }
   };
 
+  // Lines a quantity still has to be typed into (a «%» line has none of its own) — see FillQuantitiesHint.
+  const unpricedLines = est.items.filter((i) => i.unit !== 'PERCENT' && Number(i.quantity) === 0);
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -662,7 +674,17 @@ export function EstimateEditorPage() {
             {/* «Що далі» — the end of the document, and the answer to the question the master has
                 when he stops adding positions. Only once there ARE positions: with an empty list
                 the EmptyState above already says the one thing to do. */}
-            {est.items.length > 0 && (
+            {est.items.length > 0 && est.status === 'DRAFT' && est.total <= 0 ? (
+              unpricedLines.length > 0 && (
+                <FillQuantitiesHint
+                  count={unpricedLines.length}
+                  onGo={() => {
+                    const row = document.querySelector(`[data-item-id="${unpricedLines[0].id}"]`);
+                    if (row) scrollRowIntoView(row);
+                  }}
+                />
+              )
+            ) : est.items.length > 0 && (
               <EstimateNextStep
                 status={est.status}
                 signedAt={est.signedAt}
@@ -673,6 +695,7 @@ export function EstimateEditorPage() {
                 onMaterials={guard(() => void navigate(routes.materials(est.id)))}
                 showMaterials={materialsOffered}
                 onPdf={guard(() => void onPdf())}
+                pdfLoading={pdfLoading}
               />
             )}
           </div>

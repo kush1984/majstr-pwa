@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@/lib/i18n.ts';
-import { EstimateNextStep } from './EstimateNextStep.tsx';
+import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
 import type { EstimateStatus } from '@/api/types.ts';
 
 const onShare = vi.fn();
@@ -109,5 +109,21 @@ describe('EstimateNextStep', () => {
     expect(onMaterials).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Зберегти PDF/ }));
     expect(onPdf).toHaveBeenCalled();
+  });
+});
+
+/**
+ * A DRAFT that still sums to 0 ₴ asks for the quantities instead of offering «Надіслати» (review
+ * P1-5): sending a zero estimate was the first thing a new master did, and the client got nothing.
+ */
+describe('FillQuantitiesHint', () => {
+  it('names how many positions still need a quantity and takes the master to the first one', () => {
+    const onGo = vi.fn();
+    render(<FillQuantitiesHint count={3} onGo={onGo} />);
+
+    expect(screen.getByText('Заповніть кількість у 3 позиціях')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Надіслати/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'До першої такої позиції' }));
+    expect(onGo).toHaveBeenCalledOnce();
   });
 });

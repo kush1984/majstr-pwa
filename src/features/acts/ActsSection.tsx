@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '@/components/EmptyState.tsx';
+import { ErrorState } from '@/components/ErrorState.tsx';
+import { useOnline } from '@/lib/useOnline.ts';
 import { Spinner } from '@/components/Spinner.tsx';
 import { Badge } from '@/components/Badge.tsx';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
@@ -31,6 +33,7 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
   const del = useDeleteAct(objectId);
   const changeStatus = useChangeActStatus(objectId);
   const [confirmDelete, setConfirmDelete] = useState<WorkActResponse | null>(null);
+  const online = useOnline();
 
   const moveStatus = (id: string, status: WorkActStatus) => {
     changeStatus.mutate({ id, status }, {
@@ -42,6 +45,11 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
     return <div className="py-8 text-center"><Spinner /></div>;
   }
 
+  // A failed load is not «актів ще немає» (review P1-20): the acts may well exist.
+  if (acts.isError && !acts.data) {
+    return <ErrorState error={acts.error} what={t('offline.dataActs')} onRetry={() => void acts.refetch()} />;
+  }
+
   const list = acts.data ?? [];
   const block = actCreateBlock(list);
 
@@ -51,12 +59,15 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
       <div>
         <button
           type="button"
-          disabled={block !== null}
+          disabled={block !== null || !online}
           onClick={() => newAct.start(list)}
           className="w-full rounded-card border border-dashed border-brand/50 py-2.5 text-sm font-semibold text-brand disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
         >
           {t('acts.newAct')}
         </button>
+        {!online && block === null && (
+          <p className="mt-1.5 text-center text-[11px] text-muted">{t('acts.newActNeedsConnection')}</p>
+        )}
         {block && (
           <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[11px] text-muted">
             {t(block === 'open' ? 'acts.blockedOpen' : 'acts.blockedFinal')}
@@ -111,7 +122,7 @@ function ActRow({ act, onDelete, onMoveStatus }: {
   const onPdf = async () => {
     try {
       // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
-      await openPdfTab(() => actsApi.fetchPdf(act.id));
+      await openPdfTab(() => actsApi.fetchPdf(act.id), `akt-${act.number}.pdf`);
     } catch (err) {
       toast.error(toAppError(err).message);
     }

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { clearSessionDrafts, useSessionDraft } from '@/lib/sessionDraft.ts';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
@@ -42,9 +43,11 @@ export function NewEstimatePage() {
   const limits = usePlanLimits();
   const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
 
-  const [clientDraft, setClientDraft] = useState<ClientDraft>(emptyClientDraft);
-  const [project, setProject] = useState({ name: '', address: '' });
-  const [estName, setEstName] = useState('');
+  // Kept in the tab's session until the object exists (review P1-2).
+  const [clientDraft, setClientDraft] = useSessionDraft<ClientDraft>('newEstimate.client', emptyClientDraft);
+  const [project, setProject] = useSessionDraft('newEstimate.project', { name: '', address: '' });
+  const [estName, setEstName] = useSessionDraft('newEstimate.name', '');
+  const [clientOpen, setClientOpen] = useState(false);
   // What an attempt already created (review P0-4). The client and the object are made BEFORE the
   // estimate, so a retry after a failed estimate made a SECOND object and client — and on FREE the
   // cap counts every object ever made, so that cost the master one of his two for good.
@@ -91,6 +94,8 @@ export function NewEstimatePage() {
         clientId: done.client.id,
       })).id;
       const proj = { id: done.projectId };
+      // The object exists: whatever happens to the estimate next, this form must not make another.
+      clearSessionDrafts('newEstimate.');
       // Import path: the object exists now; the wizard fills the estimate from a file/photo.
       if (importMode) {
         void navigate(routes.importEstimate(proj.id), { replace: true });
@@ -139,6 +144,37 @@ export function NewEstimatePage() {
           <h1 className="text-xl font-extrabold tracking-tight text-primary">{t('estimate.newTitle')}</h1>
         </div>
 
+        {/* Object — FIRST (review P1-9): it is what the master came to make; the client is optional. */}
+        <section className="mb-5">
+          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">{t('estimate.object')}</h2>
+          <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
+            <FormField label={t('common.name')} htmlFor="pr-name" required hint={t('estimate.objectNameHint')}>
+              <Input
+                id="pr-name"
+                value={project.name}
+                onChange={(e) => setProject((s) => ({ ...s, name: e.target.value }))}
+              />
+            </FormField>
+            <FormField label={t('common.address')} htmlFor="pr-addr" required>
+              <Input
+                id="pr-addr"
+                placeholder={t('estimate.addressPlaceholder')}
+                value={project.address}
+                onChange={(e) => setProject((s) => ({ ...s, address: e.target.value }))}
+              />
+            </FormField>
+            <FormField label={t('estimate.nameLabel')} htmlFor="est-name" hint={t('estimate.nameHint')}>
+              <Input
+                id="est-name"
+                maxLength={255}
+                placeholder={t('estimate.namePlaceholder')}
+                value={estName}
+                onChange={(e) => setEstName(e.target.value)}
+              />
+            </FormField>
+          </div>
+        </section>
+
         {/* Lead choice: empty estimate vs. start from a template (defaults + my own). */}
         <section className="mb-5">
           <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
@@ -176,7 +212,7 @@ export function NewEstimatePage() {
               {templates.length === 1
                 ? t('templates.chosen', { name: templates[0].template.name })
                 : templates.length > 1
-                  ? t('templates.applyCount', { count: templates.length })
+                  ? t('templates.chosenCount', { count: templates.length })
                   : t('templates.fromTemplate')}
             </button>
           </div>
@@ -198,44 +234,28 @@ export function NewEstimatePage() {
           </button>
         </section>
 
-        {/* Client — optional; can be added later, before sending the estimate. */}
-        <section className="mb-5">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
-            {t('estimate.client')}
-          </h2>
-          <ClientPicker value={clientDraft} onChange={setClientDraft} />
+        {/* Client — optional, so ONE folded row until asked for (review P1-9); it can be added later,
+            before sending the estimate. Open from the start once a client is already chosen. */}
+        <section className="mb-6">
+          {clientOpen || clientDraft.mode !== 'none' ? (
+            <>
+              <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
+                {t('estimate.client')}
+              </h2>
+              <ClientPicker value={clientDraft} onChange={setClientDraft} />
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setClientOpen(true)}
+              className="flex min-h-[48px] w-full items-center justify-between rounded-card border border-border bg-surface px-3.5 text-left text-sm font-semibold text-primary"
+            >
+              {t('estimate.clientOptional')}
+              <span aria-hidden="true" className="text-muted">›</span>
+            </button>
+          )}
         </section>
 
-        {/* Object */}
-        <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">{t('estimate.object')}</h2>
-          <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-            <FormField label={t('common.name')} htmlFor="pr-name" required hint={t('estimate.objectNameHint')}>
-              <Input
-                id="pr-name"
-                value={project.name}
-                onChange={(e) => setProject((s) => ({ ...s, name: e.target.value }))}
-              />
-            </FormField>
-            <FormField label={t('common.address')} htmlFor="pr-addr" required>
-              <Input
-                id="pr-addr"
-                placeholder={t('estimate.addressPlaceholder')}
-                value={project.address}
-                onChange={(e) => setProject((s) => ({ ...s, address: e.target.value }))}
-              />
-            </FormField>
-            <FormField label={t('estimate.nameLabel')} htmlFor="est-name" hint={t('estimate.nameHint')}>
-              <Input
-                id="est-name"
-                maxLength={255}
-                placeholder={t('estimate.namePlaceholder')}
-                value={estName}
-                onChange={(e) => setEstName(e.target.value)}
-              />
-            </FormField>
-          </div>
-        </section>
 
         {atProjectLimit && (
           <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
@@ -252,6 +272,7 @@ export function NewEstimatePage() {
       </div>
 
       <TemplatePickerSheet
+        confirmLabel={(count) => t('templates.pickCount', { count })}
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={(tpls) => {

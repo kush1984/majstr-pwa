@@ -39,6 +39,11 @@ export function awaitingClientInterval(status: string | undefined): number | fal
   return status === 'SENT' && !outboxBusy() ? AWAITING_CLIENT_POLL_MS : false;
 }
 
+/** The same rule for a LIST screen (an object's estimates or acts): poll while any one is SENT. */
+export function anyAwaitingClientInterval(items: readonly { status: string }[] | undefined): number | false {
+  return awaitingClientInterval(items?.some((i) => i.status === 'SENT') ? 'SENT' : undefined);
+}
+
 /**
  * Whether the queue is mid-air — the one state in which a focus refetch must NOT fire.
  *

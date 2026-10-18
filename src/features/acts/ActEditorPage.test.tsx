@@ -277,8 +277,8 @@ describe('ActEditorPage', () => {
     expect(screen.getAllByText(moneyExact(9642.5)).length).toBeGreaterThan(0);
 
     // …and must NOT be saved: an invisible position can't be billed.
-    fireEvent.click(screen.getByLabelText('Дії з актом'));
-    fireEvent.click(await screen.findByText('Зберегти'));
+    // «Зберегти» is the bar pinned to the bottom now, not a FAB action (review P1-15).
+    fireEvent.click(screen.getByRole('button', { name: /^Зберегти/ }));
     await waitFor(() => expect(actsApi.replaceItems).toHaveBeenCalled());
     const sent = vi.mocked(actsApi.replaceItems).mock.calls[0][1];
     expect(sent.items.map((i) => i.estimateItemId)).toEqual(['i1']);
@@ -376,8 +376,8 @@ describe('ActEditorPage', () => {
 
     expect(screen.getByDisplayValue('Стіни')).toBeTruthy(); // the name field mirrors the stage
 
-    fireEvent.click(screen.getByLabelText('Дії з актом'));
-    fireEvent.click(await screen.findByText('Зберегти'));
+    // «Зберегти» is the bar pinned to the bottom now, not a FAB action (review P1-15).
+    fireEvent.click(screen.getByRole('button', { name: /^Зберегти/ }));
     await waitFor(() => expect(actsApi.updateHeader).toHaveBeenCalled());
     expect(vi.mocked(actsApi.updateHeader).mock.calls[0][1].title).toBe('Стіни');
   });

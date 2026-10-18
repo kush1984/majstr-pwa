@@ -28,6 +28,11 @@ export const portalApi = {
       .post<PortalStateResponse>(`/api/projects/${projectId}/portal/send-email`)
       .then((r) => r.data);
   },
+
+  /** The link actually LEFT the app (shared / copied): the visible drafts become SENT. Idempotent. */
+  markSent(projectId: string): Promise<void> {
+    return api.post(`/api/projects/${projectId}/portal/mark-sent`).then(() => undefined);
+  },
 };
 
 /**
@@ -82,6 +87,11 @@ export const estimateShareApi = {
     return api
       .post<ShareLinkResponse>(`/api/estimates/${estimateId}/share/send-email`)
       .then((r) => r.data);
+  },
+
+  /** Minting no longer flips the status (review P1-9): this does, once the link left the app. */
+  markSent(estimateId: string): Promise<void> {
+    return api.post(`/api/estimates/${estimateId}/share/mark-sent`).then(() => undefined);
   },
 };
 

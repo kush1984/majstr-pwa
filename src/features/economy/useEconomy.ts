@@ -27,6 +27,17 @@ import type {
  * (review P-48/P-52). An expense is still written — a till receipt flipped to «моя витрата» posts
  * one — and the surface that shows it now is «Мої гроші», which is what the writers invalidate.</p>
  */
+
+/**
+ * An object's money changed: its economy, AND «Мої гроші» — which unions every object's receipts and
+ * expenses — with the home strip's summary under the same ['cash'] prefix. A payment entered on the
+ * object used to leave both showing the old figures until they happened to refetch (review P1-19).
+ */
+function invalidateObjectMoney(qc: QueryClient, objectId: string): void {
+  void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+  void qc.invalidateQueries({ queryKey: ['cash'] });
+}
+
 export const economyKeys = {
   economy: (objectId: string) => ['object-economy', objectId] as const,
 };
@@ -64,7 +75,7 @@ export function useToggleEstimateCounted(objectId: string) {
     mutationFn: (v: { estimateId: string; value: boolean }) =>
       estimatesApi.setCountInEconomy(v.estimateId, v.value),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+      invalidateObjectMoney(qc, objectId);
       void qc.invalidateQueries({ queryKey: ['project-estimates', objectId] });
       // `progress` skips an estimate that does not count, which is the whole point of the toggle:
       // an open act editor reading the old progress would still offer lines it may no longer
@@ -127,7 +138,7 @@ export function useAddPayment(objectId: string) {
         deps: [objectId],
         online: () => paymentsApi.add(objectId, req, id),
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => invalidateObjectMoney(qc, objectId),
         optimistic: () => {
           const created: ProjectPaymentResponse = {
             id, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
@@ -153,7 +164,7 @@ export function useUpdatePayment(objectId: string) {
         deps: [objectId],
         online: async () => { await paymentsApi.update(objectId, id, req); },
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => invalidateObjectMoney(qc, objectId),
         optimistic: () => patchPayments(qc, objectId, (list) => list.map((p) => (p.id === id ? {
           ...p, amount: req.amount, dueDate: req.dueDate ?? null, nextStage: req.nextStage ?? null,
           purpose: req.purpose, status: deriveStageStatus(req.amount, p.received, req.dueDate ?? null),
@@ -172,7 +183,7 @@ export function useDeletePayment(objectId: string) {
         deps: [objectId],
         online: async () => { await paymentsApi.remove(objectId, paymentId); },
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => invalidateObjectMoney(qc, objectId),
         optimistic: () => patchPayments(qc, objectId, (list) => list.filter((p) => p.id !== paymentId)),
       }),
   });
@@ -203,7 +214,7 @@ export function useAddReceipt(objectId: string) {
         cancel: cancelEconomy(qc, objectId),
         onOnlineSuccess: () => {
           landed = true;
-          void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+          invalidateObjectMoney(qc, objectId);
         },
         optimistic: () => {
           const label = req.label?.trim() || null;
@@ -290,7 +301,7 @@ export function useEditReceipt(objectId: string) {
         deps: [objectId],
         online: () => paymentsApi.editReceipt(objectId, id, req),
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => invalidateObjectMoney(qc, objectId),
         optimistic: () => {
           let updated: PaymentReceiptResponse | null = null;
           const editOne = (r: PaymentReceiptResponse): PaymentReceiptResponse => {
@@ -325,7 +336,7 @@ export function useDeleteReceipt(objectId: string) {
         deps: [objectId],
         online: async () => { await paymentsApi.removeReceipt(objectId, receiptId); },
         cancel: cancelEconomy(qc, objectId),
-        onOnlineSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+        onOnlineSuccess: () => invalidateObjectMoney(qc, objectId),
         optimistic: () => patchSummary(qc, objectId, (s) => ({
           ...s,
           payments: s.payments.map((p) => ({ ...p, receipts: p.receipts.filter((r) => r.id !== receiptId) })),
@@ -342,7 +353,7 @@ export function useTransferSurplus(objectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: PaymentSurplusTransferRequest) => paymentsApi.transferSurplus(objectId, req),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+    onSuccess: () => invalidateObjectMoney(qc, objectId),
   });
 }
 
@@ -358,6 +369,6 @@ export function useCommitSplit(objectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: PaymentSplitRequest) => paymentsApi.commitSplit(objectId, req),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) }),
+    onSuccess: () => invalidateObjectMoney(qc, objectId),
   });
 }

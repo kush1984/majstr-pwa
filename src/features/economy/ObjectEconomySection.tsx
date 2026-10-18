@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ErrorState } from '@/components/ErrorState.tsx';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -410,6 +411,11 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
         <Spinner />
       </div>
     );
+  }
+
+  // A failed load must not read as an object with no money on it (review P1-20).
+  if (economy.isError && !economy.data) {
+    return <ErrorState error={economy.error} what={t('offline.dataEconomy')} onRetry={() => void economy.refetch()} />;
   }
 
   const eco = economy.data;

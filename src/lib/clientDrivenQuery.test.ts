@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { AWAITING_CLIENT_POLL_MS, CLIENT_DRIVEN_QUERY, awaitingClientInterval } from './clientDrivenQuery.ts';
+import { AWAITING_CLIENT_POLL_MS, CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval, awaitingClientInterval } from './clientDrivenQuery.ts';
 import {
   clearOutbox, enqueue, flushOutbox, getSyncStatus, registerOutboxHandler, setOutboxErrorClassifier,
 } from './outbox/outbox.ts';
@@ -88,5 +88,14 @@ describe('awaitingClientInterval — the open screen asks again while the client
     await vi.waitFor(() => expect(getSyncStatus().pending).toBe(1));
 
     expect(awaitingClientInterval('SENT')).toBe(false);
+  });
+});
+
+describe('anyAwaitingClientInterval — the object screen (review P1-14)', () => {
+  it('polls while any estimate or act on it is SENT, and stops once none is', () => {
+    expect(anyAwaitingClientInterval([{ status: 'SIGNED' }, { status: 'SENT' }])).toBe(AWAITING_CLIENT_POLL_MS);
+    expect(anyAwaitingClientInterval([{ status: 'SIGNED' }, { status: 'DRAFT' }])).toBe(false);
+    expect(anyAwaitingClientInterval([])).toBe(false);
+    expect(anyAwaitingClientInterval(undefined)).toBe(false);
   });
 });
