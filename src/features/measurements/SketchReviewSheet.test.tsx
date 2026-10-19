@@ -170,3 +170,58 @@ describe('SketchReviewSheet', () => {
     expect(req.rooms[0].items[0].name).toBe('Стеля');
   });
 });
+
+/** Project import is off (sketch-only cut): a printed plan is answered, not handed over. */
+describe('SketchReviewSheet — sketches only', () => {
+  function renderSketchOnly(onAddRoomManually = vi.fn(), onUpgradeRequired = vi.fn()) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    render(
+      <SketchReviewSheet open onClose={() => {}} objectId="p1"
+        onAddRoomManually={onAddRoomManually} onUpgradeRequired={onUpgradeRequired} />,
+      { wrapper },
+    );
+    return { onAddRoomManually, onUpgradeRequired };
+  }
+
+  it('a PRINTED_PLAN shows the message and two ways on, and opens no import', async () => {
+    vi.mocked(sketchImportApi.parse).mockResolvedValue({
+      sheetKind: 'PRINTED_PLAN', rooms: [], unitGuess: 'M', warnings: [],
+    });
+    const { onAddRoomManually } = renderSketchOnly();
+
+    dropOnUpload([sheet('bti.jpg')]);
+
+    expect(await screen.findByText(/Схоже на друкований план або техпаспорт/)).toBeTruthy();
+    expect(onPrintedPlan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Додати кімнату вручну' }));
+    expect(onAddRoomManually).toHaveBeenCalledOnce();
+  });
+
+  it('«Інше фото» goes back to the picker', async () => {
+    vi.mocked(sketchImportApi.parse).mockResolvedValue({
+      sheetKind: 'PRINTED_PLAN', rooms: [], unitGuess: 'M', warnings: [],
+    });
+    renderSketchOnly();
+    dropOnUpload([sheet('bti.jpg')]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Інше фото' }));
+
+    expect(screen.getByText(/Сфотографуйте ескіз від руки з розмірами/)).toBeTruthy();
+  });
+
+  it('a 403 UPGRADE_REQUIRED opens the PRO teaser, not an error', async () => {
+    vi.mocked(sketchImportApi.parse).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 403, data: { status: 403, code: 'UPGRADE_REQUIRED', message: 'x' } },
+    });
+    const { onUpgradeRequired } = renderSketchOnly();
+
+    dropOnUpload([sheet('sketch.jpg')]);
+
+    await waitFor(() => expect(onUpgradeRequired).toHaveBeenCalledOnce());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+});

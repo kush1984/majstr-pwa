@@ -6,8 +6,10 @@ import '@/lib/i18n.ts';
 import { MeasurementsSection } from './MeasurementsSection.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { measurementsApi } from '@/api/measurements.ts';
+import { upgradeApi } from '@/api/upgrade.ts';
 import type { MeasurementsResponse, Trade, UserResponse } from '@/api/types.ts';
 
+vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn().mockResolvedValue(undefined), interest: vi.fn() } }));
 vi.mock('@/api/measurements.ts', () => ({
   measurementsApi: {
     tree: vi.fn(),
@@ -94,12 +96,32 @@ describe('MeasurementsSection — площі vs ⚡ Електрика', () => {
 
   // The AI-calling entry points (both call the vision LLM) are hidden to cut AI spend
   // (AI_MEASUREMENT_IMPORT_ENABLED=false), same shape as the parked ⚡ block above.
-  it('hides both AI-calling entry points — «Розпізнати план чи ескіз» and «Імпорт проєкту»', async () => {
+  it('shows «Розпізнати ескіз», keeps «Імпорт проєкту» hidden', async () => {
     renderSection(['TILING']);
 
     expect(await screen.findByText('Кімнати · площі')).toBeTruthy();
-    expect(screen.queryByText('📷 Розпізнати план чи ескіз')).toBeNull();
+    expect(screen.getAllByText('📷 Розпізнати ескіз').length).toBeGreaterThan(0);
     expect(screen.queryByText('📁 Імпорт проєкту')).toBeNull();
+  });
+
+  it('FREE: the sketch button wears a PRO badge and opens the teaser, not the camera', async () => {
+    renderSection(['TILING'], 'FREE');
+    await screen.findByText('Кімнати · площі');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Розпізнати ескіз/ })[0]);
+
+    expect(screen.getAllByText('PRO').length).toBeGreaterThan(0);
+    expect(upgradeApi.click).toHaveBeenCalledWith('SKETCH_IMPORT');
+    expect(screen.queryByText(/Сфотографуйте ескіз від руки/)).toBeNull();
+  });
+
+  it('PRO: the sketch button opens the sketch sheet', async () => {
+    renderSection(['TILING'], 'PRO');
+    await screen.findByText('Кімнати · площі');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Розпізнати ескіз/ })[0]);
+
+    expect(await screen.findByText(/Сфотографуйте ескіз від руки/)).toBeTruthy();
   });
 
   // TEMPORARY business decision (TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY) — see the comment on

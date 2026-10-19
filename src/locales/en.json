@@ -1477,9 +1477,9 @@
     "M": "m"
   },
   "sketch": {
-    "button": "📷 Recognise a plan or sketch",
-    "title": "Room plan or sketch",
-    "sourceHint": "Photograph a hand-drawn sketch, a design-project sheet or a technical passport — we read the shape and numbers, you verify. Several sheets of the same object can be picked at once.",
+    "button": "📷 Recognise a sketch",
+    "title": "Room sketch",
+    "sourceHint": "Photograph a hand sketch with its sizes — we read the shape and the figures, you check them. Several sheets of one project can be picked at once.",
     "takePhoto": "Take a photo",
     "upload": "Choose photos (several allowed)",
     "parsing": "Reading…",
@@ -1502,7 +1502,10 @@
     "savePhotoTitle": "Save the sheets?",
     "savePhotoMessage": "Attach these photos to the object (private, not shown to the client)?",
     "savePhotoYes": "Save",
-    "photoSaved": "Saved"
+    "photoSaved": "Saved",
+    "printedPlanOnly": "This looks like a printed plan or a floor-plan passport. For now we only read hand-drawn sketches — photograph your sketch with its sizes, or add the room by hand.",
+    "otherPhoto": "Another photo",
+    "addRoomManually": "Add the room by hand"
   },
   "shape": {
     "enterDims": "enter the dimensions",

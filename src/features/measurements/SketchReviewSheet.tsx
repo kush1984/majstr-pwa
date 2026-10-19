@@ -41,7 +41,7 @@ interface RoomDraft {
   items: ItemDraft[];
 }
 
-type Step = 'source' | 'parsing' | 'review';
+type Step = 'source' | 'parsing' | 'review' | 'printedPlan';
 
 /**
  * Recognise a hand-drawn room sketch into measurements (PRO). Camera/upload → Claude vision →
@@ -54,6 +54,8 @@ export function SketchReviewSheet({
   onClose,
   objectId,
   onPrintedPlan,
+  onAddRoomManually,
+  onUpgradeRequired,
 }: {
   open: boolean;
   onClose: () => void;
@@ -63,7 +65,14 @@ export function SketchReviewSheet({
    * reviewing them: the import flow reconciles printed areas against gabarits, merges sheets and
    * guarantees each room its walls, and none of that exists here.
    */
-  onPrintedPlan: (files: File[]) => void;
+  onPrintedPlan?: (files: File[]) => void;
+  /**
+   * While project import is off there is nowhere to hand a printed plan to, so the sheet says what
+   * it reads (sketches by hand) and offers the two ways on: another photo, or the room by hand.
+   */
+  onAddRoomManually?: () => void;
+  /** The server answered 403 UPGRADE_REQUIRED (a FREE account): the PRO teaser, not an error. */
+  onUpgradeRequired?: () => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -161,10 +170,14 @@ export function SketchReviewSheet({
       if (res.sheetKind === 'PRINTED_PLAN') {
         // Hand over, don't review. The recogniser stopped after naming the sheet, so `rooms` is
         // empty by design — showing it would be the «нічого не прочитало» screen over a plan that
-        // reads perfectly well on the other conveyor.
-        toast.info(t('sketch.handedToImport'));
-        reset();
-        onPrintedPlan(files);
+        // reads perfectly well on the other conveyor. With that conveyor switched off, say so.
+        if (onPrintedPlan) {
+          toast.info(t('sketch.handedToImport'));
+          reset();
+          onPrintedPlan(files);
+        } else {
+          setStep('printedPlan');
+        }
         return;
       }
       setRooms(buildDrafts(res));
@@ -172,8 +185,14 @@ export function SketchReviewSheet({
       setUnit(res.unitGuess === 'MM' ? 'MM' : res.unitGuess === 'CM' ? 'CM' : 'M');
       setStep('review');
     } catch (err) {
-      toast.error(toAppError(err).message);
+      const e = toAppError(err);
       reset();
+      if (e.code === 'UPGRADE_REQUIRED' && onUpgradeRequired) {
+        onClose();
+        onUpgradeRequired();
+      } else {
+        toast.error(e.message);
+      }
     }
   };
 
@@ -264,6 +283,18 @@ export function SketchReviewSheet({
               onChange={(e) => { void onPick(e.target.files); e.target.value = ''; }} />
             <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
               onChange={(e) => { void onPick(e.target.files); e.target.value = ''; }} />
+          </div>
+        )}
+
+        {step === 'printedPlan' && (
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-primary">{t('sketch.printedPlanOnly')}</p>
+            <Button fullWidth onClick={reset}>{t('sketch.otherPhoto')}</Button>
+            {onAddRoomManually && (
+              <Button fullWidth variant="secondary" onClick={() => { close(); onAddRoomManually(); }}>
+                {t('sketch.addRoomManually')}
+              </Button>
+            )}
           </div>
         )}
 

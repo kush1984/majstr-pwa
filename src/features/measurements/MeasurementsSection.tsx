@@ -11,6 +11,8 @@ import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
+import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { upgradeApi } from '@/api/upgrade.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
@@ -36,11 +38,13 @@ const fmtNum = (n: number): string => n.toLocaleString('uk-UA', { maximumFractio
 const ELECTRICAL_MEASUREMENTS_ENABLED: boolean = false;
 
 /**
- * «Розпізнати план чи ескіз» and «Імпорт проєкту» both call the vision LLM to read a photo/PDF —
- * hidden for now to cut AI spend. All the code (SketchReviewSheet, ProjectImportSheet, the backend
- * endpoints) stays intact; flip this to `true` to bring both entry points back.
+ * Both call the vision LLM, and they are switched apart: «Розпізнати ескіз» (a hand sketch, the
+ * cheap one-photo flow) is ON; «Імпорт проєкту» (a designer's folder) stays hidden to cut AI spend.
+ * All the code (ProjectImportSheet, the backend endpoints) stays intact. While import is off, a
+ * printed plan photographed as a sketch is answered with a message, not handed over.
  */
-const AI_MEASUREMENT_IMPORT_ENABLED: boolean = false;
+const SKETCH_IMPORT_ENABLED: boolean = true;
+const PROJECT_IMPORT_ENABLED: boolean = false;
 
 /** Area/room element types (площі) vs electrical ones. Electrical lives in its own block. */
 const AREA_TYPES: MeasurementType[] = ['SURFACE', 'PARTITION', 'LINEAR'];
@@ -102,6 +106,26 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
+  // Sketch recognition stays PRO even while FREE gets Заміри (it calls the LLM; the server gates it
+  // on Feature.SKETCH_IMPORT): FREE sees the button with a PRO badge, and it opens the teaser.
+  const sketchAllowed = (me?.plan ?? 'FREE') !== 'FREE';
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const openSketch = () => {
+    if (sketchAllowed) {
+      setSketchOpen(true);
+    } else {
+      void upgradeApi.click('SKETCH_IMPORT');
+      setUpgradeOpen(true);
+    }
+  };
+  const sketchLabel = (
+    <>
+      {t('sketch.button')}
+      {!sketchAllowed && (
+        <span className="ml-1.5 rounded bg-brand-soft px-1.5 py-0.5 text-[10px] font-bold text-brand">PRO</span>
+      )}
+    </>
+  );
   const hasElectrical = ELECTRICAL_MEASUREMENTS_ENABLED && (me?.trades ?? []).includes('ELECTRICAL');
 
   const online = useOnline();
@@ -306,16 +330,20 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
           </button>
         </div>
 
-        {AI_MEASUREMENT_IMPORT_ENABLED && (
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setSketchOpen(true)}
-              className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
-              {t('sketch.button')}
-            </button>
-            <button type="button" onClick={() => setImportOpen(true)}
-              className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
-              {t('projectImport.button')}
-            </button>
+        {(SKETCH_IMPORT_ENABLED || PROJECT_IMPORT_ENABLED) && (
+          <div className={SKETCH_IMPORT_ENABLED && PROJECT_IMPORT_ENABLED ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+            {SKETCH_IMPORT_ENABLED && (
+              <button type="button" onClick={openSketch}
+                className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
+                {sketchLabel}
+              </button>
+            )}
+            {PROJECT_IMPORT_ENABLED && (
+              <button type="button" onClick={() => setImportOpen(true)}
+                className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand">
+                {t('projectImport.button')}
+              </button>
+            )}
           </div>
         )}
 
@@ -334,8 +362,8 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
                 text={t('measure.emptyText')}
                 action={
                   <div className="flex flex-col gap-2">
-                    {AI_MEASUREMENT_IMPORT_ENABLED && (
-                      <Button onClick={() => setSketchOpen(true)}>{t('sketch.button')}</Button>
+                    {SKETCH_IMPORT_ENABLED && (
+                      <Button onClick={openSketch}>{sketchLabel}</Button>
                     )}
                     <Button variant="secondary" onClick={() => setRoomModalOpen(true)}>{t('measure.addRoom')}</Button>
                   </div>
@@ -606,15 +634,18 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
         open={sketchOpen}
         onClose={() => setSketchOpen(false)}
         objectId={objectId}
-        // A printed plan photographed under «Розпізнати план чи ескіз» is not reviewed there — it
-        // moves to the import conveyor, the only place that reconciles printed areas against
-        // gabarits, merges several sheets and guarantees every room its four walls.
-        onPrintedPlan={(files) => {
+        // A printed plan photographed as a sketch is not reviewed there — it moves to the import
+        // conveyor, the only place that reconciles printed areas against gabarits, merges several
+        // sheets and guarantees every room its four walls. With import off, the sheet says so.
+        onPrintedPlan={PROJECT_IMPORT_ENABLED ? (files) => {
           setSketchOpen(false);
           setHandedFiles(files);
           setImportOpen(true);
-        }}
+        } : undefined}
+        onAddRoomManually={() => setRoomModalOpen(true)}
+        onUpgradeRequired={() => setUpgradeOpen(true)}
       />
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
 
       <ProjectImportSheet
         open={importOpen}
