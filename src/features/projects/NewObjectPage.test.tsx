@@ -50,7 +50,7 @@ describe('NewObjectPage', () => {
     const { container } = renderPage();
     fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Хата' } });
     fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Створити обʼєкт' }));
 
     await waitFor(() =>
       expect(projectsApi.create).toHaveBeenCalledWith(
@@ -58,7 +58,7 @@ describe('NewObjectPage', () => {
       ),
     );
     expect(clientsApi.create).not.toHaveBeenCalled();
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/projects/p9', { replace: true }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/projects/p9', { replace: true, state: { justCreated: true } }));
   });
 
   it('creates a NEW client inline when chosen, then the object', async () => {
@@ -71,10 +71,11 @@ describe('NewObjectPage', () => {
     const { container } = renderPage();
     fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Хата' } });
     fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
+    fireEvent.click(screen.getByRole('button', { name: /Клієнт — необов/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Новий' }));
     fireEvent.change(container.querySelector('#cp-name')!, { target: { value: 'Олег' } });
     fireEvent.change(container.querySelector('#cp-phone')!, { target: { value: '0991112233' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Створити' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Створити обʼєкт' }));
 
     await waitFor(() => expect(clientsApi.create).toHaveBeenCalled());
     await waitFor(() =>
@@ -82,5 +83,16 @@ describe('NewObjectPage', () => {
         { name: 'Хата', address: 'вул. 1', clientId: 'c5' }, expect.any(String),
       ),
     );
+  });
+});
+
+describe('NewObjectPage — the one creation form (object-first)', () => {
+  it('asks for the object only: no estimate name, no estimate kind; the client is a folded row', () => {
+    renderPage();
+
+    expect(screen.queryByText(/Назва кошторису/)).toBeNull();
+    expect(screen.queryByText('З шаблону')).toBeNull();
+    expect(screen.getByRole('button', { name: /Клієнт — необов/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Створити обʼєкт' })).toBeTruthy();
   });
 });

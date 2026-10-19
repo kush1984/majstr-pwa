@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { toast } from '@/hooks/useToast.ts';
 import '@/lib/i18n.ts';
 import { PhotosSection } from './PhotosSection.tsx';
 import { downscaleImage } from '@/lib/image.ts';
@@ -72,7 +73,8 @@ describe('PhotosSection — folders', () => {
     expect(screen.getByText('Інше')).toBeTruthy();
     // The whole point of the rework: the list level shows folders, never photo tiles.
     expect(screen.queryAllByRole('img')).toHaveLength(0);
-    expect(document.querySelectorAll('input[type="file"]')).toHaveLength(0);
+    // Only the «＋»'s own picker (object-first: a photo from the list goes into «Інше»).
+    expect(document.querySelectorAll('input[type="file"]:not([data-testid="photo-fab-input"])')).toHaveLength(0);
     // Counts are per folder, so the master can see where things went without opening each one.
     expect(screen.getAllByText('1 фото')).toHaveLength(2);
   });
@@ -237,5 +239,37 @@ describe('PhotosSection — uploading', () => {
 
     openFolder('Чеки');
     expect(screen.getByRole('button', { name: /Показати клієнту/ })).toBeTruthy();
+  });
+});
+
+describe('PhotosSection — the «＋» (object-first)', () => {
+  it('on the folder list, a photo goes to «Інше», said so with a way to re-file it', async () => {
+    const file = new File([new Uint8Array(1)], 'wall.jpg', { type: 'image/jpeg' });
+    vi.mocked(downscaleImage).mockResolvedValue(file);
+    const success = vi.spyOn(toast, 'success');
+    uploadMutate.mockImplementation((_vars, opts: { onSuccess: (p: unknown) => void }) => opts.onSuccess(photo({ id: 'new' })));
+    render(<PhotosSection projectId="p1" />);
+
+    fireEvent.change(document.querySelector<HTMLInputElement>('[data-testid="photo-fab-input"]')!,
+      { target: { files: [file] } });
+
+    await waitFor(() => expect(uploadMutate).toHaveBeenCalled());
+    expect(uploadMutate.mock.calls[0][0]).toEqual({ file, source: 'MANUAL', folder: null });
+    expect(success).toHaveBeenCalledWith('Додано в «Інше»', expect.objectContaining({
+      action: expect.objectContaining({ label: 'Перемістити в папку' }),
+    }));
+    success.mockRestore();
+    uploadMutate.mockReset();
+  });
+
+  it("inside a folder, it is that folder's own picker — a «Чеки» upload stays a receipt", async () => {
+    render(<PhotosSection projectId="p1" />);
+    openFolder('Чеки');
+    const gallery = document.querySelector<HTMLInputElement>('input[type="file"]:not([capture])')!;
+    const click = vi.spyOn(gallery, 'click').mockImplementation(() => {});
+
+    fireEvent.click(screen.getByRole('button', { name: 'Нове фото' }));
+
+    expect(click).toHaveBeenCalledOnce();
   });
 });

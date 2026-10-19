@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
@@ -67,7 +67,8 @@ function renderPage(list: ProjectResponse[], route = '/projects') {
   return { ...view, setList };
 }
 
-const fab = () => screen.queryByRole('button', { name: 'Налаштування списку' });
+/** The archive switch — a chip in the filter row now, no longer behind the FAB (objects-list). */
+const archiveChip = () => screen.queryByRole('button', { name: /^Архів · / });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,28 +77,28 @@ beforeEach(() => {
 });
 
 describe('ProjectsPage — the archived reveal follows the data', () => {
-  it('offers the FAB while a terminal object exists', async () => {
+  it('offers the archive chip while a terminal object exists', async () => {
     renderPage([LIVE, DONE]);
-    await waitFor(() => expect(fab()).not.toBeNull());
+    await waitFor(() => expect(archiveChip()).not.toBeNull());
   });
 
-  it('drops the FAB when the last archived object is deleted', async () => {
+  it('drops the archive chip when the last archived object is deleted', async () => {
     const { setList } = renderPage([LIVE, DONE]);
-    await waitFor(() => expect(fab()).not.toBeNull());
+    await waitFor(() => expect(archiveChip()).not.toBeNull());
 
     await setList([LIVE]);
 
-    await waitFor(() => expect(fab()).toBeNull());
+    await waitFor(() => expect(archiveChip()).toBeNull());
   });
 
-  it('drops the FAB even when the reveal is currently ON — the old `|| showArchived` kept it', async () => {
+  it('drops the archive chip even when the reveal is currently ON — the old `|| showArchived` kept it', async () => {
     localStorage.setItem('majstr-projects-show-archived', '1');
     const { setList } = renderPage([LIVE, DONE]);
     await waitFor(() => expect(screen.queryByText('Завершені · 1')).not.toBeNull());
 
     await setList([LIVE]);
 
-    await waitFor(() => expect(fab()).toBeNull());
+    await waitFor(() => expect(archiveChip()).toBeNull());
     expect(screen.queryByText(/Завершені/)).toBeNull();
     expect(screen.queryByText(/Скасовані/)).toBeNull();
   });
@@ -129,5 +130,53 @@ describe('ProjectsPage — the archived reveal follows the data', () => {
     expect(location).toBe('/projects?stage=COMPLETED');
     await waitFor(() => expect(screen.queryByText('Обʼєкт p2')).not.toBeNull());
     expect(location).toBe('/projects?stage=COMPLETED');
+  });
+});
+
+/**
+ * A master whose objects are all closed out used to land on «Усі · 0 — Нічого не знайдено» with no
+ * way to start a new one: the «＋» opened the archive switch (objects-list).
+ */
+describe('ProjectsPage — never a dead end', () => {
+  it('everything archived and hidden: the create buttons, and «Показати архів (N)»', async () => {
+    renderPage([DONE, project('p3', 'CANCELLED')]);
+
+    // The empty state's own button (besides the header's and the «＋»).
+    expect(await screen.findByText('Активних обʼєктів немає')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: "Новий об'єкт" }).length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText('Нічого не знайдено')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Показати архів (2)' }));
+
+    await waitFor(() => expect(screen.queryByText('Обʼєкт p2')).not.toBeNull());
+    expect(localStorage.getItem('majstr-projects-show-archived')).toBe('1');
+  });
+
+  it('a narrow filter with nothing in it still offers to create', async () => {
+    renderPage([LIVE], '/projects?stage=ASSESSMENT');
+
+    expect(await screen.findByText('Нічого не знайдено')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: "Новий об'єкт" }).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the «＋» creates an OBJECT — a direct action, no menu (object-first)', async () => {
+    renderPage([LIVE, DONE]);
+    await screen.findByText('Обʼєкт p1');
+
+    const fabButtons = screen.getAllByRole('button', { name: "Новий об'єкт" });
+    const fab = fabButtons[fabButtons.length - 1];
+    expect(fab.getAttribute('aria-expanded')).toBeNull();
+    fireEvent.click(fab);
+
+    await waitFor(() => expect(location).toBe('/projects/new'));
+  });
+
+  it('the archive chip shows the completed and cancelled objects', async () => {
+    renderPage([LIVE, DONE]);
+    await waitFor(() => expect(archiveChip()).not.toBeNull());
+    expect(screen.queryByText('Обʼєкт p2')).toBeNull();
+
+    fireEvent.click(archiveChip()!);
+
+    await waitFor(() => expect(screen.queryByText('Обʼєкт p2')).not.toBeNull());
   });
 });

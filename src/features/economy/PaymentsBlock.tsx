@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { Input } from '@/components/Input.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
@@ -1287,6 +1288,10 @@ export function PaymentsBlock({
         onEditStage={openEdit}
         onEditReceipt={setEditingReceipt}
       />
+
+      {/* «＋» is the economy tab's own action (object-first). It lives with the card, so a plan
+          without the card has no «＋» either. */}
+      <Fab ariaLabel={t('economy.addPayment')} onClick={() => setAddChoiceOpen(true)} />
 
       <AddPaymentChoiceModal
         open={addChoiceOpen}

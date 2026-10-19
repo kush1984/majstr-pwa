@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { Chip } from '@/components/Chip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Button } from '@/components/Button.tsx';
-import { Fab, FabAction } from '@/components/Fab.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
+import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import type { ObjectStage, ProjectResponse } from '@/api/types.ts';
 import { useProjects, isTerminalStage } from './useProjects.ts';
@@ -20,9 +21,10 @@ import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
  * a mix of the project's own status and the latest estimate's.
  *
  * <p>Terminal objects (COMPLETED/CANCELLED — {@link isTerminalStage}) are HIDDEN by default: a
- * finished or cancelled object is clutter on the day-to-day list. The FAB toggles them back in
- * (`showArchived`), which also surfaces their two dedicated chips. When hidden, "Усі" counts and
- * shows only live objects.</p>
+ * finished or cancelled object is clutter on the day-to-day list. The «Архів · N» chip toggles them
+ * back in (`showArchived`), which also surfaces their two dedicated chips. When hidden, "Усі" counts
+ * and shows only live objects. The FAB is «create», nothing else: a «＋» that opened the archive
+ * switch left a master whose objects were all closed with no visible way to start a new one.</p>
  */
 type Filter = 'ALL' | ObjectStage;
 
@@ -122,17 +124,21 @@ export function ProjectsPage() {
 
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { stage: f }, { replace: true });
-  // Combined flow (object + first estimate) vs. object-only. Both consume the
-  // FREE object quota, so both are gated the same way.
-  const newCombined = () => {
-    if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
-    void navigate(routes.newEstimate);
-  };
+  // ONE creation action (object-first): the estimate is made inside the object.
   const newObject = () => {
     if (atProjectLimit) return;
     void navigate(routes.newObject);
   };
   const limitTooltip = atProjectLimit ? t('limits.atLimitTooltip') : undefined;
+  const archivedCount = counts.COMPLETED + counts.CANCELLED;
+  // A FAB has no disabled look of its own, so at the cap it says why instead of doing nothing.
+  const onFab = () => {
+    if (atProjectLimit) toast.info(t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed }));
+    else newObject();
+  };
+  const createActions = (
+    <Button onClick={newObject} disabled={atProjectLimit} title={limitTooltip}>{t('common.newObject')}</Button>
+  );
 
   return (
     <>
@@ -141,16 +147,8 @@ export function ProjectsPage() {
           {t('projects.title')}
         </h1>
         <div className="hidden gap-2 sm:flex">
-          <Button
-            variant="secondary"
-            onClick={newObject}
-            disabled={atProjectLimit}
-            title={limitTooltip}
-          >
+          <Button onClick={newObject} disabled={atProjectLimit} title={limitTooltip}>
             {t('common.newObject')}
-          </Button>
-          <Button onClick={newCombined} disabled={atProjectLimit} title={limitTooltip}>
-            {t('common.addEstimate')}
           </Button>
         </div>
       </div>
@@ -160,12 +158,18 @@ export function ProjectsPage() {
       )}
 
       <div className="mb-4 flex items-center gap-2">
-        <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
+        <div className="scrollbar-none flex flex-1 gap-2 overflow-x-auto pb-1">
           {filters.map((f) => (
             <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
               {t(f.labelKey)} · {counts[f.value]}
             </Chip>
           ))}
+          {/* The archive is a chip, not a FAB menu (objects-list): visible where the filters are. */}
+          {hasArchived && (
+            <Chip active={archivedVisible} onClick={toggleArchived}>
+              {t('projects.archiveChip')} · {archivedCount}
+            </Chip>
+          )}
         </div>
         <InfoPopover text={t('projects.stageLegend')} label={t('projects.stageLegendLabel')} />
       </div>
@@ -185,17 +189,24 @@ export function ProjectsPage() {
           text={t('projects.loadErrorText')}
           action={<Button onClick={() => void refetch()}>{t('common.retry')}</Button>}
         />
-      ) : all.length === 0 ? (
+      ) : all.length === 0 || (shown.length === 0 && filter === 'ALL') ? (
+        // No objects at all — or every one is closed out and hidden: the same way in either way. «Нічого
+        // не знайдено» here was a dead end, the archive hidden behind the «＋».
         <EmptyState
           icon="📁"
-          title={t('projects.emptyTitle')}
+          title={t(all.length === 0 ? 'projects.emptyTitle' : 'projects.noLiveTitle')}
           text={t('projects.emptyText')}
           action={
-            <div className="flex flex-col items-center gap-2">
-              <Button onClick={newCombined}>{t('common.addEstimate')}</Button>
-              <Button variant="secondary" onClick={newObject}>
-                {t('common.newObject')}
-              </Button>
+            <div className="flex flex-col items-center gap-3">
+              {createActions}
+              {hasArchived && (
+                <p className="text-xs text-muted">
+                  {t('projects.archivedHint')}{' '}
+                  <button type="button" onClick={toggleArchived} className="font-semibold text-brand underline">
+                    {t('projects.showArchiveCount', { n: archivedCount })}
+                  </button>
+                </p>
+              )}
             </div>
           }
         />
@@ -204,6 +215,7 @@ export function ProjectsPage() {
           icon="🔍"
           title={t('projects.noneFoundTitle')}
           text={t('projects.noneFoundText')}
+          action={createActions}
         />
       ) : (
         <>
@@ -212,23 +224,13 @@ export function ProjectsPage() {
               <ProjectCard key={p.id} project={p} />
             ))}
           </div>
-          <div className="mt-5 flex flex-col gap-2 sm:hidden">
+          <div className="mt-5 sm:hidden">
             <Button
-              onClick={newCombined}
-              disabled={atProjectLimit}
-              title={limitTooltip}
-              fullWidth
-              className="py-3.5 shadow-cta"
-            >
-              {t('common.addEstimate')}
-            </Button>
-            <Button
-              variant="secondary"
               onClick={newObject}
               disabled={atProjectLimit}
               title={limitTooltip}
               fullWidth
-              className="py-3.5"
+              className="py-3.5 shadow-cta"
             >
               {t('common.newObject')}
             </Button>
@@ -236,22 +238,8 @@ export function ProjectsPage() {
         </>
       )}
 
-      {/* View settings live behind the FAB so the toolbar stays clean. Shown only when archived
-          objects actually exist — `hasArchived` counts the FULL list, so it is already true while
-          they are revealed. (It used to be `hasArchived || showArchived`, and that second branch was
-          reachable ONLY with zero archived objects: after deleting the last one the FAB stayed on
-          screen offering to hide what was no longer there.) */}
-      {hasArchived && (
-        <Fab ariaLabel={t('projects.viewSettings')}>
-          {(close) => (
-            <FabAction
-              icon={showArchived ? '🙈' : '🗄'}
-              label={showArchived ? t('projects.hideArchived') : t('projects.showArchived')}
-              onClick={() => close(toggleArchived)}
-            />
-          )}
-        </Fab>
-      )}
+      {/* «＋» creates (objects-list, object-first) — a direct action, no menu. */}
+      <Fab ariaLabel={t('common.newObject')} onClick={onFab} />
     </>
   );
 }

@@ -27,18 +27,21 @@ test('повний сценарій підрядника: реєстрація �
   // 2 — Dashboard (new user → teaching empty state)
   await expect(page).toHaveURL('http://localhost:5173/');
   await expect(page.getByText('Е2Е', { exact: false }).first()).toBeVisible();
-  const startCta = page.getByRole('button', { name: 'Створити перший кошторис' });
+  const startCta = page.getByRole('button', { name: "Новий об'єкт" }).first();
   await expect(startCta).toBeVisible();
 
-  // 3 — New-estimate flow with inline client + object creation
+  // 3 — Object-first: the object (inline client) on its own form, then the estimate inside it
   await startCta.click();
-  await expect(page).toHaveURL(/\/new$/);
-  await page.getByRole('button', { name: '+ Новий клієнт' }).click();
-  await page.fill('#nc-name', 'Олена Е2Е');
-  await page.fill('#nc-phone', '+380671234567');
+  await expect(page).toHaveURL(/\/projects\/new$/);
   await page.fill('#pr-name', 'Ванна Е2Е');
   await page.fill('#pr-addr', 'вул. Тестова 1');
-  await page.getByRole('button', { name: 'Створити кошторис' }).click();
+  await page.getByRole('button', { name: /Клієнт — необов/ }).click();
+  await page.getByRole('button', { name: 'Новий', exact: true }).click();
+  await page.fill('#cp-name', 'Олена Е2Е');
+  await page.fill('#cp-phone', '+380671234567');
+  await page.getByRole('button', { name: 'Створити обʼєкт' }).click();
+  await expect(page.getByText('Обʼєкт створено. Що далі?')).toBeVisible();
+  await page.getByRole('button', { name: 'Порожній кошторис' }).click();
 
   // 4 — Editor opens on the freshly created estimate
   await expect(page).toHaveURL(/\/estimates\//);

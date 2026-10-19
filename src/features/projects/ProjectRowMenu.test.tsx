@@ -196,3 +196,23 @@ describe('ProjectRowMenu — permanent delete', () => {
     await waitFor(() => expect(projectsApi.remove).toHaveBeenCalledWith('p1'));
   });
 });
+
+describe('ProjectRowMenu — a delete the server refuses (objects-list)', () => {
+  it('409 PROJECT_HAS_SIGNED_MONEY explains instead of a red error, with one «Зрозуміло»', async () => {
+    vi.mocked(projectsApi.remove).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { status: 409, code: 'PROJECT_HAS_SIGNED_MONEY', message: 'закриті місяці' } },
+    });
+    renderMenu(project({ status: 'COMPLETED', stage: 'COMPLETED' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Дії/ }));
+    fireEvent.click(await screen.findByText('Видалити обʼєкт'));
+    const dialog = await screen.findByRole('dialog', { name: 'Видалити обʼєкт назавжди?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Видалити обʼєкт' }));
+
+    expect(await screen.findByText('Цей обʼєкт не можна видалити')).toBeTruthy();
+    expect(toast.error).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Зрозуміло' }));
+    await waitFor(() => expect(screen.queryByText('Цей обʼєкт не можна видалити')).toBeNull());
+  });
+});

@@ -199,3 +199,13 @@
     opacity: 1;
   }
 }
+
+/* A row of chips scrolls sideways; its scrollbar is noise under it (objects-list). */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -21,9 +21,11 @@ import { useCreateProject, useProjects } from '@/features/projects/useProjects.t
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
- * "Object only" flow: create a project (optionally with a client) without an
- * estimate, then open it. Estimates are added later from the object screen.
- * Same FREE object cap as the combined flow.
+ * THE way to start (object-first): an object is the container — name, address, client — and the
+ * estimate is made INSIDE it. On success the object screen opens with «Що далі?» already up
+ * (`state.justCreated`), which is where the estimate's kind (template / empty / file) is chosen.
+ * The old combined form («Новий кошторис» making object, client and estimate at once) is gone, and
+ * `/new` redirects here.
  */
 export function NewObjectPage() {
   const navigate = useNavigate();
@@ -38,6 +40,9 @@ export function NewObjectPage() {
   const [clientDraft, setClientDraft] = useSessionDraft<ClientDraft>('newObject.client', emptyClientDraft);
   const [project, setProject] = useSessionDraft('newObject.project', { name: '', address: '' });
   const [busy, setBusy] = useState(false);
+  // The client is optional, so it is ONE folded row until asked for; open from the start once a
+  // client is already in the draft.
+  const [clientOpen, setClientOpen] = useState(false);
   const createdClient = useRef<{ id: string | undefined } | undefined>(undefined);
 
   const submit = async () => {
@@ -66,7 +71,7 @@ export function NewObjectPage() {
         clientId: createdClient.current.id,
       });
       clearSessionDrafts('newObject.');
-      void navigate(routes.project(proj.id), { replace: true });
+      void navigate(routes.project(proj.id), { replace: true, state: { justCreated: true } });
     } catch (err) {
       toast.error(toAppError(err).message);
       setBusy(false);
@@ -116,10 +121,23 @@ export function NewObjectPage() {
 
         {/* Client — optional; can be added later, before sending an estimate. */}
         <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
-            {t('estimate.client')}
-          </h2>
-          <ClientPicker value={clientDraft} onChange={setClientDraft} />
+          {clientOpen || clientDraft.mode !== 'none' ? (
+            <>
+              <h2 className="mb-2 text-[13px] font-bold uppercase tracking-wide text-primary">
+                {t('estimate.client')}
+              </h2>
+              <ClientPicker value={clientDraft} onChange={setClientDraft} />
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setClientOpen(true)}
+              className="flex min-h-[48px] w-full items-center justify-between rounded-card border border-border bg-surface px-3.5 text-left text-sm font-semibold text-primary"
+            >
+              {t('estimate.clientOptional')}
+              <span aria-hidden="true" className="text-muted">›</span>
+            </button>
+          )}
         </section>
 
         {atProjectLimit && (
@@ -132,7 +150,7 @@ export function NewObjectPage() {
           onClick={submit}
           className="py-4 text-base shadow-cta"
         >
-          {t('estimate.createEstimate')}
+          {t('projects.createObject')}
         </Button>
       </div>
     </div>

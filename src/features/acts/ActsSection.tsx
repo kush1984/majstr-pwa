@@ -10,6 +10,7 @@ import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { toast } from '@/hooks/useToast.ts';
+import { Fab } from '@/components/Fab.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
 import { openPdfTab } from '@/lib/openPdfTab.ts';
@@ -52,9 +53,16 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
 
   const list = acts.data ?? [];
   const block = actCreateBlock(list);
+  // The «＋» (object-first) starts an act under the SAME conditions as the button, and says why not.
+  const onFab = () => {
+    if (block) toast.info(t(block === 'open' ? 'acts.blockedOpen' : 'acts.blockedFinal'));
+    else if (!online) toast.info(t('acts.newActNeedsConnection'));
+    else newAct.start(list);
+  };
 
   return (
     <div className="space-y-3">
+      <Fab ariaLabel={t('acts.newAct')} onClick={onFab} />
       {/* Create entry — disabled with a reason when the model won't allow another act. */}
       <div>
         <button

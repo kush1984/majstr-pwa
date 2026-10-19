@@ -127,3 +127,14 @@ describe('MeasurementsSection — площі vs ⚡ Електрика', () => {
     ));
   });
 });
+
+describe('MeasurementsSection — the «＋» (object-first)', () => {
+  it('is «+ Кімната»: it opens the new-room dialog', async () => {
+    renderSection(['DRYWALL']);
+    await screen.findAllByText('+ Кімната');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Кімната' }).find((b) => b.className.includes('rounded-full'))!);
+
+    expect(await screen.findByRole('dialog', { name: '+ Кімната' })).toBeTruthy();
+  });
+});

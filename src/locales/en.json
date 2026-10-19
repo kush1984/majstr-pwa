@@ -1,5 +1,6 @@
 {
   "common": {
+    "gotIt": "Got it",
     "discardChangesTitle": "Discard changes?",
     "keepEditing": "Keep editing",
     "discardChanges": "Discard changes",
@@ -361,19 +362,25 @@
     "metricPendingHint": "objects awaiting signature",
     "metricCompleted": "Completed (mo)",
     "metricCompletedHint": "totalling {{amount}}",
-    "createFirstTitle": "Create your first estimate",
-    "createFirstText": "Add an object, a client and items — in a few minutes you'll have a ready estimate for the client.",
-    "createFirstAction": "New estimate",
+    "createFirstTitle": "Create your first project",
+    "createFirstText": "A project is a name, an address and a client. Estimates, measurements, photos and acts go inside it.",
+    "createFirstAction": "New object",
     "recentProjects": "Recent active objects",
     "quickActions": "Quick actions",
-    "quickNewEstimate": "New estimate",
-    "quickNewEstimateSub": "For a new client",
     "quickAddCatalog": "Add to catalog",
     "quickAddCatalogSub": "Work or material",
     "quickAllProjects": "All objects",
-    "quickAllProjectsSub": "View the list"
+    "quickAllProjectsSub": "View the list",
+    "quickNewObject": "New object",
+    "quickNewObjectSub": "The estimate goes inside"
   },
   "projects": {
+    "noLiveTitle": "No active projects",
+    "archiveChip": "Archive",
+    "archivedHint": "Completed and cancelled projects are in the archive.",
+    "showArchiveCount": "Show archive ({{n}})",
+    "cannotDeleteTitle": "This project cannot be deleted",
+    "cannotDeleteText": "The client signed documents or payments are recorded on it — they have to be kept. The project stays in the archive with its documents and money; it is not shown in the main list.",
     "title": "Objects",
     "filterAll": "All",
     "filterAssessment": "Draft",
@@ -385,7 +392,7 @@
     "loadErrorTitle": "Couldn't load objects",
     "loadErrorText": "Check your connection and try again.",
     "emptyTitle": "No objects yet",
-    "emptyText": "Tap «New estimate» — the object and client are filled in right there.",
+    "emptyText": "Create your first project — and the estimate inside it.",
     "noneFoundTitle": "Nothing found",
     "noneFoundText": "This filter is empty for now.",
     "detailLabel": "Object",
@@ -402,7 +409,6 @@
     "clientPortalLink": "Link to the portal",
     "estimatesCount": "Estimates · {{count}}",
     "signedMovedToEconomyHint": "Signed estimates move to the \"Object economy\" tab",
-    "addNew": "+ New",
     "noEstimatesTitle": "No estimates yet",
     "noEstimatesText": "Create the first estimate for this object.",
     "createEstimateFirst": "Create an estimate first",
@@ -423,13 +429,17 @@
       "restore": "Restore this object?"
     },
     "filterCancelled": "Cancelled",
-    "showArchived": "Show completed/cancelled",
-    "hideArchived": "Hide completed/cancelled",
-    "viewSettings": "List settings",
     "deleteObject": "Delete object",
     "deleteObjectTitle": "Delete object forever?",
     "deleteObjectConfirm": "The object and ALL its data — estimates, measurements, acts, photos, payments — will be deleted forever. This cannot be undone.",
-    "deleteObjectDone": "Object deleted"
+    "deleteObjectDone": "Object deleted",
+    "createObject": "Create project",
+    "createEstimate": "Create estimate",
+    "nextTitleCreated": "Project created. What next?",
+    "nextFromTemplate": "Estimate from a template",
+    "nextEmpty": "Empty estimate",
+    "nextFromFile": "From a file or photo",
+    "nextLater": "Later"
   },
   "estimate": {
     "shareNative": "📤 Share (Viber, Telegram, SMS)",
@@ -795,7 +805,9 @@
     "folderOther": "Other",
     "currentFolder": "current",
     "moveToNew": "To new",
-    "folderCount": "{{n}} photo(s)"
+    "folderCount": "{{n}} photo(s)",
+    "addedToOther": "Added to «Other»",
+    "addPhotoFab": "New photo"
   },
   "acts": {
     "shareText": "Work acceptance act to confirm:",
@@ -1686,9 +1698,7 @@
     "unsavedTitle": "Save changes?",
     "unsavedMessage": "This template has unsaved changes. Save them, or close without saving?",
     "discard": "Don't save",
-    "removeItem": "Remove position",
-    "pickCount": "Choose ({{count}})",
-    "chosenCount": "Templates: {{count}}"
+    "removeItem": "Remove position"
   },
   "profile": {
     "title": "Profile",

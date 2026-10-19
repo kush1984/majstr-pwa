@@ -43,9 +43,10 @@ export function DashboardPage() {
   const recent = (projects.data ?? []).filter((p) => !isTerminalStage(p.stage)).slice(0, 4);
   const m = metrics.data;
 
-  const newEstimate = () => {
+  // ONE creation action (object-first): the object, and the estimate inside it.
+  const newObject = () => {
     if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
-    void navigate(routes.newEstimate);
+    void navigate(routes.newObject);
   };
 
   const isEmpty = projects.isSuccess && projects.data.length === 0;
@@ -90,11 +91,11 @@ export function DashboardPage() {
           </h1>
         </div>
         <Button
-          onClick={newEstimate}
+          onClick={newObject}
           disabled={atProjectLimit}
           className="hidden lg:inline-flex"
         >
-          {t('common.addEstimate')}
+          {t('common.newObject')}
         </Button>
       </div>
 
@@ -157,12 +158,12 @@ export function DashboardPage() {
 
       {/* Mobile CTA */}
       <Button
-        onClick={newEstimate}
+        onClick={newObject}
         disabled={atProjectLimit}
         fullWidth
         className="mb-6 py-4 text-base shadow-cta lg:hidden"
       >
-        {t('common.addEstimate')}
+        {t('common.newObject')}
       </Button>
 
       {/* One LINE, not a card: this screen is already long. The MONTH, not the week — a week here
@@ -178,7 +179,7 @@ export function DashboardPage() {
           icon="📋"
           title={t('dashboard.createFirstTitle')}
           text={t('dashboard.createFirstText')}
-          action={<Button onClick={newEstimate}>{t('dashboard.createFirstAction')}</Button>}
+          action={<Button onClick={newObject}>{t('dashboard.createFirstAction')}</Button>}
         />
       ) : (
         <div className="lg:grid lg:grid-cols-[1.6fr_1fr] lg:items-start lg:gap-5">
@@ -221,9 +222,9 @@ export function DashboardPage() {
             <div className="flex flex-col gap-2.5">
               <QuickAction
                 icon="📋"
-                title={t('dashboard.quickNewEstimate')}
-                sub={t('dashboard.quickNewEstimateSub')}
-                onClick={newEstimate}
+                title={t('dashboard.quickNewObject')}
+                sub={t('dashboard.quickNewObjectSub')}
+                onClick={newObject}
                 disabled={atProjectLimit}
               />
               <QuickAction

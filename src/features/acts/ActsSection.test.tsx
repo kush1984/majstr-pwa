@@ -7,6 +7,7 @@ import '@/lib/i18n.ts';
 import { ActsSection } from './ActsSection.tsx';
 import { actsApi } from '@/api/acts.ts';
 import type { WorkActResponse } from '@/api/types.ts';
+import { toast } from '@/hooks/useToast.ts';
 
 vi.mock('@/api/acts.ts', () => ({
   actsApi: { list: vi.fn(), create: vi.fn(), remove: vi.fn(), changeStatus: vi.fn() },
@@ -120,5 +121,29 @@ describe('ActsSection', () => {
 
     expect(await screen.findByText(/Акт № 3/)).toBeTruthy();
     expect(screen.getByText('Підписано')).toBeTruthy();
+  });
+});
+
+describe('ActsSection — the «＋» (object-first)', () => {
+  it('starts an act, exactly like the button', async () => {
+    vi.mocked(actsApi.list).mockResolvedValue([]);
+    renderSection();
+    await screen.findByText('+ Новий акт');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Новий акт/ }).find((b) => b.className.includes('rounded-full'))!);
+
+    await waitFor(() => expect(screen.getByTestId('loc').textContent).toMatch(/^\/acts\/new\?project=p1/));
+    expect(actsApi.create).not.toHaveBeenCalled();
+  });
+
+  it('with an open act it says why, and opens nothing', async () => {
+    vi.mocked(actsApi.list).mockResolvedValue([act({ status: 'SENT' })]);
+    renderSection();
+    await screen.findByText('+ Новий акт');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Новий акт/ }).find((b) => b.className.includes('rounded-full'))!);
+
+    expect(toast.info).toHaveBeenCalledWith('Спершу завершіть відкритий акт');
+    expect(screen.getByTestId('loc').textContent).toBe('/');
   });
 });

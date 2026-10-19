@@ -538,3 +538,14 @@ describe('PaymentsBlock — material coming back is not payment for work (B-65)'
     });
   });
 });
+
+describe('PaymentsBlock — the «＋» (object-first)', () => {
+  it('is «Новий платіж», the same choice as «+ Платіж»', () => {
+    renderBlock(summary());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Новий платіж' }));
+
+    expect(screen.getByText('Запланований')).toBeTruthy();
+    expect(screen.getByText('Вже отримано')).toBeTruthy();
+  });
+});

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom';
 import { LoginPage } from '@/features/auth/LoginPage.tsx';
 import { RegisterPage } from '@/features/auth/RegisterPage.tsx';
 import { LandingPage } from '@/features/landing/LandingPage.tsx';
@@ -11,7 +11,6 @@ import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { CatalogImportPage } from '@/features/catalog/CatalogImportPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
-import { NewEstimatePage } from '@/features/estimate/NewEstimatePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
 import { ActEditorPage } from '@/features/acts/ActEditorPage.tsx';
@@ -57,7 +56,8 @@ function HomeRoute() {
   );
 }
 
-export const router = createBrowserRouter([
+/** Exported for tests that check a route's element (e.g. the `/new` redirect). */
+export const appRoutes: RouteObject[] = [
   {
     path: routes.login,
     element: (
@@ -105,7 +105,9 @@ export const router = createBrowserRouter([
     // Full-screen surfaces (no nav chrome) — own back button, like the mockups.
     element: <ProtectedRoute />,
     children: [
-      { path: routes.newEstimate, element: <NewEstimatePage /> },
+      // The combined form is gone (object-first): old links, bookmarks and shortcuts land on the
+      // one creation form.
+      { path: routes.newEstimate, element: <Navigate to={routes.newObject} replace /> },
       // Static '/projects/new' ranks above the '/projects/:id' detail route.
       { path: routes.newObject, element: <NewObjectPage /> },
       // Static '/catalog/import' ranks above nothing dynamic, but keep it here as a
@@ -135,4 +137,6 @@ export const router = createBrowserRouter([
   },
   // Unknown route → home; ProtectedRoute bounces to /login if needed.
   { path: '*', element: <Navigate to={routes.home} replace /> },
-]);
+];
+
+export const router = createBrowserRouter(appRoutes);

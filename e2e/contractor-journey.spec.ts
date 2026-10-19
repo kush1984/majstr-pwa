@@ -40,7 +40,20 @@ async function registerMaster(page: Page, label: string): Promise<string> {
   return email;
 }
 
-/** Inline new-client + new-object → creates an estimate and opens the editor. */
+/**
+ * Object-first: the object (with an inline new client) is made on its own form, then «Що далі?»
+ * on the object makes the estimate inside it and opens the editor.
+ */
+async function fillNewObject(page: Page, client: string, phone: string, obj: string, addr: string): Promise<void> {
+  await page.goto('/projects/new');
+  await page.fill('#pr-name', obj);
+  await page.fill('#pr-addr', addr);
+  await page.getByRole('button', { name: /Клієнт — необов/ }).click();
+  await page.getByRole('button', { name: 'Новий', exact: true }).click();
+  await page.fill('#cp-name', client);
+  await page.fill('#cp-phone', phone);
+}
+
 async function createEstimate(
   page: Page,
   client: string,
@@ -48,14 +61,10 @@ async function createEstimate(
   obj: string,
   addr: string,
 ): Promise<void> {
-  await page.goto('/new');
-  await expect(page).toHaveURL(/\/new$/);
-  await page.getByRole('button', { name: '+ Новий клієнт' }).click();
-  await page.fill('#nc-name', client);
-  await page.fill('#nc-phone', phone);
-  await page.fill('#pr-name', obj);
-  await page.fill('#pr-addr', addr);
-  await page.getByRole('button', { name: 'Створити кошторис' }).click();
+  await fillNewObject(page, client, phone, obj, addr);
+  await page.getByRole('button', { name: 'Створити обʼєкт' }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/);
+  await page.getByRole('button', { name: 'Порожній кошторис' }).click();
 }
 
 /** Open the add-item sheet, switch to the manual tab, fill it, submit. */
@@ -176,15 +185,8 @@ test('FREE-ліміт: створення 3-го обʼєкта заблоков
   await createEstimate(page, 'Клієнт B', '+380670000002', "Об'єкт 2", 'вул. Друга 2');
   await expect(page).toHaveURL(/\/estimates\//);
 
-  // The 3rd hits the FREE limit: a friendly toast, and we stay on /new (no editor).
-  await page.goto('/new');
-  await page.getByRole('button', { name: '+ Новий клієнт' }).click();
-  await page.fill('#nc-name', 'Клієнт C');
-  await page.fill('#nc-phone', '+380670000003');
-  await page.fill('#pr-name', "Об'єкт 3");
-  await page.fill('#pr-addr', 'вул. Третя 3');
-  await page.getByRole('button', { name: 'Створити кошторис' }).click();
-
-  await expect(page.getByRole('status')).toBeVisible(); // friendly error toast
-  await expect(page).toHaveURL(/\/new$/); // not navigated into an editor
+  // The 3rd hits the FREE limit: the form says so and will not create.
+  await fillNewObject(page, 'Клієнт C', '+380670000003', "Об'єкт 3", 'вул. Третя 3');
+  await expect(page.getByRole('button', { name: 'Створити обʼєкт' })).toBeDisabled();
+  await expect(page).toHaveURL(/\/projects\/new$/);
 });

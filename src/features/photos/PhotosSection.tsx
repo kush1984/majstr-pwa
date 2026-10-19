@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/Spinner.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Modal } from '@/components/Modal.tsx';
@@ -56,6 +57,8 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   const limits = usePlanLimits();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  // The «＋» on the folder list: there is no folder to stand in, so the photo goes to «Інше».
+  const otherRef = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<ProjectPhotoResponse | null>(null);
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [moving, setMoving] = useState<ProjectPhotoResponse | null>(null);
@@ -123,6 +126,26 @@ export function PhotosSection({ projectId }: { projectId: string }) {
     );
   };
 
+  /** From the folder list (object-first «＋»): into «Інше», said so, with a way to re-file it. */
+  const onPickToOther = async (file: File | undefined) => {
+    if (!file) return;
+    if (atPhotoLimit) {
+      toast.error(t('photos.limitReached'));
+      return;
+    }
+    const compact = await validateAndDownscale(file);
+    if (!compact) return;
+    upload.mutate(
+      { file: compact, source: 'MANUAL', folder: null },
+      {
+        onSuccess: (photo) => toast.success(t('photos.addedToOther'), {
+          action: { label: t('photos.moveToFolder'), onClick: () => setMoving(photo) },
+        }),
+        onError: (err) => toast.error(toAppError(err).message),
+      },
+    );
+  };
+
   const confirmDelete = async () => {
     if (!deleting) return;
     try {
@@ -144,6 +167,12 @@ export function PhotosSection({ projectId }: { projectId: string }) {
 
   return (
     <section>
+      {/* «＋» (object-first): inside a folder it is exactly that folder's own «add» button — the
+          same input, the same source (a «Чеки» upload stays a receipt); on the list, into «Інше». */}
+      <Fab
+        ariaLabel={t('photos.addPhotoFab')}
+        onClick={() => (open === null ? otherRef.current?.click() : galleryRef.current?.click())}
+      />
       {open === null ? (
         <>
           <ul className="space-y-2">
@@ -328,6 +357,19 @@ export function PhotosSection({ projectId }: { projectId: string }) {
         onConfirm={confirmDelete}
         onClose={() => setDeleting(null)}
       />
+      {open === null && (
+        <input
+          ref={otherRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          data-testid="photo-fab-input"
+          onChange={(e) => {
+            void onPickToOther(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+      )}
     </section>
   );
 }

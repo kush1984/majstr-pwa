@@ -1,5 +1,6 @@
 {
   "common": {
+    "gotIt": "Зрозуміло",
     "discardChangesTitle": "Скасувати зміни?",
     "keepEditing": "Продовжити редагування",
     "discardChanges": "Скасувати зміни",
@@ -361,19 +362,25 @@
     "metricPendingHint": "об'єктів очікують підпису",
     "metricCompleted": "Завершено (міс)",
     "metricCompletedHint": "на суму {{amount}}",
-    "createFirstTitle": "Створіть перший кошторис",
-    "createFirstText": "Додайте об'єкт, клієнта і позиції — за кілька хвилин матимете готовий кошторис для клієнта.",
-    "createFirstAction": "Новий кошторис",
+    "createFirstTitle": "Створіть перший обʼєкт",
+    "createFirstText": "Обʼєкт — це назва, адреса й клієнт. Кошторис, заміри, фото й акти додаються всередині.",
+    "createFirstAction": "Новий об'єкт",
     "recentProjects": "Останні активні об'єкти",
     "quickActions": "Швидкі дії",
-    "quickNewEstimate": "Новий кошторис",
-    "quickNewEstimateSub": "Для нового клієнта",
     "quickAddCatalog": "Додати в каталог",
     "quickAddCatalogSub": "Робота чи матеріал",
     "quickAllProjects": "Усі об'єкти",
-    "quickAllProjectsSub": "Переглянути список"
+    "quickAllProjectsSub": "Переглянути список",
+    "quickNewObject": "Новий об'єкт",
+    "quickNewObjectSub": "Кошторис — усередині"
   },
   "projects": {
+    "noLiveTitle": "Активних обʼєктів немає",
+    "archiveChip": "Архів",
+    "archivedHint": "Завершені й скасовані обʼєкти — в архіві.",
+    "showArchiveCount": "Показати архів ({{n}})",
+    "cannotDeleteTitle": "Цей обʼєкт не можна видалити",
+    "cannotDeleteText": "Клієнт підписав документи або по обʼєкту є записані оплати — їх треба зберегти. Обʼєкт лишається в архіві разом із документами й грошима; в основному списку його не видно.",
     "title": "Об'єкти",
     "filterAll": "Усі",
     "filterAssessment": "Чернетка",
@@ -385,7 +392,7 @@
     "loadErrorTitle": "Не вдалося завантажити об'єкти",
     "loadErrorText": "Перевірте з'єднання та спробуйте ще раз.",
     "emptyTitle": "Ще немає об'єктів",
-    "emptyText": "Натисніть «Новий кошторис» — об'єкт і клієнта вкажете там само.",
+    "emptyText": "Створіть перший обʼєкт — і в ньому кошторис.",
     "noneFoundTitle": "Нічого не знайдено",
     "noneFoundText": "У цьому фільтрі поки порожньо.",
     "detailLabel": "Об'єкт",
@@ -402,7 +409,6 @@
     "clientPortalLink": "Посилання на портал",
     "estimatesCount": "Кошториси · {{count}}",
     "signedMovedToEconomyHint": "Підписані кошториси переїжджають у вкладку «Економіка об'єкту»",
-    "addNew": "+ Новий",
     "noEstimatesTitle": "Ще немає кошторисів",
     "noEstimatesText": "Створіть перший кошторис для цього об'єкта.",
     "createEstimateFirst": "Спершу створіть кошторис",
@@ -423,13 +429,17 @@
       "restore": "Відновити об'єкт?"
     },
     "filterCancelled": "Скасовані",
-    "showArchived": "Показати завершені/скасовані",
-    "hideArchived": "Сховати завершені/скасовані",
-    "viewSettings": "Налаштування списку",
     "deleteObject": "Видалити обʼєкт",
     "deleteObjectTitle": "Видалити обʼєкт назавжди?",
     "deleteObjectConfirm": "Обʼєкт і ВСІ його дані — кошториси, заміри, акти, фото, платежі — буде видалено назавжди. Це не можна скасувати.",
-    "deleteObjectDone": "Обʼєкт видалено"
+    "deleteObjectDone": "Обʼєкт видалено",
+    "createObject": "Створити обʼєкт",
+    "createEstimate": "Створити кошторис",
+    "nextTitleCreated": "Обʼєкт створено. Що далі?",
+    "nextFromTemplate": "Кошторис із шаблону",
+    "nextEmpty": "Порожній кошторис",
+    "nextFromFile": "З файлу або фото",
+    "nextLater": "Пізніше"
   },
   "estimate": {
     "shareNative": "📤 Поділитися (Viber, Telegram, SMS)",
@@ -797,7 +807,9 @@
     "folderOther": "Інше",
     "currentFolder": "поточна",
     "moveToNew": "У нову",
-    "folderCount": "{{n}} фото"
+    "folderCount": "{{n}} фото",
+    "addedToOther": "Додано в «Інше»",
+    "addPhotoFab": "Нове фото"
   },
   "acts": {
     "shareText": "Акт виконаних робіт для підтвердження:",
@@ -1694,9 +1706,7 @@
     "unsavedTitle": "Зберегти зміни?",
     "unsavedMessage": "У шаблоні є незбережені зміни. Зберегти їх чи закрити без збереження?",
     "discard": "Не зберігати",
-    "removeItem": "Прибрати позицію",
-    "pickCount": "Обрати ({{count}})",
-    "chosenCount": "Шаблонів: {{count}}"
+    "removeItem": "Прибрати позицію"
   },
   "profile": {
     "title": "Профіль",

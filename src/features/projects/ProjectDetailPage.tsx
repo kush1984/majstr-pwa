@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/Badge.tsx';
@@ -25,7 +25,7 @@ import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval } from '@/lib/clientDriv
 import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
 import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
-import { ObjectStatusFabActions, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
+import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
@@ -36,7 +36,7 @@ import { TemplateNotCachedError, useApplyTemplate } from '@/features/estimate/us
 import { ClientEditModal } from '@/features/clients/ClientEditModal.tsx';
 import { MessagesSection } from '@/features/messages/MessagesSection.tsx';
 import { ChatLinkSheet } from '@/features/messages/ChatLinkSheet.tsx';
-import { Fab, FabAction } from '@/components/Fab.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { ObjectEconomySection } from '@/features/economy/ObjectEconomySection.tsx';
 import { MeasurementsSection } from '@/features/measurements/MeasurementsSection.tsx';
 import { ActsSection } from '@/features/acts/ActsSection.tsx';
@@ -158,6 +158,22 @@ export function ProjectDetailPage() {
   // own). Applying a template reuses the backend apply-to-project endpoint.
   const applyTemplate = useApplyTemplate();
   const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
+  // Right after «Створити об'єкт» (object-first) the object opens with «Що далі?» up — once: the flag
+  // rides the navigation state and is cleared on arrival, so a reload or a later visit does not
+  // reopen it.
+  const location = useLocation();
+  const [justCreated, setJustCreated] = useState(false);
+  useEffect(() => {
+    if ((location.state as { justCreated?: boolean } | null)?.justCreated) {
+      setJustCreated(true);
+      setEstimateChoiceOpen(true);
+      void navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, location.search, navigate]);
+  const closeChoice = () => {
+    setEstimateChoiceOpen(false);
+    setJustCreated(false);
+  };
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [consolidateOpen, setConsolidateOpen] = useState(false);
 
@@ -202,11 +218,15 @@ export function ProjectDetailPage() {
   // frees a slot (count is live). Backend still enforces it.
   const atEstimateLimit = isAtLimit(list.length, limits.data?.maxEstimatesPerProject);
   const addEstimate = () => {
-    if (atEstimateLimit || createEstimate.isPending || applyTemplate.isPending) return;
+    if (createEstimate.isPending || applyTemplate.isPending) return;
+    if (atEstimateLimit) {
+      toast.info(t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject }));
+      return;
+    }
     setEstimateChoiceOpen(true);
   };
   const createEmpty = () => {
-    setEstimateChoiceOpen(false);
+    closeChoice();
     createEmptyEstimate();
   };
   // Works offline: `useApplyTemplate` composes the estimate on the device from the cached
@@ -215,7 +235,7 @@ export function ProjectDetailPage() {
   // the same, or the master just meets the wall from a different screen.
   const onPickTemplate = async (picks: TemplatePick[]) => {
     setTemplatePickerOpen(false);
-    setEstimateChoiceOpen(false);
+    closeChoice();
     try {
       const e = await applyTemplate.mutateAsync({
         projectId: id,
@@ -279,42 +299,48 @@ export function ProjectDetailPage() {
         onClose={() => setObjectAction(null)}
       />
 
+      {/* «Що далі?» — how the estimate starts. A template is the usual answer, so it leads. Right
+          after the object was made the title says so; from the tab it is just «Новий кошторис». */}
       <Modal
         open={estimateChoiceOpen}
-        onClose={() => setEstimateChoiceOpen(false)}
-        title={t('templates.chooseType')}
+        onClose={closeChoice}
+        title={justCreated ? t('projects.nextTitleCreated') : t('common.newEstimate')}
       >
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
-              {t('templates.emptyEstimate')}
-            </Button>
-            <Button
-              onClick={() => {
-                setEstimateChoiceOpen(false);
-                setTemplatePickerOpen(true);
-              }}
-            >
-              {t('templates.fromTemplate')}
-            </Button>
-          </div>
+          <Button
+            fullWidth
+            className="py-3.5 text-base"
+            onClick={() => {
+              setEstimateChoiceOpen(false);
+              setTemplatePickerOpen(true);
+            }}
+          >
+            📋 {t('projects.nextFromTemplate')}
+          </Button>
+          <Button fullWidth variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
+            {t('projects.nextEmpty')}
+          </Button>
           {/* Import a ready estimate onto this object (Excel/photo → LLM, PRO). */}
           <Button
             fullWidth
             variant="secondary"
             onClick={() => {
-              setEstimateChoiceOpen(false);
+              closeChoice();
               void navigate(routes.importEstimate(id));
             }}
           >
-            {t('templates.fromFile')}
+            {t('projects.nextFromFile')}
           </Button>
+          <button type="button" onClick={closeChoice}
+            className="w-full py-2 text-center text-sm font-semibold text-muted">
+            {t('projects.nextLater')}
+          </button>
         </div>
       </Modal>
 
       <TemplatePickerSheet
         open={templatePickerOpen}
-        onClose={() => setTemplatePickerOpen(false)}
+        onClose={() => { setTemplatePickerOpen(false); setJustCreated(false); }}
         onPick={onPickTemplate}
         applying={applyTemplate.isPending}
       />
@@ -345,8 +371,37 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Hero */}
-      <div className="mb-4 rounded-card border border-border bg-surface-sunken p-4">
-        <div className="mb-1.5 flex items-center gap-2 text-[17px] font-bold text-primary">
+      <div className="relative mb-4 rounded-card border border-border bg-surface-sunken p-4">
+          {/* What the FAB menu used to carry (object-first): the «＋» is now the open tab's own action.
+              Share and the chat link reach the server, so they go through `guard`, and are hidden on a
+              closed object; Notes stay readable there. */}
+          <div className="absolute right-2 top-2">
+            <ActionMenu ariaLabel={t('projects.actionsMenu')}>
+              {(close) => (
+                <>
+                  {!isTerminalStage(p.stage) && (
+                    <>
+                      <ActionMenuItem icon="📤" label={t('projects.shareWithClient')}
+                        onClick={() => { close(); openShare(); }} />
+                      <ActionMenuItem icon="💬" label={t('messageLink.title')}
+                        onClick={() => { close(); guard(() => setChatLinkOpen(true))(); }} />
+                    </>
+                  )}
+                  <ActionMenuItem
+                    icon="📝"
+                    label={noteCount > 0
+                      ? t('projects.notesWithCount', { count: noteCount })
+                      : t('projects.notesCreate')}
+                    onClick={() => { close(); setNotesOpen(true); }}
+                  />
+                  <div className="border-t border-border">
+                    <ObjectStatusMenuItems stage={p.stage} onChoose={(a) => { close(); setObjectAction(a); }} />
+                  </div>
+                </>
+              )}
+            </ActionMenu>
+          </div>
+        <div className="mb-1.5 flex items-center gap-2 pr-10 text-[17px] font-bold text-primary">
           <IconTile tone="brand" size={32}>
             📁
           </IconTile>
@@ -427,15 +482,6 @@ export function ProjectDetailPage() {
                   {t('consolidate.addButton')}
                 </button>
               )}
-              <button
-                type="button"
-                onClick={addEstimate}
-                disabled={createEstimate.isPending || atEstimateLimit}
-                title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
-                className="text-[13px] font-semibold text-brand disabled:opacity-60"
-              >
-                {t('projects.addNew')}
-              </button>
             </div>
           </div>
 
@@ -462,9 +508,10 @@ export function ProjectDetailPage() {
               action={
                 <Button
                   onClick={addEstimate}
+                  disabled={atEstimateLimit}
                   loading={createEstimate.isPending || applyTemplate.isPending}
                 >
-                  {t('common.newEstimate')}
+                  {t('projects.createEstimate')}
                 </Button>
               }
             />
@@ -489,6 +536,19 @@ export function ProjectDetailPage() {
                   onDismissSuperseded={() => dismissSuperseded.mutate(s.id)}
                 />
               ))}
+              {/* The same orange, the same size as the primary buttons elsewhere — full width only on a
+                  phone, where every CTA is. */}
+              <div className="mt-1 flex justify-center">
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={addEstimate}
+                  disabled={atEstimateLimit}
+                  title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
+                  loading={createEstimate.isPending || applyTemplate.isPending}
+                >
+                  ＋ {t('common.newEstimate')}
+                </Button>
+              </div>
             </div>
           )}
         </>
@@ -519,39 +579,9 @@ export function ProjectDetailPage() {
         readOnly={isTerminalStage(p.stage)}
       />
 
-      {/* The object's two share links (both reach the server to mint or publish, so both go
-          through `guard` — offline they say so rather than failing silently; hidden once the
-          object is COMPLETED/CANCELLED — nothing to share about a closed object), the Notes action
-          (visible even when terminal — read-only inside), plus the stage-transition actions that
-          used to live in a separate ⋮ menu on the hero — one action surface, not two. */}
-      <Fab ariaLabel={t('projects.actionsMenu')}>
-        {(close) => (
-          <>
-            {!isTerminalStage(p.stage) && (
-              <>
-                <FabAction
-                  icon="📤"
-                  label={t('projects.shareWithClient')}
-                  onClick={() => close(openShare)}
-                />
-                <FabAction
-                  icon="💬"
-                  label={t('messageLink.title')}
-                  onClick={() => close(guard(() => setChatLinkOpen(true)))}
-                />
-              </>
-            )}
-            <FabAction
-              icon="📝"
-              label={noteCount > 0
-                ? t('projects.notesWithCount', { count: noteCount })
-                : t('projects.notesCreate')}
-              onClick={() => close(() => setNotesOpen(true))}
-            />
-            <ObjectStatusFabActions stage={p.stage} onChoose={(a) => close(() => setObjectAction(a))} />
-          </>
-        )}
-      </Fab>
+      {/* «＋» does the open tab's main action (object-first). This page owns the estimates tab's;
+          every other tab's section renders its own. */}
+      {tab === 'estimate' && <Fab ariaLabel={t('common.newEstimate')} onClick={addEstimate} />}
     </>
   );
 }

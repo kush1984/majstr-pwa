@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { Modal } from '@/components/Modal.tsx';
+import { Button } from '@/components/Button.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMessageLink } from '@/features/messages/useMessageLink.ts';
@@ -30,6 +32,10 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
   const { objectAction, chooseAction, confirm, isPending } = useObjectStatusAction(project.id);
   const deleteProject = useDeleteProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The server refuses to delete an object holding a signature or money (B-70). That answer used to
+  // arrive as a red toast about «закриті місяці» — the dialog had offered a deletion it could not do,
+  // then blamed the master's bookkeeping. Now it is said plainly, with the one thing left to know.
+  const [cannotDelete, setCannotDelete] = useState(false);
   // Permanent delete is offered only on a closed-out object (COMPLETED/CANCELLED) — a live object is
   // deleted by cancelling first, so a mis-tap can't wipe active work.
   const terminal = isTerminalStage(project.stage);
@@ -85,10 +91,22 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
         loading={deleteProject.isPending}
         onConfirm={() => deleteProject.mutate(project.id, {
           onSuccess: () => { setConfirmDelete(false); toast.success(t('projects.deleteObjectDone')); },
-          onError: (err) => toast.error(toAppError(err).message),
+          onError: (err) => {
+            if (toAppError(err).code === 'PROJECT_HAS_SIGNED_MONEY') {
+              setConfirmDelete(false);
+              setCannotDelete(true);
+            } else {
+              toast.error(toAppError(err).message);
+            }
+          },
         })}
         onClose={() => setConfirmDelete(false)}
       />
+
+      <Modal open={cannotDelete} onClose={() => setCannotDelete(false)} title={t('projects.cannotDeleteTitle')}>
+        <p className="mb-5 text-sm text-muted">{t('projects.cannotDeleteText')}</p>
+        <Button fullWidth onClick={() => setCannotDelete(false)}>{t('common.gotIt')}</Button>
+      </Modal>
     </>
   );
 }

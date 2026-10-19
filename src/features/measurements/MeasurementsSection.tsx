@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { Button } from '@/components/Button.tsx';
+import { Fab } from '@/components/Fab.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
@@ -501,6 +502,9 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
       )}
 
       {/* Add-room modal. */}
+      {/* «＋» is the tab's own action (object-first): a room. */}
+      <Fab ariaLabel={t('measure.addRoom')} onClick={() => setRoomModalOpen(true)} />
+
       <Modal open={roomModalOpen} onClose={() => setRoomModalOpen(false)} title={t('measure.addRoom')}>
         <div className="space-y-3">
           <Input autoFocus placeholder={t('measure.roomNamePlaceholder')} value={roomName}
