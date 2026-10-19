@@ -541,3 +541,24 @@ describe('TemplatesPage — create a template from scratch', () => {
     expect(estimateTemplatesApi.create).not.toHaveBeenCalled();
   });
 });
+
+describe('TemplatesPage — the catalog answers before the composition (CI race)', () => {
+  it('draws no pickable rows until the bundle is known, so a present position is never pickable', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    vi.mocked(catalogApi.list).mockResolvedValue(catalog);
+    let release!: (d: EstimateTemplateDetail) => void;
+    vi.mocked(estimateTemplatesApi.get).mockReturnValue(new Promise((r) => { release = r; }));
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    expect(await screen.findByText('Редагувати шаблон')).toBeTruthy();
+    // Long enough for the catalog to answer; the composition still has not.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0);
+
+    release(ownDetail);
+
+    const rows = await screen.findAllByTestId('catalog-row');
+    expect(asButton(rows.find((r) => r.textContent?.includes('Розетка'))!).disabled).toBe(true);
+  });
+});

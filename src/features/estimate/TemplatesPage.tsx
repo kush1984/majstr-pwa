@@ -844,7 +844,12 @@ function EditModal({
       {/* Add position — catalog (browse) or manual */}
       <div className="rounded-xl border border-border p-3">
         <AddPositionTabs tab={tab} onChange={setTab} />
-        {tab === 'catalog' ? (
+        {/* The picker blocks what the bundle already holds, so it waits for the composition: rows
+            drawn before it arrived let a duplicate be picked (the catalog usually answers first).
+            A detail that never comes (offline, not cached) does not hold it back. */}
+        {tab === 'catalog' && !seeded && isPending ? (
+          <div className="flex justify-center py-6 text-brand"><Spinner /></div>
+        ) : tab === 'catalog' ? (
           <CatalogPicker
             disabledNames={items.map((i) => i.name)}
             listHeightClass="max-h-[30dvh]"
