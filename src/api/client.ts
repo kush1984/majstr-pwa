@@ -37,7 +37,7 @@ interface RetryableRequest extends InternalAxiosRequestConfig {
 
 /**
  * How long a recognition call may take. Sized against the server's own ceiling for an LLM pass
- * (`HttpClients.forLlm` = 120s), not guessed: below it the client would abandon a call the server
+ * (`HttpClients.forLlm` = 170s), not guessed: below it the client would abandon a call the server
  * is still legitimately working on — and the tokens are billed either way.
  */
 export const LLM_TIMEOUT_MS = 180_000;
