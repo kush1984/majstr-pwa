@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
+import { ModalFooter } from '@/components/Modal.tsx';
 import { cn } from '@/lib/cn.ts';
 import { ShapeInput } from '@/components/ShapeInput.tsx';
 import {
@@ -100,6 +101,9 @@ export function MeasurementItemForm({
           ? toDraft({ shape: s.shape, mode: s.mode ?? 'd', values: s.values ?? {} })
           : toDraft(planeFromLegacy(s.l ?? 0, s.w ?? 0)))
       : [newDraft('rect')],
+  );
+  const [moreOpen, setMoreOpen] = useState(
+    (initSurface?.unit != null && initSurface.unit !== 'M') || (initSurface?.segments.length ?? 0) > 1,
   );
   const [openings, setOpenings] = useState<Opening[]>(
     initSurface?.openings.map((o) => ({ w: String(o.w), h: String(o.h), n: String(o.n) })) ?? [],
@@ -340,36 +344,16 @@ export function MeasurementItemForm({
       {/* SURFACE — Σ planes (any shape) − Σ openings, all measured in one unit. */}
       {type === 'SURFACE' && (
         <div className="rounded-xl border border-border bg-surface-sunken p-3">
-          <p className="mb-2 text-xs text-muted">{t('shape.hintTape')}</p>
-
-          {/* One unit for the whole element — planes and openings alike. In review mode the
-              parent's sheet-level switch drives it (hostUnit), so this one is hidden. */}
-          {!hostUnit && (
-          <div className="mb-3 flex justify-center gap-1.5">
-            {LENGTH_UNITS.map((u) => (
-              <button
-                key={u}
-                type="button"
-                onClick={() => setInternalUnit(u)}
-                className={cn(
-                  'min-h-[44px] rounded-lg border px-3.5 text-xs font-semibold transition-colors',
-                  unit === u ? 'border-brand bg-brand-soft text-brand' : 'border-border text-muted',
-                )}
-              >
-                {t(`lengthUnit.${u}`)}
-              </button>
-            ))}
-          </div>
-          )}
-
+          {/* A plain wall is ONE rectangle in metres: its fields come first. A second plane is
+              the uncommon case, so its card chrome only appears once there are two. */}
           <div className="space-y-3">
             {planes.map((p, i) => (
-              <div key={i} className="rounded-xl border border-border bg-surface p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted">
-                    {t('shape.plane', { n: i + 1 })}
-                  </span>
-                  {planes.length > 1 && (
+              <div key={i} className={cn(planes.length > 1 && 'rounded-xl border border-border bg-surface p-3')}>
+                {planes.length > 1 && (
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted">
+                      {t('shape.plane', { n: i + 1 })}
+                    </span>
                     <button
                       type="button"
                       aria-label={t('common.delete')}
@@ -378,8 +362,8 @@ export function MeasurementItemForm({
                     >
                       ✕
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
                 <ShapeInput
                   draft={p}
                   unit={unit}
@@ -388,50 +372,109 @@ export function MeasurementItemForm({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            className="mt-2 text-xs font-semibold text-brand"
-            onClick={() => setPlanes((p) => [...p, newDraft('rect')])}
-          >
-            {t('shape.addPlane')}
-          </button>
 
+          {/* Openings: one plain button until there is one, then rows under a header that keeps
+              naming the columns — a placeholder vanishes the moment a figure is typed. */}
           <div className="mt-3 border-t border-border pt-3">
-            <div className="mb-1.5 text-xs font-semibold text-muted">
-              {t('estimate.measureOpenings')} ({t(`lengthUnit.${unit}`)})
-            </div>
-            <div className="space-y-2">
-              {openings.map((o, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input inputMode="decimal" placeholder={t('estimate.measureWidth')} value={o.w}
-                    onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, w: e.target.value } : x)))} />
-                  <span className="text-muted">×</span>
-                  <Input inputMode="decimal" placeholder={t('estimate.measureHeight')} value={o.h}
-                    onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, h: e.target.value } : x)))} />
-                  <span className="text-muted">×</span>
-                  <Input inputMode="numeric" placeholder={t('estimate.measureCount')} value={o.n} className="w-16"
-                    onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, n: e.target.value } : x)))} />
-                  <button type="button" aria-label={t('common.delete')} className="px-1 text-muted"
-                    onClick={() => setOpenings((p) => p.filter((_, idx) => idx !== i))}>✕</button>
+            {openings.length === 0 ? (
+              <button type="button" className="min-h-[44px] text-sm font-semibold text-brand"
+                onClick={() => setOpenings([{ w: '', h: '', n: '1' }])}>
+                {t('measure.subtractOpening')}
+              </button>
+            ) : (
+              <>
+                <div className="mb-1.5 text-xs font-semibold text-secondary">
+                  {t('estimate.measureOpenings')} ({t(`lengthUnit.${unit}`)})
                 </div>
-              ))}
-            </div>
-            <button type="button" className="mt-2 text-xs font-semibold text-brand"
-              onClick={() => setOpenings((p) => [...p, { w: '', h: '', n: '1' }])}>
-              {t('estimate.measureAddOpening')}
-            </button>
+                <div className="mb-1 flex items-center gap-2 text-[12px] text-secondary" aria-hidden="true">
+                  <span className="flex-1">{t('estimate.measureWidth')}</span>
+                  <span className="w-3" />
+                  <span className="flex-1">{t('estimate.measureHeight')}</span>
+                  <span className="w-3" />
+                  <span className="w-16">{t('estimate.measureCount')}</span>
+                  <span className="w-5" />
+                </div>
+                <div className="space-y-2">
+                  {openings.map((o, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input inputMode="decimal" aria-label={t('estimate.measureWidth')} value={o.w}
+                        onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, w: e.target.value } : x)))} />
+                      <span className="w-3 text-center text-muted">×</span>
+                      <Input inputMode="decimal" aria-label={t('estimate.measureHeight')} value={o.h}
+                        onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, h: e.target.value } : x)))} />
+                      <span className="w-3 text-center text-muted">×</span>
+                      <Input inputMode="numeric" aria-label={t('estimate.measureCount')} value={o.n} className="w-16"
+                        onChange={(e) => setOpenings((p) => p.map((x, idx) => (idx === i ? { ...x, n: e.target.value } : x)))} />
+                      <button type="button" aria-label={t('common.delete')} className="w-5 text-muted"
+                        onClick={() => setOpenings((p) => p.filter((_, idx) => idx !== i))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="mt-2 min-h-[44px] text-xs font-semibold text-brand"
+                  onClick={() => setOpenings((p) => [...p, { w: '', h: '', n: '1' }])}>
+                  {t('estimate.measureAddOpening')}
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Intermediate sums — the master should see where the result comes from. */}
-          <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted">
-            <div className="flex justify-between">
-              <span>{t('shape.planesTotal')}</span>
-              <span className="font-semibold text-primary">{planesM2} {t('units.M2')}</span>
-            </div>
-            {openingsM2 > 0 && (
+          {/* The arithmetic, once there is any: planes − openings = net. One plane with no
+              opening already shows its own area in the shape card and the footer. */}
+          {(openings.length > 0 || planes.length > 1) && (
+            <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-secondary">
+              <div className="flex justify-between">
+                <span>{t('shape.planesTotal')}</span>
+                <span className="font-semibold text-primary">{planesM2} {t('units.M2')}</span>
+              </div>
               <div className="flex justify-between">
                 <span>{t('shape.openingsTotal')}</span>
                 <span className="font-semibold text-primary">−{openingsM2} {t('units.M2')}</span>
+              </div>
+              <div className="flex justify-between border-t border-border pt-1">
+                <span className="font-semibold">{t('measure.netArea')}</span>
+                <span className="font-bold text-primary">{result} {t('units.M2')}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Rarely touched: the unit (metres is the default every dimension used to mean) and a
+              second plane. Opens by itself when the element already uses either. In review mode
+              the parent's sheet-level switch owns the unit (hostUnit). */}
+          <div className="mt-3 border-t border-border pt-2">
+            <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}
+              className="flex min-h-[44px] w-full items-center gap-2 text-xs font-semibold text-secondary">
+              <span aria-hidden className={cn('inline-block text-base leading-none transition-transform', moreOpen && 'rotate-90')}>›</span>
+              {t('measure.moreOptions', { unit: t(`lengthUnit.${unit}`) })}
+            </button>
+            {moreOpen && (
+              <div className="space-y-3 pt-1">
+                {!hostUnit && (
+                  <div>
+                    <div className="mb-1.5 text-xs text-secondary">{t('measure.unitLabel')}</div>
+                    <div className="flex gap-1.5">
+                      {LENGTH_UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setInternalUnit(u)}
+                          className={cn(
+                            'min-h-[44px] rounded-lg border px-3.5 text-xs font-semibold transition-colors',
+                            unit === u ? 'border-brand bg-brand-soft text-brand' : 'border-border text-muted',
+                          )}
+                        >
+                          {t(`lengthUnit.${u}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="min-h-[44px] text-xs font-semibold text-brand"
+                  onClick={() => setPlanes((p) => [...p, newDraft('rect')])}
+                >
+                  {t('shape.addPlane')}
+                </button>
               </div>
             )}
           </div>
@@ -702,20 +745,27 @@ export function MeasurementItemForm({
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t border-border pt-3 text-sm text-muted">
-        <span>{t('estimate.measureResult')}</span>
-        <span className="text-base font-bold text-primary">{result} {t(unitKey)}</span>
-      </div>
-
-      {/* Review mode has no own footer — the parent sheet owns the single commit. */}
-      {!reviewMode && (
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" fullWidth onClick={onCancel}>{t('common.cancel')}</Button>
-          <Button type="button" fullWidth loading={saving} disabled={!canSave}
-            onClick={() => onSave({ name: name.trim(), type, payload: buildPayload() })}>
-            {t('common.save')}
-          </Button>
+      {/* Review mode has no own footer — the parent sheet owns the single commit. Otherwise the
+          result rides the sticky footer, so the master sees it change while typing a dimension. */}
+      {reviewMode ? (
+        <div className="flex items-center justify-between border-t border-border pt-3 text-sm text-muted">
+          <span>{t('estimate.measureResult')}</span>
+          <span className="text-base font-bold text-primary">{result} {t(unitKey)}</span>
         </div>
+      ) : (
+        <ModalFooter>
+          <div className="mb-3 flex items-center justify-between text-sm text-muted">
+            <span>{t('estimate.measureResult')}</span>
+            <span className="text-base font-bold text-primary">{result} {t(unitKey)}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" fullWidth onClick={onCancel}>{t('common.cancel')}</Button>
+            <Button type="button" fullWidth loading={saving} disabled={!canSave}
+              onClick={() => onSave({ name: name.trim(), type, payload: buildPayload() })}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </ModalFooter>
       )}
     </div>
   );

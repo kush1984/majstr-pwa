@@ -102,8 +102,8 @@ export function ShapeInput({
         </button>
       )}
 
-      <ShapeDiagram built={built} outline={outline} />
-
+      {/* Fields before the drawing: on a phone the drawing pushed them below the fold, and the
+          letter badge already ties each one to its side. */}
       <div className="grid grid-cols-2 gap-2">
         {variant.fields.map((f) => (
           <label key={f.key} className="block">
@@ -141,6 +141,8 @@ export function ShapeInput({
         </div>
       )}
       {built.noteKey && <p className="text-xs text-muted">{t(built.noteKey)}</p>}
+
+      <ShapeDiagram built={built} outline={outline} />
       {built.ok && built.diag != null && (
         <p className="text-xs text-muted">
           {t('shape.diagCheck', {
