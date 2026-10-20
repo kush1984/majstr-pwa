@@ -530,6 +530,8 @@
     "measureAddRow": "+ Додати рядок",
     "measureOpenings": "Прорізи (вікна/двері) — відняти",
     "measureAddOpening": "+ Проріз",
+    "unquantifiedCount": "{{count}} без кількості",
+    "needsQuantity": "Вкажіть кількість",
     "measureResult": "Разом",
     "measureApply": "Застосувати",
     "deposit": "Завдаток",

@@ -530,6 +530,8 @@
     "measureAddRow": "+ Add row",
     "measureOpenings": "Openings (windows/doors) — subtract",
     "measureAddOpening": "+ Opening",
+    "unquantifiedCount": "{{count}} without quantity",
+    "needsQuantity": "Set the quantity",
     "measureResult": "Total",
     "measureApply": "Apply",
     "deposit": "Deposit",

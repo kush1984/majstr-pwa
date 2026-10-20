@@ -27,6 +27,7 @@
   --success-soft: 236 253 245;
   --amber: 245 158 11;
   --amber-soft: 255 251 235;
+  --amber-strong: 146 64 14;     /* #92400e — amber TEXT on amber-soft; plain amber reads ~2:1 */
   --blue: 59 130 246;
   --blue-soft: 239 246 255;
   --red: 239 68 68;
