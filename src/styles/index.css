@@ -55,8 +55,10 @@
   --border: 229 231 235;
   --text-primary: 15 20 25;
   --text-secondary: 31 41 55;
-  --text-muted: 107 114 128;
-  --text-faint: 156 163 175;
+  /* Darkened for a phone in daylight (UX review, 2026-10): muted was #6b7280 — 4.4:1 on a sunken
+     row, under AA — and faint #9ca3af, ~2.5:1, read as absent. Each moved one step darker. */
+  --text-muted: 75 85 99;         /* #4b5563 — 7.5:1 on white */
+  --text-faint: 107 114 128;      /* #6b7280 — 4.8:1 on white */
 }
 
 @layer base {

@@ -626,7 +626,7 @@ export function MeasurementItemForm({
                   <div className="grid grid-cols-2 gap-2">
                     {(['h', 'qty'] as const).map((f) => (
                       <label key={f} className="block">
-                        <span className="mb-0.5 block text-[10px] text-muted">{t(`shtroba.field_${f}`)}</span>
+                        <span className="mb-0.5 block text-[11px] text-muted">{t(`shtroba.field_${f}`)}</span>
                         <Input inputMode="numeric" value={c[f]}
                           onChange={(e) => setChase((p) => p.map((x, idx) => (idx === i ? { ...x, [f]: e.target.value } : x)))} />
                       </label>

@@ -162,7 +162,7 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
             {/* Auto-created rollup («Додаткові роботи до акта № N») — badge it so it doesn't read
                 as an estimate the master forgot creating (economy-review). */}
             {isAddendum && (
-              <span className="flex-shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-muted">
+              <span className="flex-shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-semibold text-muted">
                 {t('economy.addendumBadge')}
               </span>
             )}
