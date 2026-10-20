@@ -194,6 +194,16 @@ describe('lshape', () => {
   it('rejects a cut bigger than the room', () => {
     expect(buildPlane(plane('lshape', 'd', { A: 500, B: 400, a: 600, b: 200 })).ok).toBe(false);
   });
+
+  it('prints every letter on a side exactly as long as that field', () => {
+    // «a» and «b» were swapped on the drawing: the step's width carried «b», its depth «a».
+    const values = { A: 950, B: 600, a: 90, b: 280 };
+    const built = buildPlane(plane('lshape', 'd', values));
+    for (const e of built.edges) {
+      const [p, q] = [built.pts[e.i], built.pts[e.j]];
+      expect(Math.hypot(q[0] - p[0], q[1] - p[1]), e.tag).toBeCloseTo(values[e.tag as keyof typeof values]);
+    }
+  });
 });
 
 describe('direct', () => {

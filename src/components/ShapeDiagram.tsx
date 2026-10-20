@@ -45,6 +45,57 @@ export function ShapeDiagram({ built, outline }: { built: Built; outline: Built 
     return [p[0] + (dx / len) * dist, p[1] + (dy / len) * dist];
   };
 
+  /** Distance from a point to a segment — a label this close to a side would sit on its line. */
+  const segDist = (p: Pt, a: Pt, b: Pt): number => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  };
+
+  /** Even-odd ray cast: is this SVG point inside the drawn polygon? */
+  const inside = ([x, y]: Pt): boolean => {
+    let hit = false;
+    for (let i = 0, j = T.length - 1; i < T.length; j = i++) {
+      const [xi, yi] = T[i];
+      const [xj, yj] = T[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+    }
+    return hit;
+  };
+
+  // A side's letter sits on that side's OUTWARD NORMAL. Pushed from the centroid instead, the
+  // letter of a short inner side (an L-room's step) landed on the vertex names beside it.
+  const edgeLabels = drawn.edges.map((e) => {
+    const a = T[e.i];
+    const b = T[e.j];
+    const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    let n: Pt = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+    if (inside([mid[0] + n[0] * 3, mid[1] + n[1] * 3])) n = [-n[0], -n[1]];
+    const d = 18;
+    const u: Pt = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    return { tag: e.tag, len, u, p: [mid[0] + n[0] * d, mid[1] + n[1] * d] as Pt };
+  });
+  // Two letters still meet where two short sides meet (a narrow L step). The LONGER side's letter
+  // slides along its own line — it has room to and stays beside the side it names.
+  const MIN_GAP = 22;
+  for (const x of edgeLabels) {
+    for (const y of edgeLabels) {
+      if (x === y || x.len < y.len) continue;
+      const gap = Math.hypot(x.p[0] - y.p[0], x.p[1] - y.p[1]);
+      if (gap >= MIN_GAP) continue;
+      const away = (x.p[0] - y.p[0]) * x.u[0] + (x.p[1] - y.p[1]) * x.u[1] >= 0 ? 1 : -1;
+      const shift = Math.min(MIN_GAP - gap + 4, x.len / 2 - 8);
+      x.p = [x.p[0] + x.u[0] * away * shift, x.p[1] + x.u[1] * away * shift];
+    }
+  }
+  const vertexLabels = T.map((p, k) => ({ name: drawn.vnames[k], p: out(p, 15) }))
+    // A vertex name is a reference mark; a side's letter is what the master reads. On a cramped
+    // corner the name gives way.
+    .filter((v) => edgeLabels.every((e) => Math.hypot(e.p[0] - v.p[0], e.p[1] - v.p[1]) > 16))
+    .filter((v) => T.every((a, i) => segDist(v.p, a, T[(i + 1) % T.length]) > 7));
+
   const caption = built.ok ? null : built.warnKey ? t('shape.impossible') : t('shape.enterDims');
 
   return (
@@ -93,39 +144,31 @@ export function ShapeDiagram({ built, outline }: { built: Built; outline: Built 
             </g>
           )}
 
-          {drawn.edges.map((e, k) => {
-            const a = T[e.i];
-            const b = T[e.j];
-            const p = out([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], 20);
-            return (
-              <text
-                key={`e${k}`}
-                x={p[0]}
-                y={p[1]}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className="fill-primary text-[16px] font-bold italic"
-              >
-                {e.tag}
-              </text>
-            );
-          })}
+          {edgeLabels.map((e, k) => (
+            <text
+              key={`e${k}`}
+              x={e.p[0]}
+              y={e.p[1]}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="fill-primary text-[16px] font-bold italic"
+            >
+              {e.tag}
+            </text>
+          ))}
 
-          {T.map((p, k) => {
-            const q = out(p, 15);
-            return (
-              <text
-                key={`v${k}`}
-                x={q[0]}
-                y={q[1]}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className="fill-faint text-[12px] font-semibold"
-              >
-                {drawn.vnames[k]}
-              </text>
-            );
-          })}
+          {vertexLabels.map((v) => (
+            <text
+              key={`v${v.name}`}
+              x={v.p[0]}
+              y={v.p[1]}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="fill-faint text-[12px] font-semibold"
+            >
+              {v.name}
+            </text>
+          ))}
         </g>
       </svg>
 

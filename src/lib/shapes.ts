@@ -106,8 +106,10 @@ export const SHAPES: Record<ShapeKey, ShapeDef> = {
             edges: [
               { tag: 'A', i: 0, j: 1 },
               { tag: 'B', i: 5, j: 0 },
-              { tag: 'a', i: 3, j: 4 },
-              { tag: 'b', i: 2, j: 3 },
+              // C→D runs along A (length a), D→E along B (length b). They were swapped, so the
+              // drawing put «a» on the step's depth and «b» on its width.
+              { tag: 'a', i: 2, j: 3 },
+              { tag: 'b', i: 3, j: 4 },
             ],
             formulaKey: 'shape.lshape.d.formula',
             ok: A > 0 && B > 0 && a > 0 && b > 0 && a < A && b < B,
