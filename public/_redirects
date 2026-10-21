@@ -1,10 +1,44 @@
-# SPA fallback for Cloudflare Pages.
+# Cloudflare Pages routing for majstr.pro (https://developers.cloudflare.com/pages/configuration/redirects/).
 #
-# The router owns deep paths (/projects/:id, /estimates/:id, /billing/return,
-# /reset-password, …). Without this rule the host looks for a real file at that
-# path and returns 404 on: a browser refresh, a shared deep link, the monobank
-# return redirect, and an installed PWA relaunching onto a sub-route.
+# The app's routes are LISTED, not caught by a `/* /index.html 200`. The catch-all answered every
+# path with 200 and the landing's HTML — /api/, //feed/, any typo — so search engines found the
+# landing at a dozen addresses (SEO audit 2026-10). Unknown paths now fall to /404.html with a real
+# 404; a file that exists (assets, /og/, the calculator pages, robots.txt) is served before these.
 #
-# 200 (not 301) = rewrite, so the URL the user sees is preserved and the router
-# picks it up on boot. Assets are served before this rule, so /assets/* is unaffected.
-/*    /index.html   200
+# ⚠️ A NEW top-level route in src/routes/routes.tsx must be added here, or a refresh, a shared link,
+# an email/push link or the monobank return lands on 404. `src/routes/redirects.test.ts` reads
+# both files and fails when one is missing. An installed PWA is not affected either way: its service
+# worker answers navigations from the cached app shell.
+#
+# 200 = rewrite: the URL stays, the router reads it on boot. The destination is "/", NOT
+# "/index.html": Pages' pretty URLs answer /index.html with a 308 to "/", so a rewrite to it turned
+# /login into a redirect to the landing and every /projects/:id into a 404 (seen in
+# `wrangler pages dev`). Rewriting to "/" serves the same index.html with the URL intact.
+
+# Partner alias. A 301 to the landing carrying the partner as ?ref= — main.tsx records it first-touch
+# on boot, exactly as the client-side /liga route did — so the alias is no longer a second copy of
+# the landing in the index.
+/liga                  /?ref=liga     301
+/liga/                 /?ref=liga     301
+
+/login                 /               200
+/register              /               200
+/verify-email          /               200
+/forgot-password       /               200
+/reset-password        /               200
+/privacy               /               200
+/new                   /               200
+/finance               /               200
+/profile               /               200
+/templates             /               200
+/projects              /               200
+/projects/*            /               200
+/catalog               /               200
+/catalog/*             /               200
+/estimates/*           /               200
+/acts/*                /               200
+/shopping/*            /               200
+/receipts/*            /               200
+/billing/*             /               200
+# The service worker's fallback when a push carries no url.
+/dashboard             /               200
