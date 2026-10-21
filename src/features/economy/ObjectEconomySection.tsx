@@ -250,7 +250,12 @@ function EstimatesSummaryPanel({ panels }: { panels: SignedEstimatePanelResponse
 /** The works axis (acts iteration) — FREE-visible: how much of the contract the client has accepted
  *  via SIGNED acts, next to how much money landed. Two PaymentStrip-twin lines against «За договором»
  *  + a balance line whose wording flips by sign. Absent when there's nothing at all to show. */
-function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
+function ActsAxis({ acts, addedByActs }: {
+  acts: ObjectEconomyActsResponse;
+  /** Σ of the ADDENDUM rollups — receipts and extra works an act wrote INTO the contract. A master
+   *  read «За договором» growing by a receipt as a new expense; named, it reads as what it is. */
+  addedByActs: number;
+}) {
   const { t } = useTranslation();
   const { contracted, acceptedByActs, received } = acts;
   if (contracted === 0 && acceptedByActs === 0 && received === 0) return null;
@@ -269,6 +274,9 @@ function ActsAxis({ acts }: { acts: ObjectEconomyActsResponse }) {
         <span className="text-xs text-muted">{t('economy.contracted')}</span>
         <span className="font-mono text-sm font-semibold tabular-nums text-primary">{formatMoney(contracted)}</span>
       </div>
+      {addedByActs > 0 && (
+        <p className="mt-0.5 text-xs text-muted">{t('economy.addedByActs', { amount: formatMoney(addedByActs) })}</p>
+      )}
       <AxisStrip label={t('economy.acceptedByActs')} value={acceptedByActs} total={contracted}
         info={t('economy.acceptedInfo', { amount: formatMoney(notYetAccepted) })} />
       <AxisStrip label={t('economy.received')} value={received} total={contracted} />
@@ -439,7 +447,10 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
       )}
 
       {/* Works axis (acts iteration) — FREE-visible, computed unconditionally by the backend. */}
-      {eco?.acts && <ActsAxis acts={eco.acts} />}
+      {eco?.acts && (
+        <ActsAxis acts={eco.acts} addedByActs={sumMoney(eco.estimates
+          .filter((p) => p.kind === 'ADDENDUM' && p.countedInEconomy).map((p) => p.total))} />
+      )}
 
       {/* Materials axis (V129) — FREE-visible for the same reason, and NEVER folded into the works
           figures above: those count one estimate set, this is money spent, not work accepted. */}

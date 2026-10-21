@@ -332,8 +332,9 @@ function MonthList({ months, onOpen }: { months: CashMonthTotal[]; onOpen: (mont
             {new Date(m.month + 'T00:00:00').toLocaleDateString('uk-UA', { month: 'long' })}
           </span>
           <span className="ml-auto flex flex-shrink-0 items-baseline gap-2 font-mono text-sm tabular-nums">
-            <span className="text-success">+{formatMoney(m.income)}</span>
-            <span className="text-muted">−{formatMoney(m.expense)}</span>
+            {/* A side with nothing on it is left out — «−0 ₴» read as a spend that went missing. */}
+            {m.income > 0 && <span className="text-success">+{formatMoney(m.income)}</span>}
+            {m.expense > 0 && <span className="text-muted">−{formatMoney(m.expense)}</span>}
           </span>
         </button>
       ))}

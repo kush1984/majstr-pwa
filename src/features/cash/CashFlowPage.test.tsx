@@ -239,6 +239,20 @@ describe('CashFlowPage', () => {
     ).toBe(true));
   });
 
+  /** A month with no spending said «−0 ₴», which read as a spend that went missing. */
+  it('leaves out the side of a month that has nothing on it', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      months: [{ month: '2026-10-01', income: 5000, expense: 0, earned: 5000 }],
+    }));
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Рік' }));
+
+    const row = (await screen.findByText('жовтень')).closest('button')!;
+    expect(row.textContent).toContain('+5');
+    expect(row.textContent).not.toContain('−');
+  });
+
   /**
    * «Період» — two dates the master picks himself, for the window none of the three buttons is:
    * a job that ran from the 12th to the 3rd, a quarter, last September.

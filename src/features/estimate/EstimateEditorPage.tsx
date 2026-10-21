@@ -689,7 +689,7 @@ export function EstimateEditorPage() {
                 status={est.status}
                 signedAt={est.signedAt}
                 onShare={guard(() => void onShare())}
-                onCreateAct={() => void navigate(routes.newAct(projectId))}
+                onCreateAct={est.kind === 'ADDENDUM' ? undefined : () => void navigate(routes.newAct(projectId))}
                 // The calculator asks the server for every figure it shows and caches nothing, so
                 // offline it opens on a spinner that never resolves. Say so at the door instead.
                 onMaterials={guard(() => void navigate(routes.materials(est.id)))}

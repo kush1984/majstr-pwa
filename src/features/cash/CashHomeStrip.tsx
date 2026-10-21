@@ -45,8 +45,8 @@ export function CashHomeStrip() {
       <span className="text-base leading-none" aria-hidden>💰</span>
       <span className="truncate text-sm font-semibold text-primary">{t('cash.thisMonth')}</span>
       <span className="ml-auto flex flex-shrink-0 items-baseline gap-2 font-mono text-sm tabular-nums">
-        <span className="text-success">+{formatMoney(summary.data.income)}</span>
-        <span className="text-muted">−{formatMoney(summary.data.expense)}</span>
+        {summary.data.income > 0 && <span className="text-success">+{formatMoney(summary.data.income)}</span>}
+        {summary.data.expense > 0 && <span className="text-muted">−{formatMoney(summary.data.expense)}</span>}
       </span>
       <span className="flex-shrink-0 text-muted" aria-hidden>›</span>
     </button>
