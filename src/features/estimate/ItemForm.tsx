@@ -103,7 +103,7 @@ export function ItemForm({
     setError,
     watch,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<ItemFormValues>({
     resolver: zodResolver(itemFormSchema),
     defaultValues: initial
@@ -498,8 +498,15 @@ export function ItemForm({
           <MeasureCalculator
             unit={watch('unit')}
             onApply={(q) => {
-              setValue('quantity', String(q), { shouldValidate: true });
+              // Read BEFORE the quantity lands: anything else he changed is still unsaved.
+              const otherChanges = Object.keys(dirtyFields).some((k) => k !== 'quantity')
+                || measurementRefs.join() !== (initial?.measurementRefs ?? []).join();
+              setValue('quantity', String(q), { shouldValidate: true, shouldDirty: true });
               setQuantityManual(true); // the single-line calc is a manual number, not object measurements
+              // An existing line whose ONLY change is the measured quantity saves on «Застосувати»
+              // — one tap instead of two, and the parent's «Збережено» confirms it. Anything else
+              // unsaved means he is mid-edit: the number is just put in, as before.
+              if (initial && !otherChanges) void submit();
             }}
             onClose={() => setCalcOpen(false)}
           />

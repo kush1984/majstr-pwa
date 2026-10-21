@@ -137,6 +137,7 @@ export function MeasureCalculator({
                 <ShapeInput
                   draft={p}
                   unit={dimUnit}
+                  collapseShapes
                   onChange={(d) => setPlanes((prev) => prev.map((x, idx) => (idx === i ? d : x)))}
                 />
               </div>
@@ -189,7 +190,7 @@ export function MeasureCalculator({
       {mode === 'area' && (
         <div className="mt-3 border-t border-border pt-3">
           <div className="mb-1.5 text-xs font-semibold text-muted">
-            {t('estimate.measureOpenings')} ({t(`lengthUnit.${dimUnit}`)})
+            {t('estimate.measureOpeningsSubtract')}
           </div>
           <div className="space-y-2">
             {openings.map((o, i) => (
@@ -208,8 +209,10 @@ export function MeasureCalculator({
                   onChange={(e) => setOpening(i, 'h', e.target.value)}
                 />
                 <span className="text-muted">×</span>
+                {/* «decimal», not «numeric», on every field here: Android's numeric pad has no
+                    comma, and a master who meets one keypad per field stops trusting the rest. */}
                 <Input
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder={t('estimate.measureCount')}
                   value={o.n}
                   onChange={(e) => setOpening(i, 'n', e.target.value)}
@@ -236,7 +239,14 @@ export function MeasureCalculator({
         </div>
       )}
 
-      <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-sm text-muted">
+      {/* Sticky inside the sheet's scroll, so «Разом» and «Застосувати» ride above the keyboard
+          while a size is typed — the Modal pins itself to visualViewport. The negative margins
+          span the panel's own p-3; `-bottom-5` reaches past the sheet's p-5, or content peeks below. */}
+      <div
+        data-testid="calc-footer"
+        className="sticky -bottom-5 z-10 -mx-3 -mb-3 mt-3 rounded-b-xl border-t border-border bg-surface-sunken px-3 pb-3 pt-3"
+      >
+      <div className="flex items-center justify-between text-sm text-muted">
         <span>{t('estimate.measureResult')}</span>
         <span className="text-base font-bold text-primary">
           {result} {t(mode === 'area' ? 'units.M2' : 'units.LINEAR_METER')}
@@ -257,6 +267,7 @@ export function MeasureCalculator({
         >
           {t('estimate.measureApply')}
         </Button>
+      </div>
       </div>
     </div>
   );

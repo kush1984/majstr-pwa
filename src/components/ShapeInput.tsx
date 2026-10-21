@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { ShapeDiagram } from '@/components/ShapeDiagram.tsx';
@@ -28,10 +28,14 @@ export function ShapeInput({
   draft,
   unit,
   onChange,
+  collapseShapes = false,
 }: {
   draft: PlaneDraft;
   unit: LengthUnit;
   onChange: (d: PlaneDraft) => void;
+  /** Show only «Прямокутник» (plus the shape in use) behind an «Інша форма ▾» — the line's
+   *  calculator, where a rectangle is nearly every case and seven chips pushed the sizes down. */
+  collapseShapes?: boolean;
 }) {
   const { t } = useTranslation();
   const variant = variantOf(draft.shape, draft.mode);
@@ -52,12 +56,15 @@ export function ShapeInput({
   };
 
   const pickShape = (shape: ShapeKey) => switchTo(shape, defaultMode(shape));
+  const [allShapes, setAllShapes] = useState(!collapseShapes);
+  // The chosen shape stays in view when the rest fold away — a fold must never hide a choice.
+  const shownShapes = allShapes ? SHAPE_KEYS : SHAPE_KEYS.filter((k) => k === 'rect' || k === draft.shape);
 
   return (
     <div className="space-y-3">
       {/* Shape chips — wrap on a phone rather than scroll, so none hide off-screen. */}
       <div className="flex flex-wrap gap-1.5">
-        {SHAPE_KEYS.map((k) => (
+        {shownShapes.map((k) => (
           <button
             key={k}
             type="button"
@@ -71,6 +78,15 @@ export function ShapeInput({
             {t(`shape.${k}.name`)}
           </button>
         ))}
+        {!allShapes && (
+          <button
+            type="button"
+            onClick={() => setAllShapes(true)}
+            className="min-h-[44px] rounded-full px-3.5 text-xs font-semibold text-brand"
+          >
+            {t('shape.otherShape')}
+          </button>
+        )}
       </div>
 
       {modes.length > 1 && (

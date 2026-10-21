@@ -520,7 +520,7 @@
     "addItemTitle": "Додати позицію",
     "fromCatalog": "З каталогу",
     "manual": "Вручну",
-    "measureCalc": "Порахувати з розмірів",
+    "measureCalc": "Порахувати за розмірами",
     "measureArea": "Площа (м²)",
     "measureLength": "Довжина (м.пог)",
     "measureLen": "Довжина",
@@ -529,6 +529,7 @@
     "measureCount": "К-ть",
     "measureAddRow": "+ Додати рядок",
     "measureOpenings": "Прорізи (вікна/двері) — відняти",
+    "measureOpeningsSubtract": "Прорізи (вікна, двері) — віднімемо від площі",
     "measureAddOpening": "+ Проріз",
     "unquantifiedCount": "{{count}} без кількості",
     "needsQuantity": "Вкажіть кількість",
@@ -1483,7 +1484,7 @@
     "linearLengthField": "Довжина, м"
   },
   "measurePick": {
-    "button": "Вибрати з замірів",
+    "button": "Взяти із замірів об'єкта",
     "total": "Разом",
     "apply": "Застосувати",
     "manualWarning": "Кількість змінена вручну. «Застосувати» перерахує її зі замірів.",
@@ -1531,6 +1532,7 @@
     "diagCheck": "Скіс (діагональ) для звірки ≈ {{value}} {{unit}}",
     "planesTotal": "Сума площин",
     "openingsTotal": "Мінус прорізи",
+    "otherShape": "Інша форма ▾",
     "addPlane": "+ Додати площину",
     "plane": "Площина {{n}}",
     "hintTape": "Заміряйте те, що позначено буквою на кресленні, і впишіть у поле з тією ж буквою.",
