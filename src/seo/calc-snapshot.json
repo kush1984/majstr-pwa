@@ -178,8 +178,8 @@
         {
           "name": "Клей для плитки еластичний C2",
           "unit": "KG",
-          "quantity": 200,
-          "packages": 8,
+          "quantity": 175,
+          "packages": 7,
           "packageName": "мішок"
         },
         {
@@ -424,21 +424,21 @@
         {
           "name": "Лист ГКЛ 1200×2500",
           "unit": "M2",
-          "quantity": 15,
-          "packages": 5,
+          "quantity": 27,
+          "packages": 9,
           "packageName": "лист"
         },
         {
           "name": "Профіль стійковий CW",
           "unit": "LINEAR_METER",
-          "quantity": 14,
+          "quantity": 27,
           "packages": null,
           "packageName": null
         },
         {
           "name": "Профіль напрямний UW",
           "unit": "LINEAR_METER",
-          "quantity": 5,
+          "quantity": 10,
           "packages": null,
           "packageName": null
         },
@@ -452,7 +452,7 @@
         {
           "name": "Стрічка ущільнювальна",
           "unit": "LINEAR_METER",
-          "quantity": 7,
+          "quantity": 14,
           "packages": null,
           "packageName": null
         },
@@ -478,21 +478,21 @@
         {
           "name": "Лист ГКЛ 1200×2500",
           "unit": "M2",
-          "quantity": 27,
-          "packages": 9,
+          "quantity": 54,
+          "packages": 18,
           "packageName": "лист"
         },
         {
           "name": "Профіль стійковий CW",
           "unit": "LINEAR_METER",
-          "quantity": 14,
+          "quantity": 27,
           "packages": null,
           "packageName": null
         },
         {
           "name": "Профіль напрямний UW",
           "unit": "LINEAR_METER",
-          "quantity": 5,
+          "quantity": 10,
           "packages": null,
           "packageName": null
         },
@@ -513,7 +513,7 @@
         {
           "name": "Стрічка ущільнювальна",
           "unit": "LINEAR_METER",
-          "quantity": 7,
+          "quantity": 14,
           "packages": null,
           "packageName": null
         },
