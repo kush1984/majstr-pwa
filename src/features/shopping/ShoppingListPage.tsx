@@ -13,6 +13,7 @@ import { CollapseGroupRow } from '@/components/CollapseGroupRow.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { formatNumber } from '@/lib/format.ts';
+import { packageCount } from '@/lib/packages.ts';
 // Handles the comma AND the space a phone keyboard puts in «1 200» — `Number()` answers NaN to that.
 import { parseDecimal } from '@/lib/decimal.ts';
 import { sharePdf } from '@/lib/sharePdf.ts';
@@ -268,6 +269,19 @@ function ShoppingRow({
   onAnswer: (suggestion: 'ACCEPT' | 'KEEP_MINE') => void;
 }) {
   const { t } = useTranslation();
+  // Counted from the row's CURRENT quantity — the master may have corrected 150 to 140.
+  const count = packageCount(item.quantity, item.packageSize);
+  const packages =
+    count != null && item.packageName != null && item.packageSize != null
+      ? t('shopping.packages', {
+          qty: count,
+          packageName: item.packageName,
+          size: formatNumber(item.packageSize, 3),
+          unit: t(`units.${item.unit}`),
+        })
+      : null;
+  const suggestedPackages =
+    item.packageName != null ? packageCount(item.suggestedQuantity, item.packageSize) : null;
   return (
     <div className="border-b border-border last:border-b-0">
       <div className="flex min-h-[56px] items-center">
@@ -306,6 +320,19 @@ function ShoppingRow({
             >
               {item.name}
             </span>
+            {packages != null && (
+              <span
+                className={
+                  item.bought
+                    ? 'block text-xs text-muted line-through'
+                    : 'block text-xs text-muted'
+                }
+              >
+                {/* On a top-up row the count is of the DIFFERENCE: «ще 1 × мішок», not the whole job. */}
+                {item.topUp && `${t('shopping.topUpPrefix')} `}
+                {packages}
+              </span>
+            )}
             {item.note && <span className="block truncate text-xs text-muted">{item.note}</span>}
             {item.topUp && (
               <span className="block text-xs text-muted">{t('shopping.topUpWhy')}</span>
@@ -321,10 +348,17 @@ function ShoppingRow({
       {item.suggestedQuantity != null && (
         <div className="rounded-xl bg-amber-soft px-3 py-2.5 mx-3 mb-3">
           <p className="text-xs text-amber">
-            {t('shopping.suggestion', {
-              qty: formatNumber(item.suggestedQuantity, 3),
-              unit: t(`units.${item.unit}`),
-            })}
+            {suggestedPackages != null
+              ? t('shopping.suggestionWithPackages', {
+                  qty: formatNumber(item.suggestedQuantity, 3),
+                  unit: t(`units.${item.unit}`),
+                  packages: suggestedPackages,
+                  packageName: item.packageName,
+                })
+              : t('shopping.suggestion', {
+                  qty: formatNumber(item.suggestedQuantity, 3),
+                  unit: t(`units.${item.unit}`),
+                })}
           </p>
           <div className="mt-2 flex gap-2">
             <button

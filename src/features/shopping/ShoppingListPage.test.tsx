@@ -291,3 +291,68 @@ describe('ShoppingListPage', () => {
     expect(screen.queryByText('Сервіс тимчасово недоступний')).toBeNull();
   });
 });
+
+describe('ShoppingListPage — packages (V174)', () => {
+  const bag = { unit: 'KG' as const, packageSize: 25, packageName: 'мішок' };
+
+  it('shows the packages under the name of a row sold by the package', () => {
+    seed([item({ name: 'Клей для плитки', quantity: 150, ...bag })]);
+    renderPage();
+
+    expect(screen.getByText('6 × мішок по 25 кг')).toBeTruthy();
+  });
+
+  it('adds no second line to a row not sold by the package', () => {
+    seed([item({ name: 'Пісок', unit: 'M3', quantity: 2, packageSize: null, packageName: null })]);
+    const { container } = renderPage();
+
+    expect(container.textContent).not.toMatch(/×/);
+  });
+
+  it('counts from the quantity the master corrected, not from the calculation', () => {
+    seed([
+      item({ id: 'a', name: 'Клей', quantity: 140, edited: true, ...bag }),
+      item({ id: 'b', name: 'Стяжка', quantity: 151, sortOrder: 1, ...bag }),
+    ]);
+    renderPage();
+
+    expect(screen.getByText('6 × мішок по 25 кг')).toBeTruthy();
+    expect(screen.getByText('7 × мішок по 25 кг')).toBeTruthy();
+  });
+
+  it('counts the packages of a top-up row from the difference it carries', () => {
+    seed([
+      item({ id: 'a', quantity: 150, bought: true, ...bag }),
+      item({ id: 'b', quantity: 6, topUp: true, sortOrder: 1, ...bag }),
+    ]);
+    renderPage();
+
+    expect(screen.getByText('ще 1 × мішок по 25 кг')).toBeTruthy();
+  });
+
+  it('strikes the packages through on a bought row, like its name', () => {
+    seed([item({ quantity: 150, bought: true, ...bag })]);
+    renderPage();
+
+    expect(screen.getByText('6 × мішок по 25 кг').className).toContain('line-through');
+  });
+
+  it('names the packages of the recalculation offer too', () => {
+    seed([item({ quantity: 140, edited: true, suggestedQuantity: 190, ...bag })]);
+    renderPage();
+
+    expect(screen.getByText(/Перерахунок дає 190 кг \(8 × мішок\)/)).toBeTruthy();
+  });
+
+  it('renders a row from an offline cache that predates the package fields', () => {
+    const old = item({ quantity: 150, unit: 'KG' });
+    delete (old as Partial<ShoppingListItemResponse>).packageSize;
+    delete (old as Partial<ShoppingListItemResponse>).packageName;
+    seed([old]);
+    renderPage();
+
+    expect(screen.getByText('Профіль CD')).toBeTruthy();
+    expect(screen.queryByText(/×/)).toBeNull();
+  });
+});
+

@@ -11,6 +11,7 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { formatNumber } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
+import { packageCount } from '@/lib/packages.ts';
 import { routes } from '@/lib/config.ts';
 import { materialsApi } from '@/api/materials.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
@@ -1181,13 +1182,7 @@ function MaterialRow({
   // The packages follow the number ON THE ROW, not the one the server last sent. «5 × мішок» under a
   // quantity the master had corrected to 200 кг was our arithmetic contradicting his, on the same
   // line — and the packages are the thing he actually carries to the till.
-  const typed = parseDecimal(value);
-  // `Math.ceil` over a binary division over-counts on the exact case: 2.1 / 0.3 is 7.000000000000001,
-  // so «7 мішків» became 8 and the master carried one he did not need (review P-29).
-  const packages =
-    line.packageSize != null && line.packageSize > 0 && typed > 0
-      ? Math.ceil(typed / line.packageSize - 1e-9)
-      : null;
+  const packages = packageCount(parseDecimal(value), line.packageSize);
   const errorId = `qty-${line.materialId}-error`;
 
   return (

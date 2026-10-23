@@ -1876,6 +1876,12 @@ export interface ShoppingListItemResponse {
   sourceEstimateId?: string | null;
   note?: string | null;
   sortOrder: number;
+  /**
+   * One package in `unit` (25 for «мішок по 25 кг»), frozen on the row by the server; the count is
+   * derived from `quantity` (`packageCount`). Optional: a phone's offline cache predates them.
+   */
+  packageSize?: number | null;
+  packageName?: string | null;
 }
 
 /** The whole list of one object. `id` is null until the first row exists — a list is created lazily. */

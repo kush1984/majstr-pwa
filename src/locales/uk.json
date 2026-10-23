@@ -1058,6 +1058,8 @@
     "topUpWhy": "Кошторис змінився після покупки — тут тільки різниця.",
     "unsignedSource": "Кошторис ще не підписаний — кількості можуть змінитись.",
     "suggestion": "Перерахунок дає {{qty}} {{unit}} — ваше число лишили.",
+    "suggestionWithPackages": "Перерахунок дає {{qty}} {{unit}} ({{packages}} × {{packageName}}) — ваше число лишили.",
+    "packages": "{{qty}} × {{packageName}} по {{size}} {{unit}}",
     "takeNew": "Взяти нове",
     "keepMine": "Лишити своє",
     "homeTitle": "Купити",

@@ -1055,6 +1055,8 @@
     "topUpWhy": "The estimate changed after the purchase — this is only the difference.",
     "unsignedSource": "The estimate is not signed yet — the quantities can still move.",
     "suggestion": "The recalculation makes it {{qty}} {{unit}} — your own number was kept.",
+    "suggestionWithPackages": "The recalculation makes it {{qty}} {{unit}} ({{packages}} × {{packageName}}) — your own number was kept.",
+    "packages": "{{qty}} × {{packageName}} of {{size}} {{unit}}",
     "takeNew": "Take the new one",
     "keepMine": "Keep mine",
     "homeTitle": "To buy",
