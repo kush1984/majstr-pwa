@@ -18,7 +18,10 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label started moving to Ubuntu 26 on 2026-10-19, and from
+    # then on «Install Playwright browser» (`--with-deps` installs Chromium's apt packages for a
+    # KNOWN Ubuntu) failed on an unchanged lockfile. Unpin once Playwright supports 26.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
