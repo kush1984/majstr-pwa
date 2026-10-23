@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { routes } from '@/lib/config.ts';
@@ -320,26 +320,123 @@ function HowItWorks() {
     <section id="how" className="scroll-mt-20 bg-landing-paper/50 px-4 py-16 sm:px-6 lg:py-20">
       <div className="mx-auto max-w-[1160px]">
         <SectionTitle sub={t('landing.stepsSubtitle')}>{t('landing.stepsTitle')}</SectionTitle>
-        <ol className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
-          {steps.map((s, i) => (
-            <li key={s.title} className="flex gap-4 lg:flex-col">
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-landing-amber text-sm font-extrabold text-white">
-                  {i + 1}
-                </span>
-                <span className="hidden h-9 w-9 place-items-center rounded-full bg-white text-landing-amber-deep lg:grid">
-                  <Icon name={s.icon} small />
-                </span>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold">{s.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-landing-muted">{s.text}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {/* Phone: the loop under the title, then the steps. Desktop: steps left, loop right. */}
+        <div className="grid gap-8 lg:grid-cols-12 lg:items-center lg:gap-12">
+          <div className="lg:order-2 lg:col-span-7">
+            <HowItWorksVideo />
+          </div>
+          <ol className="grid gap-6 md:grid-cols-2 lg:order-1 lg:col-span-5 lg:grid-cols-1">
+            {steps.map((s, i) => (
+              <li key={s.title} className="flex gap-4">
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-landing-amber text-sm font-extrabold text-white">
+                    {i + 1}
+                  </span>
+                  <span className="hidden h-9 w-9 place-items-center rounded-full bg-white text-landing-amber-deep lg:grid">
+                    <Icon name={s.icon} small />
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">{s.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-landing-muted">{s.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
+  );
+}
+
+const HOW_VIDEO = {
+  phone: { src: '/video/majstr-landing-loop-mobile.mp4', poster: '/video/majstr-landing-poster-mobile.jpg' },
+  wide: { src: '/video/majstr-landing-loop.mp4', poster: '/video/majstr-landing-poster.jpg' },
+};
+/** The same edge as the frame's `md:aspect-video`, so the file always matches the box it plays in. */
+const PHONE_QUERY = '(max-width: 767px)';
+
+function matches(query: string): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+}
+
+/** Reduced motion or «save data»: the poster stays, the loop is never fetched. */
+function prefersStill(): boolean {
+  // `connection` (Network Information API) is not in lib.dom; Chromium has it, Safari does not.
+  const connection: unknown = 'connection' in navigator ? navigator.connection : undefined;
+  const saveData =
+    typeof connection === 'object' && connection !== null && 'saveData' in connection && connection.saveData === true;
+  return matches('(prefers-reduced-motion: reduce)') || saveData;
+}
+
+/**
+ * The «Як це працює» loop. Nothing is fetched before the visitor scrolls near it: `src` and
+ * `poster` are set by an observer, ONE version chosen by width, so the browser never loads both
+ * (`<source media>` for video is honoured unreliably by Safari and Chrome). It plays only while on
+ * screen. The frame's size is CSS (4:5 on a phone, 16:9 from 768 px), so nothing shifts when it loads.
+ */
+function HowItWorksVideo() {
+  const { t } = useTranslation();
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || typeof IntersectionObserver === 'undefined') return;
+    const still = prefersStill();
+    let loaded = false;
+    const load = () => {
+      if (loaded) return;
+      loaded = true;
+      const version = matches(PHONE_QUERY) ? HOW_VIDEO.phone : HOW_VIDEO.wide;
+      video.poster = version.poster;
+      if (!still) {
+        video.muted = true; // the property, not only the attribute — what lets a phone play it unasked
+        video.src = version.src;
+      }
+    };
+    // A screen early, so the poster is already there when the frame scrolls in.
+    const near = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          load();
+          near.disconnect();
+        }
+      },
+      { rootMargin: '300px 0px' },
+    );
+    const onScreen = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          load();
+          // A refused autoplay (iOS Low Power Mode) just leaves the poster — nothing to report.
+          if (!still) void video.play().catch(() => undefined);
+        } else if (!video.paused) {
+          video.pause();
+        }
+      },
+      { threshold: 0.25 },
+    );
+    near.observe(video);
+    onScreen.observe(video);
+    return () => {
+      near.disconnect();
+      onScreen.disconnect();
+      video.pause();
+    };
+  }, []);
+
+  return (
+    <div className="aspect-[4/5] overflow-hidden rounded-2xl border border-landing-line/60 bg-white shadow-[0_6px_20px_-14px_rgba(58,37,25,0.35)] md:aspect-video">
+      <video
+        ref={ref}
+        className="block h-full w-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="none"
+        aria-label={t('landing.stepsVideoLabel')}
+      />
+    </div>
   );
 }
 

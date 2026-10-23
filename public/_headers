@@ -22,3 +22,8 @@
   Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-yyiHqnMgRGAFkFTrg0kXHkXmcMM3GtIlBRCHlrXAfxM=' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+
+# The landing loops and their posters. A file under /video is never edited in place — a new cut
+# gets a new name — so a year's immutable cache is safe and saves the repeat visit 1-2 MB.
+/video/*
+  Cache-Control: public, max-age=31536000, immutable
