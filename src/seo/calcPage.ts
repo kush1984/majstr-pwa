@@ -85,12 +85,15 @@ function checked(name: string): string | null {
   return form?.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? null;
 }
 
-/** Only the questions that apply to the chosen job are on screen (perimeter → ceiling, layers → partition). */
+/**
+ * Only the questions that apply to the chosen job are on screen (perimeter → ceiling, layers →
+ * partition), and the area is named for it — a partition's is ONE face. `data-for` lists the jobs.
+ */
 function syncDrywallFields(): void {
   if (calculator !== 'DRYWALL' || !form) return;
   const work = checked('work');
   form.querySelectorAll<HTMLElement>('[data-for]').forEach((el) => {
-    el.hidden = el.dataset.for !== work;
+    el.hidden = work == null || !(el.dataset.for ?? '').split(' ').includes(work);
   });
 }
 
