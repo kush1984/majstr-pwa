@@ -689,7 +689,7 @@ export function EstimateEditorPage() {
                 status={est.status}
                 signedAt={est.signedAt}
                 onShare={guard(() => void onShare())}
-                onCreateAct={() => void navigate(routes.newAct(projectId))}
+                onCreateAct={est.kind === 'ADDENDUM' ? undefined : () => void navigate(routes.newAct(projectId))}
                 // The calculator asks the server for every figure it shows and caches nothing, so
                 // offline it opens on a spinner that never resolves. Say so at the door instead.
                 onMaterials={guard(() => void navigate(routes.materials(est.id)))}
@@ -715,8 +715,9 @@ export function EstimateEditorPage() {
 
       {/* ONE action, no drawer. The «＋» now means what it looks like it means; everything else
           moved to the header ⋮ and to the next-step block at the foot of the list. Hidden on a
-          signed estimate, which cannot gain positions. */}
-      {!signed && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
+          signed estimate, which cannot gain positions, and while selecting: it sat on top of the
+          selection bar's «Скасувати». */}
+      {!signed && picked === null && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
 
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       {pdfSheetOpen && (

@@ -30,7 +30,7 @@ export function TradeBadge({ trade }: { trade: Trade }) {
   const { t } = useTranslation();
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold normal-case ${CLASS_BY_TRADE[trade]}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case ${CLASS_BY_TRADE[trade]}`}
       title={t('trades.' + trade)}
     >
       {t('trades.' + trade)}

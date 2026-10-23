@@ -254,7 +254,7 @@ function NextPaymentCard({ stage, onEditStage }: { stage: ProjectPaymentResponse
   const condition = upcomingCondition(stage);
   return (
     <div className="mt-2">
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted">{t('economy.paymentsNextLabel')}</p>
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">{t('economy.paymentsNextLabel')}</p>
       <button
         type="button"
         onClick={() => onEditStage(stage)}

@@ -68,6 +68,19 @@ interface ReceiptFormValue {
   issuedAt: string | null;
 }
 
+/** How far before «Роботи з» a receipt may be dated before the editor asks about it. */
+const OLD_RECEIPT_DAYS = 60;
+
+/**
+ * A slip dated two months before the works began — an old paper picked up by mistake, or a year
+ * the recognition misread («14-11-25» taken for 2014). It prints on the act the client signs, so the
+ * master is asked before signing. Nothing is blocked: an old purchase can be genuine. ISO dates.
+ */
+export function isLongBefore(issuedAt: string, worksFrom: string): boolean {
+  const day = 24 * 60 * 60 * 1000;
+  return Date.parse(worksFrom) - Date.parse(issuedAt) > OLD_RECEIPT_DAYS * day;
+}
+
 export function ActReceiptsSection({
   actId,
   projectId,
@@ -80,6 +93,7 @@ export function ActReceiptsSection({
   onToExpensesChange,
   showPhotosInPdf,
   onShowPhotosInPdfChange,
+  worksFrom,
 }: {
   actId: string;
   projectId: string;
@@ -99,6 +113,8 @@ export function ActReceiptsSection({
   /** PDF-appendix-only toggle: the portal always shows the photos. */
   showPhotosInPdf: boolean;
   onShowPhotosInPdfChange: (v: boolean) => void;
+  /** «Роботи з» — a receipt dated long before it is flagged (see `isLongBefore`). */
+  worksFrom?: string;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -325,6 +341,9 @@ export function ActReceiptsSection({
                     <p className="mt-0.5 text-xs text-muted">{t('acts.receiptItemizedBadge')}</p>
                   )}
                   {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>}
+                  {!signed && r.issuedAt && worksFrom && isLongBefore(r.issuedAt, worksFrom) && (
+                    <p className="mt-0.5 text-xs text-amber-strong">{t('acts.receiptOldDate')}</p>
+                  )}
                   {/* The same paper filed on the object too (B-04). A warning both ways: the
                       object's list points here, this points back — and nothing is blocked, because
                       a shop can legitimately reprint a slip and only the master is holding it. */}

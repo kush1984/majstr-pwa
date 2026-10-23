@@ -56,6 +56,14 @@ const collisionDetection: CollisionDetection = (args) => {
  * them. So moving a section is moving its lines together, and the whole feature reduces to one
  * renumbering — see estimateArrange.
  */
+/**
+ * A bundle lands every line at quantity 0: priced, not yet measured. On the board it must not read
+ * like a filled line worth 0 ₴. A «%» line has its own rules, and a signed estimate is final.
+ */
+function isUnquantified(item: EstimateItemResponse, signed: boolean): boolean {
+  return !signed && item.unit !== 'PERCENT' && Number(item.quantity) === 0;
+}
+
 export function EstimateItemsBoard({
   items,
   estimateId,
@@ -324,6 +332,7 @@ function SectionBlock({
   // What this stage costs. The master is asked it on site far more often than the grand total.
   const subtotal = section.items.reduce((sum, i) => sum + i.lineTotal, 0);
   const collapsed = collapse.isCollapsed(section.category);
+  const unquantifiedCount = section.items.filter((i) => isUnquantified(i, signed)).length;
   // The header carries the section's dominant trade. A category almost always belongs to ONE trade
   // (a stage inside it); on the rare mix, the first item's trade is used — same rule as sortOrder,
   // «the section IS the run of lines sharing a category, ordered by the first of them».
@@ -388,7 +397,12 @@ function SectionBlock({
           // a "did I lose those?" moment. Rendered outside the button so it never becomes part of
           // the fold-toggle target area.
           <span className="font-normal normal-case text-muted">
-            ({section.items.length})
+            ({section.items.length}
+            {unquantifiedCount > 0 && (
+              <span className="font-semibold text-amber-strong">
+                {' · '}{t('estimate.unquantifiedCount', { count: unquantifiedCount })}
+              </span>
+            )})
           </span>
         )}
         <span className="font-bold normal-case text-muted">{formatMoney(subtotal)}</span>
@@ -452,6 +466,7 @@ function ItemRow({
   // only counts SIGNED into closedByActs), so this never shows work the client hasn't accepted.
   const closed = item.closedByActs ?? 0;
   const fullyClosed = closed > 0 && closed >= item.quantity;
+  const unquantified = isUnquantified(item, signed);
   const partlyClosed = closed > 0 && !fullyClosed;
   const description = item.description?.trim() ?? '';
 
@@ -503,7 +518,8 @@ function ItemRow({
               : isTouched ? 'border-brand/30 bg-brand-soft/20'
                 : fullyClosed ? 'border-success/60 bg-success-soft'
                   : partlyClosed ? 'border-success/40 bg-success-soft/40'
-                    : 'border-border bg-surface',
+                    : unquantified ? 'border-dashed border-amber/70 bg-surface-sunken'
+                      : 'border-border bg-surface',
         )}
       >
         {/* The number is a GUTTER for the whole card, not a word inside the name.
@@ -528,16 +544,26 @@ function ItemRow({
         <span className="min-w-0 flex-1">
           <span className="flex items-start justify-between gap-2">
             <span className="min-w-0 flex-1 text-sm font-medium text-primary">{item.name}</span>
-            <span className="whitespace-nowrap text-sm font-bold text-primary">
-              {formatMoney(item.lineTotal)}
-            </span>
+            {unquantified ? (
+              <span className="whitespace-nowrap text-sm font-bold text-faint">—</span>
+            ) : (
+              <span className="whitespace-nowrap text-sm font-bold text-primary">
+                {formatMoney(item.lineTotal)}
+              </span>
+            )}
           </span>
           {/* No manual indent any more: the gutter above already holds the column open, so this
               line simply starts where the name starts. */}
           <span className="mt-1 flex items-center gap-2 text-xs text-muted">
-            <span>
-              {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
-            </span>
+            {unquantified ? (
+              <span className="rounded-full border border-amber/60 bg-amber-soft px-2 py-0.5 text-[12px] font-semibold text-amber-strong">
+                {t('estimate.needsQuantity')}
+              </span>
+            ) : (
+              <span>
+                {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
+              </span>
+            )}
             <span className="h-[3px] w-[3px] rounded-full bg-faint" />
             {/* A percentage has no price per unit — «500 ₴/%» meant nothing. It says what it is a
                 percentage OF, in the same words the PDF and the client's portal use. */}

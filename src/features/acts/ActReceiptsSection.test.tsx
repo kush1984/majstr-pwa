@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
-import { ActReceiptsSection } from './ActReceiptsSection.tsx';
+import { ActReceiptsSection, isLongBefore } from './ActReceiptsSection.tsx';
 import { actsApi } from '@/api/acts.ts';
 import { decodeQrFromFile } from '@/lib/qr.ts';
 import { useOnline } from '@/lib/useOnline.ts';
@@ -539,5 +539,22 @@ describe('ActReceiptsSection — an unreadable amount is refused, never billed a
     // 0 ≥ 0 would have read as «the return fits» about two numbers nobody has.
     expect(screen.queryByText(/Повернення не може бути більшим/)).toBeNull();
     expect(screen.getByText('Зберегти').closest('button')!.disabled).toBe(true);
+  });
+});
+
+/**
+ * A master's Епіцентр slip: the recognition took the footer «14-11-25» for 2014, the paper went onto
+ * the act the client signed, and nobody was asked. Two months before «Роботи з» is when the editor
+ * asks; nothing is blocked, since an old purchase can be genuine.
+ */
+describe('isLongBefore', () => {
+  it('flags a receipt dated more than two months before the works', () => {
+    expect(isLongBefore('2014-11-25', '2026-10-19')).toBe(true);
+    expect(isLongBefore('2026-08-01', '2026-10-19')).toBe(true);
+  });
+
+  it('leaves a recent receipt, or one bought during the works, alone', () => {
+    expect(isLongBefore('2026-09-10', '2026-10-19')).toBe(false);
+    expect(isLongBefore('2026-10-20', '2026-10-19')).toBe(false);
   });
 });

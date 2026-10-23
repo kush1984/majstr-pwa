@@ -373,7 +373,10 @@ export function ActEditorPage() {
     return bad;
   }, [additional]);
   const advanceInvalid = moneyOf(advance) === null;
-  const invalid = qtyErrors.size > 0 || additionalErrors.size > 0 || advanceInvalid;
+  // «з 20.10 по 19.10» reached signed acts and the client's portal: nothing checked the order. ISO
+  // dates compare as text. The server refuses it too (WORK_ACT_PERIOD_ORDER).
+  const periodInvalid = periodFrom !== '' && periodTo !== '' && periodFrom > periodTo;
+  const invalid = qtyErrors.size > 0 || additionalErrors.size > 0 || advanceInvalid || periodInvalid;
 
   // WYSIWYG (review fix): the act contains exactly what the editor shows. With «Показувати
   // матеріали» off, MATERIAL estimate lines are hidden — so they must not count into the total nor
@@ -874,9 +877,10 @@ export function ActEditorPage() {
           )}
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label={t('acts.periodFrom')}><Input type="date" value={periodFrom} disabled={signed} onChange={(e) => setPeriodFrom(e.target.value)} /></Field>
-          <Field label={t('acts.periodTo')}><Input type="date" value={periodTo} disabled={signed} onChange={(e) => setPeriodTo(e.target.value)} /></Field>
+          <Field label={t('acts.periodFrom')}><Input type="date" value={periodFrom} disabled={signed} invalid={!signed && periodInvalid} onChange={(e) => setPeriodFrom(e.target.value)} /></Field>
+          <Field label={t('acts.periodTo')}><Input type="date" value={periodTo} disabled={signed} invalid={!signed && periodInvalid} onChange={(e) => setPeriodTo(e.target.value)} /></Field>
         </div>
+        {!signed && periodInvalid && <p className="-mt-1 text-xs text-danger">{t('acts.periodOrder')}</p>}
         <Field label={t('acts.issuedAt')}><Input type="date" value={issuedAt} disabled={signed} onChange={(e) => setIssuedAt(e.target.value)} /></Field>
         <Field label={t('acts.contractRef')}><Input value={contractRef} disabled={signed} onChange={(e) => setContractRef(e.target.value)} /></Field>
         {!signed && (
@@ -1092,7 +1096,8 @@ export function ActEditorPage() {
             sent={sent}
             queued={queued} onQueuedChanged={refreshQueued}
             toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
-            showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos} />
+            showPhotosInPdf={showReceiptPhotos} onShowPhotosInPdfChange={setShowReceiptPhotos}
+            worksFrom={periodFrom || undefined} />
         </>
       )}
 

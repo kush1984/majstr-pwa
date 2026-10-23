@@ -138,7 +138,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
             end={it.end}
             className={({ isActive }) =>
               cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors',
+                'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors',
                 isActive ? 'text-brand' : 'text-muted',
               )
             }

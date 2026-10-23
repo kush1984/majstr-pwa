@@ -322,6 +322,25 @@ describe('ObjectEconomySection', () => {
     expect(screen.getByText('Завдаток')).toBeTruthy();
   });
 
+  /**
+   * A receipt on an act grows «За договором» — the client owes it now. A master read that growth as
+   * a new expense; the line under the figure names what was added and by whom.
+   */
+  it('names what acts added to «За договором»', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [
+        panel(),
+        panel({ id: 'e2', name: 'Матеріали за чеками до акта № 7', kind: 'ADDENDUM', works: 0, materials: 210.75, total: 210.75 }),
+      ],
+      acts: { contracted: 15210.75, acceptedByActs: 2810.75, received: 5000 },
+    }));
+
+    renderSection('FREE');
+
+    expect(await screen.findByText(/з них додано актами/)).toBeTruthy();
+    expect(screen.getByText(/з них додано актами/).textContent).toContain('210');
+  });
+
   it('an ADDENDUM rollup panel wears its badge — not an estimate the master forgot creating', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(
       economyFixture({ estimates: [panel({ name: 'Додаткові роботи до акта № 7', kind: 'ADDENDUM' })] }),
@@ -330,7 +349,7 @@ describe('ObjectEconomySection', () => {
     renderSection('FREE');
 
     expect(await screen.findByText('Додаткові роботи до акта № 7')).toBeTruthy();
-    expect(screen.getByText('дод. роботи з акта')).toBeTruthy();
+    expect(screen.getByText('з акта')).toBeTruthy();
   });
 
   it('an ADDENDUM rollup has no ⋮ at all — both its actions were dead ends', async () => {

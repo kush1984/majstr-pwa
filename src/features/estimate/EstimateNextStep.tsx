@@ -39,7 +39,9 @@ export function EstimateNextStep({
   /** When the client signed it; absent on anything but a SIGNED estimate. */
   signedAt?: string | null;
   onShare: () => void;
-  onCreateAct: () => void;
+  /** Absent on an ADDENDUM («Матеріали за чеками / Додатково до акта № N»): its lines were already
+   *  accepted by the act that made it, and the server refuses to close them with another one. */
+  onCreateAct?: () => void;
   onMaterials: () => void;
   /** False only when the server says nothing can be calculated for this estimate's trades (V129). */
   showMaterials: boolean;
@@ -60,12 +62,12 @@ export function EstimateNextStep({
       ? t('estimate.nextStep.sentTitle')
       : t('estimate.nextStep.draftTitle');
   const hint = signed
-    ? t('estimate.nextStep.signedHint')
+    ? (onCreateAct ? t('estimate.nextStep.signedHint') : t('estimate.nextStep.addendumHint'))
     : sent
       ? t('estimate.nextStep.sentHint')
       : t('estimate.nextStep.draftHint');
   const primary = signed
-    ? { label: t('estimate.nextStep.createAct'), onClick: onCreateAct }
+    ? (onCreateAct ? { label: t('estimate.nextStep.createAct'), onClick: onCreateAct } : null)
     : sent
       // The reminder this used to carry was dropped by the master: there is no reminder flow, and
       // re-sending the same letter is not one. What he actually needs at this point is the link
@@ -80,9 +82,11 @@ export function EstimateNextStep({
     >
       <h2 className="text-[15px] font-bold leading-snug text-primary">{title}</h2>
       <p className="mt-1 text-xs leading-snug text-muted">{hint}</p>
-      <Button fullWidth className="mt-3.5 min-h-[48px] text-[15px] font-semibold" onClick={primary.onClick}>
-        {primary.label}
-      </Button>
+      {primary && (
+        <Button fullWidth className="mt-3.5 min-h-[48px] text-[15px] font-semibold" onClick={primary.onClick}>
+          {primary.label}
+        </Button>
+      )}
       {/* Quiet on purpose: these are alternatives, not competitors. Full-width rows so the tap
           target is the whole line rather than the words. */}
       <div className="mt-1.5 flex flex-col">

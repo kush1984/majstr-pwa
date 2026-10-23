@@ -7,6 +7,7 @@ import { ItemForm } from './ItemForm.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { aUser } from '@/test/factories.ts';
+import { asInput } from '@/test/dom.ts';
 import type { EstimateItemResponse } from '@/api/types.ts';
 
 vi.mock('@/api/catalog.ts', () => ({
@@ -22,14 +23,14 @@ const line = (over: Partial<EstimateItemResponse>): EstimateItemResponse => ({
   ...over,
 });
 
-function renderForm(initial: EstimateItemResponse, onSubmit = vi.fn()) {
+function renderForm(initial: EstimateItemResponse, onSubmit = vi.fn(), objectId?: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, aUser());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   return render(
-    <ItemForm initial={initial} submitLabel="Зберегти" submitting={false} onSubmit={onSubmit} />,
+    <ItemForm initial={initial} objectId={objectId} submitLabel="Зберегти" submitting={false} onSubmit={onSubmit} />,
     { wrapper },
   );
 }
@@ -120,5 +121,79 @@ describe('ItemForm — the live line sum', () => {
   it('leaves a «%» line to its own preview', () => {
     renderForm(line({ unit: 'PERCENT', quantity: 10, unitPrice: 0, percentBaseKind: 'TOTAL' }));
     expect(screen.queryByTestId('line-sum')).toBeNull();
+  });
+});
+
+/**
+ * The line's size calculator (size S): plain-words buttons, a rectangle first with the other shapes
+ * one tap away, and «Застосувати» that saves an otherwise untouched line in the same tap.
+ */
+describe('ItemForm — the size calculator', () => {
+  const openCalc = () => fireEvent.click(screen.getByRole('button', { name: /Порахувати за розмірами/ }));
+  const typeSides = (a: string, b: string) => {
+    fireEvent.change(screen.getByLabelText(/^a /), { target: { value: a } });
+    fireEvent.change(screen.getByLabelText(/^b /), { target: { value: b } });
+  };
+
+  it('says what each door does, and what happens to the openings', () => {
+    renderForm(line({ unit: 'M2' }), vi.fn(), 'obj-1');
+    expect(screen.getByRole('button', { name: '📐 Порахувати за розмірами' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /📋 Взяти із замірів об'єкта/ })).toBeTruthy();
+
+    openCalc();
+
+    const heading = screen.getByText(/^Прорізи \(вікна, двері\) — віднімемо від площі$/);
+    expect(heading.textContent).not.toMatch(/\(м\)/);
+  });
+
+  it('shows the rectangle and folds the other shapes behind «Інша форма ▾»', () => {
+    renderForm(line({ unit: 'M2' }));
+    openCalc();
+
+    expect(screen.getByRole('button', { name: 'Прямокутник' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Трапеція' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Інша форма ▾' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Трапеція' }));
+
+    // The chosen shape stays in view; the fold button is gone once opened.
+    expect(screen.getByRole('button', { name: 'Трапеція' }).className).toContain('bg-primary');
+    expect(screen.queryByRole('button', { name: 'Інша форма ▾' })).toBeNull();
+  });
+
+  it('every field of the calculator opens the decimal keypad (it has the comma)', () => {
+    renderForm(line({ unit: 'M2' }));
+    openCalc();
+    fireEvent.click(screen.getByRole('button', { name: /Проріз/ }));
+
+    const calc = screen.getByTestId('calc-footer').parentElement!;
+    const fields = calc.querySelectorAll('input');
+    expect(fields.length).toBeGreaterThanOrEqual(5); // a, b, width, height, count
+    fields.forEach((f) => expect(f.getAttribute('inputmode')).toBe('decimal'));
+  });
+
+  it('«Застосувати» saves a line whose only change is the measured quantity', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ unit: 'M2' }), onSubmit);
+    openCalc();
+    typeSides('4,5', '2,8');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Застосувати' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ quantity: 12.6, unitPrice: 260 });
+  });
+
+  it('«Застосувати» only fills the quantity when something else is still unsaved', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ unit: 'M2' }), onSubmit);
+    fireEvent.change(screen.getByLabelText(/Ціна/), { target: { value: '300' } });
+    openCalc();
+    typeSides('4,5', '2,8');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Застосувати' }));
+
+    await waitFor(() => expect(asInput(screen.getByLabelText(/Кількість/)).value).toBe('12.6'));
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

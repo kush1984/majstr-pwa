@@ -120,4 +120,35 @@ describe('Modal — system back', () => {
 
     await waitFor(() => expect(window.history.state).toEqual({ usr: null, key: 'k1', idx: 3 }));
   });
+
+  /**
+   * Android Chrome and iOS Safari open the keyboard OVER the layout viewport, so a sheet sized by
+   * `inset-0`/`dvh` kept Save under the keys (the master's screenshot). Only `visualViewport` shrinks.
+   */
+  it('pins itself to the part of the screen the keyboard leaves visible', () => {
+    const vv = Object.assign(new EventTarget(), { offsetTop: 0, height: 800 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+    try {
+      render(<Modal open onClose={vi.fn()} title="Елемент"><input aria-label="назва" /></Modal>);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog.style.height).toBe('800px');
+
+      act(() => {
+        vv.height = 420;
+        vv.offsetTop = 12;
+        vv.dispatchEvent(new Event('resize'));
+      });
+
+      expect(dialog.style.height).toBe('420px');
+      expect(dialog.style.top).toBe('12px');
+    } finally {
+      Reflect.deleteProperty(window, 'visualViewport');
+    }
+  });
+
+  it('falls back to the full overlay where visualViewport is missing', () => {
+    render(<Modal open onClose={vi.fn()} title="Елемент"><p>x</p></Modal>);
+
+    expect(screen.getByRole('dialog').style.height).toBe('');
+  });
 });

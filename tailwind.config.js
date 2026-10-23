@@ -48,7 +48,7 @@ export default {
         },
         // Status colours (badges, accents) + their soft backgrounds.
         success: { DEFAULT: v('success'), soft: v('success-soft') },
-        amber: { DEFAULT: v('amber'), soft: v('amber-soft') },
+        amber: { DEFAULT: v('amber'), soft: v('amber-soft'), strong: v('amber-strong') },
         info: { DEFAULT: v('blue'), soft: v('blue-soft') },
         danger: { DEFAULT: v('red'), soft: v('red-soft') },
         // Public landing page palette (graphite + warm paper + build yellow).

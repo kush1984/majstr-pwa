@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -56,6 +56,8 @@ export function Modal({
   mask?: boolean;
 }) {
   const { t } = useTranslation();
+  const panel = useRef<HTMLDivElement>(null);
+  const visible = useVisibleViewport(open, panel);
   const dirty = useRef(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // Callers pass an inline `onClose`; the history entry must live as long as the modal is OPEN,
@@ -129,6 +131,7 @@ export function Modal({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      style={visible ? { top: visible.top, height: visible.height, bottom: 'auto' } : undefined}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -141,8 +144,9 @@ export function Modal({
         disabled={!dismissable}
       />
       <div
+        ref={panel}
         className={cn(
-          'relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-card-lg sm:rounded-2xl',
+          'relative z-10 max-h-[90%] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-card-lg sm:rounded-2xl',
           size === 'lg' ? 'max-w-xl' : 'max-w-md',
           mask && 'ph-mask',
         )}
@@ -179,4 +183,50 @@ export function Modal({
     </div>,
     document.body,
   );
+}
+
+/**
+ * The sheet's actions and running result, kept on screen while the form above them scrolls. Sticky
+ * inside the panel's scroll; the negative margins undo the panel's `p-5` so the bar spans its width
+ * and covers what scrolls beneath it. `-bottom-5` holds whether an engine measures the sticky edge
+ * from the padding box or the scrollport — either way the buttons stay visible.
+ */
+export function ModalFooter({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 border-t border-border bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The part of the screen the on-screen keyboard leaves visible. Android Chrome (since 108) and iOS
+ * Safari both open the keyboard OVER the layout viewport — `dvh` and `inset-0` do not shrink — so a
+ * bottom sheet sized against them keeps its lower half, Save included, under the keys. Only
+ * `visualViewport` reports what is actually visible; the overlay is pinned to it, and a focused
+ * field is brought back into the shrunken sheet. Null where the API is missing: `inset-0` stands.
+ */
+function useVisibleViewport(open: boolean, panel: RefObject<HTMLDivElement | null>) {
+  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!open || !vv) return;
+    const update = () => setBox({ top: vv.offsetTop, height: vv.height });
+    const onResize = () => {
+      update();
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && panel.current?.contains(focused)) {
+        // Centre, not «nearest»: nearest parks the field under the sticky footer.
+        requestAnimationFrame(() => focused.scrollIntoView({ block: 'center' }));
+      }
+    };
+    update();
+    vv.addEventListener('resize', onResize);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', update);
+    };
+  }, [open, panel]);
+  return box;
 }

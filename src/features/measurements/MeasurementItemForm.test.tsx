@@ -55,6 +55,7 @@ describe('MeasurementItemForm', () => {
     render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
 
     fireEvent.change(screen.getByPlaceholderText(/Стеля/), { target: { value: 'Фронтон' } });
+    fireEvent.click(screen.getByRole('button', { name: /Додатково/ }));
     fireEvent.click(screen.getByRole('button', { name: 'см' }));
     fireEvent.click(screen.getByRole('button', { name: 'Трикутник' }));
     // b (основа) and h (висота) — the letters drawn on the diagram.
@@ -95,7 +96,53 @@ describe('MeasurementItemForm', () => {
     // Pre-shapes rows have no unit — they were metres, and the sides land on a/b.
     expect(asInput(screen.getByLabelText(/^a ширина/)).value).toBe('5.31');
     expect(asInput(screen.getByLabelText(/^b висота/)).value).toBe('3.69');
+    fireEvent.click(screen.getByRole('button', { name: /Додатково/ }));
     expect(screen.getByRole('button', { name: 'м' }).className).toContain('border-brand');
+  });
+
+  it('keeps a plain wall short: unit and «+ площина» fold away, openings start as one button', () => {
+    render(<MeasurementItemForm onSave={vi.fn()} onCancel={() => {}} />);
+
+    expect(screen.queryByRole('button', { name: 'см' })).toBeNull();
+    expect(screen.queryByText('+ Додати площину')).toBeNull();
+    expect(screen.queryByLabelText('Ширина')).toBeNull();
+    // The fold names the unit in force, so metres are never a hidden assumption.
+    expect(screen.getByRole('button', { name: 'Додатково · м' })).toBeTruthy();
+  });
+
+  it('subtracts an opening and shows planes − openings = net before saving', () => {
+    const onSave = vi.fn();
+    render(<MeasurementItemForm onSave={onSave} onCancel={() => {}} />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Стеля/), { target: { value: 'Стіна зліва' } });
+    fireEvent.change(screen.getByLabelText(/^a ширина/), { target: { value: '4.5' } });
+    fireEvent.change(screen.getByLabelText(/^b висота/), { target: { value: '2.8' } });
+    fireEvent.click(screen.getByRole('button', { name: /Відняти проріз/ }));
+    // Labelled fields, not placeholders — the name survives a typed value.
+    fireEvent.change(screen.getByLabelText('Ширина'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Висота'), { target: { value: '2.1' } });
+
+    expect(screen.getByText('Чиста площа').nextElementSibling?.textContent).toBe('8.4 м²');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ openings: [{ w: 2, h: 2.1, n: 1 }] }),
+    }));
+  });
+
+  it('opens the fold by itself for an element measured in centimetres', () => {
+    render(
+      <MeasurementItemForm
+        initial={{
+          id: 'c1', name: 'Укіс', type: 'SURFACE', unit: 'M2', result: 0.6, sortOrder: 0,
+          payload: { unit: 'CM', segments: [{ shape: 'rect', mode: 'd', values: { a: 200, b: 30 } }], openings: [] },
+        }}
+        onSave={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'см' }).className).toContain('border-brand');
   });
 
   it('opens an imported EMPTY (to-measure) surface as one blank rectangle, not «площа напряму»', () => {

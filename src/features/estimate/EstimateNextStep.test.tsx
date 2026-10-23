@@ -56,6 +56,20 @@ describe('EstimateNextStep', () => {
     expect(onCreateAct).toHaveBeenCalled();
   });
 
+  /**
+   * «Матеріали за чеками до акта № 7» is signed too, but its lines were accepted by the act that made
+   * it and the server refuses to close them again — «Створити акт» there led to a dead end.
+   */
+  it('an estimate made BY an act offers no act of its own, and says why', () => {
+    render(
+      <EstimateNextStep status="SIGNED" signedAt="2026-10-19T10:00:00Z" onShare={onShare}
+        onMaterials={onMaterials} showMaterials={false} onPdf={onPdf} />,
+    );
+    expect(screen.queryByRole('button', { name: /Створити акт/ })).toBeNull();
+    expect(screen.getByText(/вже прийняті актом/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /PDF/ })).toBeTruthy();
+  });
+
   it('SIGNED without a date still renders a heading', () => {
     setup('SIGNED', null);
     expect(screen.getByText('Кошторис підписано')).toBeTruthy();

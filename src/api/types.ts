@@ -524,6 +524,9 @@ export interface EstimateResponse {
   projectId: string;
   name: string | null;
   status: EstimateStatus;
+  /** REGULAR, or ADDENDUM — written by a signed act («Матеріали за чеками до акта № N»). Absent from
+   *  an older server and from an estimate built offline, both of which mean REGULAR. */
+  kind?: EstimateKind;
   validUntil: string | null;
   notes: string | null;
   /** What the applied bundle promised the client - the finish level and its tolerances (V121).

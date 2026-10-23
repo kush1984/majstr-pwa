@@ -389,3 +389,54 @@ describe('EstimateItemsBoard — category collapse (V125 iteration)', () => {
     expect(screen.getByText('B')).toBeTruthy();
   });
 });
+
+/**
+ * A bundle lands every line at quantity 0. Painted like a filled line, «0 ₴» read as «free» and
+ * the master could not tell what was still to measure in a 30-line estimate.
+ */
+describe('EstimateItemsBoard — lines still without a quantity', () => {
+  beforeEach(() => localStorage.clear());
+
+  const board = (items: EstimateItemResponse[], signed = false) =>
+    render(
+      <EstimateItemsBoard estimateId="zero-qty" items={items} signed={signed}
+        onEdit={vi.fn()} onArrange={vi.fn()} />,
+    );
+
+  it('marks a 0-quantity line «Вкажіть кількість» with a dash for its total, not 0 ₴', () => {
+    board([
+      line({ id: 'a', name: 'Шліфування стін', category: 'Оздоблення', quantity: 0, lineTotal: 0 }),
+      line({ id: 'b', name: 'Ґрунтування', category: 'Оздоблення', quantity: 2, lineTotal: 200, sortOrder: 1 }),
+    ]);
+
+    const zero = screen.getByText('Шліфування стін').closest('button')!;
+    expect(zero.textContent).toContain('Вкажіть кількість');
+    expect(zero.textContent).toContain('—');
+    expect(zero.className).toContain('border-dashed');
+    const filled = screen.getByText('Ґрунтування').closest('button')!;
+    expect(filled.textContent).not.toContain('Вкажіть кількість');
+    expect(filled.className).not.toContain('border-dashed');
+  });
+
+  it('leaves a «%» line alone', () => {
+    board([line({ id: 'p', name: 'Знижка', unit: 'PERCENT', quantity: 0, lineTotal: 0 })]);
+    expect(screen.queryByText('Вкажіть кількість')).toBeNull();
+  });
+
+  it('leaves a signed estimate alone', () => {
+    board([line({ id: 's', name: 'Демонтаж', quantity: 0, lineTotal: 0 })], true);
+    expect(screen.queryByText('Вкажіть кількість')).toBeNull();
+  });
+
+  it('a folded category still says how many of its lines wait for a quantity', () => {
+    board([
+      line({ id: 'a', name: 'A', category: 'Оздоблення', quantity: 0, lineTotal: 0 }),
+      line({ id: 'b', name: 'B', category: 'Оздоблення', quantity: 0, lineTotal: 0, sortOrder: 1 }),
+      line({ id: 'c', name: 'C', category: 'Оздоблення', quantity: 3, lineTotal: 300, sortOrder: 2 }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Згорнути категорію/ }));
+
+    expect(screen.getByText(/2 без кількості/)).toBeTruthy();
+  });
+});

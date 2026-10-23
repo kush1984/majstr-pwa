@@ -1,7 +1,8 @@
-# majstr.pro — the public landing ("/"), the privacy policy ("/privacy") and the
-# two calculator pages (/kalkulyator-plytky, /kalkulyator-gipsokartonu) are meant to
-# be indexed. Everything below is either an auth-gated app view with
-# no public content, or a tokenised client portal that must NEVER be indexed (it
+# majstr.pro — the public landing ("/") and the two calculator pages
+# (/kalkulyator-plytky, /kalkulyator-gipsokartonu) are what the sitemap offers. /privacy stays
+# crawlable but is NOT in the sitemap: it is served the landing's index.html, whose canonical is
+# "/", so listing it sent Google two contradicting signals.
+# Everything below is either an auth-gated app view with no public content, or a tokenised client portal that must NEVER be indexed (it
 # carries the client's personal data and the estimate/act totals).
 #
 # Client portals (?p= / ?e= / ?a= / ?t=) all live under the single path
@@ -23,5 +24,9 @@ Disallow: /estimates
 Disallow: /acts
 Disallow: /billing
 Disallow: /portal/
+Disallow: /finance
+Disallow: /shopping
+Disallow: /receipts
+Disallow: /dashboard
 
 Sitemap: https://majstr.pro/sitemap.xml
