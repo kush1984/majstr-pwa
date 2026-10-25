@@ -1,5 +1,5 @@
-# majstr.pro — the public landing ("/") and the two calculator pages
-# (/kalkulyator-plytky, /kalkulyator-gipsokartonu) are what the sitemap offers. /privacy stays
+# majstr.pro — the public landing ("/") and the four calculator pages (/kalkulyator-plytky,
+# /kalkulyator-gipsokartonu, /kalkulyator-shtukaturky, /kalkulyator-styazhky) are what the sitemap offers. /privacy stays
 # crawlable but is NOT in the sitemap: it is served the landing's index.html, whose canonical is
 # "/", so listing it sent Google two contradicting signals.
 # Everything below is either an auth-gated app view with no public content, or a tokenised client portal that must NEVER be indexed (it

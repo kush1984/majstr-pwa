@@ -37,9 +37,16 @@ precacheAndRoute(self.__WB_MANIFEST);
 /**
  * The public calculator pages are their OWN documents, not routes of the app: without these entries
  * the worker would answer a returning visitor's /kalkulyator-plytky with the cached SPA shell, and
- * he would land on the landing page instead of the calculator he searched for.
+ * he would land on the landing page instead of the calculator he searched for. A new calculator page
+ * goes here in the same commit as its vite input (seoPages.test.ts reads this list as text).
  */
-const NAVIGATION_DENYLIST = [/^\/api\//, /^\/kalkulyator-plytky/, /^\/kalkulyator-gipsokartonu/];
+const NAVIGATION_DENYLIST = [
+  /^\/api\//,
+  /^\/kalkulyator-plytky/,
+  /^\/kalkulyator-gipsokartonu/,
+  /^\/kalkulyator-shtukaturky/,
+  /^\/kalkulyator-styazhky/,
+];
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: NAVIGATION_DENYLIST }),

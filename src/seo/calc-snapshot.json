@@ -525,6 +525,245 @@
           "packageName": "упаковка"
         }
       ]
+    },
+    {
+      "id": "plaster-room",
+      "label": "Кімната 3×4 м, стіни 2,7 м, мінус вікно й двері (34 м²), гіпсова, вручну, 15 мм",
+      "calculator": "PLASTER",
+      "inputs": {
+        "area": 34,
+        "plaster": "GYPSUM",
+        "method": "MANUAL",
+        "thicknessMm": 15,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Штукатурка гіпсова",
+          "unit": "KG",
+          "quantity": 510,
+          "packages": 17,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 10,
+          "packages": 2,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Ванна 18 м² стін, цементно-вапняна, 20 мм",
+      "calculator": "PLASTER",
+      "inputs": {
+        "area": 18,
+        "plaster": "CEMENT_LIME",
+        "thicknessMm": 20,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Штукатурка цементно-вапняна",
+          "unit": "KG",
+          "quantity": 650,
+          "packages": 26,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Двокімнатна квартира, 150 м² стін, гіпсова, машиною, 15 мм",
+      "calculator": "PLASTER",
+      "inputs": {
+        "area": 150,
+        "plaster": "GYPSUM",
+        "method": "MACHINE",
+        "thicknessMm": 15,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Штукатурка гіпсова машинна",
+          "unit": "KG",
+          "quantity": 2370,
+          "packages": 79,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 25,
+          "packages": 5,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Старий будинок, 40 м² кривих стін, гіпсова, 30 мм",
+      "calculator": "PLASTER",
+      "inputs": {
+        "area": 40,
+        "plaster": "GYPSUM",
+        "method": "MANUAL",
+        "thicknessMm": 30,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Штукатурка гіпсова",
+          "unit": "KG",
+          "quantity": 1200,
+          "packages": 40,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 10,
+          "packages": 2,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "id": "screed-room",
+      "label": "Кімната 15 м², цементна, 50 мм",
+      "calculator": "SCREED",
+      "inputs": {
+        "area": 15,
+        "screed": "CEMENT",
+        "thicknessMm": 50,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Стяжка цементна (суха суміш)",
+          "unit": "KG",
+          "quantity": 1650,
+          "packages": 66,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Кухня 10 м², цементна, 40 мм",
+      "calculator": "SCREED",
+      "inputs": {
+        "area": 10,
+        "screed": "CEMENT",
+        "thicknessMm": 40,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Стяжка цементна (суха суміш)",
+          "unit": "KG",
+          "quantity": 900,
+          "packages": 36,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Квартира 55 м², цементна, 60 мм",
+      "calculator": "SCREED",
+      "inputs": {
+        "area": 55,
+        "screed": "CEMENT",
+        "thicknessMm": 60,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Стяжка цементна (суха суміш)",
+          "unit": "KG",
+          "quantity": 7275,
+          "packages": 291,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 15,
+          "packages": 3,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Наливна підлога 20 м², 5 мм",
+      "calculator": "SCREED",
+      "inputs": {
+        "area": 20,
+        "screed": "SELF_LEVELLING",
+        "thicknessMm": 5,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Суміш самовирівнювальна",
+          "unit": "KG",
+          "quantity": 200,
+          "packages": 8,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        }
+      ]
+    },
+    {
+      "label": "Наливна підлога 12 м², 10 мм",
+      "calculator": "SCREED",
+      "inputs": {
+        "area": 12,
+        "screed": "SELF_LEVELLING",
+        "thicknessMm": 10,
+        "wastePercent": 10
+      },
+      "materials": [
+        {
+          "name": "Суміш самовирівнювальна",
+          "unit": "KG",
+          "quantity": 250,
+          "packages": 10,
+          "packageName": "мішок"
+        },
+        {
+          "name": "Ґрунтовка глибокого проникнення",
+          "unit": "LITRE",
+          "quantity": 5,
+          "packages": 1,
+          "packageName": "каністра"
+        }
+      ]
     }
   ]
 }

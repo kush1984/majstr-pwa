@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Калькулятор стяжки та наливної підлоги — скільки мішків суміші | Majstr</title>
+    <meta name="description" content="Порахуйте цементну стяжку чи наливну підлогу за площею й товщиною: мішки суміші, ґрунтовка, а за бажанням сітка, плівка й демпферна стрічка. З поясненням розрахунку." />
+    <link rel="canonical" href="https://majstr.pro/kalkulyator-styazhky" />
+    <meta property="og:title" content="Калькулятор стяжки та наливної підлоги" />
+    <meta property="og:description" content="Скільки мішків цементної стяжки чи наливної підлоги купити — за площею й товщиною, з ґрунтовкою." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://majstr.pro/kalkulyator-styazhky" />
+    <meta property="og:site_name" content="Majstr" />
+    <meta property="og:locale" content="uk_UA" />
+    <meta property="og:image" content="https://majstr.pro/og/og-styazhky.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор стяжки та наливної підлоги" />
+    <meta name="twitter:description" content="Скільки мішків цементної стяжки чи наливної підлоги купити — за площею й товщиною, з ґрунтовкою." />
+    <meta name="twitter:image" content="https://majstr.pro/og/og-styazhky.png" />
+    <meta name="theme-color" content="#F26B1F" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Калькулятор стяжки та наливної підлоги",
+      "url": "https://majstr.pro/kalkulyator-styazhky",
+      "inLanguage": "uk",
+      "description": "Цементна стяжка чи наливна підлога, ґрунтовка, сітка, плівка й демпферна стрічка — за площею й товщиною, за нормами застосунку Majstr.",
+      "isPartOf": { "@type": "WebSite", "name": "Majstr", "url": "https://majstr.pro/" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Majstr", "item": "https://majstr.pro/" },
+        { "@type": "ListItem", "position": 2, "name": "Калькулятор стяжки", "item": "https://majstr.pro/kalkulyator-styazhky" }
+      ]
+    }
+    </script>
+</head>
+<body data-calculator="SCREED" class="seo-page">
+  <header class="seo-header">
+    <a href="/" class="seo-logo"><span aria-hidden="true">M</span>Majstr.pro</a>
+    <a href="/login" class="seo-signin">Увійти</a>
+  </header>
+
+  <main class="seo-main">
+    <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор стяжки</nav>
+    <h1>Калькулятор стяжки та наливної підлоги — скільки мішків суміші купити</h1>
+    <p class="seo-lede">Скільки суміші на стяжку: площа підлоги × товщина × витрата на 1 мм, плюс запас, з округленням угору до цілих мішків. Приклад: кімната 15 м², цементна стяжка 50 мм, запас 10 %: <!--SEO_EXAMPLE:screed-room-->. Підставте свої розміри нижче — рахуємо тими ж нормами, що й застосунок Majstr.</p>
+
+    <form id="calc" class="seo-calc" novalidate>
+      <label>Площа підлоги, м²
+        <input name="area" inputmode="decimal" autocomplete="off" placeholder="напр. 15" required />
+      </label>
+      <fieldset>
+        <legend>Яка стяжка</legend>
+        <label><input type="radio" name="screed" value="CEMENT" checked /> Цементна — з мішків</label>
+        <label><input type="radio" name="screed" value="SELF_LEVELLING" /> Наливна підлога</label>
+      </fieldset>
+      <label>Товщина, мм
+        <input name="thicknessMm" inputmode="decimal" autocomplete="off" placeholder="напр. 50" />
+        <small data-show="screed:CEMENT">Цементна стяжка — від 10 до 100 мм. По міцній основі, з якою стяжка зчеплена, можна від 10 мм; на плівці чи утеплювачі шар роблять товстіше. Порожнє поле — типова товщина.</small>
+        <small data-show="screed:SELF_LEVELLING" hidden>Наливна підлога — від 2 до 30 мм. Порожнє поле — типова товщина.</small>
+      </label>
+      <fieldset data-show="screed:CEMENT">
+        <legend>Що ще під стяжку</legend>
+        <label><input type="checkbox" name="withMesh" value="true" /> З армуванням сіткою</label>
+        <label><input type="checkbox" name="withFilm" value="true" /> З плівкою під стяжку</label>
+      </fieldset>
+      <label>Периметр кімнати, м <span class="seo-optional">(необов'язково)</span>
+        <input name="perimeter" inputmode="decimal" autocomplete="off" placeholder="напр. 16" />
+        <small>Якщо вкажете — порахуємо демпферну стрічку по краю кімнати.</small>
+      </label>
+      <fieldset>
+        <legend>Запас</legend>
+        <label><input type="radio" name="wastePercent" value="5" /> 5 %</label>
+        <label><input type="radio" name="wastePercent" value="10" checked /> 10 %</label>
+        <label><input type="radio" name="wastePercent" value="15" /> 15 %</label>
+      </fieldset>
+      <button type="submit">Порахувати</button>
+      <p class="seo-error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="seo-result" aria-live="polite" hidden></section>
+
+    <section>
+      <h2>Як ми рахуємо</h2>
+      <p><b>Суміш</b> — це площа підлоги × товщина × витрата сухої суміші на 1 мм. У цементної стяжки й наливної підлоги витрата на 1 мм різна. Товщину рахуйте від найвищої точки підлоги до майбутнього рівня: якщо основа має перепад, середня товщина більша, ніж здається.</p>
+      <p><b>Яка товщина можлива.</b> За технічними описами виробників цементні стяжки з мішків кладуть шаром від 10 до 100 мм; найтонший шар — тільки по міцній основі, з якою стяжка зчеплена. Наливні суміші розраховані на тонкий шар: калькулятор приймає 2–30 мм, а межі конкретної суміші написані на мішку.</p>
+      <p><b>Ґрунтовка</b> — окремий крок перед стяжкою, на всю площу.</p>
+      <p><b>Сітка й плівка</b> рахуються, тільки якщо ви їх позначили, і тільки для цементної стяжки — у м² з напуском. <b>Демпферна стрічка</b> по краю кімнати рахується, якщо ви вказали периметр.</p>
+      <p><b>Чого калькулятор не рахує</b> — докупіть самі: <b>маяки</b> (їх кількість залежить від форми кімнати й кроку, а не від площі), утеплювач під стяжку.</p>
+      <p><b>Запас</b> покриває нерівності основи й залишки в міксері. Наприкінці все округлюємо <b>вгору</b> до цілих мішків.</p>
+      <p>Норми — з технічних листів виробників і практики майстрів. Конкретна суміш може мати свою витрату: її можна вказати після розрахунку в полі «Своя норма з мішка».</p>
+    </section>
+
+    <section>
+      <h2>Таблиця для типових випадків</h2>
+      <!--SEO_TABLE:SCREED-->
+    </section>
+
+    <section class="seo-cta">
+      <h2>Порахуй увесь об'єкт — з кошторисом і списком покупок</h2>
+      <p>У Majstr калькулятор матеріалів рахує з робіт кошторису: стяжка, плитка, штукатурка, фарба — усе разом, і відразу в список покупок.</p>
+      <a href="/register" class="seo-cta-button">Спробувати безкоштовно →</a>
+      <p class="seo-own-hint">Збережи свої норми — і застосунок рахуватиме під тебе на кожному об'єкті.</p>
+    </section>
+
+    <p class="seo-note">Розрахунок орієнтовний. Норма конкретного продукту може відрізнятися — дивіться упаковку.</p>
+  </main>
+
+  <footer class="seo-footer">
+    <span>© 2026 Majstr.pro</span>
+    <a href="/kalkulyator-plytky">Калькулятор плитки</a>
+    <a href="/kalkulyator-gipsokartonu">Калькулятор гіпсокартону</a>
+    <a href="/kalkulyator-shtukaturky">Калькулятор штукатурки</a>
+    <a href="/privacy">Політика конфіденційності</a>
+    <a href="https://www.youtube.com/@majstrpro" rel="noopener" target="_blank">YouTube</a>
+    <a href="https://t.me/majstr_pro" rel="noopener" target="_blank">Telegram</a>
+  </footer>
+
+  <script type="module" src="/src/seo/calcPage.ts"></script>
+</body>
+</html>

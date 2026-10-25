@@ -16,7 +16,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
-  // The SPA plus two STATIC pages (the public calculators): real HTML at build time, so a bot that
+  // The SPA plus four STATIC pages (the public calculators): real HTML at build time, so a bot that
   // runs no JavaScript reads every word and every figure. Each lands in dist/ under its own name —
   // Cloudflare Pages serves /kalkulyator-plytky from kalkulyator-plytky.html — and src/sw.ts keeps
   // its navigation fallback OFF them.
@@ -26,6 +26,8 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         'kalkulyator-plytky': path.resolve(__dirname, 'kalkulyator-plytky.html'),
         'kalkulyator-gipsokartonu': path.resolve(__dirname, 'kalkulyator-gipsokartonu.html'),
+        'kalkulyator-shtukaturky': path.resolve(__dirname, 'kalkulyator-shtukaturky.html'),
+        'kalkulyator-styazhky': path.resolve(__dirname, 'kalkulyator-styazhky.html'),
       },
     },
   },

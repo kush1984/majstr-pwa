@@ -3,8 +3,8 @@ import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 
 /**
- * The static calculator pages (kalkulyator-plytky.html, kalkulyator-gipsokartonu.html): the form is
- * already in the HTML for bots and humans alike; this only reads it, asks
+ * The static calculator pages (kalkulyator-plytky / -gipsokartonu / -shtukaturky / -styazhky .html):
+ * the form is already in the HTML for bots and humans alike; this only reads it, asks
  * `POST /api/public/materials/calc` — the app's own arithmetic — and prints the answer with the
  * same explanation the app's «Показати розрахунок» gives. No framework, no analytics SDK: the page
  * has to paint instantly, and an anonymous visitor has no analytics consent to give.
@@ -53,9 +53,12 @@ const number = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 3 });
 const form = document.querySelector<HTMLFormElement>('#calc');
 const result = document.querySelector<HTMLElement>('#result');
 const errorBox = form?.querySelector<HTMLElement>('.seo-error') ?? null;
-const calculator = document.body.dataset.calculator as 'TILE' | 'DRYWALL' | undefined;
+const calculator = document.body.dataset.calculator as 'TILE' | 'DRYWALL' | 'PLASTER' | 'SCREED' | undefined;
+/** Plaster and screed norms are per mm of layer, as the bag prints them; the tile adhesive's is per m². */
+const perMm = calculator === 'PLASTER' || calculator === 'SCREED';
+const OWN_NORM_UNIT = perMm ? 'кг/м² на 1 мм' : 'кг/м²';
 
-/** The visitor's own adhesive norm: what he typed, what was applied, and why it was refused. */
+/** The visitor's own main-material norm: what he typed, what was applied, and why it was refused. */
 let ownNormDraft = '';
 let ownNorm: number | null = null;
 let ownNormError: string | null = null;
@@ -97,6 +100,19 @@ function syncDrywallFields(): void {
   });
 }
 
+/**
+ * `data-show="plaster:GYPSUM"` — shown only while that radio holds one of the listed values (the
+ * machine method is gypsum-only, mesh and film are cement-screed-only, the thickness hint follows
+ * the screed kind). The server refuses those combinations anyway; this keeps them off screen.
+ */
+function syncShownFields(): void {
+  form?.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => {
+    const [name, values = ''] = (el.dataset.show ?? '').split(':');
+    const value = checked(name);
+    el.hidden = value == null || !values.split(' ').includes(value);
+  });
+}
+
 function showError(message: string): void {
   if (!errorBox) return;
   errorBox.textContent = message;
@@ -126,6 +142,30 @@ function inputs(): Record<string, unknown> | null {
       return null;
     }
     if (box != null) out.boxArea = box;
+    if (ownNorm != null) out.ownNorm = ownNorm;
+  } else if (calculator === 'PLASTER' || calculator === 'SCREED') {
+    const thickness = figure('thicknessMm');
+    if (thickness != null && Number.isNaN(thickness)) {
+      showError('Товщина — число в міліметрах, наприклад 15. Або залиште поле порожнім.');
+      return null;
+    }
+    if (thickness != null) out.thicknessMm = thickness;
+    if (calculator === 'PLASTER') {
+      out.plaster = checked('plaster');
+      if (out.plaster === 'GYPSUM') out.method = checked('method') ?? 'MANUAL';
+    } else {
+      out.screed = checked('screed');
+      if (out.screed === 'CEMENT') {
+        out.withMesh = form.querySelector<HTMLInputElement>('input[name="withMesh"]')?.checked ?? false;
+        out.withFilm = form.querySelector<HTMLInputElement>('input[name="withFilm"]')?.checked ?? false;
+      }
+      const perimeter = figure('perimeter');
+      if (perimeter != null && Number.isNaN(perimeter)) {
+        showError('Периметр — число в метрах, наприклад 16. Або залиште поле порожнім.');
+        return null;
+      }
+      if (perimeter != null) out.perimeter = perimeter;
+    }
     if (ownNorm != null) out.ownNorm = ownNorm;
   } else {
     const work = checked('work');
@@ -165,9 +205,13 @@ function explanation(m: MaterialLine): HTMLElement {
   return how;
 }
 
-/** The tile page's main material — the adhesive, C1 or C2 by format. Only it takes an own norm. */
+/**
+ * The material an own norm replaces: the tile adhesive (C1 or C2 by format), or the plaster / screed
+ * mix — the one line bought by the THICKNESS, whatever the server calls it.
+ */
 function isMainMaterial(m: MaterialLine): boolean {
-  return calculator === 'TILE' && m.name.startsWith('Клей');
+  if (calculator === 'TILE') return m.name.startsWith('Клей');
+  return perMm && m.sources.some((s) => s.basis === 'THICKNESS');
 }
 
 function materialList(materials: MaterialLine[]): HTMLElement {
@@ -180,7 +224,7 @@ function materialList(materials: MaterialLine[]): HTMLElement {
     row.append(text('span', m.name), text('b', packagesText(m)));
     li.append(row);
     const own = m.sources.length > 0 && m.sources.every((s) => s.ownNorm);
-    if (own) li.append(text('p', `За вашою нормою ${number.format(m.sources[0].qtyPerUnit)} кг/м²`, 'seo-own-note'));
+    if (own) li.append(text('p', `За вашою нормою ${number.format(m.sources[0].qtyPerUnit)} ${OWN_NORM_UNIT}`, 'seo-own-note'));
     li.append(explanation(m));
     if (isMainMaterial(m)) li.append(ownNormBlock(m, own));
     list.append(li);
@@ -196,9 +240,9 @@ function ownNormBlock(m: MaterialLine, own: boolean): HTMLElement {
   const block = document.createElement('details');
   block.className = 'seo-own-norm';
   block.open = own || ownNormError != null;
-  block.append(text('summary', 'Своя норма з упаковки'));
+  block.append(text('summary', perMm ? 'Своя норма з мішка' : 'Своя норма з упаковки'));
   const label = document.createElement('label');
-  label.append('Клей з упаковки, кг/м²');
+  label.append(perMm ? `Витрата з мішка, ${OWN_NORM_UNIT}` : 'Клей з упаковки, кг/м²');
   const input = document.createElement('input');
   input.name = 'ownNorm';
   input.inputMode = 'decimal';
@@ -207,9 +251,12 @@ function ownNormBlock(m: MaterialLine, own: boolean): HTMLElement {
   input.placeholder = own ? '' : number.format(m.sources[0]?.qtyPerUnit ?? 0);
   label.append(input);
   block.append(label);
+  const ours = number.format(m.sources[0]?.qtyPerUnit ?? 0);
   block.append(text('small', own
     ? 'Порожнє поле — повернемо нашу норму.'
-    : `Наша норма для цього формату — ${number.format(m.sources[0]?.qtyPerUnit ?? 0)} кг/м². Пишіть так, як на мішку: кг на 1 м².`));
+    : perMm
+      ? `Наша норма — ${ours} ${OWN_NORM_UNIT}. На мішку часто пишуть «${calculator === 'SCREED' ? '18–20' : '8–9'} кг/м² при шарі 10 мм»: поділіть на 10.`
+      : `Наша норма для цього формату — ${ours} кг/м². Пишіть так, як на мішку: кг на 1 м².`));
   if (ownNormError) block.append(text('p', ownNormError, 'seo-error'));
   const apply = document.createElement('button');
   apply.type = 'button';
@@ -222,7 +269,9 @@ function ownNormBlock(m: MaterialLine, own: boolean): HTMLElement {
     } else {
       const value = parseDecimal(ownNormDraft);
       if (!Number.isFinite(value) || value <= 0) {
-        ownNormError = 'Норма — число в кг/м², наприклад 1,6.';
+        ownNormError = perMm
+          ? `Норма — число в ${OWN_NORM_UNIT}, наприклад ${calculator === 'SCREED' ? '1,9' : '0,9'}.`
+          : 'Норма — число в кг/м², наприклад 1,6.';
         if (lastResponse) render(lastResponse, false);
         return;
       }
@@ -258,7 +307,9 @@ function render(res: CalcResponse, scroll = true): void {
   }
   // On the tile page the one line sold by the m² is the tile; everything else is what goes under it.
   const tiles = calculator === 'TILE' ? res.materials.filter((m) => m.unit === 'M2') : [];
-  const rest = res.materials.filter((m) => !tiles.includes(m));
+  // The mix is what the visitor came for — first, whatever order the server listed it in.
+  const rest = res.materials.filter((m) => !tiles.includes(m))
+    .sort((a, b) => Number(perMm && isMainMaterial(b)) - Number(perMm && isMainMaterial(a)));
   for (const tile of tiles) result.append(tileBlock(tile));
   if (tiles.length > 0 && rest.length > 0) result.append(text('h3', 'Клей, затирка, ґрунт'));
   if (rest.length > 0) result.append(materialList(rest));
@@ -281,6 +332,8 @@ function render(res: CalcResponse, scroll = true): void {
 
 async function submit(event: SubmitEvent): Promise<void> {
   event.preventDefault();
+  // Only a recount from «Своя норма» blames a refusal on the norm; the form's own errors stay on the form.
+  const fromOwnNorm = focusOwnNorm;
   if (errorBox) errorBox.hidden = true;
   const body = inputs();
   if (!body || !calculator) return;
@@ -300,7 +353,7 @@ async function submit(event: SubmitEvent): Promise<void> {
     if (!res.ok) {
       const problem = (await res.json().catch(() => null)) as { message?: string } | null;
       const message = problem?.message ?? 'Не вдалося порахувати. Перевірте числа й спробуйте ще раз.';
-      if (body.ownNorm != null && lastResponse) {
+      if (fromOwnNorm && body.ownNorm != null && lastResponse) {
         // Refused for his own norm (out of range): say so where he typed it, keep the last answer.
         ownNorm = null;
         ownNormError = message;
@@ -326,5 +379,9 @@ async function submit(event: SubmitEvent): Promise<void> {
 }
 
 form?.addEventListener('submit', (e) => void submit(e));
-form?.addEventListener('change', syncDrywallFields);
+form?.addEventListener('change', () => {
+  syncDrywallFields();
+  syncShownFields();
+});
 syncDrywallFields();
+syncShownFields();

@@ -1,7 +1,7 @@
 // Prints the calculator pages' typical-case tables into the HTML at build (and dev) time, from
 // src/seo/calc-snapshot.json — so a bot without JavaScript reads every figure, and no figure is
-// ever typed by hand. A page marks the spot with <!--SEO_TABLE:TILE--> / <!--SEO_TABLE:DRYWALL-->, and
-// quotes one case in its prose with <!--SEO_EXAMPLE:<id>-->.
+// ever typed by hand. A page marks the spot with <!--SEO_TABLE:<CALCULATOR>--> (TILE, DRYWALL,
+// PLASTER, SCREED), and quotes one case in its prose with <!--SEO_EXAMPLE:<id>-->.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -57,7 +57,7 @@ export function seoCalcTables(root: string): Plugin {
           readFileSync(path.join(root, 'src', 'seo', 'calc-snapshot.json'), 'utf8'),
         ) as CalcSnapshot;
         return html
-          .replace(/<!--SEO_TABLE:(TILE|DRYWALL)-->/g, (_, kind: string) =>
+          .replace(/<!--SEO_TABLE:(TILE|DRYWALL|PLASTER|SCREED)-->/g, (_, kind: string) =>
             tableHtml(snapshot.rows.filter((r) => r.calculator === kind)))
           .replace(/<!--SEO_EXAMPLE:([a-z0-9-]+)-->/g, (_, id: string) => {
             const row = snapshot.rows.find((r) => r.id === id);

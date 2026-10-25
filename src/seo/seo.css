@@ -44,13 +44,14 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
 .seo-calc { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .seo-calc label { display: grid; gap: 6px; font-weight: 600; font-size: 15px; }
 .seo-calc small { font-weight: 400; color: var(--muted); font-size: 13px; }
-.seo-calc input:not([type="radio"]), .seo-calc select {
+.seo-calc input:not([type="radio"]):not([type="checkbox"]), .seo-calc select {
   font: inherit; font-weight: 400; min-height: 48px; padding: 10px 12px;
   border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); width: 100%;
 }
 .seo-calc fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .seo-calc legend { font-weight: 600; font-size: 15px; margin-bottom: 6px; width: 100%; }
 .seo-calc fieldset label { display: flex; align-items: center; gap: 6px; font-weight: 500; min-height: 44px; }
+.seo-calc input[type="checkbox"] { width: 20px; height: 20px; margin: 0; accent-color: var(--amber); }
 .seo-calc [hidden] { display: none; }
 .seo-calc button {
   font: inherit; font-weight: 700; min-height: 52px; border: 0; border-radius: 12px;

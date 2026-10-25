@@ -362,9 +362,15 @@
     "jointMm": "number?",
     "layers": "number?",
     "layout": "string?",
+    "method": "string?",
     "ownNorm": "number?",
     "perimeter": "number?",
+    "plaster": "string?",
+    "screed": "string?",
+    "thicknessMm": "number?",
     "wastePercent": "number?",
+    "withFilm": "boolean?",
+    "withMesh": "boolean?",
     "work": "string?"
   },
   "PushSubscribeRequest": {

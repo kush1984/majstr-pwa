@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Калькулятор штукатурки — скільки мішків гіпсової чи цементної штукатурки | Majstr</title>
+    <meta name="description" content="Порахуйте штукатурку для стін: гіпсову вручну чи машиною або цементно-вапняну — за площею й товщиною шару, з ґрунтовкою і округленням до мішків. З поясненням розрахунку." />
+    <link rel="canonical" href="https://majstr.pro/kalkulyator-shtukaturky" />
+    <meta property="og:title" content="Калькулятор штукатурки" />
+    <meta property="og:description" content="Скільки мішків штукатурки купити — за площею стін і товщиною шару, з ґрунтовкою." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://majstr.pro/kalkulyator-shtukaturky" />
+    <meta property="og:site_name" content="Majstr" />
+    <meta property="og:locale" content="uk_UA" />
+    <meta property="og:image" content="https://majstr.pro/og/og-shtukaturky.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор штукатурки" />
+    <meta name="twitter:description" content="Скільки мішків штукатурки купити — за площею стін і товщиною шару, з ґрунтовкою." />
+    <meta name="twitter:image" content="https://majstr.pro/og/og-shtukaturky.png" />
+    <meta name="theme-color" content="#F26B1F" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Калькулятор штукатурки",
+      "url": "https://majstr.pro/kalkulyator-shtukaturky",
+      "inLanguage": "uk",
+      "description": "Гіпсова чи цементно-вапняна штукатурка й ґрунтовка для стін — за площею й товщиною шару, за нормами застосунку Majstr.",
+      "isPartOf": { "@type": "WebSite", "name": "Majstr", "url": "https://majstr.pro/" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Majstr", "item": "https://majstr.pro/" },
+        { "@type": "ListItem", "position": 2, "name": "Калькулятор штукатурки", "item": "https://majstr.pro/kalkulyator-shtukaturky" }
+      ]
+    }
+    </script>
+</head>
+<body data-calculator="PLASTER" class="seo-page">
+  <header class="seo-header">
+    <a href="/" class="seo-logo"><span aria-hidden="true">M</span>Majstr.pro</a>
+    <a href="/login" class="seo-signin">Увійти</a>
+  </header>
+
+  <main class="seo-main">
+    <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор штукатурки</nav>
+    <h1>Калькулятор штукатурки — скільки мішків купити на стіни</h1>
+    <p class="seo-lede">Скільки штукатурки купити: площа стін × середня товщина шару × витрата суміші на 1 мм, плюс запас, з округленням угору до цілих мішків. Приклад: кімната 3×4 м зі стінами 2,7 м, мінус вікно й двері — це близько 34 м². Гіпсова штукатурка вручну, шар 15 мм, запас 10 %: <!--SEO_EXAMPLE:plaster-room-->. Підставте свої розміри нижче — рахуємо тими ж нормами, що й застосунок Majstr.</p>
+
+    <form id="calc" class="seo-calc" novalidate>
+      <label>Площа стін, м²
+        <input name="area" inputmode="decimal" autocomplete="off" placeholder="напр. 34" required />
+        <small>Довжина всіх стін × висота мінус вікна й двері.</small>
+      </label>
+      <fieldset>
+        <legend>Яка штукатурка</legend>
+        <label><input type="radio" name="plaster" value="GYPSUM" checked /> Гіпсова — житлові кімнати</label>
+        <label><input type="radio" name="plaster" value="CEMENT_LIME" /> Цементно-вапняна — ванна, укоси, неопалюване</label>
+      </fieldset>
+      <fieldset data-show="plaster:GYPSUM">
+        <legend>Як наносите</legend>
+        <label><input type="radio" name="method" value="MANUAL" checked /> Вручну</label>
+        <label><input type="radio" name="method" value="MACHINE" /> Машиною</label>
+      </fieldset>
+      <label>Середня товщина шару, мм
+        <input name="thicknessMm" inputmode="decimal" autocomplete="off" placeholder="напр. 15" />
+        <small>Прикладіть правило в кількох місцях: середнє відхилення стіни + 5–10 мм на маяк. Зазвичай 10–20 мм. Порожнє поле — типова товщина для цієї роботи.</small>
+      </label>
+      <fieldset>
+        <legend>Запас</legend>
+        <label><input type="radio" name="wastePercent" value="5" /> 5 %</label>
+        <label><input type="radio" name="wastePercent" value="10" checked /> 10 %</label>
+        <label><input type="radio" name="wastePercent" value="15" /> 15 %</label>
+      </fieldset>
+      <button type="submit">Порахувати</button>
+      <p class="seo-error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="seo-result" aria-live="polite" hidden></section>
+
+    <section>
+      <h2>Як ми рахуємо</h2>
+      <p><b>Штукатурка</b> — це площа стін × середня товщина шару × витрата сухої суміші на 1 мм. Витрата на 1 мм у гіпсової, машинної гіпсової та цементно-вапняної штукатурки різна, тому спершу оберіть тип і спосіб нанесення. Товщину міряйте правилом у кількох місцях: стіну рідко штукатурять рівним шаром, а витрата залежить саме від середнього.</p>
+      <p><b>Яка товщина можлива.</b> За технічними описами виробників гіпсову штукатурку наносять шаром від 5 мм, за одне нанесення — зазвичай до 30 мм, на стелю — тонше. Тому калькулятор приймає для гіпсової 5–60 мм, а для цементно-вапняної 5–40 мм: товщий шар наносять у кілька прийомів.</p>
+      <p><b>Ґрунтовка</b> глибокого проникнення — окремий крок перед штукатуренням, на всю площу стін.</p>
+      <p><b>Чого калькулятор не рахує</b> — докупіть самі: <b>маяки</b> (їх кількість залежить від довжини стін і кроку, а не від площі), <b>штукатурну сітку</b>, яку для товстого шару кладуть у перший шар (технічні описи вимагають її, коли загальна товщина перевищує 20–30 мм), кутники для укосів і зовнішніх кутів.</p>
+      <p><b>Запас</b> покриває нерівності основи й розчин, що падає під час роботи. Наприкінці все округлюємо <b>вгору</b> до цілих мішків: пів мішка в магазині не продають, а нестача зупиняє роботу.</p>
+      <p>Норми — з технічних листів виробників і практики майстрів. Конкретна суміш може мати свою витрату: її можна вказати після розрахунку в полі «Своя норма з мішка».</p>
+    </section>
+
+    <section>
+      <h2>Таблиця для типових випадків</h2>
+      <!--SEO_TABLE:PLASTER-->
+    </section>
+
+    <section class="seo-cta">
+      <h2>Порахуй увесь об'єкт — з кошторисом і списком покупок</h2>
+      <p>У Majstr калькулятор матеріалів рахує з робіт кошторису: штукатурка, шпаклівка, фарба, плитка — усе разом, і відразу в список покупок.</p>
+      <a href="/register" class="seo-cta-button">Спробувати безкоштовно →</a>
+      <p class="seo-own-hint">Збережи свої норми — і застосунок рахуватиме під тебе на кожному об'єкті.</p>
+    </section>
+
+    <p class="seo-note">Розрахунок орієнтовний. Норма конкретного продукту може відрізнятися — дивіться упаковку.</p>
+  </main>
+
+  <footer class="seo-footer">
+    <span>© 2026 Majstr.pro</span>
+    <a href="/kalkulyator-plytky">Калькулятор плитки</a>
+    <a href="/kalkulyator-gipsokartonu">Калькулятор гіпсокартону</a>
+    <a href="/kalkulyator-styazhky">Калькулятор стяжки</a>
+    <a href="/privacy">Політика конфіденційності</a>
+    <a href="https://www.youtube.com/@majstrpro" rel="noopener" target="_blank">YouTube</a>
+    <a href="https://t.me/majstr_pro" rel="noopener" target="_blank">Telegram</a>
+  </footer>
+
+  <script type="module" src="/src/seo/calcPage.ts"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 // by Playwright, with a REAL app screen (public/landing/shot-editor.webp, from landing:shots) in a
 // CSS phone frame. Re-run after `npm run landing:shots`, so the preview follows the interface.
 //
-//   npm run og:images   → public/og/og-default.png, og-plytky.png, og-gipsokartonu.png
+//   npm run og:images   → public/og/og-default.png and one card per calculator page
 
 import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -38,6 +38,18 @@ const CARDS: Card[] = [
     badge: 'Безкоштовний калькулятор',
     lines: ['Калькулятор', 'гіпсокартону', 'та профілю'],
     sub: 'Листи ГКЛ, профіль, підвіси й саморізи — для стелі, стіни чи перегородки.',
+  },
+  {
+    file: 'og-shtukaturky.png',
+    badge: 'Безкоштовний калькулятор',
+    lines: ['Калькулятор', 'штукатурки', 'для стін'],
+    sub: 'Скільки мішків гіпсової чи цементної штукатурки й ґрунтовки купити — за площею й товщиною.',
+  },
+  {
+    file: 'og-styazhky.png',
+    badge: 'Безкоштовний калькулятор',
+    lines: ['Калькулятор', 'стяжки', 'та наливної підлоги'],
+    sub: 'Мішки суміші, ґрунтовка, сітка, плівка й демпферна стрічка — за площею й товщиною.',
   },
 ];
 

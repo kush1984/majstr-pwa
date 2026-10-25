@@ -64,3 +64,110 @@ describe('kalkulyator-gipsokartonu', () => {
     expect([perimeter(), layers()]).toEqual([true, true]);
   });
 });
+
+/** The body calcPage.ts POSTs on submit — fetch is stubbed with an empty answer. */
+async function submitted(form: HTMLFormElement): Promise<{ calculator: string; inputs: Record<string, unknown> }> {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ materials: [], wastePercent: 10, missing: [] }), { status: 200 }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  form.requestSubmit();
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  const init = fetchMock.mock.calls[0][1] as RequestInit;
+  return JSON.parse(init.body as string) as { calculator: string; inputs: Record<string, unknown> };
+}
+
+function type(form: HTMLFormElement, name: string, value: string): void {
+  const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+  if (!input) throw new Error(`no input ${name}`);
+  input.value = value;
+}
+
+describe('kalkulyator-shtukaturky', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    vi.unstubAllGlobals();
+  });
+
+  it('asks how it is applied only for gypsum — the library has no machine cement-lime', async () => {
+    const form = await load('kalkulyator-shtukaturky.html');
+    const method = () => form.querySelector<HTMLElement>('fieldset[data-show="plaster:GYPSUM"]')?.hidden;
+
+    expect(method()).toBe(false);
+    choose(form, 'plaster', 'CEMENT_LIME');
+    expect(method()).toBe(true);
+    choose(form, 'plaster', 'GYPSUM');
+    expect(method()).toBe(false);
+  });
+
+  it('reads a comma, and sends no method for cement-lime even if machine was picked before', async () => {
+    const form = await load('kalkulyator-shtukaturky.html');
+    type(form, 'area', '34,5');
+    type(form, 'thicknessMm', '12,5');
+    choose(form, 'method', 'MACHINE');
+    choose(form, 'plaster', 'CEMENT_LIME');
+
+    const body = await submitted(form);
+
+    expect(body.calculator).toBe('PLASTER');
+    expect(body.inputs).toEqual({ area: 34.5, wastePercent: 10, thicknessMm: 12.5, plaster: 'CEMENT_LIME' });
+  });
+
+  it('leaves an empty thickness out — the server takes the position\'s own', async () => {
+    const form = await load('kalkulyator-shtukaturky.html');
+    type(form, 'area', '20');
+
+    const body = await submitted(form);
+
+    expect(body.inputs).toEqual({ area: 20, wastePercent: 10, plaster: 'GYPSUM', method: 'MANUAL' });
+  });
+});
+
+describe('kalkulyator-styazhky', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    vi.unstubAllGlobals();
+  });
+
+  it('changes the thickness hint with the screed kind, and offers mesh and film for cement only', async () => {
+    const form = await load('kalkulyator-styazhky.html');
+    const ticks = () => form.querySelector<HTMLElement>('fieldset[data-show="screed:CEMENT"]')?.hidden;
+
+    expect(visibleText(form, 'small[data-show]')).toEqual([expect.stringContaining('від 10 до 100 мм')]);
+    expect(ticks()).toBe(false);
+
+    choose(form, 'screed', 'SELF_LEVELLING');
+    expect(visibleText(form, 'small[data-show]')).toEqual([expect.stringContaining('від 2 до 30 мм')]);
+    expect(ticks()).toBe(true);
+  });
+
+  it('sends the ticks and the optional perimeter for cement, with commas', async () => {
+    const form = await load('kalkulyator-styazhky.html');
+    type(form, 'area', '15,5');
+    type(form, 'thicknessMm', '45');
+    type(form, 'perimeter', '16,2');
+    const mesh = form.querySelector<HTMLInputElement>('input[name="withMesh"]');
+    if (!mesh) throw new Error('no mesh tick');
+    mesh.checked = true;
+
+    const body = await submitted(form);
+
+    expect(body.calculator).toBe('SCREED');
+    expect(body.inputs).toEqual({
+      area: 15.5, wastePercent: 10, thicknessMm: 45, screed: 'CEMENT', withMesh: true, withFilm: false, perimeter: 16.2,
+    });
+  });
+
+  it('drops the ticks for a self-levelling floor, and the perimeter when left empty', async () => {
+    const form = await load('kalkulyator-styazhky.html');
+    type(form, 'area', '20');
+    const film = form.querySelector<HTMLInputElement>('input[name="withFilm"]');
+    if (!film) throw new Error('no film tick');
+    film.checked = true;
+    choose(form, 'screed', 'SELF_LEVELLING');
+
+    const body = await submitted(form);
+
+    expect(body.inputs).toEqual({ area: 20, wastePercent: 10, screed: 'SELF_LEVELLING' });
+  });
+});

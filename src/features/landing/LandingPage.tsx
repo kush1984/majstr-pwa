@@ -651,6 +651,12 @@ function LandingFooter() {
           <a href="/kalkulyator-gipsokartonu" className="text-landing-ink hover:text-landing-amber-deep">
             {t('landing.footerCalcDrywall')}
           </a>
+          <a href="/kalkulyator-shtukaturky" className="text-landing-ink hover:text-landing-amber-deep">
+            {t('landing.footerCalcPlaster')}
+          </a>
+          <a href="/kalkulyator-styazhky" className="text-landing-ink hover:text-landing-amber-deep">
+            {t('landing.footerCalcScreed')}
+          </a>
           <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
             {t('privacy.footerLink')}
           </Link>
