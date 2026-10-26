@@ -17,6 +17,7 @@ import { useCollapsedCategories } from './useCollapsedCategories.ts';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { percentLabel } from './percentLine.ts';
+import { InlineItemBody, type InlineCommit } from './InlineItemBody.tsx';
 import type { EstimateItemResponse, Trade } from '@/api/types.ts';
 import {
   flatten, ITEM_ID, resolveDrag, SECTION_ID, sectionId, toSections, type Section,
@@ -71,6 +72,7 @@ export function EstimateItemsBoard({
   touched,
   lastTouched,
   onEdit,
+  onInline,
   onArrange,
   selection,
 }: {
@@ -85,6 +87,8 @@ export function EstimateItemsBoard({
    *  can see at a glance which line he last worked on while stepping through a long estimate. */
   lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
+  /** Present = rows edit in place (INLINE_ITEM_EDITING); absent = a tap opens the dialog. */
+  onInline?: InlineCommit;
   /** The new arrangement, flat and in order, each line carrying the section it now belongs to. */
   onArrange: (arranged: EstimateItemResponse[]) => void;
   /**
@@ -159,6 +163,7 @@ export function EstimateItemsBoard({
           touched={touched}
           lastTouched={lastTouched}
           onEdit={onEdit}
+          onInline={onInline}
           selection={selection}
           byId={byId}
           onDragEnd={onDragEndFor('WORK', worksSections)}
@@ -175,6 +180,7 @@ export function EstimateItemsBoard({
           touched={touched}
           lastTouched={lastTouched}
           onEdit={onEdit}
+          onInline={onInline}
           selection={selection}
           byId={byId}
           onDragEnd={onDragEndFor('MATERIAL', materialsSections)}
@@ -204,7 +210,7 @@ export function EstimateItemsBoard({
  * to this type, so a line or a category can never cross into the other.
  */
 function TypeGroup({
-  heading, sections, startNumber, signed, touched, lastTouched, onEdit, selection, byId, onDragEnd,
+  heading, sections, startNumber, signed, touched, lastTouched, onEdit, onInline, selection, byId, onDragEnd,
   showTradeBadges, collapse,
 }: {
   /** The section heading, or null to render the block bare (a single-type estimate). */
@@ -216,6 +222,7 @@ function TypeGroup({
   touched?: ReadonlySet<string>;
   lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
+  onInline?: InlineCommit;
   selection?: Selection;
   byId: Map<string, EstimateItemResponse>;
   onDragEnd: (e: DragEndEvent) => void;
@@ -257,6 +264,7 @@ function TypeGroup({
               touched={touched}
               lastTouched={lastTouched}
               onEdit={onEdit}
+          onInline={onInline}
               selection={selection}
               byId={byId}
               showTradeBadges={showTradeBadges}
@@ -302,7 +310,7 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function SectionBlock({
-  section, firstNumber, signed, touched, lastTouched, onEdit, selection, byId,
+  section, firstNumber, signed, touched, lastTouched, onEdit, onInline, selection, byId,
   showTradeBadges, collapse,
 }: {
   section: Section<EstimateItemResponse>;
@@ -313,6 +321,7 @@ function SectionBlock({
   touched?: ReadonlySet<string>;
   lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
+  onInline?: InlineCommit;
   selection?: Selection;
   showTradeBadges: boolean;
   collapse: ReturnType<typeof useCollapsedCategories>;
@@ -423,6 +432,7 @@ function SectionBlock({
                 touched={touched}
                 lastTouched={lastTouched}
                 onEdit={onEdit}
+          onInline={onInline}
                 selection={selection}
                 byId={byId}
               />
@@ -435,7 +445,7 @@ function SectionBlock({
 }
 
 function ItemRow({
-  item, number, signed, touched, lastTouched, onEdit, selection, byId,
+  item, number, signed, touched, lastTouched, onEdit, onInline, selection, byId,
 }: {
   item: EstimateItemResponse;
   /** Every line by id, so a percentage row can name the line it is measured against. */
@@ -445,6 +455,7 @@ function ItemRow({
   touched?: ReadonlySet<string>;
   lastTouched?: ReadonlySet<string>;
   onEdit: (item: EstimateItemResponse) => void;
+  onInline?: InlineCommit;
   selection?: Selection;
 }) {
   const { t } = useTranslation();
@@ -469,6 +480,17 @@ function ItemRow({
   const unquantified = isUnquantified(item, signed);
   const partlyClosed = closed > 0 && !fullyClosed;
   const description = item.description?.trim() ?? '';
+
+  const stateClass = picked ? 'border-brand bg-brand-soft/40'
+    : isLastTouched ? 'border-success/50 bg-success-soft'
+      : isTouched ? 'border-brand/30 bg-brand-soft/20'
+        : fullyClosed ? 'border-success/60 bg-success-soft'
+          : partlyClosed ? 'border-success/40 bg-success-soft/40'
+            : unquantified ? 'border-dashed border-amber/70 bg-surface-sunken'
+              : 'border-border bg-surface';
+  // A cell is editable exactly where the server allows the edit: never on a signed estimate (an
+  // addendum is always signed), and never while the row is a checkbox in selection mode.
+  const inlineHere = onInline !== undefined && !signed && !selection;
 
   // `data-item-id` is the anchor the editor scrolls a just-added/edited line to. Rows are nested
   // inside category sections, so the page cannot hold a ref per line — it finds this by id instead.
@@ -503,86 +525,91 @@ function ItemRow({
           <DragGrip listeners={listeners} attributes={attributes} label={t('estimate.dragItem')} stretch />
         )
       )}
-      <button
-        type="button"
-        // In selection mode the row IS the checkbox — the whole card, not a 20 px square, because
-        // this is a thumb picking dozens of lines in a row.
-        onClick={() => (selection ? selectable && selection.onToggle(item.id) : !signed && onEdit(item))}
-        disabled={signed && !selection}
-        aria-pressed={selection && selectable ? picked : undefined}
-        title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
-        className={cn(
-          'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',
-          picked ? 'border-brand bg-brand-soft/40'
-            : isLastTouched ? 'border-success/50 bg-success-soft'
-              : isTouched ? 'border-brand/30 bg-brand-soft/20'
-                : fullyClosed ? 'border-success/60 bg-success-soft'
-                  : partlyClosed ? 'border-success/40 bg-success-soft/40'
-                    : unquantified ? 'border-dashed border-amber/70 bg-surface-sunken'
-                      : 'border-border bg-surface',
-        )}
-      >
-        {/* The number is a GUTTER for the whole card, not a word inside the name.
-            Putting it in the name's text flow was the first attempt and it read as a mess: a name
-            long enough to wrap — most of them, on a phone — sent its second line back to the left
-            margin, underneath the number, so neither the text nor the column lined up with
-            anything. As its own column it stays a column, and every line of the name shares one
-            left edge.
+      {inlineHere ? (
+        <InlineItemBody
+          item={item}
+          number={number}
+          percentText={item.unit === 'PERCENT' ? percentLabel(item, byId) : null}
+          className={stateClass}
+          onCommit={onInline}
+          onMore={() => onEdit(item)}
+        />
+      ) : (
+        <button
+          type="button"
+          // In selection mode the row IS the checkbox — the whole card, not a 20 px square, because
+          // this is a thumb picking dozens of lines in a row.
+          onClick={() => (selection ? selectable && selection.onToggle(item.id) : !signed && onEdit(item))}
+          disabled={signed && !selection}
+          aria-pressed={selection && selectable ? picked : undefined}
+          title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
+          className={cn(
+            'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',
+            stateClass,
+          )}
+        >
+          {/* The number is a GUTTER for the whole card, not a word inside the name.
+              Putting it in the name's text flow was the first attempt and it read as a mess: a name
+              long enough to wrap — most of them, on a phone — sent its second line back to the left
+              margin, underneath the number, so neither the text nor the column lined up with
+              anything. As its own column it stays a column, and every line of the name shares one
+              left edge.
 
-            MIN-width, not a fixed one, and sized for two digits. Reserving three digits' worth on
-            every row bought alignment for the rare 100+ estimate by taking a strip of a 375 px
-            screen away from every ordinary one — the wrong trade, since the name is what the master
-            reads and the number is only a reference mark. A three-digit row simply grows by a
-            couple of pixels. Tabular figures keep the right edge straight, which is what lets him
-            run a finger down the column and count. */}
-        {/* self-center, not top-aligned: a name wraps to two or three lines on a phone, and a
-            number pinned to the first line reads as if it belongs to that line rather than to the
-            row. Centred on the row's height it belongs to the whole card. */}
-        <span className="min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
-          {number}.
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-start justify-between gap-2">
-            <span className="min-w-0 flex-1 text-sm font-medium text-primary">{item.name}</span>
-            {unquantified ? (
-              <span className="whitespace-nowrap text-sm font-bold text-faint">—</span>
-            ) : (
-              <span className="whitespace-nowrap text-sm font-bold text-primary">
-                {formatMoney(item.lineTotal)}
-              </span>
-            )}
+              MIN-width, not a fixed one, and sized for two digits. Reserving three digits' worth on
+              every row bought alignment for the rare 100+ estimate by taking a strip of a 375 px
+              screen away from every ordinary one — the wrong trade, since the name is what the master
+              reads and the number is only a reference mark. A three-digit row simply grows by a
+              couple of pixels. Tabular figures keep the right edge straight, which is what lets him
+              run a finger down the column and count. */}
+          {/* self-center, not top-aligned: a name wraps to two or three lines on a phone, and a
+              number pinned to the first line reads as if it belongs to that line rather than to the
+              row. Centred on the row's height it belongs to the whole card. */}
+          <span className="min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
+            {number}.
           </span>
-          {/* No manual indent any more: the gutter above already holds the column open, so this
-              line simply starts where the name starts. */}
-          <span className="mt-1 flex items-center gap-2 text-xs text-muted">
-            {unquantified ? (
-              <span className="rounded-full border border-amber/60 bg-amber-soft px-2 py-0.5 text-[12px] font-semibold text-amber-strong">
-                {t('estimate.needsQuantity')}
-              </span>
-            ) : (
-              <span>
-                {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
-              </span>
-            )}
-            <span className="h-[3px] w-[3px] rounded-full bg-faint" />
-            {/* A percentage has no price per unit — «500 ₴/%» meant nothing. It says what it is a
-                percentage OF, in the same words the PDF and the client's portal use. */}
-            <span className={cn(item.baseDetached && 'text-amber')}>
-              {percentLabel(item, byId) ?? `${formatMoney(item.unitPrice)}/${t('units.' + item.unit)}`}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-start justify-between gap-2">
+              <span className="min-w-0 flex-1 text-sm font-medium text-primary">{item.name}</span>
+              {unquantified ? (
+                <span className="whitespace-nowrap text-sm font-bold text-faint">—</span>
+              ) : (
+                <span className="whitespace-nowrap text-sm font-bold text-primary">
+                  {formatMoney(item.lineTotal)}
+                </span>
+              )}
             </span>
-            {fullyClosed && (
-              <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
-                {t('acts.closedFull')}
+            {/* No manual indent any more: the gutter above already holds the column open, so this
+                line simply starts where the name starts. */}
+            <span className="mt-1 flex items-center gap-2 text-xs text-muted">
+              {unquantified ? (
+                <span className="rounded-full border border-amber/60 bg-amber-soft px-2 py-0.5 text-[12px] font-semibold text-amber-strong">
+                  {t('estimate.needsQuantity')}
+                </span>
+              ) : (
+                <span>
+                  {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
+                </span>
+              )}
+              <span className="h-[3px] w-[3px] rounded-full bg-faint" />
+              {/* A percentage has no price per unit — «500 ₴/%» meant nothing. It says what it is a
+                  percentage OF, in the same words the PDF and the client's portal use. */}
+              <span className={cn(item.baseDetached && 'text-amber')}>
+                {percentLabel(item, byId) ?? `${formatMoney(item.unitPrice)}/${t('units.' + item.unit)}`}
               </span>
-            )}
-            {partlyClosed && (
-              <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
-                {formatNumber(closed, 3)} / {formatNumber(item.quantity, 3)}
-              </span>
-            )}
+              {fullyClosed && (
+                <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                  {t('acts.closedFull')}
+                </span>
+              )}
+              {partlyClosed && (
+                <span className="ml-auto flex-shrink-0 whitespace-nowrap rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+                  {formatNumber(closed, 3)} / {formatNumber(item.quantity, 3)}
+                </span>
+              )}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      )}
       {/* The explanation the line carries from the catalog (V119) lives BESIDE the row, never
           inside it (V121): rendered inline it ran the width of the board and pushed the whole
           estimate sideways — «все пливе». Same shape as the catalog board, minus the clamped

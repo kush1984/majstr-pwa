@@ -676,7 +676,19 @@
     "percentFrozenBase": "Base amount, ₴",
     "percentFrozenTitle": "Carried over from a consolidation",
     "percentFrozenHint": "Frozen when estimates were consolidated — there is no live base any more. The percent and amount are editable directly.",
-    "clientOptional": "Client — optional"
+    "clientOptional": "Client — optional",
+    "inline": {
+      "name": "Name",
+      "quantity": "Quantity",
+      "price": "Price",
+      "sum": "Total",
+      "percent": "Percent",
+      "more": "All fields of «{{name}}»",
+      "manual": "✎ manual",
+      "quantityFirst": "Enter the quantity first",
+      "sumActual": "You typed {{typed}}; at a price to the kopeck it comes to {{actual}}",
+      "roundPrice": "Round the price"
+    }
   },
   "economy": {
     "addendumBadge": "from an act",

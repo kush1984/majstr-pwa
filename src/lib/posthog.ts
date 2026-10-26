@@ -108,6 +108,18 @@ interface EventMap {
    * surfaces it was, and nothing else travels.</p>
    */
   crew_margin_viewed: { scope: 'economy' | 'editor' };
+
+  /**
+   * A value saved straight from a row (inline editing). The backend stores the new value but not
+   * that it came from a cell rather than the dialog — and whether masters edit in the row at all
+   * is the one question here. Which FIELD and which SCREEN only: never a name, never a sum.
+   */
+  inline_edit_commit: {
+    field: 'quantity' | 'price' | 'sum' | 'name' | 'percent';
+    screen: 'estimate' | 'catalog' | 'template';
+  };
+  /** «Оновити каталог» from the estimate's card: how many positions were repriced and added. */
+  catalog_sync_apply: { updated: number; added: number };
 }
 
 type EventName = keyof EventMap;

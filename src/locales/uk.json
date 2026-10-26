@@ -678,7 +678,19 @@
     "percentFrozenBase": "База (сума), ₴",
     "percentFrozenTitle": "Перенесено зі зведення",
     "percentFrozenHint": "Зафіксовано при зведенні кошторисів — живої бази більше немає. Відсоток і сума редагуються напряму.",
-    "clientOptional": "Клієнт — необов'язково"
+    "clientOptional": "Клієнт — необов'язково",
+    "inline": {
+      "name": "Назва",
+      "quantity": "Кількість",
+      "price": "Ціна",
+      "sum": "Сума",
+      "percent": "Відсоток",
+      "more": "Усі поля позиції «{{name}}»",
+      "manual": "✎ вручну",
+      "quantityFirst": "Спершу вкажіть кількість",
+      "sumActual": "Введено {{typed}}, за ціною до копійки виходить {{actual}}",
+      "roundPrice": "Округлити ціну"
+    }
   },
   "economy": {
     "addendumBadge": "з акта",

@@ -44,6 +44,10 @@ import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { estimateName } from './estimateName.ts';
 import { crewMarginOf } from './crewMargin.ts';
 import { track } from '@/lib/posthog.ts';
+import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
+import { toastUndoable } from '@/lib/inlineEdit.ts';
+import type { InlineCommit } from './InlineItemBody.tsx';
+import { itemRequest } from './inlineItem.ts';
 import {
   useEstimate,
   useRemoveItem,
@@ -121,6 +125,21 @@ export function EstimateEditorPage() {
     });
     setLastTouched(new Set(ids));
     scrollTo.current = ids[0] ?? null;
+  };
+  /**
+   * A value typed into a row: through the same offline queue the dialog uses, then «Збережено ·
+   * Скасувати». The undo re-sends the line exactly as it was — again through the queue. Highlighted
+   * like any edit, but NOT scrolled to: the row is already in view, and the next cell may be open.
+   */
+  const commitInline: InlineCommit = (item, patch, field) => {
+    const fail = (err: unknown) => toast.error(toAppError(err).message);
+    setTouched((prev) => new Set(prev).add(item.id));
+    setLastTouched(new Set([item.id]));
+    track('inline_edit_commit', { field, screen: 'estimate' });
+    updateItem.mutate({ itemId: item.id, req: itemRequest(item, patch) }, { onError: fail });
+    toastUndoable(t('inline.saved'), () => {
+      updateItem.mutate({ itemId: item.id, req: itemRequest(item) }, { onError: fail });
+    });
   };
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -575,6 +594,7 @@ export function EstimateEditorPage() {
                   touched={touched}
                   lastTouched={lastTouched}
                   onEdit={setEditing}
+                  onInline={INLINE_ITEM_EDITING ? commitInline : undefined}
                   selection={picked === null ? undefined : {
                     selected: picked,
                     // In markup mode a material or «%» row carries no tick at all: a checkbox that
