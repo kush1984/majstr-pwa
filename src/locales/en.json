@@ -2196,5 +2196,12 @@
     "needConnection": "A connection is needed to get the link.",
     "title": "Chat link",
     "rowAria": "Chat link: {{name}}"
+  },
+  "inline": {
+    "saved": "Saved",
+    "undo": "Undo",
+    "next": "Next ↓",
+    "done": "Done",
+    "cancel": "Cancel"
   }
 }
