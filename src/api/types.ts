@@ -710,6 +710,35 @@ export interface CatalogItemRequest {
 }
 
 /** One entry in a batch add-from-catalog request. */
+/** «Оновити каталог» from an estimate's card — one transaction (`POST /api/catalog/sync`). Only a
+ *  CLIENT price travels: there is no crew-price field, so `sourceUnitPrice` cannot reach the catalog. */
+export interface CatalogSyncRequest {
+  updates: CatalogSyncPriceUpdateRequest[];
+  creates: CatalogSyncNewPositionRequest[];
+}
+
+/** A position the master already has takes this price. */
+export interface CatalogSyncPriceUpdateRequest {
+  catalogItemId: string;
+  defaultPrice: number;
+}
+
+/** A position the catalog lacks; `id` is client-generated, so a replay finds what it created. */
+export interface CatalogSyncNewPositionRequest {
+  id: string;
+  name: string;
+  category?: string | null;
+  trade?: Trade | null;
+  type: ItemType;
+  unit: Unit;
+  defaultPrice: number;
+}
+
+export interface CatalogSyncResponse {
+  updated: number;
+  added: number;
+}
+
 export interface BatchCatalogItemEntry {
   catalogItemId: string;
   quantity: number;

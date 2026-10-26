@@ -44,7 +44,8 @@ import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { estimateName } from './estimateName.ts';
 import { crewMarginOf } from './crewMargin.ts';
 import { track } from '@/lib/posthog.ts';
-import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
+import { CATALOG_SYNC_CARD, INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
+import { CatalogSyncCard } from './CatalogSyncCard.tsx';
 import { toastUndoable } from '@/lib/inlineEdit.ts';
 import type { InlineCommit } from './InlineItemBody.tsx';
 import { itemRequest } from './inlineItem.ts';
@@ -718,6 +719,7 @@ export function EstimateEditorPage() {
                 pdfLoading={pdfLoading}
               />
             )}
+            {CATALOG_SYNC_CARD && !signed && <CatalogSyncCard estimateId={id} items={est.items} />}
           </div>
 
           {/* Desktop summary */}

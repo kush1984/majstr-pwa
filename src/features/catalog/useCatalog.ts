@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi } from '@/api/catalog.ts';
-import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade, UserResponse } from '@/api/types.ts';
+import type {
+  CatalogItemRequest, CatalogItemResponse, CatalogSyncRequest, ItemType, Trade, UserResponse,
+} from '@/api/types.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
@@ -150,6 +152,43 @@ export function useUpdateCatalogItem() {
             customTradeName: resolveCustomTradeName(qc, customTradeId),
             type: req.type, unit: req.unit, defaultPrice: req.defaultPrice,
           } : i)));
+        },
+      }),
+  });
+}
+
+/**
+ * «Оновити каталог» from an estimate's card: one queued batch (`catalogSync`), so offline it still
+ * lands as ONE transaction later. The cache is patched at once — the card recounts from it and
+ * disappears when nothing differs any more. Server-side every write resolves the master's open
+ * PRICE_DRIFT notice about that position (V178); the `['catalog']` invalidation refreshes the list.
+ */
+export function useCatalogSync() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateCatalog();
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: ({ batchId, req }: { batchId: string; req: CatalogSyncRequest }): Promise<void> =>
+      offlineMutate<void>({
+        entity: 'catalogSync', entityId: batchId, type: 'create', payload: req, deps: [],
+        online: async () => { await catalogApi.sync(req, batchId); },
+        cancel: cancelCatalog(qc),
+        onOnlineSuccess: invalidate,
+        optimistic: () => {
+          const prices = new Map(req.updates.map((u) => [u.catalogItemId, u.defaultPrice]));
+          const added: CatalogItemResponse[] = req.creates.map((c) => ({
+            id: c.id, name: c.name, category: c.category ?? null, trade: c.trade ?? null,
+            customTradeId: null, customTradeName: null, type: c.type, unit: c.unit,
+            defaultPrice: c.defaultPrice, sortOrder: Number.MAX_SAFE_INTEGER,
+            createdAt: new Date().toISOString(), sharedTrades: [],
+          }));
+          patchCatalog(qc, (items) =>
+            items.map((i) => (prices.has(i.id) ? { ...i, defaultPrice: prices.get(i.id) ?? i.defaultPrice } : i)));
+          // An added position only goes where a created one would: «all» and its own type's list.
+          for (const a of added) {
+            patchCatalog(qc, (items) => (items.some((i) => i.id === a.id) ? items : [...items, a]),
+              (t) => t === 'all' || t === a.type);
+          }
         },
       }),
   });

@@ -3,6 +3,8 @@ import type {
   CatalogItemRequest,
   CatalogItemResponse,
   CatalogResetResponse,
+  CatalogSyncRequest,
+  CatalogSyncResponse,
   CatalogUpdateNoticeResponse,
   ItemType,
   TemplateUpdatesResponse,
@@ -54,6 +56,14 @@ export const catalogApi = {
   search(q: string, limit = 10): Promise<CatalogItemResponse[]> {
     return api
       .get<CatalogItemResponse[]>('/api/catalog/search', { params: { q, limit } })
+      .then((r) => r.data);
+  },
+
+  /** «Оновити каталог» — re-price and add in one transaction. `batchId` rides X-Entity-Uuid like
+   *  every queued write; the per-row ids are what actually make a replay idempotent. */
+  sync(req: CatalogSyncRequest, batchId: string): Promise<CatalogSyncResponse> {
+    return api
+      .post<CatalogSyncResponse>('/api/catalog/sync', req, { headers: { 'X-Entity-Uuid': batchId } })
       .then((r) => r.data);
   },
 

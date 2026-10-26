@@ -19,7 +19,7 @@ import { fromQueuedFile } from './queuedFile.ts';
 import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
 import type {
   EstimateItemsOrderRequest,
-  BatchCatalogItemEntry, CashEntryKind, CashEntryRequest, CatalogItemRequest, ClientRequest,
+  BatchCatalogItemEntry, CashEntryKind, CashEntryRequest, CatalogItemRequest, CatalogSyncRequest, ClientRequest,
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
@@ -301,6 +301,13 @@ export function initOutbox(qc: QueryClient): () => void {
     } else {
       await catalogApi.remove(op.entityId);
     }
+  });
+
+  // «Оновити каталог» from an estimate's card — entityId is the batch id. Create only: the undo is
+  // another sync (the old prices) plus the bulk delete of the positions this one added.
+  registerOutboxHandler('catalogSync', async (op) => {
+    if (op.type !== 'create') throw new Error(`catalogSync: unsupported op type "${op.type}"`);
+    await catalogApi.sync(op.payload as CatalogSyncRequest, op.entityId);
   });
 
   // Own templates — rename / re-file / delete. Templates are never CREATED offline

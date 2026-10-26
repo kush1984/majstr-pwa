@@ -77,6 +77,23 @@
     "category": "string?",
     "id": "string"
   },
+  "CatalogSyncRequest": {
+    "creates": "array",
+    "updates": "array"
+  },
+  "CatalogSyncRequest.NewPosition": {
+    "category": "string?",
+    "defaultPrice": "number",
+    "id": "string",
+    "name": "string",
+    "trade": "string?",
+    "type": "string",
+    "unit": "string"
+  },
+  "CatalogSyncRequest.PriceUpdate": {
+    "catalogItemId": "string",
+    "defaultPrice": "number"
+  },
   "CheckoutRequest": {
     "autoRenew": "boolean?",
     "period": "string?"

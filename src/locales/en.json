@@ -304,7 +304,8 @@
       "shoppingItem": "Shopping row",
       "shoppingClear": "Hiding bought rows",
       "cashEntry": "Cash-flow entry",
-      "shareMarkSent": "«Sent» mark"
+      "shareMarkSent": "«Sent» mark",
+      "catalogSync": "Catalog update from an estimate"
     },
     "reviewStuckBody": "These changes ({{n}}) could not be sent — the app ran out of retries. Check your connection and try again, or delete them.",
     "reasonStuck": "could not be sent — out of retries",
@@ -688,6 +689,29 @@
       "quantityFirst": "Enter the quantity first",
       "sumActual": "You typed {{typed}}; at a price to the kopeck it comes to {{actual}}",
       "roundPrice": "Round the price"
+    },
+    "catalogSync": {
+      "title_one": "{{count}} price differs from the catalog",
+      "title_other": "{{count}} prices differ from the catalog",
+      "titleMissingOnly_one": "{{count}} position is not in the catalog",
+      "titleMissingOnly_other": "{{count}} positions are not in the catalog",
+      "onlyHere": "The changes are saved in this estimate only.",
+      "alsoMissing_one": "{{count}} more position is not in the catalog.",
+      "alsoMissing_other": "{{count}} more positions are not in the catalog.",
+      "open": "Update the catalog →",
+      "notNow": "Not now",
+      "sheetTitle": "Update the catalog",
+      "sheetSubtitle": "What you tick goes into your catalog — and into your next estimates.",
+      "sectionPrice": "Different price",
+      "sectionMissing": "Not in the catalog",
+      "inCatalog": "in catalog",
+      "discount": "a client discount?",
+      "addWith": "add at {{price}} / {{unit}}",
+      "apply_one": "Update {{count}} position",
+      "apply_other": "Update {{count}} positions",
+      "noCrewPrices": "Crew prices never go into the catalog",
+      "applied_one": "Catalog updated: {{count}} position",
+      "applied_other": "Catalog updated: {{count}} positions"
     }
   },
   "economy": {
