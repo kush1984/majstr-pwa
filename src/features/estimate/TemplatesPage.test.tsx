@@ -346,7 +346,7 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
     // Scoped to the composition — the name also shows up in the «зберегти в каталог» prompt the
     // manual form leaves open behind it.
     const card = (name: string) =>
-      Array.from(document.querySelectorAll<HTMLElement>('[data-template-item-id] button'))
+      Array.from(document.querySelectorAll<HTMLElement>('[data-template-item-id] [data-template-row-body]'))
         .find((el) => el.textContent?.includes(name));
 
     // A bundle is longer than the list shows and a new position lands at the BOTTOM, so it is
@@ -399,7 +399,8 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
 
     // The composition is numbered — the order is the sequence of works, not decoration.
     expect(await screen.findByText(/Грунтування стін/)).toBeTruthy();
-    fireEvent.click(screen.getByText(/Фарбування стін/));
+    // The name edits in place now; «⋯» is the door to the full position sheet.
+    fireEvent.click(screen.getByRole('button', { name: /Усі поля позиції «Фарбування стін/ }));
 
     expect(await screen.findByText('Редагувати позицію')).toBeTruthy();
     // Opens prefilled with what is already there — an edit starts from the current wording.

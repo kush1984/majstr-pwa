@@ -47,6 +47,12 @@ import type {
 } from '@/api/types.ts';
 import { TradeLevel } from '@/features/catalog/TradeLevel.tsx';
 import { TradeSelect } from './TradeSelect.tsx';
+import { InlineTextCell } from '@/components/InlineTextCell.tsx';
+import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
+import { catalogKey, indexCatalog } from '@/lib/catalogMatch.ts';
+import { formatMoney } from '@/lib/format.ts';
+import { track } from '@/lib/posthog.ts';
+import { useCatalog } from '@/features/catalog/useCatalog.ts';
 import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
 import {
   useAddTemplateItem,
@@ -697,6 +703,10 @@ function EditModal({
   const onRemove = (itemId: string) =>
     setDraft((d) => ({ ...d, items: d.items.filter((i) => i.id !== itemId) }));
   const onReorder = (arranged: DraftItem[]) => setDraft((d) => ({ ...d, items: arranged }));
+  // A template position carries no price — it is the master's catalog price at apply time — so the
+  // row shows that price, greyed, by the same key the server prices by.
+  const catalog = useCatalog();
+  const catalogByKey = useMemo(() => indexCatalog(catalog.data ?? []), [catalog.data]);
 
   /**
    * Write the draft. There is no bulk endpoint, so the diff is replayed as the sequence the API
@@ -835,6 +845,14 @@ function EditModal({
             items={items}
             unsaved={unsaved}
             onEdit={setEditingItem}
+            inline={INLINE_ITEM_EDITING ? {
+              priceOf: (item) => catalogByKey.get(catalogKey(item.name, item.type, item.unit))?.defaultPrice ?? null,
+              // Into the DRAFT, like every other change here: «Зберегти» writes it, so no toast.
+              onRename: (item, name) => {
+                track('inline_edit_commit', { field: 'name', screen: 'template' });
+                setDraft((d) => ({ ...d, items: d.items.map((i) => (i.id === item.id ? { ...i, name } : i)) }));
+              },
+            } : undefined}
             onRemove={(item) => setRemoving({ id: item.id, name: item.name })}
             onReorder={onReorder}
           />
@@ -918,16 +936,24 @@ function EditModal({
 }
 
 /** The draggable composition. A drag rearranges the DRAFT; nothing is written until «Зберегти». */
+/** Inline editing in the template editor: the NAME only (into the draft), plus the catalog price. */
+interface TemplateInline {
+  priceOf: (item: DraftItem) => number | null;
+  onRename: (item: DraftItem, name: string) => void;
+}
+
 function Composition({
   items,
   unsaved,
   onEdit,
+  inline,
   onRemove,
   onReorder,
 }: {
   items: DraftItem[];
   unsaved: ReadonlySet<string>;
   onEdit: (item: DraftItem) => void;
+  inline?: TemplateInline;
   onRemove: (item: DraftItem) => void;
   onReorder: (arranged: DraftItem[]) => void;
 }) {
@@ -962,6 +988,7 @@ function Composition({
               number={index + 1}
               unsaved={unsaved.has(item.id)}
               onEdit={() => onEdit(item)}
+              inline={inline}
               onRemove={() => onRemove(item)}
             />
           ))}
@@ -976,12 +1003,14 @@ function SortableRow({
   number,
   unsaved,
   onEdit,
+  inline,
   onRemove,
 }: {
   item: DraftItem;
   number: number;
   unsaved: boolean;
   onEdit: () => void;
+  inline?: TemplateInline;
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
@@ -997,6 +1026,41 @@ function SortableRow({
       className={cn('flex items-stretch gap-1', isDragging && 'z-10 opacity-90')}
     >
       <DragGrip listeners={listeners} attributes={attributes} label={t('templates.dragItem')} stretch />
+      {inline ? (
+        <div
+          data-template-row-body
+          className={cn(
+            'min-w-0 flex-1 rounded-lg border px-2 py-1 text-sm',
+            unsaved ? 'border-success/50 bg-success-soft' : 'border-transparent bg-surface-sunken',
+          )}
+        >
+          <div className="flex items-start gap-1">
+            <span className="flex-shrink-0 pt-3 text-xs font-semibold text-faint">{number}.</span>
+            <InlineTextCell
+              value={item.name}
+              ariaLabel={`${t('estimate.inline.name')}, ${item.name}`}
+              className="min-w-0 flex-1 text-primary"
+              onCommit={(name) => inline.onRename(item, name)}
+            />
+            <button
+              type="button"
+              onClick={onEdit}
+              aria-label={t('estimate.inline.more', { name: item.name })}
+              className="min-h-[44px] min-w-[36px] flex-shrink-0 rounded-md text-lg text-muted active:bg-surface"
+            >
+              ⋯
+            </button>
+          </div>
+          <p className="pb-1 pl-5 text-xs text-faint">
+            {(() => {
+              const price = inline.priceOf(item);
+              return price === null
+                ? `${t('units.' + item.unit)} · ${t('templates.inline.notInCatalog')}`
+                : `${t('units.' + item.unit)} · ${t('templates.inline.fromCatalog', { price: formatMoney(price) })}`;
+            })()}
+          </p>
+        </div>
+      ) : (
       <button
         type="button"
         onClick={onEdit}
@@ -1013,6 +1077,7 @@ function SortableRow({
         </span>
         <span className="flex-shrink-0 text-xs text-muted">{t('units.' + item.unit)}</span>
       </button>
+      )}
       <button
         type="button"
         onClick={onRemove}

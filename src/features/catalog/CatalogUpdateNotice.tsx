@@ -15,9 +15,10 @@ const KEY = ['catalog', 'update-notice'] as const;
  * never a stacked list of modals.
  *
  * A count notice ("N positions added/removed") only ever had one button — dismiss. A price-drift
- * notice gets a real choice: accept (updates the master's own catalog item to the new price, but
- * ONLY if it still carries the old price named — a price they edited themselves is never
- * touched) or decline (dismiss, no price change either way).
+ * notice gets a real choice: accept (the master's own catalog item takes the new price — always,
+ * since V178: an explicit tap is an explicit intent) or decline (dismiss, no price change). A
+ * master who re-prices the position himself closes its notice as resolved on the server, and the
+ * catalog invalidation (`['catalog']` is this key's prefix) takes it off the screen.
  *
  * Deliberately silent when there is nothing to say: no banner, no spinner, no layout shift on the
  * ~100% of app opens where the queue is empty.

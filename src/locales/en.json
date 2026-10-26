@@ -1440,6 +1440,10 @@
       "row": "Create «{{name}}» — no such position yet",
       "back": "← Back to the catalog",
       "addedToBasket": "«{{name}}» added to the selection"
+    },
+    "inline": {
+      "priceChanged": "Catalog price changed",
+      "nameChanged": "Catalog name changed"
     }
   },
   "measure": {
@@ -1733,7 +1737,11 @@
     "unsavedTitle": "Save changes?",
     "unsavedMessage": "This template has unsaved changes. Save them, or close without saving?",
     "discard": "Don't save",
-    "removeItem": "Remove position"
+    "removeItem": "Remove position",
+    "inline": {
+      "fromCatalog": "from catalog {{price}}",
+      "notInCatalog": "not in the catalog"
+    }
   },
   "profile": {
     "title": "Profile",

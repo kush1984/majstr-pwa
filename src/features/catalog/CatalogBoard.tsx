@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { InlineNumberCell } from '@/components/InlineNumberCell.tsx';
+import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import type { CatalogItemResponse } from '@/api/types.ts';
 import { sectionId, type Section } from '@/features/estimate/estimateArrange.ts';
 
@@ -16,6 +18,13 @@ import { sectionId, type Section } from '@/features/estimate/estimateArrange.ts'
  * manual drag-reordering here: a catalog is a reference list a master searches and prices, not one
  * he arranges, and the grips only added weight to every row.</p>
  */
+/** A name or a price typed into a catalog row (inline editing). */
+export type CatalogInlineCommit = (
+  item: CatalogItemResponse,
+  patch: { name?: string; defaultPrice?: number },
+  field: 'name' | 'price',
+) => void;
+
 export interface CatalogSelection {
   selected: Set<string>;
   onToggle: (id: string) => void;
@@ -25,12 +34,15 @@ export interface CatalogSelection {
 export function CatalogBoard({
   sections,
   onEdit,
+  onInline,
   selection,
   isCategoryOpen,
   onToggleCategory,
 }: {
   sections: Section<CatalogItemResponse>[];
   onEdit: (item: CatalogItemResponse) => void;
+  /** Present = rows edit in place (INLINE_ITEM_EDITING); absent = a tap opens the dialog. */
+  onInline?: CatalogInlineCommit;
   /** Selection mode — present, it takes over the row's tap; editing steps aside. */
   selection?: CatalogSelection;
   isCategoryOpen: (category: string) => boolean;
@@ -45,6 +57,7 @@ export function CatalogBoard({
           key={sectionId(section)}
           section={section}
           onEdit={onEdit}
+          onInline={onInline}
           selection={selection}
           open={isCategoryOpen(section.category)}
           onToggle={onToggleCategory ? () => onToggleCategory(section.category) : undefined}
@@ -74,10 +87,11 @@ function Tick({ on }: { on: boolean }) {
 }
 
 function CategoryBlock({
-  section, onEdit, selection, open, onToggle,
+  section, onEdit, onInline, selection, open, onToggle,
 }: {
   section: Section<CatalogItemResponse>;
   onEdit: (item: CatalogItemResponse) => void;
+  onInline?: CatalogInlineCommit;
   selection?: CatalogSelection;
   open: boolean;
   onToggle?: () => void;
@@ -136,7 +150,7 @@ function CategoryBlock({
       {open && (
         <div className="mt-1.5 space-y-1.5">
           {section.items.map((item) => (
-            <ItemRow key={item.id} item={item} onEdit={onEdit} selection={selection} />
+            <ItemRow key={item.id} item={item} onEdit={onEdit} onInline={onInline} selection={selection} />
           ))}
         </div>
       )}
@@ -145,15 +159,63 @@ function CategoryBlock({
 }
 
 function ItemRow({
-  item, onEdit, selection,
+  item, onEdit, onInline, selection,
 }: {
   item: CatalogItemResponse;
   onEdit: (item: CatalogItemResponse) => void;
+  onInline?: CatalogInlineCommit;
   selection?: CatalogSelection;
 }) {
   const { t } = useTranslation();
   const picked = selection ? selection.selected.has(item.id) : false;
   const description = item.description?.trim();
+
+  if (onInline && !selection) {
+    return (
+      <div className="flex items-stretch gap-1">
+        <div className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-2 py-2">
+          <div className="flex items-start gap-1">
+            <InlineTextCell
+              value={item.name}
+              ariaLabel={`${t('estimate.inline.name')}, ${item.name}`}
+              className="min-w-0 flex-1 text-sm font-medium text-primary"
+              onCommit={(name) => onInline(item, { name }, 'name')}
+            />
+            <button
+              type="button"
+              onClick={() => onEdit(item)}
+              aria-label={t('estimate.inline.more', { name: item.name })}
+              className="min-h-[44px] min-w-[44px] flex-shrink-0 rounded-md text-lg text-muted active:bg-surface-sunken"
+            >
+              ⋯
+            </button>
+          </div>
+          {description != null && description !== '' && (
+            <span className="block truncate px-2 text-[11px] leading-tight text-muted">{description}</span>
+          )}
+          <div className="mt-1 flex items-center justify-end gap-1.5 text-xs text-muted">
+            <InlineNumberCell
+              value={item.defaultPrice}
+              kind="money"
+              ariaLabel={`${t('estimate.inline.price')}, ${item.name}`}
+              className="w-[6.5rem] text-sm font-bold text-primary"
+              onCommit={(price) => {
+                // A catalog price of 0 would price the next estimate at nothing: an emptied cell
+                // keeps the old price (owner ruling 2026-10-26; the server refuses it anyway).
+                if (price >= 0.01) onInline(item, { defaultPrice: price }, 'price');
+              }}
+            />
+            <span className="whitespace-nowrap">₴ / {t('units.' + item.unit)}</span>
+          </div>
+        </div>
+        {description != null && description !== '' && (
+          <span className="flex flex-shrink-0 items-center pl-0.5">
+            <InfoPopover text={description} label={item.name} />
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-stretch gap-1">

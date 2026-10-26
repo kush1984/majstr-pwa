@@ -49,6 +49,16 @@ one-line fix.
   drops an at-rule nested inside `@layer base`**, so never wrap a base rule in
   `@media`. `C:\Work\majstr-backend\docs\iteration-touch-targets.md` has the detail.
 
+## Inline editing — what the row shows, the row edits
+
+«Що видно в рядку — редагується в рядку. Діалог — для решти.» Every new list uses
+`InlineNumberCell` / `InlineTextCell` (`src/components/`). Save on blur / Enter / «Далі ↓» /
+`visibilitychange`; cancel on Esc / system «Назад»; an empty number is 0; an empty name is not
+saved; the toast is «Збережено · Скасувати», 5 s, only the last change undoable. A cell is editable
+only where the server allows the edit (no 409 after an optimistic patch). **Crew prices never reach
+the client, and never reach the catalog.** Behind `INLINE_ITEM_EDITING` / `CATALOG_SYNC_CARD`
+(`src/lib/featureFlags.ts`). `C:\Work\majstr-backend\docs\iteration-inline-editing.md` has the detail.
+
 ## Architecture
 
 ### What this repo is

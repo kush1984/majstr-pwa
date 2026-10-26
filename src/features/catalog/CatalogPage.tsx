@@ -22,10 +22,15 @@ import {
   useCheckTemplateUpdates,
   useResetCatalog,
   useDeleteCatalogItems,
+  useUpdateCatalogItem,
 } from './useCatalog.ts';
+import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
+import { toastUndoable } from '@/lib/inlineEdit.ts';
+import { track } from '@/lib/posthog.ts';
+import type { CatalogItemRequest } from '@/api/types.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 import { CreateFromSearch, shouldOfferCreate } from './CreateFromSearch.tsx';
-import { CatalogBoard } from './CatalogBoard.tsx';
+import { CatalogBoard, type CatalogInlineCommit } from './CatalogBoard.tsx';
 import { TradeLevel, tradeBranchLabel } from './TradeLevel.tsx';
 import { toTradeTree, tradeKeyOf } from './catalogTree.ts';
 
@@ -68,6 +73,31 @@ export function CatalogPage() {
   const addNew = useAddNewFromTemplate();
   // The starter-set / add-new-from-library flows are server-side merges — they can't be queued.
   const { online, guard, offlineTitle } = useOnlineGuard();
+
+  const updateItem = useUpdateCatalogItem();
+  /**
+   * A name or price typed into a catalog row: the same offline-queued update the dialog sends, then
+   * «Ціну/Назву в каталозі змінено · Скасувати». Estimates already written are snapshots and are not
+   * touched; a re-price closes the master's open PRICE_DRIFT notice for it on the server (V178).
+   */
+  const commitInline: CatalogInlineCommit = (item, patch, field) => {
+    const request = (from: CatalogItemResponse, over: Partial<CatalogItemRequest> = {}): CatalogItemRequest => ({
+      name: from.name,
+      category: from.category ?? undefined,
+      trade: from.trade,
+      customTradeId: from.customTradeId ?? null,
+      type: from.type,
+      unit: from.unit,
+      defaultPrice: from.defaultPrice,
+      ...over,
+    });
+    const fail = (err: unknown) => toast.error(toAppError(err).message);
+    track('inline_edit_commit', { field, screen: 'catalog' });
+    updateItem.mutate({ id: item.id, req: request(item, patch) }, { onError: fail });
+    toastUndoable(t(field === 'price' ? 'catalog.inline.priceChanged' : 'catalog.inline.nameChanged'), () => {
+      updateItem.mutate({ id: item.id, req: request(item) }, { onError: fail });
+    });
+  };
 
   // `undefined` = modal closed; `null` = create; an item = edit.
   const [editing, setEditing] = useState<CatalogItemResponse | null | undefined>(undefined);
@@ -302,6 +332,7 @@ export function CatalogPage() {
                   <CatalogBoard
                     sections={branch.sections}
                     onEdit={setEditing}
+                    onInline={INLINE_ITEM_EDITING ? commitInline : undefined}
                     isCategoryOpen={(category) =>
                       isOpen(`c:${branch.key}|${category}`, autoOpenCategory)
                     }
