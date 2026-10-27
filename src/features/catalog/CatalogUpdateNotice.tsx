@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
@@ -19,6 +20,11 @@ const KEY = ['catalog', 'update-notice'] as const;
  * since V178: an explicit tap is an explicit intent) or decline (dismiss, no price change). A
  * master who re-prices the position himself closes its notice as resolved on the server, and the
  * catalog invalidation (`['catalog']` is this key's prefix) takes it off the screen.
+ *
+ * ✕ / backdrop / system «Назад» on a price-drift notice is NOT «Лишити як є»: that declined ONE
+ * offer and the next one popped straight up, so the dialog could not be closed. It asks once and
+ * then declines EVERY queued price offer. The question is its own Modal swapped in for the notice,
+ * never stacked on it — each keeps its own history entry, so «Назад» walks them correctly.
  *
  * Deliberately silent when there is nothing to say: no banner, no spinner, no layout shift on the
  * ~100% of app opens where the queue is empty.
@@ -50,14 +56,38 @@ export function CatalogUpdateNotice() {
     onMutate: (id) => dropFromQueue(id),
   });
 
+  const [confirmClose, setConfirmClose] = useState(false);
+
   const current = data?.[0];
   if (!current) return null;
 
   const busy = dismiss.isPending || accept.isPending;
 
   if (current.kind === 'PRICE_DRIFT') {
+    const offers = (data ?? []).filter((n) => n.kind === 'PRICE_DRIFT');
+    if (confirmClose) {
+      const closeAll = () => {
+        setConfirmClose(false);
+        offers.forEach((n) => dismiss.mutate(n.id));
+      };
+      return (
+        <Modal key="close-offers" open onClose={() => setConfirmClose(false)} title={t('catalog.updateNoticeCloseTitle')}>
+          <p className="mb-5 text-sm text-muted">
+            {t('catalog.updateNoticeCloseBody', { count: offers.length })}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" fullWidth onClick={() => setConfirmClose(false)}>
+              {t('catalog.updateNoticeCloseBack')}
+            </Button>
+            <Button fullWidth onClick={closeAll}>
+              {t('catalog.updateNoticeCloseConfirm')}
+            </Button>
+          </div>
+        </Modal>
+      );
+    }
     return (
-      <Modal open onClose={() => dismiss.mutate(current.id)} title={t('catalog.updateNoticePriceDriftTitle')}>
+      <Modal key="offer" open onClose={() => setConfirmClose(true)} title={t('catalog.updateNoticePriceDriftTitle')}>
         <div className="space-y-3">
           <p className="text-sm text-muted">
             {t('catalog.updateNoticePriceDriftBody', {

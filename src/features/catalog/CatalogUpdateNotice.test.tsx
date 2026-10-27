@@ -91,6 +91,41 @@ describe('CatalogUpdateNotice', () => {
     expect(catalogApi.acceptUpdateNotice).not.toHaveBeenCalled();
   });
 
+  it('✕ asks first, and «Повернутись» brings the offer back untouched', async () => {
+    vi.mocked(catalogApi.updateNotices).mockResolvedValue([priceDriftNotice]);
+    renderNotice();
+
+    await waitFor(() => expect(screen.getByText('Ринкова ціна змінилась')).toBeTruthy());
+    fireEvent.click(screen.getByText('✕'));
+
+    expect(screen.getByText('Закрити пропозиції цін?')).toBeTruthy();
+    expect(screen.queryByText('Ринкова ціна змінилась')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Повернутись' }));
+
+    expect(screen.getByText('Ринкова ціна змінилась')).toBeTruthy();
+    expect(catalogApi.dismissUpdateNotice).not.toHaveBeenCalled();
+    expect(catalogApi.acceptUpdateNotice).not.toHaveBeenCalled();
+  });
+
+  it('confirming the ✕ closes EVERY queued price offer, not just the one on screen', async () => {
+    const second: CatalogUpdateNoticeResponse = { ...priceDriftNotice, id: 'n3', positionName: 'Шпаклювання' };
+    vi.mocked(catalogApi.updateNotices).mockResolvedValue([priceDriftNotice, second, { ...countNotice, id: 'n4' }]);
+    vi.mocked(catalogApi.dismissUpdateNotice).mockResolvedValue(undefined);
+    renderNotice();
+
+    await waitFor(() => expect(screen.getByText('Ринкова ціна змінилась')).toBeTruthy());
+    fireEvent.click(screen.getByText('✕'));
+    expect(screen.getByText(/2 пропозиції нових цін/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Так, закрити' }));
+
+    await waitFor(() => expect(catalogApi.dismissUpdateNotice).toHaveBeenCalledTimes(2));
+    expect(catalogApi.dismissUpdateNotice).toHaveBeenCalledWith('n2');
+    expect(catalogApi.dismissUpdateNotice).toHaveBeenCalledWith('n3');
+    expect(catalogApi.acceptUpdateNotice).not.toHaveBeenCalled();
+    // A COUNT notice is not a price offer — it is still waiting its turn.
+    await waitFor(() => expect(screen.getByText('Ваш каталог оновлено')).toBeTruthy());
+  });
+
   it('is a real queue: resolving the oldest notice reveals the next one', async () => {
     vi.mocked(catalogApi.updateNotices).mockResolvedValue([countNotice, priceDriftNotice]);
     vi.mocked(catalogApi.dismissUpdateNotice).mockResolvedValue(undefined);
