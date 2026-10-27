@@ -171,3 +171,22 @@ describe('kalkulyator-styazhky', () => {
     expect(body.inputs).toEqual({ area: 20, wastePercent: 10, screed: 'SELF_LEVELLING' });
   });
 });
+
+/** The wall-area page's result links here with `?area=` — the field arrives filled, in the visitor's comma. */
+describe('a hand-on from the wall-area page', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('prefills the area and the perimeter the page has, and ignores junk', async () => {
+    window.history.replaceState(null, '', '/kalkulyator-styazhky?area=12.5&perimeter=14&ownNorm=9');
+    const form = await load('kalkulyator-styazhky.html');
+    const value = (name: string) => (form.elements.namedItem(name) as HTMLInputElement).value;
+    expect([value('area'), value('perimeter')]).toEqual(['12,5', '14']);
+
+    window.history.replaceState(null, '', '/kalkulyator-shtukaturky?area=-3');
+    const plaster = await load('kalkulyator-shtukaturky.html');
+    expect((plaster.elements.namedItem('area') as HTMLInputElement).value).toBe('');
+    window.history.replaceState(null, '', '/');
+  });
+});

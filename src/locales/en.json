@@ -137,6 +137,8 @@
     "faqA7": "Yes. An act is built from a signed estimate, and the client signs it online via a separate link; you can attach material receipts to it.",
     "faqQ8": "Is it an App Store or Google Play app?",
     "faqA8": "No. Majstr is a PWA: you open the site and add it to your home screen. It works on Android, iPhone and a computer, and updates itself.",
+    "faqQ9": "How do I put together a renovation estimate in Majstr?",
+    "faqA9": "Create an object \u2014 name, address, client \u2014 and add an estimate inside it. Take the works from the catalogue with market prices or from a ready template, type the quantity or calculate it from dimensions (minus windows and doors), and the total adds itself up. Send the finished estimate to the client as a link \u2014 they review and sign it online \u2014 or download a PDF.",
     "finalTitle": "Ready to try?",
     "finalText": "Create your first project today.",
     "footerSupport": "Support:",
@@ -145,6 +147,7 @@
     "footerCalcDrywall": "Drywall calculator",
     "footerCalcPlaster": "Plaster calculator",
     "footerCalcScreed": "Screed calculator",
+    "footerCalcWallArea": "Wall area calculator",
     "footerYoutube": "Majstr on YouTube",
     "footerTelegram": "Majstr on Telegram"
   },

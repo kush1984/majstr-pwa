@@ -385,6 +385,21 @@ captureRefFromUrl(window.location.search);
 captureUtmFromUrl(window.location.search);
 captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
 
+/**
+ * `?area=34.1&perimeter=14` — handed on by the wall-area page's result. Fills only an empty field
+ * the page has, in the comma the visitor would type; anything not a positive number is ignored.
+ */
+function prefillFromUrl(search: string): void {
+  const params = new URLSearchParams(search);
+  for (const name of ['area', 'perimeter']) {
+    const input = form?.elements.namedItem(name);
+    const value = Number(params.get(name));
+    if (!(input instanceof HTMLInputElement) || input.value !== '' || !(value > 0)) continue;
+    input.value = String(value).replace('.', ',');
+  }
+}
+prefillFromUrl(window.location.search);
+
 form?.addEventListener('submit', (e) => void submit(e));
 form?.addEventListener('change', () => {
   syncDrywallFields();

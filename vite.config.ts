@@ -28,6 +28,7 @@ export default defineConfig({
         'kalkulyator-gipsokartonu': path.resolve(__dirname, 'kalkulyator-gipsokartonu.html'),
         'kalkulyator-shtukaturky': path.resolve(__dirname, 'kalkulyator-shtukaturky.html'),
         'kalkulyator-styazhky': path.resolve(__dirname, 'kalkulyator-styazhky.html'),
+        'kalkulyator-ploshchi-stin': path.resolve(__dirname, 'kalkulyator-ploshchi-stin.html'),
       },
     },
   },

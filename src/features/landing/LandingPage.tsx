@@ -568,7 +568,7 @@ function Control() {
  * violation, so change one and change the other in the same commit. Accordions are an allowed FAQ
  * pattern — the answers are in the DOM even while collapsed, so crawlers still read them.
  */
-export const FAQ_COUNT = 8;
+export const FAQ_COUNT = 9;
 
 function Faq() {
   const { t } = useTranslation();
@@ -656,6 +656,9 @@ function LandingFooter() {
           </a>
           <a href="/kalkulyator-styazhky" className="text-landing-ink hover:text-landing-amber-deep">
             {t('landing.footerCalcScreed')}
+          </a>
+          <a href="/kalkulyator-ploshchi-stin" className="text-landing-ink hover:text-landing-amber-deep">
+            {t('landing.footerCalcWallArea')}
           </a>
           <Link to={routes.privacy} className="text-landing-ink hover:text-landing-amber-deep">
             {t('privacy.footerLink')}

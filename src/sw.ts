@@ -46,6 +46,7 @@ const NAVIGATION_DENYLIST = [
   /^\/kalkulyator-gipsokartonu/,
   /^\/kalkulyator-shtukaturky/,
   /^\/kalkulyator-styazhky/,
+  /^\/kalkulyator-ploshchi-stin/,
 ];
 
 registerRoute(

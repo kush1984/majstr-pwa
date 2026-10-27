@@ -60,6 +60,21 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
 .seo-calc button:disabled { opacity: 0.6; }
 .seo-error { color: #b42318; margin: 0; }
 
+/* The wall-area page: a window or door is one row of three short fields. */
+.seo-calc fieldset.seo-openings { display: grid; gap: 8px; }
+.seo-opening { display: grid; grid-template-columns: 1fr 1fr 76px; gap: 8px; }
+.seo-calc .seo-opening label { display: grid; gap: 4px; min-height: 0; font-weight: 500; font-size: 13px; color: var(--muted); }
+.seo-calc button.seo-add {
+  min-height: 44px; background: transparent; color: var(--amber-deep);
+  border: 1px dashed var(--line); font-weight: 600;
+}
+.seo-handons { display: grid; gap: 8px; margin: 12px 0; }
+.seo-handons p { margin: 0; }
+.seo-handon {
+  display: block; padding: 12px 14px; border-radius: 12px; background: #fff;
+  border: 1px solid var(--line); color: var(--amber-deep); font-weight: 700; text-decoration: none;
+}
+
 .seo-result { margin-top: 16px; padding: 16px; border-radius: 16px; background: var(--paper); scroll-margin-top: 12px; }
 .seo-result h2 { margin-top: 0; }
 .seo-materials { list-style: none; margin: 0; padding: 0; }

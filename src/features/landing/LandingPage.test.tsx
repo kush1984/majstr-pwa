@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '@/lib/i18n.ts';
-import { LandingPage } from './LandingPage.tsx';
+import { FAQ_COUNT, LandingPage } from './LandingPage.tsx';
 import uk from '@/locales/uk.json';
 
 function renderLanding() {
@@ -40,11 +40,12 @@ describe('LandingPage', () => {
     for (const cta of ctas) expect(cta.getAttribute('href')).toBe('/register');
   });
 
-  it('shows all eight questions', () => {
+  it('shows all nine questions', () => {
     renderLanding();
 
     expect(screen.getByText('Це застосунок з App Store чи Google Play?')).toBeTruthy();
-    expect(document.querySelectorAll('details')).toHaveLength(8);
+    expect(screen.getByText('Як скласти кошторис на ремонт у Majstr?')).toBeTruthy();
+    expect(document.querySelectorAll('details')).toHaveLength(9);
   });
 
   it('promises nothing the app does not have — on the page, in the static copy, in llms.txt', () => {
@@ -71,7 +72,7 @@ describe('the FAQ structured data', () => {
     const landing = uk.landing as Record<string, string>;
 
     expect(faq?.mainEntity?.map((q) => [q.name, q.acceptedAnswer.text])).toEqual(
-      Array.from({ length: 8 }, (_, i) => [landing[`faqQ${i + 1}`], landing[`faqA${i + 1}`]]),
+      Array.from({ length: FAQ_COUNT }, (_, i) => [landing[`faqQ${i + 1}`], landing[`faqA${i + 1}`]]),
     );
   });
 });

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { seoCalcTables, materialText, exampleText } from '../../scripts/seo-pages-plugin.ts';
+import { seoCalcTables, materialText, exampleText, areaFigures } from '../../scripts/seo-pages-plugin.ts';
+import { WALL_AREA_CASES, wallArea } from './wallArea.ts';
 import type { CalcSnapshot } from '../../scripts/seo-calc-cases.ts';
 
 /**
@@ -16,6 +17,9 @@ const PAGES = [
   { file: 'kalkulyator-shtukaturky.html', kind: 'PLASTER', h1: 'Калькулятор штукатурки — скільки мішків купити на стіни', url: 'https://majstr.pro/kalkulyator-shtukaturky' },
   { file: 'kalkulyator-styazhky.html', kind: 'SCREED', h1: 'Калькулятор стяжки та наливної підлоги — скільки мішків суміші купити', url: 'https://majstr.pro/kalkulyator-styazhky' },
 ] as const;
+/** The wall-area page asks no server and prints no snapshot — geometry only, from src/seo/wallArea.ts. */
+const WALL_AREA_PAGE = { file: 'kalkulyator-ploshchi-stin.html', h1: 'Калькулятор площі стін — з вікнами й дверима', url: 'https://majstr.pro/kalkulyator-ploshchi-stin' };
+const ALL_PAGES = [...PAGES, WALL_AREA_PAGE];
 
 const snapshot = JSON.parse(read('src/seo/calc-snapshot.json')) as CalcSnapshot;
 
@@ -26,7 +30,7 @@ function built(file: string): string {
   return hook.handler(read(file));
 }
 
-describe.each(PAGES)('$file', (page) => {
+describe.each(ALL_PAGES)('$file', (page) => {
   it('carries its H1, «Як ми рахуємо», the CTA and the note in the raw HTML', () => {
     const html = read(page.file);
     expect(html).toContain(`<h1>${page.h1}</h1>`);
@@ -36,6 +40,30 @@ describe.each(PAGES)('$file', (page) => {
     expect(html).toContain(`<link rel="canonical" href="${page.url}" />`);
   });
 
+  it('describes itself as a WebPage with breadcrumbs, and claims no FAQ it does not show', () => {
+    const blocks = [...read(page.file).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+      .map((m) => JSON.parse(m[1]) as { '@type': string });
+    expect(blocks.map((b) => b['@type'])).toEqual(['WebPage', 'BreadcrumbList']);
+  });
+
+  it('has its own 1200 × 630 link preview', () => {
+    const html = read(page.file);
+    expect(html).toMatch(/og:image" content="https:\/\/majstr\.pro\/og\/og-[a-z-]+\.png"/);
+    expect(html).toContain('<meta property="og:image:width" content="1200" />');
+    expect(html).toContain('summary_large_image');
+  });
+
+  it('links every OTHER calculator page from its footer, and not itself', () => {
+    const footer = /<footer class="seo-footer">([\s\S]*?)<\/footer>/.exec(read(page.file))?.[1] ?? '';
+    for (const other of ALL_PAGES) {
+      const href = `href="${new URL(other.url).pathname}"`;
+      if (other.file === page.file) expect(footer).not.toContain(href);
+      else expect(footer, other.file).toContain(href);
+    }
+  });
+});
+
+describe.each(PAGES)('$file', (page) => {
   it('prints every typical case from the snapshot — no figure typed by hand', () => {
     const html = built(page.file);
     const rows = snapshot.rows.filter((r) => r.calculator === page.kind);
@@ -52,30 +80,8 @@ describe.each(PAGES)('$file', (page) => {
     for (const row of snapshot.rows) expect(row.inputs, row.label).not.toHaveProperty('ownNorm');
   });
 
-  it('describes itself as a WebPage with breadcrumbs, and claims no FAQ it does not show', () => {
-    const blocks = [...read(page.file).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
-      .map((m) => JSON.parse(m[1]) as { '@type': string });
-    expect(blocks.map((b) => b['@type'])).toEqual(['WebPage', 'BreadcrumbList']);
-  });
-
-  it('has its own 1200 × 630 link preview', () => {
-    const html = read(page.file);
-    expect(html).toMatch(/og:image" content="https:\/\/majstr\.pro\/og\/og-[a-z]+\.png"/);
-    expect(html).toContain('<meta property="og:image:width" content="1200" />');
-    expect(html).toContain('summary_large_image');
-  });
-
   it('runs the calculator it names', () => {
     expect(read(page.file)).toContain(`<body data-calculator="${page.kind}" class="seo-page">`);
-  });
-
-  it('links every OTHER calculator page from its footer, and not itself', () => {
-    const footer = /<footer class="seo-footer">([\s\S]*?)<\/footer>/.exec(read(page.file))?.[1] ?? '';
-    for (const other of PAGES) {
-      const href = `href="${new URL(other.url).pathname}"`;
-      if (other.file === page.file) expect(footer).not.toContain(href);
-      else expect(footer, other.file).toContain(href);
-    }
   });
 
   it('invites keeping his own norms next to the CTA', () => {
@@ -130,9 +136,59 @@ describe.each([
   });
 });
 
+describe('kalkulyator-ploshchi-stin.html', () => {
+  it('nets the openings out of the walls, and the doorways out of the skirting', () => {
+    expect(wallArea({
+      length: 4, width: 3, height: 2.7,
+      windows: [{ width: 1.4, height: 1.5, count: 1 }],
+      doors: [{ width: 0.8, height: 2, count: 1 }],
+    })).toEqual({
+      perimeter: 14, wallsGross: 37.8, windows: 2.1, doors: 1.6, wallsNet: 34.1, floor: 12, skirting: 13.2,
+    });
+  });
+
+  it('counts N openings of one size N times, and never goes below zero', () => {
+    const r = wallArea({ length: 5, width: 4, height: 2.7, windows: [{ width: 1.4, height: 1.5, count: 2 }], doors: [] });
+    expect(r.windows).toBe(4.2);
+    expect(r.wallsNet).toBe(44.4);
+    expect(r.skirting).toBe(18);
+    expect(wallArea({ length: 1, width: 1, height: 1, windows: [{ width: 3, height: 3, count: 1 }], doors: [] }).wallsNet).toBe(0);
+  });
+
+  it('prints every typical room from the same function the form runs — no figure typed by hand', () => {
+    const html = built(WALL_AREA_PAGE.file);
+    expect(WALL_AREA_CASES.length).toBeGreaterThanOrEqual(4);
+    for (const c of WALL_AREA_CASES) {
+      expect(html).toContain(c.label);
+      for (const f of areaFigures(c)) expect(html).toContain(f);
+    }
+    expect(html).not.toContain('<!--SEO_AREA_');
+  });
+
+  it('answers in its first paragraph — the 3×4 room the plaster page quotes as «близько 34 м²»', () => {
+    const lede = /<p class="seo-lede">([\s\S]*?)<\/p>/.exec(built(WALL_AREA_PAGE.file))?.[1] ?? '';
+    expect(lede).toContain('стіни без вікон і дверей — 34,1 м²');
+    expect(read('kalkulyator-shtukaturky.html')).toContain('близько 34 м²');
+  });
+
+  it('runs in the browser — no server call, its own script', () => {
+    const html = read(WALL_AREA_PAGE.file);
+    expect(html).toContain('<script type="module" src="/src/seo/wallAreaPage.ts"></script>');
+    expect(read('src/seo/wallAreaPage.ts')).not.toContain('fetch(');
+  });
+
+  it('says what it does NOT count — the reveals', () => {
+    expect(read(WALL_AREA_PAGE.file)).toContain('<b>Чого калькулятор не рахує</b>: <b>укоси</b>');
+  });
+
+  it('the plaster page sends the visitor here for the area', () => {
+    expect(read('kalkulyator-shtukaturky.html')).toContain('<a href="/kalkulyator-ploshchi-stin">');
+  });
+});
+
 describe('the pages are reachable', () => {
   it('sitemap.xml lists every page, and llms.txt links every page', () => {
-    for (const page of PAGES) {
+    for (const page of ALL_PAGES) {
       expect(read('public/sitemap.xml')).toContain(`<loc>${page.url}</loc>`);
       expect(read('public/llms.txt')).toContain(page.url);
     }
@@ -149,7 +205,7 @@ describe('the pages are reachable', () => {
     expect(sw).toContain('denylist: NAVIGATION_DENYLIST');
     const swallowed = (url: string) => !denylist.some((re) => re.test(url));
     expect(swallowed('/kalkulyator-plytky')).toBe(false);
-    for (const page of PAGES) {
+    for (const page of ALL_PAGES) {
       expect(swallowed(new URL(page.url).pathname), page.url).toBe(false);
     }
     expect(swallowed('/api/projects')).toBe(false);
@@ -160,7 +216,7 @@ describe('the pages are reachable', () => {
 
   it('vite builds every page as its own document', () => {
     const config = read('vite.config.ts');
-    for (const page of PAGES) {
+    for (const page of ALL_PAGES) {
       const name = page.file.replace(/\.html$/, '');
       expect(config).toContain(`'${name}': path.resolve(__dirname, '${page.file}')`);
     }
@@ -168,11 +224,11 @@ describe('the pages are reachable', () => {
 
   it('the landing footer links every calculator page', () => {
     const landing = read('src/features/landing/LandingPage.tsx');
-    for (const page of PAGES) expect(landing).toContain(`href="${new URL(page.url).pathname}"`);
+    for (const page of ALL_PAGES) expect(landing).toContain(`href="${new URL(page.url).pathname}"`);
   });
 
   it('every page has its link-preview card on disk', () => {
-    for (const page of PAGES) {
+    for (const page of ALL_PAGES) {
       const image = /og:image" content="https:\/\/majstr\.pro(\/og\/[a-z-]+\.png)"/.exec(read(page.file))?.[1];
       expect(image, page.file).toBeDefined();
       expect(existsSync(path.join(root, 'public', image ?? '')), image).toBe(true);

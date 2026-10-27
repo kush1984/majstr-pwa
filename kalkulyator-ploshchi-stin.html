@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Калькулятор площі стін — мінус вікна й двері, площа стелі й підлоги | Majstr</title>
+    <meta name="description" content="Порахуйте площу стін кімнати без вікон і дверей, площу стелі й підлоги, периметр і довжину плінтуса — за довжиною, шириною й висотою. З поясненням розрахунку." />
+    <link rel="canonical" href="https://majstr.pro/kalkulyator-ploshchi-stin" />
+    <meta property="og:title" content="Калькулятор площі стін" />
+    <meta property="og:description" content="Площа стін без вікон і дверей, стеля, підлога й плінтус — за розмірами кімнати." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://majstr.pro/kalkulyator-ploshchi-stin" />
+    <meta property="og:site_name" content="Majstr" />
+    <meta property="og:locale" content="uk_UA" />
+    <meta property="og:image" content="https://majstr.pro/og/og-ploshchi-stin.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Калькулятор площі стін" />
+    <meta name="twitter:description" content="Площа стін без вікон і дверей, стеля, підлога й плінтус — за розмірами кімнати." />
+    <meta name="twitter:image" content="https://majstr.pro/og/og-ploshchi-stin.png" />
+    <meta name="theme-color" content="#F26B1F" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Калькулятор площі стін",
+      "url": "https://majstr.pro/kalkulyator-ploshchi-stin",
+      "inLanguage": "uk",
+      "description": "Площа стін кімнати без вікон і дверей, площа стелі й підлоги, периметр і плінтус — за довжиною, шириною й висотою.",
+      "isPartOf": { "@type": "WebSite", "name": "Majstr", "url": "https://majstr.pro/" }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Majstr", "item": "https://majstr.pro/" },
+        { "@type": "ListItem", "position": 2, "name": "Калькулятор площі стін", "item": "https://majstr.pro/kalkulyator-ploshchi-stin" }
+      ]
+    }
+    </script>
+</head>
+<body data-calculator="WALL_AREA" class="seo-page">
+  <header class="seo-header">
+    <a href="/" class="seo-logo"><span aria-hidden="true">M</span>Majstr.pro</a>
+    <a href="/login" class="seo-signin">Увійти</a>
+  </header>
+
+  <main class="seo-main">
+    <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор площі стін</nav>
+    <h1>Калькулятор площі стін — з вікнами й дверима</h1>
+    <p class="seo-lede">Площа стін кімнати — це периметр × висота стелі мінус вікна й двері. Приклад: <!--SEO_AREA_EXAMPLE:room-->. Підставте розміри своєї кімнати нижче.</p>
+
+    <form id="calc" class="seo-calc" novalidate>
+      <label>Довжина кімнати, м
+        <input name="length" inputmode="decimal" autocomplete="off" placeholder="напр. 4" required />
+      </label>
+      <label>Ширина кімнати, м
+        <input name="width" inputmode="decimal" autocomplete="off" placeholder="напр. 3" required />
+      </label>
+      <label>Висота стелі, м
+        <input name="height" inputmode="decimal" autocomplete="off" placeholder="напр. 2,7" required />
+        <small>Від підлоги до стелі. Якщо стелю опускатимете — висота до нової стелі.</small>
+      </label>
+      <fieldset class="seo-openings" data-openings="window">
+        <legend>Вікна, м</legend>
+        <div class="seo-opening">
+          <label>Ширина <input name="windowWidth" inputmode="decimal" autocomplete="off" placeholder="напр. 1,4" /></label>
+          <label>Висота <input name="windowHeight" inputmode="decimal" autocomplete="off" placeholder="напр. 1,5" /></label>
+          <label>Скільки <input name="windowCount" inputmode="numeric" autocomplete="off" placeholder="1" /></label>
+        </div>
+        <button type="button" class="seo-add" data-add="window">+ Вікно іншого розміру</button>
+      </fieldset>
+      <fieldset class="seo-openings" data-openings="door">
+        <legend>Двері, м</legend>
+        <div class="seo-opening">
+          <label>Ширина <input name="doorWidth" inputmode="decimal" autocomplete="off" placeholder="напр. 0,8" /></label>
+          <label>Висота <input name="doorHeight" inputmode="decimal" autocomplete="off" placeholder="напр. 2" /></label>
+          <label>Скільки <input name="doorCount" inputmode="numeric" autocomplete="off" placeholder="1" /></label>
+        </div>
+        <button type="button" class="seo-add" data-add="door">+ Двері іншого розміру</button>
+      </fieldset>
+      <small class="seo-small">Немає вікна — залиште поля порожніми. Розміри прорізу міряйте по коробці, не по стулці.</small>
+      <button type="submit">Порахувати</button>
+      <p class="seo-error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="seo-result" aria-live="polite" hidden></section>
+
+    <section>
+      <h2>Як ми рахуємо</h2>
+      <p><b>Периметр</b> прямокутної кімнати — 2 × (довжина + ширина). <b>Стіни разом із прорізами</b> — периметр × висота стелі.</p>
+      <p><b>Вікна й двері</b> — ширина × висота кожного прорізу, помножена на кількість таких самих. Їх віднімаємо: <b>площа стін без прорізів</b> — це те, що штукатурять, шпаклюють, фарбують чи клеять шпалерами.</p>
+      <p><b>Стеля й підлога</b> прямокутної кімнати — довжина × ширина, одна й та сама цифра.</p>
+      <p><b>Плінтус</b> — периметр мінус ширина всіх дверей: через дверний проріз плінтус не кладуть.</p>
+      <p><b>Чого калькулятор не рахує</b>: <b>укоси</b> вікон і дверей (їх площа — глибина укосу × периметр прорізу, рахуйте окремо), ніші, виступи й короби. Кімнату складної форми — наприклад, Г-подібну — поділіть на прямокутники й порахуйте кожен.</p>
+      <p>Скільки купити штукатурки чи суміші для стяжки на цю площу, порахує <a href="/kalkulyator-shtukaturky">калькулятор штукатурки</a> і <a href="/kalkulyator-styazhky">калькулятор стяжки</a> — у результаті є кнопки, що передають туди площу.</p>
+    </section>
+
+    <section>
+      <h2>Таблиця для типових кімнат</h2>
+      <!--SEO_AREA_TABLE-->
+    </section>
+
+    <section class="seo-cta">
+      <h2>Порахуй увесь об'єкт — з кошторисом для клієнта</h2>
+      <p>У Majstr площу рахуєш прямо в рядку кошторису — за розмірами, мінус вікна й двері, — і ціна роботи рахується одразу.</p>
+      <a href="/register" class="seo-cta-button">Спробувати безкоштовно →</a>
+    </section>
+
+    <p class="seo-note">Розрахунок орієнтовний: стіни рідко бувають ідеально рівними, тому міряйте кожну стіну й беріть середню висоту.</p>
+  </main>
+
+  <footer class="seo-footer">
+    <span>© 2026 Majstr.pro</span>
+    <a href="/kalkulyator-plytky">Калькулятор плитки</a>
+    <a href="/kalkulyator-gipsokartonu">Калькулятор гіпсокартону</a>
+    <a href="/kalkulyator-shtukaturky">Калькулятор штукатурки</a>
+    <a href="/kalkulyator-styazhky">Калькулятор стяжки</a>
+    <a href="/privacy">Політика конфіденційності</a>
+    <a href="https://www.youtube.com/@majstrpro" rel="noopener" target="_blank">YouTube</a>
+    <a href="https://t.me/majstr_pro" rel="noopener" target="_blank">Telegram</a>
+  </footer>
+
+  <script type="module" src="/src/seo/wallAreaPage.ts"></script>
+</body>
+</html>
