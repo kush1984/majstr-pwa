@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { captureRefFromUrl, storeRef, getStoredRef, captureUtmFromUrl, getStoredUtm } from './referral.ts';
+import {
+  captureRefFromUrl, storeRef, getStoredRef, captureUtmFromUrl, getStoredUtm, captureFirstTouch, getStoredFirstTouch,
+} from './referral.ts';
 
 beforeEach(() => localStorage.clear());
 
@@ -54,5 +56,49 @@ describe('UTM first-touch capture', () => {
     captureUtmFromUrl('?ref=liga&utm_source=tiktok');
     expect(getStoredRef()).toBe('liga');
     expect(getStoredUtm().utmSource).toBe('tiktok');
+  });
+});
+
+/**
+ * V178: Google sets no UTM, so the referrer HOST and the first PATH are what tell a search visitor
+ * apart from one who typed the address. Recorded once, on whichever page came first.
+ */
+describe('first-touch referrer host and entry page', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('keeps only the host of an outside referrer, and the path without its query', () => {
+    captureFirstTouch('https://www.google.com/', '/kalkulyator-plytky', 'majstr.pro');
+    expect(getStoredFirstTouch()).toEqual({ referrerHost: 'google.com', entryPath: '/kalkulyator-plytky' });
+  });
+
+  it('the first visit wins, even one with no referrer', () => {
+    captureFirstTouch('', '/', 'majstr.pro');
+    captureFirstTouch('https://www.google.com/', '/kalkulyator-styazhky', 'majstr.pro');
+    expect(getStoredFirstTouch()).toEqual({ referrerHost: undefined, entryPath: '/' });
+  });
+
+  it('our own pages are not a referrer', () => {
+    captureFirstTouch('https://majstr.pro/kalkulyator-plytky', '/register', 'majstr.pro');
+    expect(getStoredFirstTouch().referrerHost).toBeUndefined();
+    localStorage.clear();
+    captureFirstTouch('https://api.majstr.pro/portal/', '/', 'majstr.pro');
+    expect(getStoredFirstTouch().referrerHost).toBeUndefined();
+  });
+
+  it('a malformed referrer records nothing rather than throwing', () => {
+    expect(() => captureFirstTouch('not a url', '/', 'majstr.pro')).not.toThrow();
+  });
+});
+
+/** The calculator pages are separate documents: without their own capture a search visitor who
+ *  lands there and follows the CTA to /register would carry no source at all. */
+describe('the calculator pages record the first touch too', () => {
+  it('calcPage.ts captures ref, UTM and the referrer on load', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(resolve(process.cwd(), 'src/seo/calcPage.ts'), 'utf8');
+    expect(source).toContain('captureRefFromUrl(window.location.search);');
+    expect(source).toContain('captureUtmFromUrl(window.location.search);');
+    expect(source).toContain('captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);');
   });
 });

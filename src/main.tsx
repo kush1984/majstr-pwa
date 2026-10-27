@@ -12,7 +12,7 @@ import { App } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
 import { initPostHog } from './lib/posthog.ts';
-import { captureRefFromUrl, captureUtmFromUrl } from './lib/referral.ts';
+import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from './lib/referral.ts';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import { installOnlineTracking } from './lib/onlineStatus.ts';
 import './lib/i18n.ts';
@@ -36,6 +36,8 @@ installOnlineTracking();
 // partner, utm_* is the channel — a master can arrive on a partner link from TikTok.
 captureRefFromUrl(window.location.search);
 captureUtmFromUrl(window.location.search);
+// …and the referrer host + entry page (V178): search sets no UTM.
+captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
 
 // One shared QueryClient. Sensible defaults for this app:
 //   - staleTime 30s: avoid hammering /me on every navigation

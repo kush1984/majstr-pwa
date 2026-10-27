@@ -94,3 +94,53 @@ export function getStoredUtm(): UtmTags {
     return {};
   }
 }
+
+/**
+ * First-touch referrer HOST and entry PATH (V178) — what organic search has instead of UTM.
+ *
+ * Google sets no UTM, so a visitor from search was indistinguishable from one who typed the
+ * address. Recorded on the visitor's FIRST page, whatever it is: the app shell and the calculator
+ * pages, which are separate documents and where search visitors usually land. Only the host of the
+ * referrer (Google sends just its origin anyway) and the path, never a query — a query is where a
+ * token or a personal value rides.
+ *
+ * First touch: the first visit claims the slot even with no referrer, so a typed-in visitor who
+ * searches for us next week stays typed-in. A referrer on our own site is not a referrer.
+ */
+const ENTRY_KEY = 'majstr.entry';
+
+export interface FirstTouch {
+  referrerHost?: string;
+  entryPath?: string;
+}
+
+/** Record the first page's referrer host and path (call once per page load). */
+export function captureFirstTouch(referrer: string, path: string, ownHost: string): void {
+  try {
+    if (localStorage.getItem(ENTRY_KEY)) return; // first-touch wins
+    let referrerHost: string | undefined;
+    if (referrer) {
+      const host = new URL(referrer).hostname.toLowerCase().replace(/^www\./, '');
+      const own = ownHost.toLowerCase().replace(/^www\./, '');
+      if (host && host !== own && !host.endsWith('.' + own)) referrerHost = host.slice(0, 100);
+    }
+    const entry: FirstTouch = { referrerHost, entryPath: path.slice(0, 100) || '/' };
+    localStorage.setItem(ENTRY_KEY, JSON.stringify(entry));
+  } catch {
+    /* private mode / a malformed referrer — attribution is best-effort */
+  }
+}
+
+/** The stored first touch, or an empty object — spread into the registration payload. */
+export function getStoredFirstTouch(): FirstTouch {
+  try {
+    const raw = localStorage.getItem(ENTRY_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const { referrerHost, entryPath } = parsed as FirstTouch;
+    return { referrerHost, entryPath };
+  } catch {
+    return {};
+  }
+}

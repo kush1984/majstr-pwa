@@ -60,6 +60,8 @@ describe('public/sitemap.xml', () => {
     expect(read('index.html')).toContain('<link rel="canonical" href="https://majstr.pro/" />');
     expect(read('kalkulyator-plytky.html')).toContain('href="https://majstr.pro/kalkulyator-plytky"');
     expect(read('kalkulyator-gipsokartonu.html')).toContain('href="https://majstr.pro/kalkulyator-gipsokartonu"');
+    expect(read('kalkulyator-shtukaturky.html')).toContain('<link rel="canonical" href="https://majstr.pro/kalkulyator-shtukaturky" />');
+    expect(read('kalkulyator-styazhky.html')).toContain('<link rel="canonical" href="https://majstr.pro/kalkulyator-styazhky" />');
     expect(read('kalkulyator-shtukaturky.html')).toContain('href="https://majstr.pro/kalkulyator-shtukaturky"');
     expect(read('kalkulyator-styazhky.html')).toContain('href="https://majstr.pro/kalkulyator-styazhky"');
   });

@@ -19,7 +19,7 @@ import { AuthShell } from './LoginPage.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
-import { getStoredRef, getStoredUtm } from '@/lib/referral.ts';
+import { getStoredFirstTouch, getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
@@ -122,6 +122,8 @@ export function RegisterPage() {
         promoCode: values.promoCode?.trim() || undefined,
         // The channel dimension, stamped once server-side alongside the source above.
         ...getStoredUtm(),
+        // …and where he came from and landed first (V178) — search sets no UTM.
+        ...getStoredFirstTouch(),
       });
     } catch (err) {
       const e = toAppError(err);

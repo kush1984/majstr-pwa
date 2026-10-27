@@ -133,6 +133,9 @@ export interface RegisterRequest {
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
+  /** First-touch referrer HOST and entry PATH (V178) — what search traffic has instead of UTM. */
+  referrerHost?: string;
+  entryPath?: string;
   promoCode?: string;
 }
 

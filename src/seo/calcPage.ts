@@ -1,6 +1,7 @@
 import './seo.css';
 import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
+import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
 
 /**
  * The static calculator pages (kalkulyator-plytky / -gipsokartonu / -shtukaturky / -styazhky .html):
@@ -377,6 +378,12 @@ async function submit(event: SubmitEvent): Promise<void> {
     if (button) button.disabled = false;
   }
 }
+
+// First-touch attribution, as main.tsx does — this page is a separate document and the usual first
+// page of a search visitor, so without it the CTA to /register would carry no source at all.
+captureRefFromUrl(window.location.search);
+captureUtmFromUrl(window.location.search);
+captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
 
 form?.addEventListener('submit', (e) => void submit(e));
 form?.addEventListener('change', () => {
