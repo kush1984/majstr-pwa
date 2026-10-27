@@ -52,10 +52,12 @@ describe('EstimateItemsBoard — works/materials split', () => {
   });
 });
 
-describe('EstimateItemsBoard — session edit highlight', () => {
-  const rowButton = (name: string) => screen.getByText(name).closest('button')!;
+describe('EstimateItemsBoard — session edit marker', () => {
+  // A dot by the line number, never a painted row (calm cells).
+  const marker = (id: string) =>
+    document.querySelector(`[data-item-id="${id}"] [data-row-marker]`)?.getAttribute('data-row-marker') ?? null;
 
-  it('an untouched line gets neither highlight', () => {
+  it('an untouched line carries no dot', () => {
     render(
       <EstimateItemsBoard
         estimateId="test-est"
@@ -65,26 +67,10 @@ describe('EstimateItemsBoard — session edit highlight', () => {
         onArrange={vi.fn()}
       />,
     );
-    expect(rowButton('Позиція A').className).not.toContain('border-brand/30');
-    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
+    expect(marker('a')).toBeNull();
   });
 
-  it('a line touched earlier this session gets the fainter brand highlight', () => {
-    render(
-      <EstimateItemsBoard
-        estimateId="test-est"
-        items={[line({ id: 'a', name: 'Позиція A' })]}
-        signed={false}
-        touched={new Set(['a'])}
-        onEdit={vi.fn()}
-        onArrange={vi.fn()}
-      />,
-    );
-    expect(rowButton('Позиція A').className).toContain('border-brand/30');
-    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
-  });
-
-  it('the MOST RECENTLY touched line gets the brighter success highlight instead', () => {
+  it('the MOST RECENTLY touched line gets the «last» dot, an earlier one the «touched» dot', () => {
     render(
       <EstimateItemsBoard
         estimateId="test-est"
@@ -99,19 +85,17 @@ describe('EstimateItemsBoard — session edit highlight', () => {
         onArrange={vi.fn()}
       />,
     );
-    // Both were touched this session, but only the LAST one gets the brighter treatment — the
-    // earlier one keeps the plain "touched" look, never both at once.
-    expect(rowButton('Позиція A').className).toContain('border-brand/30');
-    expect(rowButton('Позиція A').className).not.toContain('border-success/50');
-    expect(rowButton('Позиція B').className).toContain('border-success/50');
-    expect(rowButton('Позиція B').className).not.toContain('border-brand/30');
+    expect(marker('a')).toBe('touched');
+    expect(marker('b')).toBe('last');
+    // The row itself is not painted any more.
+    expect(screen.getByText('Позиція B').closest('button')!.className).not.toContain('success');
   });
 });
 
 describe('EstimateItemsBoard — closed by SIGNED acts', () => {
   const rowButton = (name: string) => screen.getByText(name).closest('button')!;
 
-  it('a fully closed line shows the «закрито» chip and the success background', () => {
+  it('a fully closed line shows the «закрито» chip', () => {
     render(
       <EstimateItemsBoard
         estimateId="test-est"
@@ -122,7 +106,6 @@ describe('EstimateItemsBoard — closed by SIGNED acts', () => {
       />,
     );
     expect(screen.getByText('✓ закрито')).toBeTruthy();
-    expect(rowButton('Позиція A').className).toContain('bg-success-soft');
   });
 
   it('a partially closed line shows a «done / total» chip, not the «закрито» one', () => {
@@ -152,7 +135,7 @@ describe('EstimateItemsBoard — closed by SIGNED acts', () => {
       />,
     );
     expect(screen.queryByText('✓ закрито')).toBeNull();
-    expect(rowButton('Позиція A').className).not.toContain('bg-success-soft');
+    expect(rowButton('Позиція A').textContent).not.toContain(' / 10');
   });
 });
 
@@ -412,10 +395,8 @@ describe('EstimateItemsBoard — lines still without a quantity', () => {
     const zero = screen.getByText('Шліфування стін').closest('button')!;
     expect(zero.textContent).toContain('Вкажіть кількість');
     expect(zero.textContent).toContain('—');
-    expect(zero.className).toContain('border-dashed');
     const filled = screen.getByText('Ґрунтування').closest('button')!;
     expect(filled.textContent).not.toContain('Вкажіть кількість');
-    expect(filled.className).not.toContain('border-dashed');
   });
 
   it('leaves a «%» line alone', () => {
@@ -438,5 +419,18 @@ describe('EstimateItemsBoard — lines still without a quantity', () => {
     fireEvent.click(screen.getByRole('button', { name: /Згорнути категорію/ }));
 
     expect(screen.getByText(/2 без кількості/)).toBeTruthy();
+  });
+
+  it('an open category counts them in its header too — the one place it is said', () => {
+    board([
+      line({ id: 'a', name: 'A', category: 'Оздоблення', quantity: 0, lineTotal: 0 }),
+      line({ id: 'c', name: 'C', category: 'Оздоблення', quantity: 3, lineTotal: 300, sortOrder: 1 }),
+    ]);
+    expect(screen.getByText('1 без кількості')).toBeTruthy();
+  });
+
+  it('a category where every line has a quantity carries no chip', () => {
+    board([line({ id: 'c', name: 'C', category: 'Оздоблення', quantity: 3, lineTotal: 300 })]);
+    expect(screen.queryByText(/без кількості/)).toBeNull();
   });
 });

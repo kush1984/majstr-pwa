@@ -973,7 +973,7 @@ function Composition({
   };
 
   return (
-    <div className="max-h-[32dvh] space-y-1 overflow-y-auto">
+    <div className="max-h-[32dvh] divide-y divide-divider overflow-y-auto rounded-xl border border-border bg-surface">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1023,19 +1023,19 @@ function SortableRow({
       // The anchor the editor scrolls a just-added/edited position to.
       data-template-item-id={item.id}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn('flex items-stretch gap-1', isDragging && 'z-10 opacity-90')}
+      className={cn(
+        'flex items-stretch gap-1 bg-surface has-[[data-inline-editing]]:bg-row-editing',
+        isDragging && 'relative z-10 opacity-90 shadow-card-md',
+      )}
     >
       <DragGrip listeners={listeners} attributes={attributes} label={t('templates.dragItem')} stretch />
       {inline ? (
         <div
           data-template-row-body
-          className={cn(
-            'min-w-0 flex-1 rounded-lg border px-2 py-1 text-sm',
-            unsaved ? 'border-success/50 bg-success-soft' : 'border-transparent bg-surface-sunken',
-          )}
+          className={cn('min-w-0 flex-1 text-sm', unsaved && 'bg-success-soft')}
         >
           <div className="flex items-start gap-1">
-            <span className="flex-shrink-0 pt-3 text-xs font-semibold text-faint">{number}.</span>
+            <span className="flex-shrink-0 pt-3.5 text-xs font-semibold text-faint">{number}.</span>
             <InlineTextCell
               value={item.name}
               ariaLabel={`${t('estimate.inline.name')}, ${item.name}`}
@@ -1046,12 +1046,12 @@ function SortableRow({
               type="button"
               onClick={onEdit}
               aria-label={t('estimate.inline.more', { name: item.name })}
-              className="min-h-[44px] min-w-[36px] flex-shrink-0 rounded-md text-lg text-muted active:bg-surface"
+              className="min-h-[44px] min-w-[36px] flex-shrink-0 text-lg text-faint active:text-muted"
             >
               ⋯
             </button>
           </div>
-          <p className="pb-1 pl-5 text-xs text-faint">
+          <p className="-mt-2 pb-2 pl-6 text-xs text-faint">
             {(() => {
               const price = inline.priceOf(item);
               return price === null
@@ -1065,10 +1065,8 @@ function SortableRow({
         type="button"
         onClick={onEdit}
         className={cn(
-          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm',
-          unsaved
-            ? 'border-success/50 bg-success-soft'
-            : 'border-transparent bg-surface-sunken',
+          'flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left text-sm active:bg-surface-sunken',
+          unsaved && 'bg-success-soft',
         )}
       >
         <span className="min-w-0 break-words text-primary">

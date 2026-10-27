@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { closeModalEntry, dropModalEntry, openModalEntry } from '@/lib/modalHistory.ts';
@@ -50,18 +50,47 @@ export function focusNextInlineCell(from: Element | null): boolean {
   if (!from) return false;
   const cells = Array.from(document.querySelectorAll(`[${INLINE_CELL_ATTR}]`));
   const next = cells[cells.indexOf(from) + 1];
-  const trigger = next?.querySelector('button');
+  // A number opens from a <button>; a name from its text, a `role="button"` span (see InlineTextCell).
+  const trigger = next?.querySelector<HTMLElement>('button, [role="button"]');
   if (!trigger) return false;
   trigger.click();
   return true;
 }
 
 /**
- * «Далі ↓», pinned just above the on-screen keyboard. The visual viewport is what the keyboard
- * shrinks; the layout viewport is not, so `bottom` is the gap between the two.
+ * A mouse and a keyboard, not a finger: Enter / Esc / Tab are there, so the open cell shows a quiet
+ * hint instead of the buttons a phone needs above its on-screen keyboard. Read once per open cell.
  */
-export function InlineKeyboardBar({ onNext }: { onNext: () => void }) {
+export function isFinePointer(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: fine)').matches;
+}
+
+export interface InlineBarAction {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
+/** The desktop hint under an open cell: «Enter — зберегти · Esc — скасувати». */
+export function InlineKeyHint({ withTab = false, className, ref }: {
+  withTab?: boolean;
+  className?: string;
+  ref?: Ref<HTMLSpanElement>;
+}) {
   const { t } = useTranslation();
+  return (
+    <span ref={ref} className={className ?? 'mt-1 block text-[11px] leading-tight text-faint'}>
+      {withTab ? t('inline.keysWithTab') : t('inline.keys')}
+    </span>
+  );
+}
+
+/**
+ * The actions of the open cell («Далі ↓», or «Скасувати» · «Готово» for a name), pinned just above
+ * the on-screen keyboard. The visual viewport is what the keyboard shrinks; the layout viewport is
+ * not, so `bottom` is the gap between the two.
+ */
+export function InlineKeyboardBar({ actions }: { actions: InlineBarAction[] }) {
   const [bottom, setBottom] = useState(0);
 
   useEffect(() => {
@@ -79,19 +108,24 @@ export function InlineKeyboardBar({ onNext }: { onNext: () => void }) {
 
   return createPortal(
     <div
-      className="fixed inset-x-0 z-[65] flex justify-end border-t border-gray-200 bg-gray-50 px-3 py-1.5"
+      className="fixed inset-x-0 z-[65] flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-3 py-1.5"
       style={{ bottom }}
     >
-      <button
-        type="button"
-        // Keep the input focused: a press here must not blur (and so commit) before onNext runs.
-        onPointerDown={(e) => e.preventDefault()}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={onNext}
-        className="min-h-[44px] rounded-md px-4 text-sm font-semibold text-orange-700 active:bg-orange-100"
-      >
-        {t('inline.next')}
-      </button>
+      {actions.map((a) => (
+        <button
+          key={a.label}
+          type="button"
+          // Keep the field focused: a press here must not blur (and so commit) before onClick runs.
+          onPointerDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={a.onClick}
+          className={a.primary
+            ? 'min-h-[44px] rounded-md px-4 text-sm font-semibold text-orange-700 active:bg-orange-100'
+            : 'min-h-[44px] rounded-md px-3 text-sm text-gray-700 active:bg-gray-100'}
+        >
+          {a.label}
+        </button>
+      ))}
     </div>,
     document.body,
   );

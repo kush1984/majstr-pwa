@@ -148,7 +148,8 @@ function CategoryBlock({
       </div>
 
       {open && (
-        <div className="mt-1.5 space-y-1.5">
+        // One white block per sub-category with hairlines between rows, like the estimate.
+        <div className="mt-1.5 divide-y divide-divider rounded-xl border border-border bg-surface">
           {section.items.map((item) => (
             <ItemRow key={item.id} item={item} onEdit={onEdit} onInline={onInline} selection={selection} />
           ))}
@@ -172,41 +173,41 @@ function ItemRow({
 
   if (onInline && !selection) {
     return (
-      <div className="flex items-stretch gap-1">
-        <div className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-2 py-2">
-          <div className="flex items-start gap-1">
+      <div className="flex items-stretch gap-1 first:rounded-t-xl last:rounded-b-xl has-[[data-inline-editing]]:bg-row-editing">
+        <div className="flex min-w-0 flex-1 items-start gap-1 py-1 pl-2">
+          <span className="min-w-0 flex-1">
             <InlineTextCell
               value={item.name}
               ariaLabel={`${t('estimate.inline.name')}, ${item.name}`}
-              className="min-w-0 flex-1 text-sm font-medium text-primary"
+              className="text-sm font-medium text-primary"
               onCommit={(name) => onInline(item, { name }, 'name')}
             />
-            <button
-              type="button"
-              onClick={() => onEdit(item)}
-              aria-label={t('estimate.inline.more', { name: item.name })}
-              className="min-h-[44px] min-w-[44px] flex-shrink-0 rounded-md text-lg text-muted active:bg-surface-sunken"
-            >
-              ⋯
-            </button>
-          </div>
-          {description != null && description !== '' && (
-            <span className="block truncate px-2 text-[11px] leading-tight text-muted">{description}</span>
-          )}
-          <div className="mt-1 flex items-center justify-end gap-1.5 text-xs text-muted">
+            {description != null && description !== '' && (
+              <span className="-mt-2 block truncate px-1 pb-1.5 text-[11px] leading-tight text-muted">{description}</span>
+            )}
+          </span>
+          <span className="flex flex-shrink-0 items-center whitespace-nowrap text-xs text-faint">
             <InlineNumberCell
               value={item.defaultPrice}
               kind="money"
               ariaLabel={`${t('estimate.inline.price')}, ${item.name}`}
-              className="w-[6.5rem] text-sm font-bold text-primary"
+              className="text-sm font-semibold text-primary"
               onCommit={(price) => {
                 // A catalog price of 0 would price the next estimate at nothing: an emptied cell
                 // keeps the old price (owner ruling 2026-10-26; the server refuses it anyway).
                 if (price >= 0.01) onInline(item, { defaultPrice: price }, 'price');
               }}
             />
-            <span className="whitespace-nowrap">₴ / {t('units.' + item.unit)}</span>
-          </div>
+            <span className="pl-0.5">₴ / {t('units.' + item.unit)}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onEdit(item)}
+            aria-label={t('estimate.inline.more', { name: item.name })}
+            className="min-h-[44px] min-w-[36px] flex-shrink-0 text-lg text-faint active:text-muted"
+          >
+            ⋯
+          </button>
         </div>
         {description != null && description !== '' && (
           <span className="flex flex-shrink-0 items-center pl-0.5">
@@ -218,7 +219,7 @@ function ItemRow({
   }
 
   return (
-    <div className="flex items-stretch gap-1">
+    <div className="flex items-stretch gap-1 first:rounded-t-xl last:rounded-b-xl">
       {selection && (
         <button
           type="button"
@@ -235,8 +236,8 @@ function ItemRow({
         onClick={() => (selection ? selection.onToggle(item.id) : onEdit(item))}
         aria-pressed={selection ? picked : undefined}
         className={cn(
-          'flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border bg-surface px-3.5 py-3 text-left transition-transform active:scale-[0.99]',
-          picked ? 'border-brand bg-brand-soft/40' : 'border-border',
+          'flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-surface-sunken',
+          picked && 'bg-brand-soft/40',
         )}
       >
         <span className="min-w-0 flex-1">

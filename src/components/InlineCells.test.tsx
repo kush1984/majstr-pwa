@@ -109,6 +109,54 @@ describe('InlineNumberCell', () => {
     expect(onCommit).toHaveBeenCalledWith(7);
   });
 
+  it('Tab saves and opens the next cell, like «Далі ↓»', () => {
+    const qty = vi.fn();
+    render(
+      <div>
+        <InlineNumberCell value={1} kind="quantity" ariaLabel="Кількість, А" onCommit={qty} />
+        <InlineNumberCell value={100} kind="money" ariaLabel="Ціна, А" onCommit={vi.fn()} />
+      </div>,
+    );
+    const first = openCell('Кількість, А');
+    fireEvent.change(first, { target: { value: '4' } });
+    fireEvent.keyDown(first, { key: 'Tab' });
+    expect(qty).toHaveBeenCalledWith(4);
+    expect(screen.getByRole('textbox', { name: 'Ціна, А' })).toBeTruthy();
+  });
+
+  it('reports what is being typed, and null when the cell closes', () => {
+    const onDraft = vi.fn();
+    render(<InlineNumberCell value={5} kind="quantity" ariaLabel="Кількість, Стяжка" onCommit={vi.fn()} onDraft={onDraft} />);
+    const input = openCell('Кількість, Стяжка');
+    fireEvent.change(input, { target: { value: '7,5' } });
+    expect(onDraft).toHaveBeenLastCalledWith(7.5);
+    fireEvent.change(input, { target: { value: 'abc' } });
+    expect(onDraft).toHaveBeenLastCalledWith(null);
+    fireEvent.change(input, { target: { value: '8' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onDraft).toHaveBeenLastCalledWith(null);
+  });
+
+  it('at rest: no frame, a dotted underline; open: a ring, and the value selected whole', () => {
+    render(<InlineNumberCell value={650} kind="money" ariaLabel="Ціна, Стяжка" onCommit={vi.fn()} />);
+    const button = screen.getByRole('button', { name: 'Ціна, Стяжка' });
+    expect(button.className).not.toMatch(/\bborder\b/);
+    expect(button.querySelector('span')?.className).toContain('border-dotted');
+    const input = openCell('Ціна, Стяжка');
+    expect(input.className).toContain('ring-2');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
+
+  it('with a mouse, a key hint instead of the «Далі ↓» bar', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+    render(<InlineNumberCell value={5} kind="quantity" ariaLabel="Кількість, Стяжка" onCommit={vi.fn()} />);
+    openCell('Кількість, Стяжка');
+    expect(screen.getByText('Enter — зберегти · Esc — скасувати · Tab — далі')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Далі ↓' })).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it('read-only: plain text, no button to tap', () => {
     render(<InlineNumberCell value={5} kind="quantity" ariaLabel="Кількість, Стяжка" onCommit={vi.fn()} readOnly />);
     expect(screen.queryByRole('button')).toBeNull();
@@ -135,6 +183,54 @@ describe('InlineTextCell', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onCommit).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Назва, Стяжка' }).textContent).toBe('Стяжка');
+  });
+
+  it('a tap puts the caret at the end of the TAPPED word, never selecting the whole name', () => {
+    render(<InlineTextCell value="Укладання плитки 300×600" ariaLabel="Назва, Плитка" onCommit={vi.fn()} />);
+    const shown = screen.getByRole('button', { name: 'Назва, Плитка' });
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      value: () => ({ offsetNode: shown.firstChild, offset: 12 }), // inside «плитки»
+      configurable: true,
+    });
+    fireEvent.click(shown, { detail: 1, clientX: 40, clientY: 10 });
+    Reflect.deleteProperty(document, 'caretPositionFromPoint');
+    const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Назва, Плитка' });
+    expect(field.selectionStart).toBe('Укладання плитки'.length);
+    expect(field.selectionEnd).toBe('Укладання плитки'.length);
+  });
+
+  it('opened from the keyboard, the caret goes to the end of the name', () => {
+    render(<InlineTextCell value="Стяжка" ariaLabel="Назва, Стяжка" onCommit={vi.fn()} />);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Назва, Стяжка' }), { key: 'Enter' });
+    const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Назва, Стяжка' });
+    expect(field.selectionStart).toBe(6);
+    expect(field.selectionEnd).toBe(6);
+  });
+
+  it('at rest a name is selectable text: no frame, no underline', () => {
+    render(<InlineTextCell value="Стяжка" ariaLabel="Назва, Стяжка" onCommit={vi.fn()} />);
+    const shown = screen.getByRole('button', { name: 'Назва, Стяжка' });
+    expect(shown.className).not.toMatch(/\bborder\b/);
+    expect(shown.className).not.toContain('border-dotted');
+    expect(shown.className).toContain('select-text');
+  });
+
+  it('a pasted line break becomes a space — a name is one line', () => {
+    const onCommit = vi.fn();
+    render(<InlineTextCell value="Стяжка" ariaLabel="Назва, Стяжка" onCommit={onCommit} />);
+    const input = openCell('Назва, Стяжка');
+    fireEvent.change(input, { target: { value: 'Стяжка\nцементна' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledWith('Стяжка цементна');
+  });
+
+  it('with a mouse, a key hint instead of «Скасувати · Готово»', () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }));
+    render(<InlineTextCell value="Стяжка" ariaLabel="Назва, Стяжка" onCommit={vi.fn()} />);
+    openCell('Назва, Стяжка');
+    expect(screen.getByText('Enter — зберегти · Esc — скасувати')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Готово' })).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('«Скасувати» cancels without the blur saving first', () => {

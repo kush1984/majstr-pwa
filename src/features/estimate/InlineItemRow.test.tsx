@@ -73,10 +73,23 @@ describe('estimate row — inline editing', () => {
     expect(onInline).toHaveBeenLastCalledWith(expect.anything(), { unitPrice: 673 }, 'price');
   });
 
-  it('a quantity of 0: the sum is not editable and the row says so', () => {
+  it('a quantity of 0: «к-сть?» where the number goes, a dash for the sum, no sentence under it', () => {
     board([line({ quantity: 0, lineTotal: 0 })]);
     expect(screen.queryByRole('button', { name: 'Сума, Стяжка' })).toBeNull();
-    expect(screen.getByText('Спершу вкажіть кількість')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Кількість, Стяжка' }).textContent).toBe('к-сть?');
+    expect(screen.queryByText('Спершу вкажіть кількість')).toBeNull();
+  });
+
+  it('the sum follows the quantity WHILE it is typed, greyed, and sends nothing until commit', () => {
+    const { onInline } = board([line({ quantity: 10, unitPrice: 90, lineTotal: 900 })]);
+    fireEvent.click(screen.getByRole('button', { name: 'Кількість, Стяжка' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Кількість, Стяжка' }), { target: { value: '12' } });
+    const sum = screen.getByRole('button', { name: 'Сума, Стяжка' });
+    expect(sum.textContent).toBe('1 080,00');
+    expect(sum.className).toContain('text-faint');
+    expect(onInline).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Кількість, Стяжка' }), { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Сума, Стяжка' }).textContent).toBe('900,00');
   });
 
   it('a «%» line edits only its percent, keeps a discount negative, and shows the sign', () => {

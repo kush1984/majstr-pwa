@@ -686,7 +686,6 @@
       "percent": "Percent",
       "more": "All fields of «{{name}}»",
       "manual": "✎ manual",
-      "quantityFirst": "Enter the quantity first",
       "sumActual": "You typed {{typed}}; at a price to the kopeck it comes to {{actual}}",
       "roundPrice": "Round the price"
     },
@@ -2246,6 +2245,9 @@
     "undo": "Undo",
     "next": "Next ↓",
     "done": "Done",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "keys": "Enter — save · Esc — cancel",
+    "keysWithTab": "Enter — save · Esc — cancel · Tab — next",
+    "noQuantity": "qty?"
   }
 }

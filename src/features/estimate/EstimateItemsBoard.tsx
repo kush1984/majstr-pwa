@@ -405,20 +405,21 @@ function SectionBlock({
           // A collapsed section still tells the master how many lines it hides, so the fold is not
           // a "did I lose those?" moment. Rendered outside the button so it never becomes part of
           // the fold-toggle target area.
-          <span className="font-normal normal-case text-muted">
-            ({section.items.length}
-            {unquantifiedCount > 0 && (
-              <span className="font-semibold text-amber-strong">
-                {' · '}{t('estimate.unquantifiedCount', { count: unquantifiedCount })}
-              </span>
-            )})
+          <span className="font-normal normal-case text-muted">({section.items.length})</span>
+        )}
+        {/* The ONE place a missing quantity is announced: each such line just says «к-сть?» where
+            its number goes, instead of a sentence under every one of them. */}
+        {unquantifiedCount > 0 && (
+          <span className="whitespace-nowrap rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-amber-strong">
+            {t('estimate.unquantifiedCount', { count: unquantifiedCount })}
           </span>
         )}
         <span className="font-bold normal-case text-muted">{formatMoney(subtotal)}</span>
       </div>
 
       {!collapsed && (
-        <div className="space-y-1.5">
+        // One white block per section, rows split by a hairline — a document, not a stack of cards.
+        <div className="divide-y divide-divider rounded-xl border border-border bg-surface">
           <SortableContext
             items={section.items.map((i) => ITEM_ID + i.id)}
             strategy={verticalListSortingStrategy}
@@ -481,13 +482,10 @@ function ItemRow({
   const partlyClosed = closed > 0 && !fullyClosed;
   const description = item.description?.trim() ?? '';
 
-  const stateClass = picked ? 'border-brand bg-brand-soft/40'
-    : isLastTouched ? 'border-success/50 bg-success-soft'
-      : isTouched ? 'border-brand/30 bg-brand-soft/20'
-        : fullyClosed ? 'border-success/60 bg-success-soft'
-          : partlyClosed ? 'border-success/40 bg-success-soft/40'
-            : unquantified ? 'border-dashed border-amber/70 bg-surface-sunken'
-              : 'border-border bg-surface';
+  // No frames: a picked row is tinted, everything else is said by a dot (just changed) or a chip
+  // (closed by acts, no quantity) — never by painting the whole row.
+  const stateClass = picked ? 'bg-brand-soft/40' : '';
+  const marker = isLastTouched ? 'last' : isTouched ? 'touched' : null;
   // A cell is editable exactly where the server allows the edit: never on a signed estimate (an
   // addendum is always signed), and never while the row is a checkbox in selection mode.
   const inlineHere = onInline !== undefined && !signed && !selection;
@@ -499,7 +497,10 @@ function ItemRow({
       ref={setNodeRef}
       data-item-id={item.id}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`flex items-stretch gap-1 ${isDragging ? 'z-10 opacity-90' : ''}`}
+      className={cn(
+        'flex items-stretch gap-1 bg-surface first:rounded-t-xl last:rounded-b-xl has-[[data-inline-editing]]:bg-row-editing',
+        isDragging && 'relative z-10 opacity-90 shadow-card-md',
+      )}
     >
       {selection ? (
         selectable ? (
@@ -530,6 +531,7 @@ function ItemRow({
           item={item}
           number={number}
           percentText={item.unit === 'PERCENT' ? percentLabel(item, byId) : null}
+          marker={marker}
           className={stateClass}
           onCommit={onInline}
           onMore={() => onEdit(item)}
@@ -544,7 +546,7 @@ function ItemRow({
           aria-pressed={selection && selectable ? picked : undefined}
           title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
           className={cn(
-            'flex min-w-0 flex-1 gap-1.5 rounded-xl border px-3 py-3 text-left transition disabled:cursor-default active:scale-[0.99] disabled:active:scale-100',
+            'flex min-w-0 flex-1 gap-1.5 px-2 py-3 text-left transition disabled:cursor-default active:bg-surface-sunken disabled:active:bg-transparent',
             stateClass,
           )}
         >
@@ -564,7 +566,17 @@ function ItemRow({
           {/* self-center, not top-aligned: a name wraps to two or three lines on a phone, and a
               number pinned to the first line reads as if it belongs to that line rather than to the
               row. Centred on the row's height it belongs to the whole card. */}
-          <span className="min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
+          <span className="relative min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
+            {marker && (
+              <span
+                aria-hidden
+                data-row-marker={marker}
+                className={cn(
+                  'absolute -left-1.5 top-[0.55rem] h-1.5 w-1.5 rounded-full',
+                  marker === 'last' ? 'bg-success' : 'bg-brand/50',
+                )}
+              />
+            )}
             {number}.
           </span>
           <span className="min-w-0 flex-1">

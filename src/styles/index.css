@@ -59,6 +59,12 @@
      row, under AA — and faint #9ca3af, ~2.5:1, read as absent. Each moved one step darker. */
   --text-muted: 75 85 99;         /* #4b5563 — 7.5:1 on white */
   --text-faint: 107 114 128;      /* #6b7280 — 4.8:1 on white */
+
+  /* Calm inline cells: a value at rest reads as document text; only the active field gets a frame. */
+  --cell-dot: 201 205 211;        /* #c9cdd3 — the dotted «tap me» underline under an editable number */
+  --cell-hover: 243 244 246;      /* #f3f4f6 — pointer hover behind a value */
+  --row-editing: 255 251 247;     /* #fffbf7 — the row whose cell is open */
+  --divider: 236 237 240;         /* #ecedf0 — between the rows of one white block */
 }
 
 @layer base {

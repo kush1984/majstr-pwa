@@ -16,25 +16,35 @@ export type InlineField = 'quantity' | 'price' | 'sum' | 'name' | 'percent';
  *  offer the undo. */
 export type InlineCommit = (item: EstimateItemResponse, patch: Partial<EstimateItemRequest>, field: InlineField) => void;
 
+/** A dot by the line number: this line was just changed (`last`) or changed earlier this session. */
+export type RowMarker = 'last' | 'touched' | null;
+
 /**
  * The inside of an estimate row when it edits in place: name · quantity · unit · price · sum, and
  * «⋯» for everything else (unit, category, measurements, description…), which is the old dialog.
  * A «%» line edits only its percent; its sum is derived, so it is read-only.
+ *
+ * Calm at rest: no card, no frame — the values read as text, the editable numbers carry a dotted
+ * underline, and only the open field is framed. A line with no quantity says «к-сть?» where the
+ * number goes; the section header counts them.
  */
 export function InlineItemBody({
-  item, number, percentText, className, onCommit, onMore,
+  item, number, percentText, marker = null, className, onCommit, onMore,
 }: {
   item: EstimateItemResponse;
   number: number;
   /** «від Укладання плитки» — what a «%» line is a percentage OF (the board's own label). */
   percentText: string | null;
-  className: string;
+  marker?: RowMarker;
+  className?: string;
   onCommit: InlineCommit;
   onMore: () => void;
 }) {
   const { t } = useTranslation();
   // The figure the master typed into the sum, while it is not what price × quantity gives.
   const [typedSum, setTypedSum] = useState<number | null>(null);
+  // What the quantity or price field reads WHILE it is being typed — the sum follows it live.
+  const [draft, setDraft] = useState<{ quantity?: number; price?: number } | null>(null);
   const isPercent = item.unit === 'PERCENT';
   const unit = t('units.' + item.unit);
   const label = (field: string) => `${t('estimate.inline.' + field)}, ${item.name}`;
@@ -47,10 +57,26 @@ export function InlineItemBody({
     onCommit(item, { unitPrice: edit.price }, 'sum');
   };
 
+  const liveSum = draft === null
+    ? null
+    : (draft.quantity ?? item.quantity) * (draft.price ?? item.unitPrice);
+  const draftOf = (field: 'quantity' | 'price') => (v: number | null) =>
+    setDraft(v === null ? null : { [field]: v });
+
   return (
-    <div className={cn('min-w-0 flex-1 rounded-xl border px-2 py-2', className)}>
-      <div className="flex items-start gap-1.5">
-        <span className="min-w-[1.35rem] flex-shrink-0 pt-3 text-right text-[13px] tabular-nums text-faint">
+    <div className={cn('min-w-0 flex-1 py-1 pr-1', className)}>
+      <div className="flex items-start gap-1">
+        <span className="relative min-w-[1.35rem] flex-shrink-0 pt-3 text-right text-[13px] tabular-nums text-faint">
+          {marker && (
+            <span
+              aria-hidden
+              data-row-marker={marker}
+              className={cn(
+                'absolute -left-1.5 top-[1.15rem] h-1.5 w-1.5 rounded-full',
+                marker === 'last' ? 'bg-success' : 'bg-brand/50',
+              )}
+            />
+          )}
           {number}.
         </span>
         <InlineTextCell
@@ -63,13 +89,13 @@ export function InlineItemBody({
           type="button"
           onClick={onMore}
           aria-label={t('estimate.inline.more', { name: item.name })}
-          className="min-h-[44px] min-w-[44px] flex-shrink-0 rounded-md text-lg text-muted active:bg-surface-sunken"
+          className="min-h-[44px] min-w-[40px] flex-shrink-0 text-lg text-faint active:text-muted"
         >
           ⋯
         </button>
       </div>
 
-      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[1.7rem] text-xs text-muted">
+      <div className="-mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[1.7rem] text-xs text-muted">
         {isPercent ? (
           <>
             {item.quantity < 0 && <span className="text-sm font-semibold text-primary">−</span>}
@@ -77,7 +103,7 @@ export function InlineItemBody({
               value={Math.abs(item.quantity)}
               kind="percent"
               ariaLabel={label('percent')}
-              className="w-[4.5rem] text-sm text-primary"
+              className="text-sm font-semibold text-primary"
               onCommit={(pct) => {
                 // A percentage of 0 is no line at all — the server refuses it.
                 if (pct > 0) onCommit(item, percentPatch(item, pct), 'percent');
@@ -92,7 +118,10 @@ export function InlineItemBody({
               value={item.quantity}
               kind="quantity"
               ariaLabel={label('quantity')}
-              className="w-[4.75rem] text-sm text-primary"
+              className="text-sm font-semibold text-primary"
+              display={noQuantity ? t('inline.noQuantity') : undefined}
+              tone={noQuantity ? 'warn' : 'default'}
+              onDraft={draftOf('quantity')}
               onCommit={(q) => {
                 setTypedSum(null);
                 onCommit(item, quantityPatch(item, q), 'quantity');
@@ -107,7 +136,8 @@ export function InlineItemBody({
               value={item.unitPrice}
               kind="money"
               ariaLabel={label('price')}
-              className="w-[5.75rem] text-sm text-primary"
+              className="text-sm font-semibold text-primary"
+              onDraft={draftOf('price')}
               onCommit={(p) => {
                 setTypedSum(null);
                 onCommit(item, { unitPrice: p }, 'price');
@@ -116,25 +146,25 @@ export function InlineItemBody({
           </>
         )}
         <span aria-hidden className="ml-auto">=</span>
-        {isPercent || noQuantity ? (
-          <span className="min-h-[44px] content-center px-2 text-sm font-bold text-primary tabular-nums">
+        {isPercent || (noQuantity && liveSum === null) ? (
+          <span className="min-h-[44px] content-center px-1 text-sm font-bold text-primary tabular-nums">
             {noQuantity ? '—' : formatMoney(item.lineTotal)}
           </span>
         ) : (
+          // Stays mounted while a neighbour is typed (only its text goes grey), so «Далі» from the
+          // price still lands on it.
           <InlineNumberCell
             value={item.lineTotal}
             kind="money"
             ariaLabel={label('sum')}
-            display={formatInlineNumber(item.lineTotal, 'money')}
-            className="w-[6.5rem] text-sm font-bold text-primary"
+            display={formatInlineNumber(liveSum ?? item.lineTotal, 'money')}
+            tone={liveSum === null ? 'default' : 'dim'}
+            className="text-sm font-bold text-primary"
             onCommit={commitSum}
           />
         )}
       </div>
 
-      {noQuantity && (
-        <p className="mt-1 pl-[1.7rem] text-[12px] text-amber-strong">{t('estimate.inline.quantityFirst')}</p>
-      )}
       {typedSum !== null && !noQuantity && (
         <p className="mt-1 flex flex-wrap items-center gap-x-2 pl-[1.7rem] text-[12px] text-muted">
           <span>
