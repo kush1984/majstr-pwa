@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { seoCalcTables, materialText, exampleText, areaFigures } from '../../scripts/seo-pages-plugin.ts';
-import { WALL_AREA_CASES, wallArea } from './wallArea.ts';
+import { PLAN_SHAPES, WALL_AREA_CASES, wallArea } from './wallArea.ts';
+import { SHAPES } from '@/lib/shapes.ts';
 import type { CalcSnapshot } from '../../scripts/seo-calc-cases.ts';
 
 /**
@@ -137,9 +138,11 @@ describe.each([
 });
 
 describe('kalkulyator-ploshchi-stin.html', () => {
+  const rect = (a: number, b: number) => ({ shape: 'rect' as const, values: { a, b } });
+
   it('nets the openings out of the walls, and the doorways out of the skirting', () => {
     expect(wallArea({
-      length: 4, width: 3, height: 2.7,
+      plan: rect(4, 3), height: 2.7,
       windows: [{ width: 1.4, height: 1.5, count: 1 }],
       doors: [{ width: 0.8, height: 2, count: 1 }],
     })).toEqual({
@@ -148,11 +151,44 @@ describe('kalkulyator-ploshchi-stin.html', () => {
   });
 
   it('counts N openings of one size N times, and never goes below zero', () => {
-    const r = wallArea({ length: 5, width: 4, height: 2.7, windows: [{ width: 1.4, height: 1.5, count: 2 }], doors: [] });
-    expect(r.windows).toBe(4.2);
-    expect(r.wallsNet).toBe(44.4);
-    expect(r.skirting).toBe(18);
-    expect(wallArea({ length: 1, width: 1, height: 1, windows: [{ width: 3, height: 3, count: 1 }], doors: [] }).wallsNet).toBe(0);
+    const r = wallArea({ plan: rect(5, 4), height: 2.7, windows: [{ width: 1.4, height: 1.5, count: 2 }], doors: [] });
+    expect(r?.windows).toBe(4.2);
+    expect(r?.wallsNet).toBe(44.4);
+    expect(r?.skirting).toBe(18);
+    expect(wallArea({ plan: rect(1, 1), height: 1, windows: [{ width: 3, height: 3, count: 1 }], doors: [] })?.wallsNet).toBe(0);
+  });
+
+  it('an L-shaped room has the walls of its overall rectangle, and the floor minus the cut-out', () => {
+    const r = wallArea({
+      plan: { shape: 'lshape', values: { A: 5, B: 4, a: 2, b: 1.5 } }, height: 2.7,
+      windows: [{ width: 1.4, height: 1.5, count: 2 }], doors: [{ width: 0.8, height: 2, count: 1 }],
+    });
+    expect(r).toEqual({
+      perimeter: 18, wallsGross: 48.6, windows: 4.2, doors: 1.6, wallsNet: 42.8, floor: 17, skirting: 17.2,
+    });
+  });
+
+  it('a cut corner adds its slanted wall — and reports it for the tape', () => {
+    const r = wallArea({ plan: { shape: 'cut', values: { a: 4, b: 3, c: 3, d: 2 } }, height: 2.5, windows: [], doors: [] });
+    expect(r?.slope).toBe(1.41);
+    expect(r?.perimeter).toBe(13.41);
+    expect(r?.floor).toBe(11.5);
+  });
+
+  it('refuses a plan that makes no room', () => {
+    expect(wallArea({ plan: { shape: 'lshape', values: { A: 5, B: 4, a: 6, b: 1 } }, height: 2.7, windows: [], doors: [] })).toBeNull();
+  });
+
+  it("offers only the plans a ROOM has, each with the app's letters", () => {
+    const html = read(WALL_AREA_PAGE.file);
+    for (const shape of PLAN_SHAPES) {
+      expect(html).toContain(`name="shape" value="${shape}"`);
+      const group = new RegExp(`data-plan="${shape}"[^>]*>([\\s\\S]*?)</div>`).exec(html)?.[1] ?? '';
+      const named = [...group.matchAll(/name="([a-z]+)-([A-Za-z])"/g)].map((m) => m[2]);
+      const tags = [...group.matchAll(/<b class="seo-tag">([A-Za-z])<\/b>/g)].map((m) => m[1]);
+      expect(named, shape).toEqual(SHAPES[shape].variants.d.fields.map((f) => f.key));
+      expect(tags, shape).toEqual(SHAPES[shape].variants.d.fields.map((f) => f.tag));
+    }
   });
 
   it('prints every typical room from the same function the form runs — no figure typed by hand', () => {

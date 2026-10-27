@@ -68,6 +68,21 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
   min-height: 44px; background: transparent; color: var(--amber-deep);
   border: 1px dashed var(--line); font-weight: 600;
 }
+/* The room's plan: the app's drawing, the letter on each side matching the badge on its field. */
+.seo-plan { display: grid; gap: 4px; }
+.seo-plan-svg { display: block; width: 100%; max-width: 360px; margin: 0 auto; }
+.seo-plan-shape { fill: var(--paper); stroke: var(--amber); stroke-width: 2; stroke-linejoin: round; }
+.seo-plan-edge { fill: var(--ink); font: italic 700 16px Inter, system-ui, sans-serif; }
+.seo-plan-vertex { fill: var(--muted); font: 600 12px Inter, system-ui, sans-serif; }
+.seo-plan .seo-small { margin: 0; text-align: center; }
+.seo-plan-warn { margin: 0; text-align: center; color: #b42318; font-size: 14px; }
+.seo-plan-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+.seo-plan-fields small { grid-column: 1 / -1; }
+.seo-calc .seo-plan-fields label { font-size: 14px; }
+.seo-tag {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 2px;
+  border-radius: 6px; background: var(--paper); font-style: italic; font-weight: 700;
+}
 .seo-handons { display: grid; gap: 8px; margin: 12px 0; }
 .seo-handons p { margin: 0; }
 .seo-handon {

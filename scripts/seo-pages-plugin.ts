@@ -52,6 +52,7 @@ export function exampleText(row: SnapshotRow): string {
 /** «стіни без вікон і дверей — 34,1 м²» … — one wall-area case's figures, in the order the page lists them. */
 export function areaFigures(c: WallAreaCase): string[] {
   const r = wallArea(c.room);
+  if (!r) throw new Error(`wall-area case «${c.id}» does not form a room`);
   return [
     `стіни без вікон і дверей — ${number.format(r.wallsNet)} м²`,
     `стеля й підлога — по ${number.format(r.floor)} м²`,

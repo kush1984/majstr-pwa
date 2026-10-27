@@ -55,12 +55,51 @@
     <p class="seo-lede">Площа стін кімнати — це периметр × висота стелі мінус вікна й двері. Приклад: <!--SEO_AREA_EXAMPLE:room-->. Підставте розміри своєї кімнати нижче.</p>
 
     <form id="calc" class="seo-calc" novalidate>
-      <label>Довжина кімнати, м
-        <input name="length" inputmode="decimal" autocomplete="off" placeholder="напр. 4" required />
-      </label>
-      <label>Ширина кімнати, м
-        <input name="width" inputmode="decimal" autocomplete="off" placeholder="напр. 3" required />
-      </label>
+      <fieldset>
+        <legend>Форма кімнати</legend>
+        <label><input type="radio" name="shape" value="rect" checked /> Прямокутна</label>
+        <label><input type="radio" name="shape" value="lshape" /> Г-подібна</label>
+        <label><input type="radio" name="shape" value="cut" /> Зі зрізаним кутом</label>
+      </fieldset>
+      <div class="seo-plan" id="plan" aria-hidden="true"></div>
+      <div class="seo-plan-fields" data-plan="rect">
+        <label><span><b class="seo-tag">a</b> Довжина, м</span>
+          <input name="rect-a" inputmode="decimal" autocomplete="off" placeholder="напр. 4" />
+        </label>
+        <label><span><b class="seo-tag">b</b> Ширина, м</span>
+          <input name="rect-b" inputmode="decimal" autocomplete="off" placeholder="напр. 3" />
+        </label>
+      </div>
+      <div class="seo-plan-fields" data-plan="lshape" hidden>
+        <label><span><b class="seo-tag">A</b> Довжина загалом, м</span>
+          <input name="lshape-A" inputmode="decimal" autocomplete="off" placeholder="напр. 5" />
+        </label>
+        <label><span><b class="seo-tag">B</b> Ширина загалом, м</span>
+          <input name="lshape-B" inputmode="decimal" autocomplete="off" placeholder="напр. 4" />
+        </label>
+        <label><span><b class="seo-tag">a</b> Виріз по довжині, м</span>
+          <input name="lshape-a" inputmode="decimal" autocomplete="off" placeholder="напр. 2" />
+        </label>
+        <label><span><b class="seo-tag">b</b> Виріз по ширині, м</span>
+          <input name="lshape-b" inputmode="decimal" autocomplete="off" placeholder="напр. 1,5" />
+        </label>
+        <small>A×B — габарити кімнати, a×b — кут, якого бракує до прямокутника.</small>
+      </div>
+      <div class="seo-plan-fields" data-plan="cut" hidden>
+        <label><span><b class="seo-tag">a</b> Нижня стіна, м</span>
+          <input name="cut-a" inputmode="decimal" autocomplete="off" placeholder="напр. 4" />
+        </label>
+        <label><span><b class="seo-tag">b</b> Ліва стіна, м</span>
+          <input name="cut-b" inputmode="decimal" autocomplete="off" placeholder="напр. 3" />
+        </label>
+        <label><span><b class="seo-tag">c</b> Верхня стіна, м</span>
+          <input name="cut-c" inputmode="decimal" autocomplete="off" placeholder="напр. 3" />
+        </label>
+        <label><span><b class="seo-tag">d</b> Права стіна, м</span>
+          <input name="cut-d" inputmode="decimal" autocomplete="off" placeholder="напр. 2" />
+        </label>
+        <small>Скошену стіну між c і d порахуємо самі — звірте її рулеткою.</small>
+      </div>
       <label>Висота стелі, м
         <input name="height" inputmode="decimal" autocomplete="off" placeholder="напр. 2,7" required />
         <small>Від підлоги до стелі. Якщо стелю опускатимете — висота до нової стелі.</small>
@@ -92,11 +131,11 @@
 
     <section>
       <h2>Як ми рахуємо</h2>
-      <p><b>Периметр</b> прямокутної кімнати — 2 × (довжина + ширина). <b>Стіни разом із прорізами</b> — периметр × висота стелі.</p>
+      <p><b>Периметр</b> — сума довжин усіх стін. У прямокутної кімнати це 2 × (довжина + ширина); у Г-подібної — стільки ж, скільки в прямокутника її габаритів A×B: виріз забирає дві ділянки стін і додає дві такі самі всередині кута. Скошену стіну кімнати зі зрізаним кутом рахуємо за теоремою Піфагора. <b>Стіни разом із прорізами</b> — периметр × висота стелі.</p>
       <p><b>Вікна й двері</b> — ширина × висота кожного прорізу, помножена на кількість таких самих. Їх віднімаємо: <b>площа стін без прорізів</b> — це те, що штукатурять, шпаклюють, фарбують чи клеять шпалерами.</p>
-      <p><b>Стеля й підлога</b> прямокутної кімнати — довжина × ширина, одна й та сама цифра.</p>
+      <p><b>Стеля й підлога</b> — площа плану кімнати, одна й та сама цифра: у прямокутної — довжина × ширина, у Г-подібної — A × B мінус a × b. Креслення над полями показує, яку стіну міряти для кожної літери — так само, як у замірах застосунку Majstr.</p>
       <p><b>Плінтус</b> — периметр мінус ширина всіх дверей: через дверний проріз плінтус не кладуть.</p>
-      <p><b>Чого калькулятор не рахує</b>: <b>укоси</b> вікон і дверей (їх площа — глибина укосу × периметр прорізу, рахуйте окремо), ніші, виступи й короби. Кімнату складної форми — наприклад, Г-подібну — поділіть на прямокутники й порахуйте кожен.</p>
+      <p><b>Чого калькулятор не рахує</b>: <b>укоси</b> вікон і дверей (їх площа — глибина укосу × периметр прорізу, рахуйте окремо), ніші, виступи й короби. Для кімнати іншої форми периметр — це сума довжин усіх її стін.</p>
       <p>Скільки купити штукатурки чи суміші для стяжки на цю площу, порахує <a href="/kalkulyator-shtukaturky">калькулятор штукатурки</a> і <a href="/kalkulyator-styazhky">калькулятор стяжки</a> — у результаті є кнопки, що передають туди площу.</p>
     </section>
 
