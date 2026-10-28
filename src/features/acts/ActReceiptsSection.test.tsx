@@ -319,7 +319,7 @@ describe('ActReceiptsSection', () => {
     renderSection({ receipts: [receipt({ id: 'r1', label: 'Чек №1', amount: 0, issuedAt: null, hasPhoto: false })] });
 
     fireEvent.click(screen.getByText('Редагувати'));
-    const name = screen.getByPlaceholderText('Чек №1');
+    const name = screen.getByPlaceholderText<HTMLInputElement>('Чек №1');
     expect(name.value).toBe('');
     const amount = document.querySelector('[role="dialog"] input[inputmode="decimal"]') as HTMLInputElement;
     fireEvent.change(amount, { target: { value: '3485' } });
