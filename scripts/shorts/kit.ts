@@ -91,7 +91,10 @@ export class Recorder {
   private shot = 0;
   private stopLoop: (() => Promise<void>) | null = null;
 
-  constructor(readonly outDir: string) {
+  readonly outDir: string;
+
+  constructor(outDir: string) {
+    this.outDir = outDir;
     rmSync(path.join(outDir, 'raw'), { recursive: true, force: true });
     mkdirSync(path.join(outDir, 'raw'), { recursive: true });
     if (SHOTS) {
