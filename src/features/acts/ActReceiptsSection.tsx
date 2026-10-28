@@ -1,3 +1,4 @@
+import { editableReceiptLabel, isServerReceiptName } from '@/lib/receiptName.ts';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
@@ -168,7 +169,11 @@ export function ActReceiptsSection({
     // Offline the photos were not «not read» — they have not even been sent yet, and «не вдалося
     // прочитати» would name a failure that did not happen.
     if (out.offline) toast.success(t('acts.receiptBatchQueued', { count: out.saved }));
-    else if (out.unread > 0) toast.info(t('acts.receiptBatchUnread', { count: out.unread }));
+    // Reading switched OFF is not a failed read: only the free QR was tried, and «не вдалося
+    // прочитати» blamed the app for what the master chose.
+    else if (out.unread > 0) {
+      toast.info(t(choice.withAi ? 'acts.receiptBatchUnread' : 'acts.receiptBatchUnpriced', { count: out.unread }));
+    }
     else toast.success(t('acts.receiptBatchDone', { count: out.saved }));
   };
 
@@ -588,7 +593,7 @@ function ReceiptForm({
   const key = editing?.id ?? null;
   if (key !== seededFor) {
     setSeededFor(key);
-    setLabel(editing?.label ?? '');
+    setLabel(editableReceiptLabel(editing?.label));
     setAmount(editing == null || editing.amount <= 0 ? '' : String(editing.amount));
     setReturned(editing == null || editing.returnedAmount <= 0 ? '' : String(editing.returnedAmount));
     setIssuedAt(editing?.issuedAt ?? '');
@@ -609,7 +614,9 @@ function ReceiptForm({
   // A field that does not read yet says so itself — comparing the two 0s it would fall back to
   // would answer «the return is fine» about numbers nobody has.
   const returnTooBig = !amountInvalid && !returnedInvalid && num(returned) > num(amount);
-  const valid = label.trim() !== '' && !amountInvalid && !returnedInvalid
+  // A blank field keeps the server's «Чек №N» (it is the placeholder, not lost).
+  const keepsServerName = isServerReceiptName(editing?.label);
+  const valid = (label.trim() !== '' || keepsServerName) && !amountInvalid && !returnedInvalid
     && num(amount) > 0 && !returnTooBig;
   // Nothing a read could still fill in: every field the footer pass returns is already there.
   // Leaving the button live invites a slow call whose only possible effect is to overwrite what the
@@ -660,7 +667,8 @@ function ReceiptForm({
         )}
 
         <Field label={t('acts.receiptLabel')}>
-          <Input value={label} placeholder={t('acts.receiptLabelHint')} onChange={(e) => setLabel(e.target.value)} />
+          <Input value={label} placeholder={keepsServerName ? editing?.label : t('acts.receiptLabelHint')}
+            onChange={(e) => setLabel(e.target.value)} />
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={t('acts.receiptAmount')}>
@@ -719,7 +727,7 @@ function ReceiptForm({
 
         <Button fullWidth loading={busy} disabled={!valid || reading}
           onClick={() => onSubmit({
-            label: label.trim(), amount: num(amount), returnedAmount: num(returned),
+            label: label.trim() || (editing?.label ?? ''), amount: num(amount), returnedAmount: num(returned),
             issuedAt: issuedAt.trim() === '' ? null : issuedAt,
           })}>
           {t('common.save')}

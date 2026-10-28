@@ -12,7 +12,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
-import { Fab, FabAction } from '@/components/Fab.tsx';
+import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { Section } from '@/components/Section.tsx';
 import { Badge } from '@/components/Badge.tsx';
 import { toast } from '@/hooks/useToast.ts';
@@ -770,6 +770,23 @@ export function ActEditorPage() {
     }
   };
 
+  // An unreadable field is caught BEFORE the signature sheet opens: the master types the client's
+  // name, taps «Підписати» and only then learns nothing was saved. A receipt still in the queue is
+  // refused in the same place and for the same reason (review P-36) — it is money on this screen
+  // that the signature would leave out.
+  const startSign = async () => {
+    if (invalid) {
+      toast.error(t('acts.fixFields'));
+      return;
+    }
+    if (!hasLines) {
+      toast.info(t('acts.emptyHint'));
+      return;
+    }
+    if (!(await queuedReceiptsClear())) return;
+    setSignOpen(true);
+  };
+
   const onShare = once(async () => {
     if (await beforeHandingOver()) setShareOpen(true);
   });
@@ -841,6 +858,28 @@ export function ActEditorPage() {
           {act.data && (
             <button type="button" onClick={() => void onShare()} aria-label={t('acts.share')}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-base text-primary">🔗</button>
+          )}
+          {/* Everything but «Зберегти» (the bottom bar) lives here — a FAB carries ONE action, and
+              this screen's one action is the save. Delete / PDF address a server row, so an unsaved
+              new act offers only the paper signature. */}
+          {(!signed || act.data) && (
+            <ActionMenu ariaLabel={t('acts.actionsMenu')}
+              triggerClassName="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-lg leading-none text-primary">
+              {(close) => (
+                <>
+                  {!signed && (
+                    <ActionMenuItem icon="✍️" label={t('acts.sign')} onClick={() => { close(); void startSign(); }} />
+                  )}
+                  {act.data && (
+                    <ActionMenuItem icon="📄" label={t('acts.pdf')} onClick={() => { close(); void onPdf(); }} />
+                  )}
+                  {(act.data?.status === 'DRAFT' || act.data?.status === 'REJECTED') && (
+                    <ActionMenuItem icon="🗑" label={t('common.delete')} danger
+                      onClick={() => { close(); setConfirmDelete(true); }} />
+                  )}
+                </>
+              )}
+            </ActionMenu>
           )}
         </div>
       </div>
@@ -959,8 +998,9 @@ export function ActEditorPage() {
                             invalid={badQty}
                             onChange={(e) => setQty((q) => ({ ...q, [line.estimateItemId]: e.target.value }))}
                             className="w-28" />
-                          <span className="text-xs text-muted">{t('units.' + line.unit)}</span>
-                          <span className="ml-auto text-sm font-semibold text-primary">
+                          <span className="shrink-0 text-xs text-muted">{t('units.' + line.unit)}</span>
+                          {/* nowrap: a narrow phone row broke «0 ₴» into «0» over «₴». */}
+                          <span className="ml-auto shrink-0 whitespace-nowrap text-sm font-semibold text-primary">
                             {formatMoney(badQty ? 0 : roundMoney(entered * line.unitPrice))}
                           </span>
                         </div>
@@ -1031,7 +1071,7 @@ export function ActEditorPage() {
               {!badRow && (a.name.trim() !== '' || a.quantity.trim() !== '') && (
                 <div className="mt-1.5 flex items-baseline justify-between gap-2">
                   <span className="text-xs text-muted">{t('acts.rowTotal')}</span>
-                  <span className="text-sm font-semibold text-primary">
+                  <span className="whitespace-nowrap text-sm font-semibold text-primary">
                     {formatMoney(roundMoney(num(a.quantity) * money(a.unitPrice)))}
                   </span>
                 </div>
@@ -1160,44 +1200,6 @@ export function ActEditorPage() {
         )}
       </Section>
 
-      {/* Actions — a speed-dial FAB so the master reaches Save/Sign/Share/PDF/Delete from anywhere on a
-          long editor without scrolling to the bottom. Ordered so the primary Save sits nearest the
-          thumb and the destructive Delete sits farthest from it. */}
-      <Fab ariaLabel={t('acts.actionsMenu')}
-        position={signed ? 'bottom-6 right-4 lg:bottom-8 lg:right-8' : 'bottom-24 right-4 lg:bottom-28 lg:right-8'}>
-        {(close) => (
-          <>
-            {/* Delete / PDF / share all address a server row — an unsaved new act has none. */}
-            {(act.data?.status === 'DRAFT' || act.data?.status === 'REJECTED') && (
-              <FabAction icon="🗑" label={t('common.delete')} onClick={() => close(() => setConfirmDelete(true))} />
-            )}
-            {act.data && <FabAction icon="📄" label={t('acts.pdf')} onClick={() => close(() => void onPdf())} />}
-            {/* Same sheet as the top bar's 🔗. Duplicated on purpose: deep in a long editor the top
-                bar is scrolled away, and «поділитися» is exactly what the master reaches for there. */}
-            {act.data && (
-              <FabAction icon="🔗" label={t('acts.share')} onClick={() => close(() => void onShare())} />
-            )}
-            {!signed && (
-              <FabAction icon="✍️" label={t('acts.sign')} onClick={() => close(() => void (async () => {
-                // An unreadable field is caught BEFORE the signature sheet opens: the master types
-                // the client's name, taps «Підписати» and only then learns nothing was saved. A
-                // receipt still in the queue is refused in the same place and for the same reason
-                // (review P-36) — it is money on this screen that the signature would leave out.
-                if (invalid) {
-                  toast.error(t('acts.fixFields'));
-                  return;
-                }
-                if (!hasLines) {
-                  toast.info(t('acts.emptyHint'));
-                  return;
-                }
-                if (!(await queuedReceiptsClear())) return;
-                setSignOpen(true);
-              })())} />
-            )}
-          </>
-        )}
-      </Fab>
 
       {!signed && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">

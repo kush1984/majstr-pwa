@@ -61,18 +61,12 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
   };
 
   return (
-    <div className="space-y-3">
+    // pb-24: the last row (or the empty state's text) must be able to scroll clear of the «＋».
+    <div className="space-y-3 pb-24">
+      {/* The «＋» is the tab's ONE create action (it also says why it is blocked); the line below
+          only explains. A dashed «+ Новий акт» beside it was the same action twice. */}
       <Fab ariaLabel={t('acts.newAct')} onClick={onFab} />
-      {/* Create entry — disabled with a reason when the model won't allow another act. */}
       <div>
-        <button
-          type="button"
-          disabled={block !== null || !online}
-          onClick={() => newAct.start(list)}
-          className="w-full rounded-card border border-dashed border-brand/50 py-2.5 text-sm font-semibold text-brand disabled:cursor-not-allowed disabled:border-border disabled:text-muted"
-        >
-          {t('acts.newAct')}
-        </button>
         {!online && block === null && (
           <p className="mt-1.5 text-center text-[11px] text-muted">{t('acts.newActNeedsConnection')}</p>
         )}

@@ -1,3 +1,4 @@
+import { editableReceiptLabel, isServerReceiptName } from '@/lib/receiptName.ts';
 import { useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -90,7 +91,10 @@ export function ProjectReceiptsPage() {
     }
     if (out.error) toast.error(out.error);
     if (out.saved === 0) return;
-    if (out.unread > 0) toast.info(t('receipts.batchUnread', { count: out.unread }));
+    // Reading switched OFF is not a failed read (only the free QR was tried).
+    if (out.unread > 0) {
+      toast.info(t(choice.withAi ? 'receipts.batchUnread' : 'receipts.batchUnpriced', { count: out.unread }));
+    }
     else toast.success(t('receipts.batchDone', { count: out.saved }));
   };
 
@@ -646,7 +650,7 @@ function ReceiptForm({
   const key = editing?.id ?? null;
   if (key !== seededFor) {
     setSeededFor(key);
-    setLabel(editing?.label ?? '');
+    setLabel(editableReceiptLabel(editing?.label));
     setAmount(editing == null || editing.amount <= 0 ? '' : String(editing.amount));
     setIssuedAt(editing?.issuedAt ?? '');
     setReading(false);
@@ -664,8 +668,9 @@ function ReceiptForm({
   const billed = editing?.billedOnActId != null;
   // A billed receipt's amount is frozen and the field disabled, so only a live one can be wrong.
   const amountInvalid = !billed && amountOf(amount) === null;
-  // The server names a blank label «Чек №N», so there is always something here to keep.
-  const valid = label.trim() !== '' && !amountInvalid;
+  // The server names a blank label «Чек №N»; it stands in the placeholder, and a blank field keeps it.
+  const keepsServerName = isServerReceiptName(editing?.label);
+  const valid = (label.trim() !== '' || keepsServerName) && !amountInvalid;
   // Nothing a read could still fill in — leaving the button live invites a slow call whose only
   // possible effect is to overwrite what the master just typed off the paper in front of him.
   const nothingToRead = valid && num(amount) > 0 && issuedAt.trim() !== '';
@@ -713,7 +718,7 @@ function ReceiptForm({
         <Field label={t('receipts.label')}>
           <Input
             value={label}
-            placeholder={t('receipts.labelHint')}
+            placeholder={keepsServerName ? editing?.label : t('receipts.labelHint')}
             onChange={(e) => setLabel(e.target.value)}
           />
         </Field>
@@ -774,7 +779,7 @@ function ReceiptForm({
           disabled={!valid || reading}
           onClick={() =>
             onSubmit({
-              label: label.trim(),
+              label: label.trim() || (editing?.label ?? ''),
               // The stored figure, never the field's: a billed receipt's amount is frozen, and the
               // server refuses anything else.
               amount: billed ? (editing?.amount ?? 0) : num(amount),

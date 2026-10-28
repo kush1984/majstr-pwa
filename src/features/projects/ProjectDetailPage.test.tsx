@@ -6,7 +6,7 @@ import '@/lib/i18n.ts';
 import { ProjectDetailPage } from './ProjectDetailPage.tsx';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
-import type { ProjectResponse } from '@/api/types.ts';
+import type { EstimateSummary, ProjectResponse } from '@/api/types.ts';
 
 /**
  * Object-first: the object is where an estimate is made. Right after «Створити об'єкт» the page
@@ -92,6 +92,26 @@ describe('ProjectDetailPage — «Що далі?» (object-first)', () => {
 
     expect(await screen.findByRole('button', { name: 'Порожній кошторис' })).toBeTruthy();
     expect(screen.queryByText('Обʼєкт створено. Що далі?')).toBeNull();
+  });
+});
+
+describe('ProjectDetailPage — every estimate signed', () => {
+  // A signed estimate moves to «Економіка»; the tab used to answer «Ще немає кошторисів» about an
+  // object that has one.
+  it('says where the signed estimate went, and still offers another', async () => {
+    vi.mocked(estimatesApi.listForProject).mockResolvedValue([{
+      id: 'e1', projectId: 'p1', name: null, status: 'SIGNED', validUntil: null,
+      createdAt: '2026-10-19T10:00:00Z', updatedAt: '2026-10-19T10:00:00Z', countInEconomy: true,
+      markupPercent: null, duplicatedFromId: null, supersededByEstimateId: null,
+    } as unknown as EstimateSummary]);
+    renderPage('/projects/p1');
+
+    expect(await screen.findByText('Кошторис підписано')).toBeTruthy();
+    expect(screen.queryByText('Ще немає кошторисів')).toBeNull();
+    expect(screen.getByRole('button', { name: '+ Додатковий кошторис' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Відкрити «Економіку»' }));
+    await waitFor(() => expect(screen.queryByText('Кошторис підписано')).toBeNull());
   });
 });
 

@@ -284,6 +284,20 @@ describe('ActEditorPage', () => {
     expect(sent.items.map((i) => i.estimateItemId)).toEqual(['i1']);
   });
 
+  it('no FAB: «Зберегти» is the bottom bar, the rest lives in the header ⋮', async () => {
+    // The FAB used to be a menu (delete / PDF / share / sign) under a «＋», and it sat over the
+    // rows' sums. A FAB carries one action; this screen's one action is the save.
+    renderEditor();
+    await screen.findByText('Шпаклювання стін');
+
+    const menus = screen.getAllByLabelText('Дії з актом');
+    expect(menus).toHaveLength(1);
+    expect(menus[0].textContent).toBe('⋮');
+    fireEvent.click(menus[0]);
+    expect(await screen.findByText('Підписати')).toBeTruthy();
+    expect(screen.getByText('PDF')).toBeTruthy();
+  });
+
   it('signing an act with no lines is blocked with a hint instead of the modal', async () => {
     renderEditor();
     await screen.findByText('Шпаклювання стін'); // nothing ticked — the act is empty

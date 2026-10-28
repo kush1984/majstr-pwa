@@ -485,9 +485,10 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
-          {list.length > activeList.length && (
+          {list.length > activeList.length && activeList.length > 0 && (
             // Only the moment it's actually true for this object — a master with no signed
-            // estimates yet has nowhere for this hint to point to.
+            // estimates yet has nowhere for this hint to point to. With NOTHING left here the empty
+            // state below says it instead.
             <p className="mb-3 text-xs text-muted">{t('projects.signedMovedToEconomyHint')}</p>
           )}
 
@@ -500,6 +501,27 @@ export function ProjectDetailPage() {
 
           {estimates.isPending ? (
             <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
+          ) : activeList.length === 0 && list.length > 0 ? (
+            // Every estimate is signed and moved to «Економіка». «Ще немає кошторисів» on an object
+            // with a signed one read as if it had been lost.
+            <EmptyState
+              icon="✅"
+              title={t('projects.allSignedTitle')}
+              text={t('projects.allSignedText')}
+              action={
+                <div className="flex flex-col items-center gap-3">
+                  <Button onClick={() => setTab('economy')}>{t('projects.allSignedToEconomy')}</Button>
+                  <button
+                    type="button"
+                    onClick={addEstimate}
+                    disabled={atEstimateLimit}
+                    className="min-h-[44px] text-sm font-semibold text-brand disabled:opacity-60"
+                  >
+                    {t('projects.allSignedAddEstimate')}
+                  </button>
+                </div>
+              }
+            />
           ) : activeList.length === 0 ? (
             <EmptyState
               icon="🧾"

@@ -48,14 +48,14 @@ function renderSection() {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ActsSection', () => {
-  it('empty object: «+ Новий акт» is enabled and the teaching empty state shows', async () => {
+  it('empty object: the «＋» is the ONE create action, and the teaching empty state shows', async () => {
     vi.mocked(actsApi.list).mockResolvedValue([]);
 
     renderSection();
 
-    const btn = await screen.findByText('+ Новий акт');
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByText('Актів ще немає')).toBeTruthy();
+    expect(await screen.findByText('Актів ще немає')).toBeTruthy();
+    // The dashed «+ Новий акт» beside the «＋» was the same action twice.
+    expect(screen.getAllByRole('button', { name: '+ Новий акт' })).toHaveLength(1);
   });
 
   it('«+ Новий акт» only opens the editor — nothing is created until «Зберегти»', async () => {
@@ -63,7 +63,7 @@ describe('ActsSection', () => {
     vi.mocked(actsApi.list).mockResolvedValue([act({ status: 'SIGNED', periodTo: '2026-08-14' })]);
 
     renderSection();
-    fireEvent.click(await screen.findByText('+ Новий акт'));
+    fireEvent.click(await screen.findByRole('button', { name: '+ Новий акт' }));
 
     expect(actsApi.create).not.toHaveBeenCalled();
     // The period start still comes from this side (it knows the object's acts) — via the URL now.
@@ -76,9 +76,10 @@ describe('ActsSection', () => {
 
     renderSection();
 
-    const btn = await screen.findByText('+ Новий акт');
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Спершу завершіть відкритий акт')).toBeTruthy();
+    expect(await screen.findByText('Спершу завершіть відкритий акт')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '+ Новий акт' }));
+    expect(toast.info).toHaveBeenCalledWith('Спершу завершіть відкритий акт');
+    expect(screen.getByTestId('loc').textContent).toBe('/');
   });
 
   it('a FINAL act closes the object to any further acts', async () => {
@@ -86,9 +87,9 @@ describe('ActsSection', () => {
 
     renderSection();
 
-    const btn = await screen.findByText('+ Новий акт');
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/фінальним актом/)).toBeTruthy();
+    expect(await screen.findByText(/фінальним актом/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '+ Новий акт' }));
+    expect(screen.getByTestId('loc').textContent).toBe('/');
   });
 
   it('a SENT act offers recall and «client declined» — the exits REJECTED was built for', async () => {
@@ -125,12 +126,10 @@ describe('ActsSection', () => {
 });
 
 describe('ActsSection — the «＋» (object-first)', () => {
-  it('starts an act, exactly like the button', async () => {
+  it('starts an act', async () => {
     vi.mocked(actsApi.list).mockResolvedValue([]);
     renderSection();
-    await screen.findByText('+ Новий акт');
-
-    fireEvent.click(screen.getAllByRole('button', { name: /Новий акт/ }).find((b) => b.className.includes('rounded-full'))!);
+    fireEvent.click(await screen.findByRole('button', { name: '+ Новий акт' }));
 
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toMatch(/^\/acts\/new\?project=p1/));
     expect(actsApi.create).not.toHaveBeenCalled();
@@ -139,9 +138,7 @@ describe('ActsSection — the «＋» (object-first)', () => {
   it('with an open act it says why, and opens nothing', async () => {
     vi.mocked(actsApi.list).mockResolvedValue([act({ status: 'SENT' })]);
     renderSection();
-    await screen.findByText('+ Новий акт');
-
-    fireEvent.click(screen.getAllByRole('button', { name: /Новий акт/ }).find((b) => b.className.includes('rounded-full'))!);
+    fireEvent.click(await screen.findByRole('button', { name: '+ Новий акт' }));
 
     expect(toast.info).toHaveBeenCalledWith('Спершу завершіть відкритий акт');
     expect(screen.getByTestId('loc').textContent).toBe('/');

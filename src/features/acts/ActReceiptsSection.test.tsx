@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActReceiptsSection, isLongBefore } from './ActReceiptsSection.tsx';
 import { actsApi } from '@/api/acts.ts';
+import { toast } from '@/hooks/useToast.ts';
 import { decodeQrFromFile } from '@/lib/qr.ts';
 import { useOnline } from '@/lib/useOnline.ts';
 import { dropQueuedReceipt, patchQueuedReceipt, type QueuedActReceipt } from './offlineReceipts.ts';
@@ -293,6 +294,52 @@ describe('ActReceiptsSection', () => {
     expect(rows[0]).toContain('Чек №3');
     expect(rows[1]).toContain('2.');
     expect(rows[1]).toContain('Чек №1');
+  });
+
+  it('reading switched OFF: the toast says the sums are to be typed, never «не вдалося прочитати»', async () => {
+    // He chose to type the sums himself; blaming a read he did not ask for read as a failure.
+    renderSection({ receipts: [] });
+
+    pickAndStart(1, () => fireEvent.click(screen.getByText('Прочитати суми автоматично')));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('Додано без суми: 1 — впишіть її з фото.'));
+    expect(toast.info).not.toHaveBeenCalledWith(expect.stringMatching(/Не вдалося прочитати/));
+  });
+
+  it('reading ON and nothing read: that failure is still named', async () => {
+    renderSection({ receipts: [] });
+
+    pickAndStart(1);
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('Не вдалося прочитати чеків: 1 — впишіть суму вручну.'));
+  });
+
+  it("the server's «Чек №N» is the placeholder: typing replaces it, a blank keeps it", async () => {
+    // Typing into a field holding «Чек №1» appended — «Чек №1Кабель, п…» landed in «Мої гроші».
+    renderSection({ receipts: [receipt({ id: 'r1', label: 'Чек №1', amount: 0, issuedAt: null, hasPhoto: false })] });
+
+    fireEvent.click(screen.getByText('Редагувати'));
+    const name = screen.getByPlaceholderText('Чек №1');
+    expect(name.value).toBe('');
+    const amount = document.querySelector('[role="dialog"] input[inputmode="decimal"]') as HTMLInputElement;
+    fireEvent.change(amount, { target: { value: '3485' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(actsApi.updateReceipt).toHaveBeenCalled());
+    expect(vi.mocked(actsApi.updateReceipt).mock.calls[0][2]).toMatchObject({ label: 'Чек №1', amount: 3485 });
+  });
+
+  it('a name the master typed replaces «Чек №N» rather than joining it', async () => {
+    renderSection({ receipts: [receipt({ id: 'r1', label: 'Чек №1', amount: 0, issuedAt: null, hasPhoto: false })] });
+
+    fireEvent.click(screen.getByText('Редагувати'));
+    fireEvent.change(screen.getByPlaceholderText('Чек №1'), { target: { value: 'Кабель, підрозетники' } });
+    const amount = document.querySelector('[role="dialog"] input[inputmode="decimal"]') as HTMLInputElement;
+    fireEvent.change(amount, { target: { value: '3485' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(actsApi.updateReceipt).toHaveBeenCalled());
+    expect(vi.mocked(actsApi.updateReceipt).mock.calls[0][2]).toMatchObject({ label: 'Кабель, підрозетники' });
   });
 
   it('the edit dialog shows the paper, and a tap opens it full-size', async () => {
