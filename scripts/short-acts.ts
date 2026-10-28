@@ -161,9 +161,10 @@ async function record(browser: Browser, rec: Recorder, s: Seeded): Promise<void>
   await page.getByRole('button', { name: 'Редагувати', exact: true }).first().click();
   await beat(page, 1200);
   const sheet = page.getByRole('dialog').last();
-  // The server names a fresh receipt «Чек №N» in the field itself — clear it, or the label is appended.
-  await sheet.getByPlaceholder('Епіцентр — клей і грунтовка').fill('');
-  await sheet.getByPlaceholder('Епіцентр — клей і грунтовка').pressSequentially(RECEIPT.label, { delay: 35 * PACE });
+  // The server's «Чек №N» is the field's placeholder: typing replaces it.
+  const receiptName = sheet.getByPlaceholder(/^Чек №\d+$/);
+  await receiptName.click();
+  await receiptName.pressSequentially(RECEIPT.label, { delay: 35 * PACE });
   await sheet.locator('input[inputmode="decimal"]').first().click();
   await sheet.locator('input[inputmode="decimal"]').first().pressSequentially(RECEIPT.amount, { delay: 90 * PACE });
   await beat(page, 600);
