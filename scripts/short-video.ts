@@ -292,11 +292,13 @@ async function snap(page: Page, name: string): Promise<void> {
 }
 
 /** A human pace: the viewer has to see the tap land before the screen moves on. */
-const beat = (page: Page, ms = 700) => page.waitForTimeout(ms);
+/** SHORT_PACE stretches every pause (1 = brisk, 1.6 = easy to follow on a phone). */
+const PACE = Number(process.env.SHORT_PACE ?? 1);
+const beat = (page: Page, ms = 700) => page.waitForTimeout(ms * PACE);
 
 async function typeSlow(page: Page, selector: string, text: string): Promise<void> {
   await page.locator(selector).click();
-  await page.locator(selector).pressSequentially(text, { delay: 35 });
+  await page.locator(selector).pressSequentially(text, { delay: 35 * PACE });
 }
 
 async function startVite(): Promise<ChildProcess> {
@@ -541,6 +543,8 @@ const HOOK_SECONDS = 2.4;
 const OUTRO_SECONDS = 3.2;
 /** The body is sped up to land the whole short near the music's length. */
 const TARGET_SECONDS = 31;
+/** SHORT_REALTIME=1 keeps the recording at its own speed instead of fitting it to TARGET_SECONDS. */
+const REALTIME = process.env.SHORT_REALTIME === '1';
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -626,7 +630,7 @@ async function compose(browser: Browser): Promise<void> {
 
   const duration = Number(spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', rawPath]).stdout.toString());
   const bodyRaw = duration - steps[0].at;
-  const speed = Math.max(1, bodyRaw / (TARGET_SECONDS - HOOK_SECONDS - OUTRO_SECONDS));
+  const speed = REALTIME ? 1 : Math.max(1, bodyRaw / (TARGET_SECONDS - HOOK_SECONDS - OUTRO_SECONDS));
   console.log(`  raw ${bodyRaw.toFixed(1)} s of steps → ×${speed.toFixed(2)}`);
 
   // One input per step background, then the bezel, hook and outro stills.
@@ -663,9 +667,10 @@ async function compose(browser: Browser): Promise<void> {
     console.log('  (no SHORT_MUSIC — the short is silent)');
   } else {
     const len = Number(spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', silent]).stdout.toString());
-    ffmpeg(['-i', silent, '-stream_loop', '-1', '-i', music, '-filter_complex',
-      `[1:a]atrim=duration=${len.toFixed(3)},afade=t=out:st=${(len - 1.2).toFixed(3)}:d=1.2[a]`,
-      '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', final]);
+    // A short longer than the track gets the track again, crossfaded over its own fade-out.
+    ffmpeg(['-i', silent, '-i', music, '-i', music, '-i', music, '-filter_complex',
+      `[1:a][2:a]acrossfade=d=2[m1];[m1][3:a]acrossfade=d=2[m];[m]atrim=duration=${len.toFixed(3)},afade=t=out:st=${(len - 1.5).toFixed(3)}:d=1.5[a]`,
+      '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', final]);
     rmSync(silent);
   }
   console.log(`  ✓ ${path.relative(root, final)}`);
