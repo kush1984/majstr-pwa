@@ -98,7 +98,7 @@ describe('ProjectDetailPage — «Що далі?» (object-first)', () => {
 describe('ProjectDetailPage — every estimate signed', () => {
   // A signed estimate moves to «Економіка»; the tab used to answer «Ще немає кошторисів» about an
   // object that has one.
-  it('says where the signed estimate went, and still offers another', async () => {
+  it('says where the signed estimate went', async () => {
     vi.mocked(estimatesApi.listForProject).mockResolvedValue([{
       id: 'e1', projectId: 'p1', name: null, status: 'SIGNED', validUntil: null,
       createdAt: '2026-10-19T10:00:00Z', updatedAt: '2026-10-19T10:00:00Z', countInEconomy: true,
@@ -108,7 +108,8 @@ describe('ProjectDetailPage — every estimate signed', () => {
 
     expect(await screen.findByText('Кошторис підписано')).toBeTruthy();
     expect(screen.queryByText('Ще немає кошторисів')).toBeNull();
-    expect(screen.getByRole('button', { name: '+ Додатковий кошторис' })).toBeTruthy();
+    // A further estimate is the «＋»'s, not a second button here.
+    expect(screen.getAllByRole('button', { name: 'Новий кошторис' })).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Відкрити «Економіку»' }));
     await waitFor(() => expect(screen.queryByText('Кошторис підписано')).toBeNull());

@@ -508,19 +508,8 @@ export function ProjectDetailPage() {
               icon="✅"
               title={t('projects.allSignedTitle')}
               text={t('projects.allSignedText')}
-              action={
-                <div className="flex flex-col items-center gap-3">
-                  <Button onClick={() => setTab('economy')}>{t('projects.allSignedToEconomy')}</Button>
-                  <button
-                    type="button"
-                    onClick={addEstimate}
-                    disabled={atEstimateLimit}
-                    className="min-h-[44px] text-sm font-semibold text-brand disabled:opacity-60"
-                  >
-                    {t('projects.allSignedAddEstimate')}
-                  </button>
-                </div>
-              }
+              // «Новий кошторис» stays the «＋»'s — one action, one place.
+              action={<Button onClick={() => setTab('economy')}>{t('projects.allSignedToEconomy')}</Button>}
             />
           ) : activeList.length === 0 ? (
             <EmptyState

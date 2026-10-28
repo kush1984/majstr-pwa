@@ -419,7 +419,6 @@
     "allSignedTitle": "Estimate signed",
     "allSignedText": "Signed estimates live in the «Economy» tab — with the contract, payments and acts.",
     "allSignedToEconomy": "Open «Economy»",
-    "allSignedAddEstimate": "+ Additional estimate",
     "noEstimatesTitle": "No estimates yet",
     "noEstimatesText": "Create the first estimate for this object.",
     "createEstimateFirst": "Create an estimate first",
