@@ -114,7 +114,7 @@ async function record(browser: Browser, rec: Recorder, s: Seeded): Promise<void>
   const warm = await context.newPage();
   warm.setDefaultTimeout(120_000);
   await warm.goto(`${APP}/projects/${s.projectId}?tab=acts`);
-  await warm.getByText('Новий акт').first().waitFor().catch(async (e: unknown) => {
+  await warm.getByRole('button', { name: '+ Новий акт' }).waitFor().catch(async (e: unknown) => {
     await warm.screenshot({ path: path.join(outDir, 'warm-failed.png') });
     console.log('  warm-up stuck at', warm.url());
     throw e;
@@ -124,11 +124,12 @@ async function record(browser: Browser, rec: Recorder, s: Seeded): Promise<void>
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   await page.goto(`${APP}/projects/${s.projectId}?tab=acts`);
-  await page.getByText('Новий акт').first().waitFor();
+  await page.getByRole('button', { name: '+ Новий акт' }).waitFor();
   rec.start(page);
   await rec.step(page, 'Робота йде — складаю акт');
   await beat(page, 1300);
-  await page.getByText('Новий акт').first().click();
+  // The «＋» is the tab's one create action.
+  await page.getByRole('button', { name: '+ Новий акт' }).click();
   await page.getByText('Кошторис від', { exact: false }).first().waitFor();
   await beat(page, 900);
 
