@@ -8,6 +8,7 @@
 //   SHORT_REALTIME=1     keeps the recording's own speed instead of fitting it to ~31 s
 //   SHORT_MUSIC=…m4a     lays the track under the short, crossfaded into itself when it runs out
 //   SHORT_SHOTS=1        drops a PNG at every step into <out>/debug/
+//   SHORT_HOOK_SECONDS=5 holds the opening card longer (a voice-over's first line)
 //   PW_CHROMIUM=…        a Chromium to launch instead of Playwright's own
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -174,7 +175,8 @@ const INK = '#2b1d14';
 const AMBER = '#f26b1f';
 const FONT = "Inter, 'Segoe UI', Roboto, Arial, sans-serif";
 
-const HOOK_SECONDS = 2.4;
+/** SHORT_HOOK_SECONDS holds the opening card longer — a voice-over's first line has to fit on it. */
+const HOOK_SECONDS = Number(process.env.SHORT_HOOK_SECONDS ?? 2.4);
 const OUTRO_SECONDS = 3.2;
 /** The body is sped up to land the whole short near the music's length. */
 const TARGET_SECONDS = 31;
