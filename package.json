@@ -17,6 +17,7 @@
     "youtube:assets": "node scripts/youtube-assets.ts",
     "short:video": "node scripts/short-video.ts",
     "short:economy": "node scripts/short-economy.ts",
+    "short:acts": "node scripts/short-acts.ts",
     "seo:snapshot": "node scripts/seo-snapshot.ts",
     "seo:check": "node scripts/seo-snapshot.ts --check",
     "test:e2e": "playwright test",
