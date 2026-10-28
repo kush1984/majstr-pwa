@@ -281,32 +281,44 @@ export async function compose(browser: Browser, rec: Recorder, spec: ShortSpec):
   const speed = REALTIME ? 1 : Math.max(1, bodyRaw / (TARGET_SECONDS - HOOK_SECONDS - OUTRO_SECONDS));
   console.log(`  raw ${bodyRaw.toFixed(1)} s of steps → ×${speed.toFixed(2)}`);
 
-  // One input per step background, then the bezel, hook and outro stills.
-  const inputs = ['-i', rawPath];
-  steps.forEach((_, i) => inputs.push('-loop', '1', '-i', path.join(frames, `bg-${i}.png`)));
-  const bezel = steps.length + 1;
-  inputs.push('-loop', '1', '-i', path.join(frames, 'bezel.png'));
-  inputs.push('-loop', '1', '-t', String(HOOK_SECONDS), '-i', path.join(frames, 'hook.png'));
-  inputs.push('-loop', '1', '-t', String(OUTRO_SECONDS), '-i', path.join(frames, 'outro.png'));
-  const hook = bezel + 1;
-  const outro = bezel + 2;
+  // One ffmpeg per piece, then a lossless join. A single graph that split the whole recording into
+  // a branch per step held every frame of it in memory at once — 12 GB and an OOM kill on a
+  // one-minute short.
+  const pieces = path.join(outDir, 'pieces');
+  rmSync(pieces, { recursive: true, force: true });
+  mkdirSync(pieces, { recursive: true });
+  const encode = ['-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-r', '30', '-pix_fmt', 'yuv420p'];
+  const card = (png: string, seconds: number, out: string) =>
+    ffmpeg(['-loop', '1', '-t', String(seconds), '-i', png, '-vf', 'fps=30,setsar=1', ...encode, out]);
 
-  const f: string[] = [];
-  f.push(`[0:v]fps=30,scale=${PHONE.w}:${PHONE.h}:flags=lanczos,split=${steps.length}${steps.map((_, i) => `[v${i}]`).join('')}`);
-  f.push(`[${bezel}:v]format=rgba,split=${steps.length}${steps.map((_, i) => `[z${i}]`).join('')}`);
+  const list: string[] = [];
+  const hookOut = path.join(pieces, '00-hook.mp4');
+  card(path.join(frames, 'hook.png'), HOOK_SECONDS, hookOut);
+  list.push(hookOut);
   steps.forEach((st, i) => {
     const end = i + 1 < steps.length ? steps[i + 1].at : duration;
     const len = (end - st.at) / speed;
-    f.push(`[v${i}]trim=start=${st.at.toFixed(3)}:end=${end.toFixed(3)},setpts=(PTS-STARTPTS)/${speed.toFixed(4)}[c${i}]`);
-    f.push(`[${i + 1}:v]fps=30,trim=duration=${len.toFixed(3)}[b${i}]`);
-    f.push(`[b${i}][c${i}]overlay=${PHONE.x}:${PHONE.y}:shortest=1[o${i}]`);
-    f.push(`[o${i}][z${i}]overlay=0:0:shortest=1,setsar=1[s${i}]`);
+    const out = path.join(pieces, `${String(i + 1).padStart(2, '0')}-step.mp4`);
+    ffmpeg([
+      '-ss', st.at.toFixed(3), '-t', (end - st.at).toFixed(3), '-i', rawPath,
+      '-loop', '1', '-i', path.join(frames, `bg-${i}.png`),
+      '-loop', '1', '-i', path.join(frames, 'bezel.png'),
+      '-filter_complex',
+      `[0:v]setpts=(PTS-STARTPTS)/${speed.toFixed(4)},fps=30,scale=${PHONE.w}:${PHONE.h}:flags=lanczos[c];` +
+      `[1:v]fps=30[b];[2:v]format=rgba[z];[b][c]overlay=${PHONE.x}:${PHONE.y}:shortest=1[o];` +
+      `[o][z]overlay=0:0:shortest=1,setsar=1[out]`,
+      '-map', '[out]', '-t', len.toFixed(3), ...encode, out,
+    ]);
+    list.push(out);
   });
-  f.push(`[${hook}:v]fps=30,setsar=1[h]`);
-  f.push(`[${outro}:v]fps=30,setsar=1[e]`);
-  f.push(`[h]${steps.map((_, i) => `[s${i}]`).join('')}[e]concat=n=${steps.length + 2}:v=1:a=0,format=yuv420p[out]`);
+  const outroOut = path.join(pieces, '99-outro.mp4');
+  card(path.join(frames, 'outro.png'), OUTRO_SECONDS, outroOut);
+  list.push(outroOut);
+
+  const listFile = path.join(pieces, 'list.txt');
+  writeFileSync(listFile, list.map((f) => `file '${f}'`).join('\n'));
   const silent = path.join(outDir, 'silent.mp4');
-  ffmpeg([...inputs, '-filter_complex', f.join(';'), '-map', '[out]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-r', '30', silent]);
+  ffmpeg(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', silent]);
 
   const music = process.env.SHORT_MUSIC;
   const final = path.join(outDir, spec.file);
