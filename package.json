@@ -15,6 +15,7 @@
     "landing:photos": "node scripts/landing-photos.ts",
     "og:images": "node scripts/og-images.ts",
     "youtube:assets": "node scripts/youtube-assets.ts",
+    "short:video": "node scripts/short-video.ts",
     "seo:snapshot": "node scripts/seo-snapshot.ts",
     "seo:check": "node scripts/seo-snapshot.ts --check",
     "test:e2e": "playwright test",
