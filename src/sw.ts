@@ -47,6 +47,8 @@ const NAVIGATION_DENYLIST = [
   /^\/kalkulyator-shtukaturky/,
   /^\/kalkulyator-styazhky/,
   /^\/kalkulyator-ploshchi-stin/,
+  /^\/zrazok-koshtorysu/,
+  /^\/zrazok-akta/,
 ];
 
 registerRoute(

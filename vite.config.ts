@@ -29,6 +29,8 @@ export default defineConfig({
         'kalkulyator-shtukaturky': path.resolve(__dirname, 'kalkulyator-shtukaturky.html'),
         'kalkulyator-styazhky': path.resolve(__dirname, 'kalkulyator-styazhky.html'),
         'kalkulyator-ploshchi-stin': path.resolve(__dirname, 'kalkulyator-ploshchi-stin.html'),
+        'zrazok-koshtorysu': path.resolve(__dirname, 'zrazok-koshtorysu.html'),
+        'zrazok-akta': path.resolve(__dirname, 'zrazok-akta.html'),
       },
     },
   },

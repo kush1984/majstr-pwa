@@ -148,3 +148,38 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
   background: #fff; color: var(--amber-deep); cursor: pointer; touch-action: manipulation;
 }
 .seo-own-hint { margin: 10px 0 0; font-size: 14px; opacity: 0.95; }
+
+/* The sample estimate page: the document itself, laid out like the app's PDF but readable on a phone —
+   the quantity × price sits under the name, so the table needs only two columns at 375 px. */
+.seo-doc { margin: 8px 0 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.seo-doc-head { border-bottom: 2px solid var(--ink); padding-bottom: 8px; margin-bottom: 10px; }
+.seo-doc-title { margin: 0; font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: 0.02em; }
+.seo-doc-head .seo-small { margin: 2px 0 0; }
+.seo-doc-meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 12px; font-size: 14px; }
+.seo-doc-meta dt { color: var(--muted); }
+.seo-doc-meta dd { margin: 0; }
+.seo-estimate { width: 100%; border-collapse: collapse; font-size: 14px; }
+.seo-estimate th, .seo-estimate td { text-align: left; vertical-align: top; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.seo-estimate thead th { font-size: 13px; color: var(--muted); font-weight: 600; }
+.seo-estimate thead th:last-child, .seo-estimate-sum { text-align: right; white-space: nowrap; }
+.seo-estimate-section th { background: var(--paper); font-weight: 700; padding: 6px 8px; }
+.seo-estimate-name { display: block; }
+.seo-estimate-calc { display: block; font-size: 13px; color: var(--muted); }
+.seo-estimate tfoot th, .seo-estimate tfoot td { font-weight: 800; font-size: 16px; border-bottom: 0; border-top: 2px solid var(--ink); }
+.seo-doc-terms { margin: 12px 0 0; font-size: 14px; }
+.seo-checklist { padding-left: 22px; }
+.seo-checklist li { margin: 6px 0; }
+.seo-faq h3 { font-size: 17px; margin: 18px 0 4px; }
+.seo-faq p { margin: 0; }
+
+/* The sample act: the parties, the two parts (works / additional works), the totals and the signatures. */
+.seo-doc-part { font-size: 14px; text-transform: uppercase; letter-spacing: 0.03em; margin: 16px 0 4px; }
+.seo-parties { display: grid; gap: 10px; margin: 0 0 4px; font-size: 14px; }
+.seo-parties p { margin: 0; }
+.seo-parties b { display: block; }
+.seo-act-totals { margin-top: 8px; }
+.seo-act-totals th { font-weight: 600; }
+.seo-estimate-grand th, .seo-estimate-grand td { font-weight: 800; font-size: 16px; border-top: 2px solid var(--ink); border-bottom: 0; }
+.seo-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; font-size: 14px; }
+.seo-signatures p { margin: 0; }
+.seo-signatures span { display: block; margin-top: 28px; border-top: 1px solid var(--ink); padding-top: 4px; color: var(--muted); font-size: 13px; }

@@ -57,6 +57,8 @@ describe('public/sitemap.xml', () => {
       'https://majstr.pro/kalkulyator-shtukaturky',
       'https://majstr.pro/kalkulyator-styazhky',
       'https://majstr.pro/kalkulyator-ploshchi-stin',
+      'https://majstr.pro/zrazok-koshtorysu',
+      'https://majstr.pro/zrazok-akta',
     ]);
     expect(read('index.html')).toContain('<link rel="canonical" href="https://majstr.pro/" />');
     expect(read('kalkulyator-plytky.html')).toContain('href="https://majstr.pro/kalkulyator-plytky"');

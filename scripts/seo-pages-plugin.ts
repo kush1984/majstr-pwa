@@ -3,13 +3,19 @@
 // ever typed by hand. A page marks the spot with <!--SEO_TABLE:<CALCULATOR>--> (TILE, DRYWALL,
 // PLASTER, SCREED), and quotes one case in its prose with <!--SEO_EXAMPLE:<id>-->. The wall-area page
 // asks no server, so its table comes straight from src/seo/wallArea.ts: <!--SEO_AREA_TABLE--> and
-// <!--SEO_AREA_EXAMPLE:<id>-->.
+// <!--SEO_AREA_EXAMPLE:<id>-->. The sample-document pages print theirs from src/seo/sampleEstimate.ts and
+// src/seo/sampleAct.ts: <!--SEO_SAMPLE_ESTIMATE|TOTAL|COUNT--> and <!--SEO_ACT_DOCUMENT|PAYABLE|COUNT-->.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 import type { CalcSnapshot, SnapshotMaterial, SnapshotRow } from './seo-calc-cases.ts';
 import { WALL_AREA_CASES, wallArea, type WallAreaCase } from '../src/seo/wallArea.ts';
+import { SAMPLE_LINES, lineTotalKop, sampleSections, sampleTotalKop, type SampleLine } from '../src/seo/sampleEstimate.ts';
+import {
+  SAMPLE_ACT_ADDITIONAL, SAMPLE_ADVANCE_PERCENT, actAdvanceKop, actGrandKop, actPayableKop,
+} from '../src/seo/sampleAct.ts';
+import { hryvniaInWords } from '../src/seo/hryvniaInWords.ts';
 
 const UNIT: Record<string, string> = {
   KG: 'кг', M2: 'м²', LINEAR_METER: 'м.п.', PIECE: 'шт', LITRE: 'л', M3: 'м³',
@@ -74,6 +80,55 @@ export function areaExampleText(c: WallAreaCase): string {
   return escapeHtml(`${label}: ${areaFigures(c).join('; ')}`);
 }
 
+const money = new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function moneyText(kop: number): string {
+  return money.format(kop / 100);
+}
+
+/** Section header rows and numbered line rows; numbering continues from `n`, as the act PDF's does. */
+function lineRows(lines: SampleLine[], n: { value: number }, withSections = true): string {
+  return sampleSections(lines).map((section) => {
+    const rows = section.lines.map((line) => {
+      n.value += 1;
+      const calc = `${number.format(line.quantity)} ${UNIT[line.unit] ?? line.unit} × ${number.format(line.price)} грн`;
+      return `<tr><td><span class="seo-estimate-name">${n.value}. ${escapeHtml(line.name)}</span>`
+        + `<span class="seo-estimate-calc">${escapeHtml(calc)}</span></td>`
+        + `<td class="seo-estimate-sum">${moneyText(lineTotalKop(line))}</td></tr>`;
+    }).join('');
+    if (!withSections) return rows;
+    return `<tr class="seo-estimate-section"><th scope="rowgroup" colspan="2">${escapeHtml(section.name)}</th></tr>${rows}`;
+  }).join('');
+}
+
+const HEAD = '<thead><tr><th scope="col">Робота</th><th scope="col">Сума, грн</th></tr></thead>';
+
+function totalRow(label: string, value: string, emphasize = false): string {
+  return `<tr${emphasize ? ' class="seo-estimate-grand"' : ''}><th scope="row">${label}</th><td class="seo-estimate-sum">${value}</td></tr>`;
+}
+
+/** The sample estimate as the app's PDF lays it out: sections, numbered lines, «Разом». */
+export function sampleEstimateHtml(): string {
+  return `<table class="seo-estimate">${HEAD}<tbody>${lineRows(SAMPLE_LINES, { value: 0 })}</tbody>`
+    + `<tfoot>${totalRow('Разом', moneyText(sampleTotalKop()))}</tfoot></table>`;
+}
+
+/** The sample act's money part, in the act PDF's order: works, additional works, totals, the sum in words. */
+export function sampleActHtml(): string {
+  const n = { value: 0 };
+  const works = `<h3 class="seo-doc-part">І. Виконані роботи</h3>`
+    + `<table class="seo-estimate">${HEAD}<tbody>${lineRows(SAMPLE_LINES, n)}</tbody></table>`;
+  const additional = `<h3 class="seo-doc-part">ІІ. Додаткові роботи</h3>`
+    + `<table class="seo-estimate">${HEAD}<tbody>${lineRows(SAMPLE_ACT_ADDITIONAL, n, false)}</tbody></table>`;
+  const totals = `<table class="seo-estimate seo-act-totals"><tbody>`
+    + totalRow('Разом за актом', moneyText(actGrandKop()))
+    + totalRow(`Зараховано авансів (${SAMPLE_ADVANCE_PERCENT} %)`, `− ${moneyText(actAdvanceKop())}`)
+    + totalRow('До сплати', moneyText(actPayableKop()), true)
+    + `</tbody></table>`;
+  const words = `<p class="seo-doc-terms">Сума до сплати прописом: ${escapeHtml(hryvniaInWords(actPayableKop()))}.</p>`;
+  return works + additional + totals + words;
+}
+
 function wallAreaCase(id: string): WallAreaCase {
   const c = WALL_AREA_CASES.find((x) => x.id === id);
   if (!c) throw new Error(`src/seo/wallArea.ts has no case «${id}»`);
@@ -86,6 +141,18 @@ export function seoCalcTables(root: string): Plugin {
     transformIndexHtml: {
       order: 'pre',
       handler(html) {
+        if (html.includes('<!--SEO_SAMPLE_')) {
+          html = html
+            .replace(/<!--SEO_SAMPLE_ESTIMATE-->/g, () => sampleEstimateHtml())
+            .replace(/<!--SEO_SAMPLE_TOTAL-->/g, () => moneyText(sampleTotalKop()))
+            .replace(/<!--SEO_SAMPLE_COUNT-->/g, () => String(SAMPLE_LINES.length));
+        }
+        if (html.includes('<!--SEO_ACT_')) {
+          html = html
+            .replace(/<!--SEO_ACT_DOCUMENT-->/g, () => sampleActHtml())
+            .replace(/<!--SEO_ACT_PAYABLE-->/g, () => moneyText(actPayableKop()))
+            .replace(/<!--SEO_ACT_COUNT-->/g, () => String(SAMPLE_LINES.length + SAMPLE_ACT_ADDITIONAL.length));
+        }
         if (html.includes('<!--SEO_AREA_')) {
           html = html
             .replace(/<!--SEO_AREA_TABLE-->/g, () => areaTableHtml(WALL_AREA_CASES))
