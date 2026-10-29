@@ -293,6 +293,22 @@ one-line summary — keep the item in the file as a record.
 
 ## Quality & tooling
 
+### Landing page shipped the whole authenticated app bundle
+- **Status:** OPEN (parked 2026-10-29) — a working draft sits in the local stash
+  «PARKED: lazy routes + chunkReload».
+- **Context:** `src/routes/routes.tsx` imports every page statically, so a guest on `/` (the SEO
+  entry point) downloads the estimate editor, pdf-lib, 7z-wasm and every feature page: one `main`
+  chunk of 1.75 MB (526 KB gzip).
+- **Draft:** every route except `LandingPage` is `React.lazy` behind one `page()` Suspense helper
+  (`main` → ~870 KB, 275 KB gzip), plus `lib/chunkReload.ts` reloading once on `vite:preloadError`
+  (30 s cooldown) for a tab left on the previous deploy.
+- **Why parked:** it changes how the whole authenticated app loads, for an SEO-only gain. Before it
+  ships: `npm run test:e2e:offline` plus a manual check that a never-opened route (the shopping
+  list) opens offline; a compact in-layout Suspense fallback instead of the `min-h-dvh`
+  `FullPageSpinner` under `AppLayout`.
+- **Further:** the remaining `main` is react/react-dom/react-query/i18n/Sentry/PostHog + the shell.
+  Vendor `manualChunks` or lazy Sentry/PostHog init would cut it more.
+
 ### ESLint config missing
 - **Status:** RESOLVED (2026-08-20) — `eslint.config.js` is committed, the script is
   `eslint . --max-warnings 0`, and CI's `verify` job runs it as the FIRST gate step, so a single

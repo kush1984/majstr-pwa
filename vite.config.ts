@@ -66,6 +66,7 @@ export default defineConfig({
         globIgnores: ['**/api/**'],
       },
       manifest: {
+        id: '/',
         name: 'Majstr — кошториси для підрядника',
         short_name: 'Majstr',
         description:
