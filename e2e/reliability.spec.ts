@@ -32,6 +32,7 @@ test('backend недоступний → дружній екран помилк�
   await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
   await page.fill('#phone', '+380501119999');
   await page.fill('#companyName', 'Релі ФОП');
+  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
   await expect(page).toHaveURL('http://localhost:5173/', { timeout: 25_000 });

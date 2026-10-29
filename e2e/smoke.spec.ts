@@ -22,6 +22,7 @@ test('повний сценарій підрядника: реєстрація �
   await page.locator('input[type="checkbox"][value="TILING"]').check();
   await page.fill('#phone', '+380501112233');
   await page.fill('#companyName', 'Е2Е ФОП');
+  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
   // 2 — Dashboard (new user → teaching empty state)
@@ -37,6 +38,8 @@ test('повний сценарій підрядника: реєстрація �
   await page.fill('#pr-addr', 'вул. Тестова 1');
   await page.getByRole('button', { name: /Клієнт — необов/ }).click();
   await page.getByRole('button', { name: 'Новий', exact: true }).click();
+  // A fresh master confirms once that he may enter a client's data.
+  await page.getByRole('button', { name: 'Зрозуміло, підтверджую' }).click();
   await page.fill('#cp-name', 'Олена Е2Е');
   await page.fill('#cp-phone', '+380671234567');
   await page.getByRole('button', { name: 'Створити обʼєкт' }).click();
@@ -47,13 +50,14 @@ test('повний сценарій підрядника: реєстрація �
   await expect(page).toHaveURL(/\/estimates\//);
   await expect(page.getByText('Кошторис порожній')).toBeVisible();
 
-  // 5 — Add a line item from the starter catalog (seeded at registration)
-  await page.getByRole('button', { name: '+ Додати позицію' }).click();
+  // 5 — Add a line item from the starter catalog (seeded at registration). Categories start
+  // collapsed; a search expands the ones it matches. A picked row lands with quantity 1.
+  await page.getByRole('button', { name: '+ Додати позицію' }).first().click();
+  await page.getByRole('searchbox', { name: 'Пошук у каталозі...' }).fill('Демонтаж');
   const firstCatalogRow = page.getByTestId('catalog-row').first();
   await expect(firstCatalogRow).toBeVisible();
   await firstCatalogRow.click();
-  await page.fill('#pick-qty', '5');
-  await page.getByRole('button', { name: 'Додати', exact: true }).click();
+  await page.getByRole('button', { name: /^Додати \d+ позиц/ }).click();
 
   // 6 — Backend recomputed the total; it shows ₴ and is no longer zero
   const total = page.getByTestId('estimate-total').first();
@@ -64,14 +68,16 @@ test('повний сценарій підрядника: реєстрація �
   // 7 — Sharing opens a sheet with options; triggering "copy link" gives clear
   // feedback, never a silent failure. Tolerant of every policy outcome: a copied
   // link, the verify-email gate (unverified contractor), or the PRO gate.
-  await page.getByRole('button', { name: /Поділитися/ }).first().click();
-  await expect(page.getByRole('dialog', { name: 'Поділитися з клієнтом' })).toBeVisible();
-  await page.getByRole('button', { name: /Копіювати посилання/ }).click();
-  await expect(
-    page
-      .getByText(/Посилання скопійовано|доступний у плані PRO/)
-      .or(page.getByRole('dialog', { name: 'Підтвердіть email' })),
-  ).toBeVisible();
+  await page.getByRole('button', { name: /Надіслати клієнту/ }).first().click();
+  const shareSheet = page.getByRole('dialog', { name: 'Поділитися з клієнтом' });
+  const verifyEmail = page.getByRole('dialog', { name: 'Підтвердіть email' });
+  await expect(shareSheet.or(verifyEmail).first()).toBeVisible();
+  if (await shareSheet.isVisible()) {
+    await page.getByRole('button', { name: /Копіювати посилання/ }).click();
+    await expect(
+      page.getByText(/Посилання скопійовано|доступний у плані PRO/).or(verifyEmail).first(),
+    ).toBeVisible();
+  }
 
   // 8 — Profile edit (#16): the modal opens prefilled with the current data.
   // (UI only — the backend PUT /api/profile is still in progress, so we don't
@@ -98,14 +104,15 @@ test('повний сценарій підрядника: реєстрація �
 
   // 10 — Logout (Fix G): clicking "Вийти" revokes the session server-side
   // (POST /api/auth/logout, fire-and-forget) then routes to /login.
-  await page.getByRole('button', { name: 'Вийти' }).click();
+  await page.getByRole('button', { name: /Вийти/ }).first().click();
+  await page.getByRole('dialog', { name: 'Вийти' }).getByRole('button', { name: 'Вийти' }).click();
   await expect(page).toHaveURL(/\/login$/);
 
   // After logout, "/" is the PUBLIC landing again (not the dashboard) — the
   // token is cleared, so a guest sees marketing, not app content.
   await page.goto('/');
   await expect(page).toHaveURL('http://localhost:5173/');
-  await expect(page.getByRole('link', { name: 'Почати безкоштовно' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Спробувати безкоштовно/ }).first()).toBeVisible();
   // And a protected route still bounces a logged-out user to /login.
   await page.goto('/projects');
   await expect(page).toHaveURL(/\/login$/);

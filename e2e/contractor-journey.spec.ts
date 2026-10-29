@@ -50,6 +50,10 @@ async function fillNewObject(page: Page, client: string, phone: string, obj: str
   await page.fill('#pr-addr', addr);
   await page.getByRole('button', { name: /Клієнт — необов/ }).click();
   await page.getByRole('button', { name: 'Новий', exact: true }).click();
+  // A fresh master confirms ONCE that he may enter a client's data; later objects go straight on.
+  const ack = page.getByRole('button', { name: 'Зрозуміло, підтверджую' });
+  await expect(ack.or(page.locator('#cp-name')).first()).toBeVisible();
+  if (await ack.isVisible()) await ack.click();
   await page.fill('#cp-name', client);
   await page.fill('#cp-phone', phone);
 }
@@ -83,6 +87,10 @@ async function addManualItem(
   await dialog.locator('#it-price').fill(item.price);
   await dialog.getByRole('button', { name: 'Додати', exact: true }).click();
   await expect(dialog).toBeHidden();
+  // A name the catalog lacks is offered to it; keep the catalog as is.
+  const saveToCatalog = page.getByRole('dialog', { name: 'Зберегти в каталог?' });
+  await saveToCatalog.getByRole('button', { name: 'Ні, дякую' }).click();
+  await expect(saveToCatalog).toBeHidden();
 }
 
 /** The backend-computed total, reduced to its digits (currency/spacing-agnostic). */
@@ -137,13 +145,17 @@ test('новий майстер: чесний дашборд + FREE-план + �
   await page.goto('/catalog');
   await expect(page.getByText('Каталог порожній')).toHaveCount(0);
   const catName = `Е2Е Позиція ${Date.now()}`;
-  await page.getByRole('button', { name: '+ Додати позицію' }).first().click();
+  // Adding lives in the catalog's FAB menu.
+  await page.getByRole('button', { name: 'Дії з каталогом' }).click();
+  await page.getByRole('button', { name: /Додати позицію/ }).first().click();
   const catDialog = page.getByRole('dialog', { name: 'Нова позиція' });
   await expect(catDialog).toBeVisible();
   await catDialog.locator('#ci-name').fill(catName);
   await catDialog.locator('#ci-price').fill('999');
   await catDialog.getByRole('button', { name: 'Додати', exact: true }).click();
   await expect(catDialog).toBeHidden();
+  // Categories start collapsed; a search expands the one holding the new position.
+  await page.getByRole('textbox', { name: 'Пошук у каталозі...' }).fill(catName);
   await expect(page.getByText(catName)).toBeVisible();
 
   // Step 6 — new estimate + manual items; the backend total recomputes.
@@ -166,12 +178,12 @@ test('новий майстер: чесний дашборд + FREE-план + �
 
   // Work 2 × 1500 = 3000.
   await addManualItem(page, { name: 'Демонтаж стін', type: 'WORK', unit: 'M2', qty: '2', price: '1500' });
-  await expect(page.getByText('Демонтаж стін')).toBeVisible();
+  await expect(page.getByText('Демонтаж стін').first()).toBeVisible();
   expect(await totalDigits(page)).toBe('3000');
 
   // Material 3 × 500 = 1500 → total 4500.
   await addManualItem(page, { name: 'Клей плитковий', type: 'MATERIAL', unit: 'KG', qty: '3', price: '500' });
-  await expect(page.getByText('Клей плитковий')).toBeVisible();
+  await expect(page.getByText('Клей плитковий').first()).toBeVisible();
   expect(await totalDigits(page)).toBe('4500');
 });
 
