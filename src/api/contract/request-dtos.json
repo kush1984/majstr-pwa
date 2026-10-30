@@ -37,6 +37,17 @@
     "itemIds": "array?",
     "templateId": "string"
   },
+  "BroadcastPreviewRequest": {
+    "body": "string",
+    "segment": "string",
+    "subject": "string"
+  },
+  "BroadcastSendRequest": {
+    "body": "string",
+    "segment": "string",
+    "subject": "string",
+    "userIds": "array"
+  },
   "CashEntryRequest": {
     "amount": "number",
     "category": "string?",
