@@ -7,8 +7,10 @@ import {
   shouldRefetchAfterFlush,
 } from './outbox.ts';
 import { tokens } from '@/lib/tokens.ts';
+import { aSessionToken } from '@/test/factories.ts';
 
 beforeEach(async () => {
+  tokens.set(aSessionToken(), 'r');
   await clearOutbox();
   setOutboxErrorClassifier(() => 'retry'); // default; the blocked tests override it
 });
@@ -300,10 +302,7 @@ describe('outbox engine', () => {
 });
 
 describe('owner tagging — the queue outlives a logout without leaking between accounts', () => {
-  /** A decodable access token whose `sub` is the given user id. */
-  function tokenFor(userId: string): string {
-    return `header.${btoa(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + 900 }))}.sig`;
-  }
+  const tokenFor = aSessionToken;
 
   it('stamps the authoring master onto every queued op', async () => {
     tokens.set(tokenFor('master-a'), 'r');

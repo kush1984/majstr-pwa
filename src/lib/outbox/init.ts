@@ -409,10 +409,11 @@ export function initOutbox(qc: QueryClient): () => void {
   setOutboxErrorClassifier((e) => {
     if (axios.isAxiosError(e) && e.response) {
       const s = e.response.status;
-      // 401/403 is an AUTH problem, not a rejected write: the token rotated mid-replay, or the
-      // session needs a re-login. Keep the op queued — telling the master "pay or delete your
-      // work" over an expired token would be a lie (and could cost them real data).
-      if (s === 401 || s === 403) {
+      // 401 is an AUTH problem, not a rejected write: the interceptor already tried a refresh, so
+      // the session is gone. Keep the op queued, and at no cost to its attempts — telling the master
+      // "pay or delete your work" over an expired token would be a lie (and could cost them real data).
+      if (s === 401) return 'auth';
+      if (s === 403) {
         const code = (e.response.data as { code?: string } | undefined)?.code ?? '';
         return code.includes('LIMIT') ? 'limit' : 'retry';
       }

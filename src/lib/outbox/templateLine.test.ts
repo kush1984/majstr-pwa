@@ -5,6 +5,8 @@ import {
   releaseBlockedTemplateLines, setOutboxErrorClassifier,
 } from './outbox.ts';
 import { isTemplateLine } from './templateLine.ts';
+import { tokens } from '@/lib/tokens.ts';
+import { aSessionToken } from '@/test/factories.ts';
 
 /**
  * Review P0-5: a bundle applied offline queued its lines through the manual door, which refuses a
@@ -13,6 +15,7 @@ import { isTemplateLine } from './templateLine.ts';
  * on a master's phone are released on the next start.
  */
 beforeEach(async () => {
+  tokens.set(aSessionToken(), 'r');
   await clearOutbox();
 });
 

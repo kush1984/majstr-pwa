@@ -27,6 +27,11 @@ import type {
   UserResponse,
 } from '../api/types';
 
+/** A decodable access token whose `sub` is the user id: what the outbox reads as «who is signed in». */
+export function aSessionToken(userId = 'master-a'): string {
+  return `header.${btoa(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + 900 }))}.sig`;
+}
+
 export function aUser(overrides: Partial<UserResponse> = {}): UserResponse {
   return {
     id: 'u1',

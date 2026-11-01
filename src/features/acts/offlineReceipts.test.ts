@@ -11,6 +11,8 @@ import {
   mergeQueuedReceipts, patchQueuedReceipt,
   patchQueuedReceiptFromRead, queuedReceiptRow, type ActReceiptOpPayload, type QueuedActReceipt,
 } from './offlineReceipts.ts';
+import { tokens } from '@/lib/tokens.ts';
+import { aSessionToken } from '@/test/factories.ts';
 import type { WorkActReceiptResponse } from '@/api/types.ts';
 
 vi.mock('@/api/acts.ts', () => ({ actsApi: { addReceipt: vi.fn() } }));
@@ -34,6 +36,7 @@ beforeAll(() => initOutbox(new QueryClient())());
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  tokens.set(aSessionToken(), 'r');
   await clearOutbox();
   onlineManager.setOnline(true);
 });

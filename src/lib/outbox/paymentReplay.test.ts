@@ -4,6 +4,8 @@ import { QueryClient } from '@tanstack/react-query';
 import { clearOutbox, enqueue, flushOutbox, outboxCount } from './outbox.ts';
 import { initOutbox } from './init.ts';
 import { paymentsApi } from '@/api/payments.ts';
+import { tokens } from '@/lib/tokens.ts';
+import { aSessionToken } from '@/test/factories.ts';
 
 /**
  * The money the master typed with no signal actually reaches the server on reconnect (review
@@ -30,6 +32,7 @@ const OBJECT = 'obj-1';
 let stop: () => void;
 
 beforeEach(async () => {
+  tokens.set(aSessionToken(), 'r');
   await clearOutbox();
   vi.clearAllMocks();
   stop?.();

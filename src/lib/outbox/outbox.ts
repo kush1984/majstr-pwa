@@ -60,8 +60,12 @@ export interface SyncStatus {
   syncing: boolean;
 }
 
-/** Classifies a handler error: retry it (transient) or block it (permanent — needs the user). */
-export type OutboxErrorKind = 'retry' | 'limit' | 'other';
+/**
+ * Classifies a handler error: retry it (transient), block it (permanent — needs the user), or stop
+ * the pass because the session is gone (`auth`: nothing is wrong with the write, and it costs no
+ * attempt).
+ */
+export type OutboxErrorKind = 'retry' | 'limit' | 'other' | 'auth';
 let classifyError: (e: unknown) => OutboxErrorKind = () => 'retry';
 export function setOutboxErrorClassifier(fn: (e: unknown) => OutboxErrorKind): void {
   classifyError = fn;
@@ -117,7 +121,11 @@ function heldEntities(all: OutboxOp[]): Set<string> {
 /** Re-count the queue from Dexie (pending vs blocked vs runnable) and publish if it changed. Never throws. */
 async function refreshPending(): Promise<void> {
   try {
-    const all = await outboxDb.ops.toArray();
+    const everything = await outboxDb.ops.toArray();
+    // Another master's leftovers are never sent in this session (`runFlush`), so they must not read
+    // as work in progress: a `runnable` that can never reach 0 shuts the focus refetch app-wide.
+    const me = tokens.ownerId();
+    const all = me ? everything.filter((o) => o.ownerId === me) : everything;
     const blocked = all.filter((o) => o.status === 'blocked').length;
     const pending = all.length - blocked;
     const held = heldEntities(all);
@@ -427,6 +435,11 @@ let followUp: Promise<FlushResult> | null = null;
  * Replay the queue. Repeated passes let a just-synced parent unblock its children within one
  * flush. Each op is tried at most once per flush; deps still in the queue (pending OR failed)
  * hold their dependents back. Concurrency-guarded so overlapping triggers don't double-send.
+ *
+ * Only the signed-in master's own ops are ever sent. The interceptor reads the token at request
+ * time, so an op sent under the wrong session is an ordinary create landing in somebody else's
+ * account: one master's client and money, on a phone a crew shares. Another master's op is left
+ * alone rather than deleted; destroying work is a decision for the login (`discardForeignOps`).
  */
 export function flushOutbox(): Promise<FlushResult> {
   if (running) {
@@ -441,6 +454,8 @@ export function flushOutbox(): Promise<FlushResult> {
 }
 
 async function runFlush(): Promise<FlushResult> {
+  const me = tokens.ownerId();
+  if (!me) return { synced: 0, failed: 0, blocked: 0 };
   setSyncing(true);
   let synced = 0;
   let blocked = 0;
@@ -455,8 +470,15 @@ async function runFlush(): Promise<FlushResult> {
       const done = new Set<number>(); // seqs synced in THIS pass (deleted from the DB but still in `ops`)
       const unfinished = (o: OutboxOp) => o.seq !== undefined && !done.has(o.seq);
       for (const op of ops) {
+        // The session changed under this pass (a login here or in another tab, a dead refresh):
+        // what is left was read for somebody who is no longer the one signed in.
+        if (tokens.ownerId() !== me) {
+          progressed = false;
+          break;
+        }
         const seq = op.seq;
         if (seq === undefined || attempted.has(seq)) continue;
+        if (op.ownerId !== me) continue;
         // Per-entity ordering: an update/delete waits for its own create (any earlier op on the
         // SAME entity that hasn't landed) — so we never PUT before the row exists on the server.
         if (ops.some((o) => o.entityId === op.entityId && o.seq !== undefined && o.seq < seq && unfinished(o))) continue;
@@ -483,6 +505,13 @@ async function runFlush(): Promise<FlushResult> {
           progressed = true;
         } catch (e) {
           const kind = classifyError(e);
+          if (kind === 'auth') {
+            // The session died, not the write. An attempt spent here walks the op to `stuck` while
+            // the master is merely logged out, and the rest of the queue would only earn the same.
+            failedEntityIds.add(op.entityId);
+            progressed = false;
+            break;
+          }
           if (kind === 'retry') {
             const attempts = op.attempts + 1;
             if (attempts >= MAX_ATTEMPTS) {
@@ -540,21 +569,33 @@ export function shouldRefetchAfterFlush(result: FlushResult): boolean {
 /** Backoff for the self-retry below: 15s, 30s, 60s, then every 2 min. */
 const RETRY_DELAYS_MS = [15_000, 30_000, 60_000, 120_000];
 
+let kick: (() => void) | null = null;
+
+/**
+ * Sync now, for a session that has just begun: {@link startOutboxSync} arms nothing while nobody is
+ * signed in, so without this a master's restored work waits for the next network or visibility change.
+ */
+export function kickOutboxSync(): void {
+  void refreshPending(); // the counts just changed hands along with the session
+  kick?.();
+}
+
 export function startOutboxSync(onFlush?: (result: FlushResult) => void): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let misses = 0;
 
   const run = async (): Promise<void> => {
     if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
-    if (!onlineManager.isOnline()) return;
+    if (!onlineManager.isOnline() || !tokens.ownerId()) return;
     const result = await flushOutbox();
     onFlush?.(result);
     // Re-arm ONLY while something is still waiting. Previously the sole trigger was an
     // online/offline transition, so a flush that hit a 5xx (or a half-open connection) left the
     // ops sitting there: the phone had signal, the badge said "syncing…", and nothing moved
     // again until the master toggled the network or restarted the app.
+    const me = tokens.ownerId();
     const remaining = await outboxDb.ops
-      .filter((o) => o.status !== 'blocked')
+      .filter((o) => o.status !== 'blocked' && o.ownerId === me)
       .count()
       .catch(() => 0);
     if (remaining > 0) {
@@ -566,18 +607,21 @@ export function startOutboxSync(onFlush?: (result: FlushResult) => void): () => 
     }
   };
 
-  const unsubscribe = onlineManager.subscribe(() => { misses = 0; void run(); });
+  const runAfresh = () => { misses = 0; void run(); };
+  const unsubscribe = onlineManager.subscribe(runAfresh);
   // Coming back from the background is the single most valuable trigger on a phone: the master
   // walks out of the basement with the app suspended, so no online/offline event ever fires.
   const onVisible = () => {
-    if (document.visibilityState === 'visible') { misses = 0; void run(); }
+    if (document.visibilityState === 'visible') runAfresh();
   };
   document.addEventListener('visibilitychange', onVisible);
+  kick = runAfresh;
   void run();
 
   return () => {
     unsubscribe();
     document.removeEventListener('visibilitychange', onVisible);
+    kick = null;
     if (timer !== undefined) clearTimeout(timer);
   };
 }
