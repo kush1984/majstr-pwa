@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { seoCalcTables } from './scripts/seo-pages-plugin.ts';
-import { cspReportEndpoint } from './src/lib/cspReport.ts';
+import { cspReportEndpoint, withCspReportAddress } from './src/lib/cspReport.ts';
 
 // App version for the Profile "Версія застосунку" row — read from package.json
 // at build time so it never drifts from the published version.
@@ -25,10 +25,7 @@ function cspReportAddress(): Plugin {
       const file = path.resolve(__dirname, 'dist/_headers');
       if (!existsSync(file)) return;
       const endpoint = cspReportEndpoint(loadEnv(mode, __dirname, 'VITE_').VITE_SENTRY_DSN);
-      const headers = readFileSync(file, 'utf-8');
-      writeFileSync(file, endpoint
-        ? headers.replace('__CSP_REPORT_URI__', endpoint)
-        : headers.replace('; report-uri __CSP_REPORT_URI__', ''));
+      writeFileSync(file, withCspReportAddress(readFileSync(file, 'utf-8'), endpoint));
     },
   };
 }

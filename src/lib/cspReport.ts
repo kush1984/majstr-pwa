@@ -13,3 +13,14 @@ export function cspReportEndpoint(dsn: string | undefined): string | null {
     return null;
   }
 }
+
+/**
+ * The text of `_headers` with the report address filled in, or the directive gone when there is none.
+ * Matches the whole directive because the file's comments name the placeholder too, and `replace`
+ * takes only the first it finds.
+ */
+export function withCspReportAddress(headers: string, endpoint: string | null): string {
+  return endpoint
+    ? headers.replace('report-uri __CSP_REPORT_URI__', `report-uri ${endpoint}`)
+    : headers.replace('; report-uri __CSP_REPORT_URI__', '');
+}

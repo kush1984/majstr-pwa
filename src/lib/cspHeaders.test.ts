@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cspReportEndpoint } from './cspReport.ts';
+import { cspReportEndpoint, withCspReportAddress } from './cspReport.ts';
 
 const headers = readFileSync(resolve(__dirname, '../../public/_headers'), 'utf-8');
 const indexHtml = readFileSync(resolve(__dirname, '../../index.html'), 'utf-8');
 
-const policy = /Content-Security-Policy(?:-Report-Only)?: (.+)/.exec(headers)?.[1] ?? '';
+function policyOf(text: string): string {
+  return /Content-Security-Policy(?:-Report-Only)?: (.+)/.exec(text)?.[1] ?? '';
+}
+
+const policy = policyOf(headers);
 
 function directive(name: string): string[] {
   return policy
@@ -63,5 +67,20 @@ describe('cspReportEndpoint', () => {
     expect(cspReportEndpoint('')).toBeNull();
     expect(cspReportEndpoint(undefined)).toBeNull();
     expect(cspReportEndpoint('not a url')).toBeNull();
+  });
+});
+
+describe('withCspReportAddress', () => {
+  it('fills the policy itself, though the comments above it name the placeholder first', () => {
+    const endpoint = 'https://o1.ingest.de.sentry.io/api/42/security/?sentry_key=abc123';
+
+    const filled = policyOf(withCspReportAddress(headers, endpoint));
+
+    expect(filled).toContain(`report-uri ${endpoint}`);
+    expect(filled).not.toContain('__CSP_REPORT_URI__');
+  });
+
+  it('drops the directive when there is nowhere to send reports', () => {
+    expect(policyOf(withCspReportAddress(headers, null))).not.toContain('report-uri');
   });
 });
