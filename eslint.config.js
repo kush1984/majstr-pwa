@@ -57,6 +57,12 @@ export default tseslint.config(
         { checksVoidReturn: { attributes: false } },
       ],
 
+      // A schema built before z.config() runs reports a CSP violation on every page.
+      'no-restricted-imports': [
+        'error',
+        { paths: [{ name: 'zod', message: "Import z from '@/lib/zod.ts', which configures it first." }] },
+      ],
+
       // ---- noise control ----------------------------------------------------
       // An intentionally-unused binding is spelled with a leading underscore.
       '@typescript-eslint/no-unused-vars': [
@@ -80,6 +86,11 @@ export default tseslint.config(
       // unbound spy assertion IS a real mistake.)
       '@typescript-eslint/unbound-method': 'off',
     },
+  },
+
+  {
+    files: ['src/lib/zod.ts'],
+    rules: { 'no-restricted-imports': 'off' },
   },
 
   {

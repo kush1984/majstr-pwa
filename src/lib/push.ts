@@ -19,6 +19,39 @@ export function isPushSupported(): boolean {
   );
 }
 
+const PUSH_OWNER_KEY = 'majstr.pushOwner';
+
+/**
+ * Drops this device's subscription and remembers whose it was, so the same master gets it back at their
+ * next login and nobody else on a shared phone does (P-80). Answers the endpoint it dropped. Best effort:
+ * `getRegistration`, not `ready`, because `ready` never settles with no worker. No api import, since the
+ * forced logout in `api/client.ts` calls this.
+ */
+export async function dropLocalPushSubscription(ownerId: string | null): Promise<string | null> {
+  if (!isPushSupported()) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return null;
+    if (ownerId) localStorage.setItem(PUSH_OWNER_KEY, ownerId);
+    await sub.unsubscribe();
+    return sub.endpoint;
+  } catch {
+    return null;
+  }
+}
+
+/** Whose subscription a logout dropped, once: whoever opens the app next settles it either way. */
+export function takeRememberedPushOwner(): string | null {
+  try {
+    const owner = localStorage.getItem(PUSH_OWNER_KEY);
+    localStorage.removeItem(PUSH_OWNER_KEY);
+    return owner;
+  } catch {
+    return null;
+  }
+}
+
 /** True on iPhone / iPad (incl. iPadOS reporting itself as desktop Safari). */
 export function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false;

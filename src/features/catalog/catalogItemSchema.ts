@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod.ts';
 import { parseMoney } from '@/lib/decimal.ts';
 import i18n from '@/lib/i18n.ts';
 import { UNITS } from '@/api/types.ts';

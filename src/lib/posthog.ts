@@ -24,8 +24,10 @@ import { getStoredRef, getStoredUtm } from '@/lib/referral.ts';
  *     that does not load this bundle at all.)
  *  2. **No personal data leaves the device.** Autocapture is OFF (it ships the text of whatever was
  *     clicked — client names and sums would land in event names), pageviews are off (the event list
- *     below is closed), replay masks every input and every `.ph-mask` container, and the person is
- *     identified by UUID with a fixed, reviewed property set — never an email, name or phone.
+ *     below is closed), replay masks every input and ALL text except what is marked `.ph-unmask`, and
+ *     the person is identified by UUID with a fixed, reviewed property set — never an email, name or
+ *     phone. The clients whose names and numbers appear on these screens never agreed to anything, and
+ *     a master's consent cannot cover them, so a new screen must be masked without anyone remembering to.
  *
  * Replay lives HERE and only here — Sentry's replay stays off (`sentry.ts` has no replay
  * integration on purpose). Two recorders would double the cost and record the same screens twice.
@@ -155,10 +157,11 @@ export function initPostHog(): void {
         // silently ignored, and the only way to find that out is to watch your own recording.
         session_recording: {
           maskAllInputs: true,
-          // ONE class, hung on whole sensitive containers (client card, profile requisites, the
-          // economy tab, payment rows, PDF previews). A per-selector list is a list someone
-          // forgets to extend when the next screen ships.
-          maskTextSelector: '.ph-mask',
+          // Everything, and a screen opts OUT rather than in. A class hung on sensitive containers is
+          // still a list someone forgets to extend when the next screen ships, and it was: messages
+          // with a client's name and phone were being recorded.
+          maskTextSelector: '*',
+          maskTextFn: replayText,
           // 100 %, on purpose. The free tier allows 5k recordings/month, which this scale cannot
           // approach, and replay is the entire reason PostHog is here — sampling would save a
           // resource we are not short of at the cost of the thing we came for. Lower it only when
@@ -169,6 +172,11 @@ export function initPostHog(): void {
       return posthog;
     })
     .catch(() => null); // analytics must never break a working flow — fail soft, like push
+}
+
+/** What a replay may read: only text inside `.ph-unmask`, which is the app's own chrome. Exported for tests. */
+export function replayText(text: string, element?: HTMLElement | null): string {
+  return element?.closest('.ph-unmask') ? text : text.replace(/\S/g, '*');
 }
 
 /**
@@ -239,11 +247,16 @@ export function identifyMaster(user: UserResponse): void {
  * it through the one consent door — `applyAnalyticsIdentity` opts a consented master back in, so
  * this cannot strand analytics for the next person.</p>
  */
-export function resetAnalytics(): void {
-  withClient((ph) => {
-    ph.reset();
-    ph.opt_out_capturing();
-  });
+export function resetAnalytics(): Promise<void> {
+  if (!loading) return Promise.resolve();
+  return loading
+    .then((ph) => {
+      if (ph) {
+        ph.reset();
+        ph.opt_out_capturing();
+      }
+    })
+    .catch(() => undefined);
 }
 
 /** Send one of the events above. No-op when analytics is disabled; never throws. */

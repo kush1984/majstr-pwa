@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   EstimateImportParseResponse,
   EstimateResponse,
@@ -39,8 +40,13 @@ export const receiptImportApi = {
 
   /** Append the confirmed receipt lines to the estimate → updated estimate. */
   commit(estimateId: string, items: ReceiptItemsCommitItem[]): Promise<EstimateResponse> {
-    return api
-      .post<EstimateResponse>(`/api/estimates/${estimateId}/receipt-items/commit`, { items })
-      .then((r) => r.data);
+    return sendOnce(`receipt-items:${estimateId}:${JSON.stringify(items)}`, (headers) =>
+      api
+        .post<EstimateResponse>(`/api/estimates/${estimateId}/receipt-items/commit`, { items }, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 };

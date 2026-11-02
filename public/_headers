@@ -1,25 +1,25 @@
 # Cloudflare Pages response headers (https://developers.cloudflare.com/pages/configuration/headers/).
 #
-# ⚠️ Content-Security-Policy is REPORT-ONLY on purpose. A hard CSP that gets an origin
-# wrong fails silently in production — and the way we'd find out is broken monobank
-# payments or a dead Sentry/PostHog. Report-only blocks NOTHING; it only reports
-# violations (visible in the browser console / devtools). Run it like this for ~a week,
-# read what would have been blocked, add any missing origins, and ONLY THEN rename the
-# header to `Content-Security-Policy` to enforce.
+# ⚠️ Content-Security-Policy is REPORT-ONLY for now. A hard CSP that gets an origin wrong
+# fails silently in production — and the way we'd find out is broken monobank payments or a
+# dead Sentry/PostHog. Report-only blocks NOTHING; it reports violations to Sentry (the build
+# fills in __CSP_REPORT_URI__ from VITE_SENTRY_DSN). Read what would have been blocked, add any
+# missing origins, and THEN rename the header to `Content-Security-Policy`.
+# src/lib/cspHeaders.test.ts fails once the deadline in it has passed and this is still report-only.
+# e2e-offline/csp.spec.ts serves the production build under this policy, enforced.
 #
 # Known external origins this policy accounts for:
 #   - Google Fonts:  fonts.googleapis.com (CSS) + fonts.gstatic.com (font files)
 #   - PostHog (EU):  eu.i.posthog.com (ingest) + eu-assets.i.posthog.com (recorder/array scripts)
 #   - Sentry:        *.ingest.sentry.io / *.ingest.de.sentry.io (error ingest)
 #   - Inline:        the boot-screen script in index.html, allowed by its sha256 hash.
-#   - API:           same-origin /api in prod, so 'self' covers it. If the API ever moves
-#                    to its own origin, the report-only phase will surface it — add it then.
+#   - API:           https://api.majstr.pro, its own origin (requests, and the logo as an image).
 # monobank checkout is a top-level navigation (window.location), not a form/XHR, so it is
 # not governed by connect-src/form-action and needs no entry here.
-# Before enforcing, also consider adding X-Frame-Options: DENY (frame-ancestors below is
-# the CSP equivalent but is not enforced while this header is Report-Only).
+# X-Frame-Options is there because frame-ancestors is not enforced while this is report-only.
 /*
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-yyiHqnMgRGAFkFTrg0kXHkXmcMM3GtIlBRCHlrXAfxM=' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-yyiHqnMgRGAFkFTrg0kXHkXmcMM3GtIlBRCHlrXAfxM=' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://api.majstr.pro; connect-src 'self' https://api.majstr.pro https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri __CSP_REPORT_URI__
+  X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
 

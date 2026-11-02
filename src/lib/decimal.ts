@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from './zod.ts';
 import i18n from '@/lib/i18n.ts';
 
 export { parseDecimal } from './parseDecimal.ts';

@@ -19,11 +19,10 @@ vi.mock('@/hooks/useToast.ts', () => ({
 /**
  * What session replay may never record (reviews P-07, P-25, P-44).
  *
- * <p>PostHog masks every input and every `.ph-mask` container (`lib/posthog.ts`), which makes the
- * class the whole mechanism — and a container that simply does not carry it fails SILENTLY: the
- * recording looks fine, and the data it should not hold is in it. Nothing else in the app can catch
- * that, so the surfaces that show somebody else's personal data or the master's money assert the
- * class here, on the rendered DOM.</p>
+ * <p>PostHog masks every input and all text (`lib/posthog.ts`, P-77). `.ph-mask` used to be the whole
+ * mechanism and is now the second layer, kept on the surfaces that show somebody else's personal data
+ * or the master's money, so this does not rest on a single SDK option. These assert it on the rendered
+ * DOM.</p>
  *
  * <p>The `Modal` case is the one that was most wrong and least visible: it renders through
  * `createPortal` into `document.body`, so it sits OUTSIDE whatever mask its caller wrapped the

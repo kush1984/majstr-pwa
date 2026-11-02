@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   MeasurementsResponse,
   ProjectImportCommitRequest,
@@ -39,8 +40,13 @@ export const projectImportApi = {
   },
 
   commit(objectId: string, req: ProjectImportCommitRequest): Promise<MeasurementsResponse> {
-    return api
-      .post<MeasurementsResponse>(`/api/projects/${objectId}/measurements/project/commit`, req)
-      .then((r) => r.data);
+    return sendOnce(`project-import:${objectId}:${JSON.stringify(req)}`, (headers) =>
+      api
+        .post<MeasurementsResponse>(`/api/projects/${objectId}/measurements/project/commit`, req, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 };

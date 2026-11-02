@@ -1,4 +1,5 @@
-import { api, ensureAccessToken, fetchTimeoutSignal } from './client.ts';
+import { api, ensureAccessToken, fetchTimeoutSignal, uploadTimeoutMs } from './client.ts';
+import { sendOnce } from './submission.ts';
 import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type { PhotoSource, PhotoVisibility, ProjectPhotoFolderResponse, ProjectPhotoResponse } from './types.ts';
@@ -29,11 +30,15 @@ export const photosApi = {
     // Sent whenever the caller knows the target folder — '' is «Інше», not "unset". Omitting it
     // entirely leaves the server's per-source default (RECEIPT → «Чеки», else «Інше»).
     if (opts.folder !== undefined) form.append('folder', opts.folder ?? '');
-    return api
-      .post<ProjectPhotoResponse>(`/api/projects/${projectId}/photos`, form, {
-        headers: { 'Content-Type': undefined } as unknown as Record<string, string>,
-      })
-      .then((r) => r.data);
+    const fingerprint = `photo:${projectId}:${file.name}:${file.size}:${file.lastModified}:${JSON.stringify(opts)}`;
+    return sendOnce(fingerprint, (idHeader) =>
+      api
+        .post<ProjectPhotoResponse>(`/api/projects/${projectId}/photos`, form, {
+          headers: { 'Content-Type': undefined, ...idHeader } as unknown as Record<string, string>,
+          timeout: uploadTimeoutMs(file.size),
+        })
+        .then((r) => r.data),
+    );
   },
 
   listFolders(projectId: string): Promise<ProjectPhotoFolderResponse[]> {

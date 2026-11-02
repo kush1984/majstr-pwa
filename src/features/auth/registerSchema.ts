@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@/lib/zod.ts';
 import i18n from '@/lib/i18n.ts';
 
 export const TRADE_VALUES = [
@@ -36,7 +36,7 @@ export const registerSchema = z
     // Master-invented trade names, collected locally and created alongside the account on
     // submit (the same flow ProfileEditModal offers post-registration, just reachable here
     // too — there's no account yet to attach them to individually).
-    customTrades: z.array(z.string().trim().min(1).max(100)).default([]),
+    customTrades: z.array(z.string().trim().min(1).max(100)),
     phone: z
       .string()
       .min(5, i18n.t('validation.enterPhone'))

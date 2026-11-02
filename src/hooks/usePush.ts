@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isPushSupported, urlBase64ToUint8Array } from '@/lib/push.ts';
+import {
+  dropLocalPushSubscription,
+  isPushSupported,
+  takeRememberedPushOwner,
+  urlBase64ToUint8Array,
+} from '@/lib/push.ts';
+import { tokens } from '@/lib/tokens.ts';
 import { pushApi, type PushSubscribePayload } from '@/api/push.ts';
 import { toAppError } from '@/api/errors.ts';
 import i18n from '@/lib/i18n.ts';
@@ -148,9 +154,34 @@ export async function resyncPushSubscription(): Promise<void> {
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
       await pushApi.subscribe(subscriptionToPayload(sub));
+      return;
+    }
+    // A logout dropped it. The master who had it gets it back; anyone else on the phone opts in themselves.
+    const owner = takeRememberedPushOwner();
+    if (owner && owner === tokens.ownerId() && Notification.permission === 'granted') {
+      const vapidKey = await getVapidPublicKey();
+      if (vapidKey) {
+        const fresh = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+        await pushApi.subscribe(subscriptionToPayload(fresh));
+      }
     }
   } catch {
     // Non-fatal — a failed re-sync just means we retry on the next app open.
+  }
+}
+
+/**
+ * On logout: a shared phone must stop showing this master's client messages on its lock screen (P-80).
+ * Takes the token because the session is gone by the time the request goes out. If the server call
+ * fails, the next push to the dropped endpoint answers «gone» and the server forgets the row.
+ */
+export async function dropPushOnLogout(accessToken: string | null, ownerId: string | null): Promise<void> {
+  const endpoint = await dropLocalPushSubscription(ownerId);
+  if (endpoint && accessToken) {
+    await pushApi.unsubscribeAs(endpoint, accessToken).catch(() => undefined);
   }
 }
 

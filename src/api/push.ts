@@ -1,4 +1,4 @@
-import { api } from './client.ts';
+import { api, rawApi } from './client.ts';
 
 /**
  * Web-push subscription endpoints. The backend (Step 8) owns the VAPID
@@ -40,5 +40,15 @@ export const pushApi = {
 
   unsubscribe(endpoint: string): Promise<void> {
     return api.post('/api/push/unsubscribe', { endpoint }).then(() => undefined);
+  },
+
+  /** For a logout, whose tokens are gone by the time an interceptor would read them. */
+  unsubscribeAs(endpoint: string, accessToken: string): Promise<void> {
+    return rawApi({
+      method: 'POST',
+      url: '/api/push/unsubscribe',
+      data: { endpoint },
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then(() => undefined);
   },
 };

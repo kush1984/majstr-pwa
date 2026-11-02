@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   PaymentReceiptEditRequest,
   PaymentReceiptRequest,
@@ -41,9 +42,14 @@ export const paymentsApi = {
   },
 
   commitSplit(objectId: string, req: PaymentSplitRequest): Promise<ProjectPaymentResponse[]> {
-    return api
-      .post<ProjectPaymentResponse[]>(`/api/projects/${objectId}/payments/split/commit`, req)
-      .then((r) => r.data);
+    return sendOnce(`payment-split:${objectId}:${JSON.stringify(req)}`, (headers) =>
+      api
+        .post<ProjectPaymentResponse[]>(`/api/projects/${objectId}/payments/split/commit`, req, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 
   addReceipt(objectId: string, req: PaymentReceiptRequest, id?: string): Promise<PaymentReceiptResponse[]> {

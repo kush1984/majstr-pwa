@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   MeasurementsResponse,
   SketchCommitRequest,
@@ -25,8 +26,13 @@ export const sketchImportApi = {
   },
 
   commit(objectId: string, req: SketchCommitRequest): Promise<MeasurementsResponse> {
-    return api
-      .post<MeasurementsResponse>(`/api/projects/${objectId}/measurements/sketch/commit`, req)
-      .then((r) => r.data);
+    return sendOnce(`sketch-import:${objectId}:${JSON.stringify(req)}`, (headers) =>
+      api
+        .post<MeasurementsResponse>(`/api/projects/${objectId}/measurements/sketch/commit`, req, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 };

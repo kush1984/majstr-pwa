@@ -1,7 +1,7 @@
 {
   "name": "majstr-pwa",
   "private": true,
-  "version": "1.68.3",
+  "version": "1.68.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,7 +21,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:e2e:offline": "playwright test --config=playwright.offline.config.ts",
-    "test:e2e:offline:shell": "playwright test --config=playwright.offline.config.ts e2e-offline/shell.spec.ts",
+    "test:e2e:offline:shell": "playwright test --config=playwright.offline.config.ts e2e-offline/shell.spec.ts e2e-offline/refresh-stall.spec.ts e2e-offline/csp.spec.ts",
     "typecheck:tests": "tsc -b tsconfig.test.json"
   },
   "dependencies": {
@@ -29,7 +29,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@hookform/resolvers": "^3.9.1",
+    "@hookform/resolvers": "^5.9.2",
     "@sentry/react": "^8.55.2",
     "@tanstack/query-async-storage-persister": "^5.101.4",
     "@tanstack/react-query": "^5.62.0",
@@ -52,7 +52,7 @@
     "react-router-dom": "^7.1.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

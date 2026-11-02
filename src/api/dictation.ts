@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   DictationCommitItem,
   DictationParseResponse,
@@ -25,9 +26,14 @@ export const dictationApi = {
 
   /** Append the confirmed dictated lines to the estimate → updated estimate. */
   commit(estimateId: string, items: DictationCommitItem[]): Promise<EstimateResponse> {
-    return api
-      .post<EstimateResponse>(`/api/estimates/${estimateId}/dictation/commit`, { items })
-      .then((r) => r.data);
+    return sendOnce(`dictation:${estimateId}:${JSON.stringify(items)}`, (headers) =>
+      api
+        .post<EstimateResponse>(`/api/estimates/${estimateId}/dictation/commit`, { items }, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 
   /**

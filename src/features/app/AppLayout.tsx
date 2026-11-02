@@ -71,7 +71,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
         <div className="px-3 pb-5 pt-2 text-[22px] font-extrabold tracking-tight text-brand">
           Majstr
         </div>
-        <nav className="flex flex-col gap-0.5">
+        <nav className="ph-unmask flex flex-col gap-0.5">
           {NAV_ITEMS.map((it) => (
             <NavLink
               key={it.to}
@@ -130,7 +130,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav className="ph-unmask fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
         {NAV_ITEMS.map((it) => (
           <NavLink
             key={it.to}

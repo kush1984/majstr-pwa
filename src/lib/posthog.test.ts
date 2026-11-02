@@ -70,6 +70,30 @@ describe('disabled by default', () => {
   });
 });
 
+describe('replayText', () => {
+  async function replayText() {
+    return (await load('phc_test')).replayText;
+  }
+
+  it('masks text by default, keeping only its shape', async () => {
+    const element = document.createElement('p');
+
+    expect((await replayText())('Олена +380 67', element)).toBe('***** **** **');
+  });
+
+  it('reads only what sits inside .ph-unmask', async () => {
+    const nav = document.createElement('nav');
+    nav.className = 'ph-unmask';
+    const label = nav.appendChild(document.createElement('span'));
+
+    expect((await replayText())('Обʼєкти', label)).toBe('Обʼєкти');
+  });
+
+  it('masks when it cannot tell which element the text belongs to', async () => {
+    expect((await replayText())('Олена', null)).toBe('*****');
+  });
+});
+
 describe('init options', () => {
   it('starts opted out, with autocapture off and masking INSIDE session_recording', async () => {
     const mod = await load('phc_test');
@@ -88,7 +112,9 @@ describe('init options', () => {
     // watch it. Assert their nesting, not just their presence.
     const rec = opts.session_recording as Record<string, unknown>;
     expect(rec.maskAllInputs).toBe(true);
-    expect(rec.maskTextSelector).toBe('.ph-mask');
+    // Everything by default: a screen nobody thought about must not record a client's name (P-77).
+    expect(rec.maskTextSelector).toBe('*');
+    expect(rec.maskTextFn).toBe(mod.replayText);
     expect(opts).not.toHaveProperty('maskAllInputs');
   });
 
@@ -157,7 +183,7 @@ describe('logout', () => {
     mod.applyAnalyticsIdentity(master());
     await vi.waitFor(() => expect(ph.identify).toHaveBeenCalled());
 
-    mod.resetAnalytics();
+    await mod.resetAnalytics();
     // Without this the next person to log in is appended to the previous master's person, and
     // their session recording is filed under them.
     await vi.waitFor(() => expect(ph.reset).toHaveBeenCalledTimes(1));
@@ -169,7 +195,7 @@ describe('logout', () => {
   it('lets the next consented master back in — the opt-out is not a one-way door', async () => {
     const mod = await load('phc_test');
     mod.initPostHog();
-    mod.resetAnalytics();
+    await mod.resetAnalytics();
     await vi.waitFor(() => expect(ph.opt_out_capturing).toHaveBeenCalled());
 
     // Consent is re-applied on every login through the one door, so logging out cannot strand

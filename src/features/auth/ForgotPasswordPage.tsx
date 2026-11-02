@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { z } from 'zod';
+import { z } from '@/lib/zod.ts';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';

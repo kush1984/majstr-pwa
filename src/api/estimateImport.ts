@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   EstimateImportCommitRequest,
   EstimateImportCommitResponse,
@@ -27,8 +28,13 @@ export const estimateImportApi = {
   },
 
   commit(req: EstimateImportCommitRequest): Promise<EstimateImportCommitResponse> {
-    return api
-      .post<EstimateImportCommitResponse>('/api/estimates/import/commit', req)
-      .then((r) => r.data);
+    return sendOnce(`estimate-import:${JSON.stringify(req)}`, (headers) =>
+      api
+        .post<EstimateImportCommitResponse>('/api/estimates/import/commit', req, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 };

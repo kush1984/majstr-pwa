@@ -6,6 +6,9 @@ import axios, {
 import { config, routes } from '@/lib/config.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
+import { resetAnalytics } from '@/lib/posthog.ts';
+import { dropLocalPushSubscription } from '@/lib/push.ts';
+import { setSentryUser } from '@/lib/sentry.ts';
 import i18n from '@/lib/i18n.ts';
 import type { AuthResponse, BackendError } from './types.ts';
 
@@ -54,6 +57,17 @@ const RAW_TIMEOUT_MS = 30_000;
 
 /** Registration seeds a whole catalog before it answers. */
 export const REGISTER_TIMEOUT_MS = 60_000;
+
+/** The writes `sendOnce` makes safe to repeat. Nothing queues them, so waiting costs less than failing. */
+export const COMMIT_TIMEOUT_MS = 30_000;
+
+/** What a site uplink can carry at worst: 0.25 Mbit/s, and a 1 MB photo over 0.5 took 16 s against the old 12. */
+const UPLOAD_BYTES_PER_SECOND = 32_000;
+
+export function uploadTimeoutMs(bytes: number): number {
+  const needed = (bytes / UPLOAD_BYTES_PER_SECOND) * 1000;
+  return Math.min(LLM_TIMEOUT_MS, Math.max(COMMIT_TIMEOUT_MS, needed));
+}
 
 /** A bearer `fetch` carries a PDF render or megabytes of photo, over one bar at worst. */
 export const FETCH_TIMEOUT_MS = 60_000;
@@ -105,6 +119,9 @@ function accessTokenExpired(): boolean {
 }
 
 // ---------- single-flight refresh ----------
+
+/** Nothing in the cleanup may strand a master on a dead screen. */
+const FORCE_LOGIN_CLEANUP_MS = 2000;
 
 let refreshInFlight: Promise<string | null> | null = null;
 let redirectingToLogin = false;
@@ -171,6 +188,7 @@ async function doRefresh(): Promise<string | null> {
 
 /** Clear auth and bounce to /login — at most once, even under a stampede. */
 function forceLogin(): void {
+  const ownerId = tokens.ownerId();
   tokens.clear();
   if (!redirectingToLogin && window.location.pathname !== routes.login) {
     redirectingToLogin = true;
@@ -184,9 +202,21 @@ function forceLogin(): void {
     // outside their control — a refresh whose reply was lost on a bad connection was enough.
     // It stays owner-stamped and is offered back on the next login; `discardForeignOps` drops
     // it the moment somebody else signs in, so nothing can leak between accounts.
-    void clearPersistedCache().finally(() => {
+    //
+    // The analytics identity goes too, and the reload does not undo it: PostHog persists the opt-in
+    // and the id, so whoever used the phone next was recorded before consenting, as the last master
+    // (P-81). So does the push subscription, which has no valid token to tell the server with (P-80).
+    setSentryUser(null);
+    const cleanup = Promise.allSettled([
+      clearPersistedCache(),
+      resetAnalytics(),
+      dropLocalPushSubscription(ownerId),
+    ]);
+    const redirect = () => {
       window.location.href = routes.login;
-    });
+    };
+    void Promise.race([cleanup, new Promise((resolve) => { setTimeout(resolve, FORCE_LOGIN_CLEANUP_MS); })])
+      .finally(redirect);
   }
 }
 

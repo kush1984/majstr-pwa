@@ -1,15 +1,37 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { seoCalcTables } from './scripts/seo-pages-plugin.ts';
+import { cspReportEndpoint } from './src/lib/cspReport.ts';
 
 // App version for the Profile "Версія застосунку" row — read from package.json
 // at build time so it never drifts from the published version.
 const pkg = JSON.parse(
   readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'),
 ) as { version: string };
+
+/** `public/_headers` is copied as it is, so the report address is filled in here, off the Sentry DSN. */
+function cspReportAddress(): Plugin {
+  let mode = 'production';
+  return {
+    name: 'csp-report-address',
+    apply: 'build',
+    configResolved(resolved) {
+      mode = resolved.mode;
+    },
+    closeBundle() {
+      const file = path.resolve(__dirname, 'dist/_headers');
+      if (!existsSync(file)) return;
+      const endpoint = cspReportEndpoint(loadEnv(mode, __dirname, 'VITE_').VITE_SENTRY_DSN);
+      const headers = readFileSync(file, 'utf-8');
+      writeFileSync(file, endpoint
+        ? headers.replace('__CSP_REPORT_URI__', endpoint)
+        : headers.replace('; report-uri __CSP_REPORT_URI__', ''));
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -35,6 +57,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    cspReportAddress(),
     seoCalcTables(__dirname),
     react(),
     VitePWA({

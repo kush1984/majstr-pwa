@@ -1,4 +1,5 @@
-import { api } from './client.ts';
+import { api, COMMIT_TIMEOUT_MS } from './client.ts';
+import { sendOnce } from './submission.ts';
 import type {
   CatalogImportCommitRequest,
   CatalogImportCommitResponse,
@@ -34,6 +35,13 @@ export const catalogImportApi = {
   },
 
   commit(req: CatalogImportCommitRequest): Promise<CatalogImportCommitResponse> {
-    return api.post<CatalogImportCommitResponse>('/api/catalog/import/commit', req).then((r) => r.data);
+    return sendOnce(`catalog-import:${JSON.stringify(req)}`, (headers) =>
+      api
+        .post<CatalogImportCommitResponse>('/api/catalog/import/commit', req, {
+          headers,
+          timeout: COMMIT_TIMEOUT_MS,
+        })
+        .then((r) => r.data),
+    );
   },
 };
