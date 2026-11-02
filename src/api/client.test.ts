@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { api, ensureAccessToken, LLM_TIMEOUT_MS } from './client.ts';
+import {
+  api,
+  ensureAccessToken,
+  fetchTimeoutSignal,
+  FETCH_TIMEOUT_MS,
+  LLM_TIMEOUT_MS,
+  rawApi,
+  REFRESH_TIMEOUT_MS,
+  REGISTER_TIMEOUT_MS,
+} from './client.ts';
+import { authApi } from './auth.ts';
 import { tokens } from '@/lib/tokens.ts';
 
 /**
@@ -30,11 +40,13 @@ function authResponse(access: string, refresh: string) {
   return { data: { accessToken: access, refreshToken: refresh } };
 }
 
-function axiosErrorWithStatus(status: number): AxiosError {
+function axiosErrorWithStatus(status: number, data?: unknown): AxiosError {
   const err = new AxiosError(`Request failed with status code ${status}`);
-  err.response = { status } as AxiosResponse;
+  err.response = { status, data } as AxiosResponse;
   return err;
 }
+
+const backendError = { status: 400, error: 'Bad Request', message: 'Некоректні дані', path: '/api/auth/refresh' };
 
 function networkError(): AxiosError {
   return new AxiosError('Network Error', AxiosError.ERR_NETWORK);
@@ -71,13 +83,101 @@ describe('ensureAccessToken / refresh classification', () => {
     expect(tokens.getRefresh()).toBe('refresh-new'); // rotation honoured
   });
 
-  it('4xx from /refresh = dead auth: resolves null and clears tokens', async () => {
+  it.each([
+    ['401', axiosErrorWithStatus(401)],
+    ["400 in the backend's own shape", axiosErrorWithStatus(400, backendError)],
+  ])('%s from /refresh = dead auth: resolves null and clears tokens', async (_name, refusal) => {
     tokens.set(makeJwt(-60), 'refresh-revoked');
-    vi.spyOn(axios, 'post').mockRejectedValue(axiosErrorWithStatus(401));
+    vi.spyOn(axios, 'post').mockRejectedValue(refusal);
 
     await expect(ensureAccessToken()).resolves.toBeNull();
     expect(tokens.getAccess()).toBeNull(); // forceLogin cleared storage
     expect(tokens.getRefresh()).toBeNull();
+  });
+
+  it.each([
+    ['a bare 400 from an edge', axiosErrorWithStatus(400, '<html>Bad Request</html>')],
+    ['a 400 with some other JSON', axiosErrorWithStatus(400, { reason: 'blocked' })],
+    ['a 403 from a WAF', axiosErrorWithStatus(403)],
+    ['a 404 during a deploy', axiosErrorWithStatus(404)],
+    ['a 408', axiosErrorWithStatus(408)],
+    ['a 413', axiosErrorWithStatus(413)],
+    ['a 429', axiosErrorWithStatus(429)],
+  ])('%s says nothing about the token: rejects and KEEPS tokens', async (_name, answer) => {
+    const access = makeJwt(-60);
+    tokens.set(access, 'refresh-1');
+    vi.spyOn(axios, 'post').mockRejectedValue(answer);
+
+    await expect(ensureAccessToken()).rejects.toBe(answer);
+    expect(tokens.getAccess()).toBe(access);
+    expect(tokens.getRefresh()).toBe('refresh-1');
+  });
+
+  it('a 200 with no tokens in it is somebody else\'s page: rejects and KEEPS tokens', async () => {
+    const access = makeJwt(-60);
+    tokens.set(access, 'refresh-1');
+    vi.spyOn(axios, 'post').mockResolvedValue({ data: '<html>Sign in to the Wi-Fi</html>' });
+
+    await expect(ensureAccessToken()).rejects.toThrow();
+    expect(tokens.getAccess()).toBe(access);
+    expect(tokens.getRefresh()).toBe('refresh-1');
+  });
+
+  it('a refresh that never answers gives up at its timeout, keeps tokens, and the next call tries again', async () => {
+    vi.useFakeTimers();
+    try {
+      const access = makeJwt(-60);
+      tokens.set(access, 'refresh-1');
+      // What the real adapter does with `timeout`: it rejects, once that long has passed.
+      const post = vi.spyOn(axios, 'post').mockImplementationOnce(
+        (_url, _body, cfg) =>
+          new Promise((_resolve, reject) => {
+            setTimeout(
+              () => reject(new AxiosError('timeout', AxiosError.ECONNABORTED)),
+              cfg?.timeout ?? Number.POSITIVE_INFINITY,
+            );
+          }),
+      );
+
+      const stalled = expect(ensureAccessToken()).rejects.toMatchObject({ code: AxiosError.ECONNABORTED });
+      await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS);
+      await stalled;
+      expect(tokens.getAccess()).toBe(access);
+      expect(tokens.getRefresh()).toBe('refresh-1');
+
+      post.mockResolvedValueOnce(authResponse('new-access', 'refresh-new'));
+      await expect(ensureAccessToken()).resolves.toBe('new-access');
+      expect(post).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('every request behind a stalled refresh is released with it', async () => {
+    vi.useFakeTimers();
+    try {
+      tokens.set(makeJwt(-60), 'refresh-1');
+      vi.spyOn(axios, 'post').mockImplementationOnce(
+        (_url, _body, cfg) =>
+          new Promise((_resolve, reject) => {
+            setTimeout(
+              () => reject(new AxiosError('timeout', AxiosError.ECONNABORTED)),
+              cfg?.timeout ?? Number.POSITIVE_INFINITY,
+            );
+          }),
+      );
+      const adapter = vi.fn();
+      api.defaults.adapter = adapter;
+
+      const waiting = Promise.allSettled([api.get('/api/one'), api.get('/api/two')]);
+      await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS);
+
+      const results = await waiting;
+      expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+      expect(adapter).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('network error during refresh is transient: rejects and KEEPS tokens', async () => {
@@ -120,6 +220,44 @@ describe('ensureAccessToken / refresh classification', () => {
     expect(b).toBe('new-access');
     expect(c).toBe('new-access');
     expect(post).toHaveBeenCalledTimes(1); // no race-rotation
+  });
+});
+
+describe('calls outside the axios instance also have a ceiling', () => {
+  function stubRawRequest() {
+    return vi.spyOn(axios, 'request').mockResolvedValue({ data: {} });
+  }
+
+  it('rawApi applies a timeout by default', async () => {
+    const request = stubRawRequest();
+
+    await rawApi({ method: 'POST', url: '/api/auth/login' });
+
+    expect(request.mock.calls[0][0].timeout).toBeGreaterThan(0);
+  });
+
+  it('registration gets longer, because it seeds a catalog before answering', async () => {
+    const request = stubRawRequest();
+
+    await authApi.register({} as Parameters<typeof authApi.register>[0]);
+
+    expect(request.mock.calls[0][0].timeout).toBe(REGISTER_TIMEOUT_MS);
+  });
+
+  it('a bearer fetch gets a signal that fires at the fetch ceiling', () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+
+    expect(fetchTimeoutSignal()).toBeInstanceOf(AbortSignal);
+    expect(timeout).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
+  });
+
+  it('a phone without AbortSignal.timeout still fetches, with no signal', () => {
+    vi.stubGlobal('AbortSignal', {});
+    try {
+      expect(fetchTimeoutSignal()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

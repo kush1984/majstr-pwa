@@ -1,4 +1,4 @@
-import { api, ensureAccessToken } from './client.ts';
+import { api, ensureAccessToken, fetchTimeoutSignal } from './client.ts';
 import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type {
@@ -160,6 +160,7 @@ export const actsApi = {
     const access = await ensureAccessToken();
     const resp = await fetch(`${config.apiBaseUrl}/api/acts/${id}/pdf`, {
       headers: { Authorization: `Bearer ${access ?? ''}` },
+      signal: fetchTimeoutSignal(),
     });
     if (!resp.ok) {
       throw await httpError(resp);

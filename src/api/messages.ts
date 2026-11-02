@@ -1,4 +1,4 @@
-import { api, ensureAccessToken } from './client.ts';
+import { api, ensureAccessToken, fetchTimeoutSignal } from './client.ts';
 import { httpError } from './errors.ts';
 import { config } from '@/lib/config.ts';
 import type { MessageView } from './types.ts';
@@ -46,7 +46,7 @@ export const messagesApi = {
     const access = await ensureAccessToken();
     const resp = await fetch(
       `${config.apiBaseUrl}/api/projects/${projectId}/messages/${messageId}/files/${fileId}`,
-      { headers: { Authorization: `Bearer ${access ?? ''}` } },
+      { headers: { Authorization: `Bearer ${access ?? ''}` }, signal: fetchTimeoutSignal() },
     );
     if (!resp.ok) throw await httpError(resp);
     return URL.createObjectURL(await resp.blob());

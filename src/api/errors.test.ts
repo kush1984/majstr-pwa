@@ -22,6 +22,15 @@ describe('a request that never got an answer', () => {
     expect(failure.code).toBe('NETWORK');
   });
 
+  it('treats a fetch that hit its timeout as no answer, not as raw English', () => {
+    onlineManager.setOnline(true);
+
+    const failure = toAppError(new DOMException('signal timed out', 'TimeoutError'));
+
+    expect(failure.message).toBe(i18n.t('errors.network'));
+    expect(failure.code).toBe('NETWORK');
+  });
+
   it('still blames the server when the connection is fine', () => {
     // The other half of the same fork: online and no answer means the server really is unreachable,
     // and saying «потрібен інтернет» there would be its own wrong-way-round lie.

@@ -7,7 +7,7 @@ import { config, routes } from '@/lib/config.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { clearPersistedCache } from '@/lib/offlinePersist.ts';
 import i18n from '@/lib/i18n.ts';
-import type { AuthResponse } from './types.ts';
+import type { AuthResponse, BackendError } from './types.ts';
 
 /**
  * Axios instance shared across the whole app.
@@ -24,11 +24,12 @@ import type { AuthResponse } from './types.ts';
  *    original request a single time (`_retry` guard).
  * 3. Refresh is single-flight: concurrent callers share one `/api/auth/refresh`
  *    promise, so a stampede of queries triggers exactly one rotation.
- * 4. Refresh failures are CLASSIFIED: a 4xx from /api/auth/refresh means the
- *    token is genuinely dead → clear storage and redirect to /login ONCE
- *    (`redirectingToLogin` latch), pending requests reject. A network error
- *    or 5xx is transient → the failing request rejects but tokens are KEPT;
- *    we never log the user out because of a blip or a backend hiccup.
+ * 4. Refresh failures are CLASSIFIED: the backend refusing the token (see
+ *    `refreshRefused`) means it is genuinely dead → clear storage and redirect
+ *    to /login ONCE (`redirectingToLogin` latch), pending requests reject.
+ *    Anything else is transient (a network error, a timeout, a 5xx, an edge's
+ *    403 or 429) → the failing request rejects but tokens are KEPT; we never log
+ *    the user out because of a blip or a backend hiccup.
  */
 
 interface RetryableRequest extends InternalAxiosRequestConfig {
@@ -41,6 +42,26 @@ interface RetryableRequest extends InternalAxiosRequestConfig {
  * is still legitimately working on — and the tokens are billed either way.
  */
 export const LLM_TIMEOUT_MS = 180_000;
+
+/**
+ * Every bearer request waits for a refresh in flight, and so does the outbox. Without a ceiling, one
+ * hung socket stopped all of them until the master killed the app.
+ */
+export const REFRESH_TIMEOUT_MS = 15_000;
+
+/** Login, logout, forgot, reset, verify. Longer than `api`'s 12 s: nothing queues these, the master is waiting. */
+const RAW_TIMEOUT_MS = 30_000;
+
+/** Registration seeds a whole catalog before it answers. */
+export const REGISTER_TIMEOUT_MS = 60_000;
+
+/** A bearer `fetch` carries a PDF render or megabytes of photo, over one bar at worst. */
+export const FETCH_TIMEOUT_MS = 60_000;
+
+/** `AbortSignal.timeout` arrived in Safari 16; an older phone keeps today's behaviour. */
+export function fetchTimeoutSignal(): AbortSignal | null {
+  return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(FETCH_TIMEOUT_MS) : null;
+}
 
 export const api = axios.create({
   baseURL: config.apiBaseUrl,
@@ -91,12 +112,13 @@ let redirectingToLogin = false;
 /**
  * Refresh the access token, deduped: concurrent callers await the same
  * promise so we rotate the refresh token exactly once. Resolves to the new
- * access token, or `null` if auth is DEAD (no refresh token, or the server
- * definitively rejected it with a 4xx) — callers treat `null` as "log out".
+ * access token, or `null` if auth is DEAD (no refresh token, or the backend
+ * refused it) — callers treat `null` as "log out".
  *
- * REJECTS on transient failures (network down, backend 5xx): we must NOT log
- * the user out then — the refresh token is still perfectly valid, the server
- * just couldn't be reached. Callers propagate the error so the original
+ * REJECTS on transient failures (network down, timeout, 5xx, any answer that
+ * is not the backend's verdict on the token): we must NOT log the user out
+ * then — the refresh token is still perfectly valid, the server just couldn't
+ * be reached. Callers propagate the error so the original
  * request fails like any other transient failure (and React Query's retry
  * policy gets its shot), with tokens intact.
  */
@@ -109,6 +131,21 @@ function runRefresh(): Promise<string | null> {
   return refreshInFlight;
 }
 
+/**
+ * Did the backend itself refuse this token? 401 is its answer for an expired, revoked or rotated-away
+ * token, and 400 with its own error body for a malformed request. A 403 from a WAF, a 404 during a
+ * deploy, a 429 or an edge's bare 400 say nothing about the token, and logging out on them made a
+ * master retype a password on a phone with no signal.
+ */
+function refreshRefused(err: unknown): boolean {
+  if (!axios.isAxiosError(err) || !err.response) return false;
+  const { status, data } = err.response as { status: number; data: unknown };
+  if (status === 401) return true;
+  if (status !== 400 || typeof data !== 'object' || data === null) return false;
+  const body = data as Partial<BackendError>;
+  return typeof body.message === 'string' && typeof body.path === 'string';
+}
+
 async function doRefresh(): Promise<string | null> {
   const refreshToken = tokens.getRefresh();
   if (!refreshToken) return null;
@@ -118,23 +155,16 @@ async function doRefresh(): Promise<string | null> {
     const resp = await axios.post<AuthResponse>(
       `${config.apiBaseUrl}/api/auth/refresh`,
       { refreshToken },
-      { headers: { 'Content-Type': 'application/json' } },
+      { headers: { 'Content-Type': 'application/json' }, timeout: REFRESH_TIMEOUT_MS },
     );
-    if (!resp.data?.accessToken || !resp.data?.refreshToken) return null;
+    // A 2xx with no tokens is somebody else's page, not a verdict on the token.
+    if (!resp.data?.accessToken || !resp.data?.refreshToken) {
+      throw new Error('Refresh answered without tokens');
+    }
     tokens.set(resp.data.accessToken, resp.data.refreshToken);
     return resp.data.accessToken;
   } catch (err) {
-    // The server SAW the token and said no (401 expired/revoked/rotated-away,
-    // or any other 4xx) → auth is genuinely dead.
-    if (
-      axios.isAxiosError(err) &&
-      err.response &&
-      err.response.status >= 400 &&
-      err.response.status < 500
-    ) {
-      return null;
-    }
-    // No response (offline / DNS / timeout) or 5xx → transient; keep tokens.
+    if (refreshRefused(err)) return null;
     throw err;
   }
 }
@@ -146,8 +176,8 @@ function forceLogin(): void {
     redirectingToLogin = true;
     // A genuinely-dead session (server refused the refresh) — wipe the PERSISTED READ cache,
     // then hard-redirect. The reload alone drops in-memory state but NOT IndexedDB, so without
-    // this the next load would rehydrate the dead session's data. Reached only on a 4xx from
-    // /refresh — never when merely offline (that path keeps everything).
+    // this the next load would rehydrate the dead session's data. Reached only when the backend
+    // refused the token — never when merely offline (that path keeps everything).
     //
     // The OUTBOX is deliberately kept. It holds work the master actually did and the server
     // has never seen; destroying it here was silent data loss triggered by something entirely
@@ -281,5 +311,5 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
  *  without the auth bearer (e.g. /register, /login).
  */
 export function rawApi(cfg: AxiosRequestConfig) {
-  return axios.request({ baseURL: config.apiBaseUrl, ...cfg });
+  return axios.request({ baseURL: config.apiBaseUrl, timeout: RAW_TIMEOUT_MS, ...cfg });
 }

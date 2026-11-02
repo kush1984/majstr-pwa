@@ -1,4 +1,4 @@
-import { api, rawApi } from './client.ts';
+import { api, rawApi, REGISTER_TIMEOUT_MS } from './client.ts';
 import type {
   AuthResponse,
   LoginRequest,
@@ -17,6 +17,7 @@ export const authApi = {
       method: 'POST',
       url: '/api/auth/register',
       data: req,
+      timeout: REGISTER_TIMEOUT_MS,
     }).then((r) => r.data as AuthResponse);
   },
 

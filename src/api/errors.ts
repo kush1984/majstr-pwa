@@ -42,8 +42,12 @@ export async function httpError(resp: Response): Promise<HttpStatusError> {
   }
 }
 
-/** «Failed to fetch» (Chrome), «Load failed» (Safari), «NetworkError…» (Firefox): no answer at all. */
+/**
+ * «Failed to fetch» (Chrome), «Load failed» (Safari), «NetworkError…» (Firefox): no answer at all. So is
+ * `fetchTimeoutSignal` firing, whose DOMException would otherwise reach the master as raw English.
+ */
 function isFetchNetworkError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'TimeoutError') return true;
   return err instanceof TypeError
     && /failed to fetch|load failed|networkerror|network request failed/i.test(err.message);
 }
