@@ -76,7 +76,8 @@ function entry(over: Partial<CashEntryResponse> = {}): CashEntryResponse {
   return {
     id: 'e1', kind: 'PERSONAL', direction: 'INCOME', amount: 1000, category: null, note: null,
     happenedOn: '2026-09-10', happenedAt: '2026-09-10T08:00:00Z', projectId: null,
-    projectName: null, materialRefund: false, noteLocked: false, readOnly: false, ...over,
+    projectName: null, materialRefund: false, clientMaterial: false, noteLocked: false, readOnly: false,
+    hasPhoto: false, ...over,
   };
 }
 
@@ -94,18 +95,28 @@ function flow(entries: CashEntryResponse[]): CashFlowResponse {
 describe('applyCashDelta', () => {
   const totals = (over: Partial<CashFlowResponse>) => ({ ...flow([]), ...over });
 
-  it('earns income minus outlays — ONE subtraction, whatever came back for material', () => {
-    // Review B-33. The material the client repays is netted by its own COST already being a feed
-    // row, so subtracting the refund again billed the master for the same purchase twice.
+  it("moves none of his three figures for the client's material money", () => {
+    // Object-money iteration: a payment «на матеріал» is the client's money, not the master's, so
+    // it lands in the info line and nowhere else — exactly as the server counts it.
     const after = applyCashDelta(
       totals({ income: 28000, expense: 8000, refunds: 0, earned: 20000 }),
-      { added: entry({ id: 'r1', amount: 8000, materialRefund: true }) },
+      { added: entry({ id: 'r1', amount: 8000, materialRefund: true, clientMaterial: true }) },
     );
 
-    expect(after.income).toBe(36000);
+    expect(after.income).toBe(28000);
     expect(after.expense).toBe(8000);
     expect(after.refunds).toBe(8000);
-    expect(after.earned).toBe(28000); // and NOT 20 000
+    expect(after.earned).toBe(20000);
+  });
+
+  it('a till receipt «клієнт поверне» is not his spending either', () => {
+    const after = applyCashDelta(
+      totals({ income: 10000, expense: 0, earned: 10000 }),
+      { added: entry({ id: 't1', direction: 'EXPENSE', amount: 2500, clientMaterial: true }) },
+    );
+
+    expect(after.expense).toBe(0);
+    expect(after.earned).toBe(10000);
   });
 
   it('moves the figures by the DELTA, never by summing what is on screen', () => {
@@ -132,10 +143,10 @@ describe('applyCashDelta', () => {
     expect(after.earned).toBe(4600);
   });
 
-  it('drops a refund out of the label when its row is deleted', () => {
-    const refund = entry({ id: 'r1', amount: 5000, materialRefund: true });
+  it("drops the client's money out of the info line when its row is deleted", () => {
+    const refund = entry({ id: 'r1', amount: 5000, materialRefund: true, clientMaterial: true });
     const after = applyCashDelta(
-      totals({ income: 5000, expense: 0, refunds: 5000, earned: 5000 }),
+      totals({ income: 0, expense: 0, refunds: 5000, earned: 0 }),
       { removed: refund },
     );
 
@@ -154,6 +165,30 @@ describe('applyCashDelta', () => {
     const after = applyCashDelta(totals({ income: 900, earned: 900 }),
       { removed: row, added: { ...row, happenedOn: '2026-10-02' } });
     expect(after.income).toBe(0);
+  });
+
+  /** «по обʼєктах» + «особисте» must keep adding up to «Заробив» while a write is in flight. */
+  it('moves the object and personal slices with the totals — and opens a slice that was not there', () => {
+    const before = totals({
+      income: 10000, expense: 500, earned: 9500,
+      objects: [{ projectId: 'p1', projectName: 'Тест А', income: 10000, expense: 500, earned: 9500 }],
+      personal: null,
+    });
+
+    const withPersonal = applyCashDelta(before, {
+      added: entry({ id: 'x', direction: 'EXPENSE', amount: 800 }),
+    });
+    expect(withPersonal.personal).toMatchObject({ projectId: null, expense: 800, earned: -800 });
+    expect(withPersonal.objects?.[0].earned).toBe(9500);
+
+    const moved = applyCashDelta(withPersonal, {
+      removed: entry({ id: 'x', direction: 'EXPENSE', amount: 800 }),
+      added: entry({ id: 'x', direction: 'EXPENSE', amount: 800, projectId: 'p1', projectName: 'Тест А' }),
+    });
+    expect(moved.personal?.earned).toBe(0);
+    expect(moved.objects?.[0].earned).toBe(8700);
+    const slices = (moved.objects ?? []).reduce((sum, o) => sum + o.earned, moved.personal?.earned ?? 0);
+    expect(slices).toBe(moved.earned);
   });
 });
 

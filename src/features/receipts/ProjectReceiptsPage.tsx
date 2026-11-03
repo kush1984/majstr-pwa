@@ -71,8 +71,10 @@ export function ProjectReceiptsPage() {
 
   const items = useMemo(() => list.data?.items ?? [], [list.data]);
   // Three screens can open this one — the shopping list, the object and the economy card — so «←»
-  // returns to whichever did. The object stays the fallback: a reload loses the state.
-  const back = (location.state as { from?: string } | null)?.from ?? routes.project(projectId);
+  // returns to whichever did. A reload loses the state; the fallback is the object's «Економіка»,
+  // where its receipts live.
+  const back = (location.state as { from?: string } | null)?.from
+    ?? `${routes.project(projectId)}?tab=economy`;
 
   const onPick = (picked: FileList | null) => {
     const files = Array.from(picked ?? []);
@@ -480,7 +482,13 @@ function ReceiptCard({
               </span>
             )}
           </div>
-          {r.issuedAt && <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>}
+          {r.issuedAt ? (
+            <p className="mt-0.5 text-xs text-muted">{formatDate(r.issuedAt)}</p>
+          ) : !needsAmount && (
+            // Read but undated — the date was unreadable, or so implausible (a year back, the
+            // future) that the server dropped it. «Мої гроші» files it on the day it was added.
+            <p className="mt-0.5 text-xs text-warning">{t('receipts.noDate')}</p>
+          )}
           {/* A WARNING, never a refusal (V129): the fiscal identity is only known after a QR read,
               so the same paper can legitimately be photographed twice before either copy is read.
               Since B-04 it NAMES where the twin is — «такий чек тут уже є» about a list of forty

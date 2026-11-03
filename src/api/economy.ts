@@ -3,6 +3,7 @@ import type {
   ExpenseRequest,
   ExpenseResponse,
   ObjectEconomyResponse,
+  ObjectMoneyResponse,
 } from './types.ts';
 
 /**
@@ -13,6 +14,11 @@ import type {
 export const economyApi = {
   economy(objectId: string): Promise<ObjectEconomyResponse> {
     return api.get<ObjectEconomyResponse>(`/api/projects/${objectId}/economy`).then((r) => r.data);
+  },
+
+  /** «Гроші обʼєкта»: the object's rows of «Мої гроші» over its whole life, with the same totals. */
+  money(objectId: string): Promise<ObjectMoneyResponse> {
+    return api.get<ObjectMoneyResponse>(`/api/projects/${objectId}/money`).then((r) => r.data);
   },
 
   addExpense(objectId: string, req: ExpenseRequest, id?: string): Promise<ExpenseResponse> {

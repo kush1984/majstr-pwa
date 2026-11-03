@@ -39,7 +39,17 @@ function entry(over: Partial<CashEntryResponse> = {}): CashEntryResponse {
   };
 }
 
+/** The slices the server sends, derived from the rows the same way unless a test names its own. */
 function flow(over: Partial<CashFlowResponse> = {}): CashFlowResponse {
+  const entries = over.entries ?? [];
+  const slice = (rows: CashEntryResponse[]) => {
+    const own = rows.filter((e) => e.clientMaterial !== true);
+    const income = own.filter((e) => e.direction === 'INCOME').reduce((s, e) => s + e.amount, 0);
+    const expense = own.filter((e) => e.direction === 'EXPENSE').reduce((s, e) => s + e.amount, 0);
+    return { income, expense, earned: income - expense };
+  };
+  const ids = [...new Set(entries.flatMap((e) => (e.projectId ? [e.projectId] : [])))];
+  const personalRows = entries.filter((e) => e.projectId == null);
   return {
     from: '2026-09-01',
     to: '2026-09-30',
@@ -47,11 +57,21 @@ function flow(over: Partial<CashFlowResponse> = {}): CashFlowResponse {
     expense: 0,
     earned: 0,
     refunds: 0,
-    entries: [],
+    entries,
     months: [],
     truncated: false,
+    objects: ids.map((id) => {
+      const rows = entries.filter((e) => e.projectId === id);
+      return { projectId: id, projectName: rows[0].projectName ?? null, ...slice(rows) };
+    }),
+    personal: personalRows.length > 0 ? { projectId: null, projectName: null, ...slice(personalRows) } : null,
     ...over,
   };
+}
+
+/** Object rows sit folded under their object's line. */
+async function openObject(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(name) }));
 }
 
 function renderPage(state?: { from?: string; period?: 'WEEK' | 'MONTH' | 'YEAR' }) {
@@ -84,7 +104,22 @@ describe('CashFlowPage', () => {
     await waitFor(() => expect(screen.getByText(/17\D*000/)).toBeTruthy());
     expect(screen.getByText('Прийшло')).toBeTruthy();
     expect(screen.getByText('Заробив')).toBeTruthy();
-    expect(screen.getByText(/повернення за матеріал/)).toBeTruthy();
+    expect(screen.getByText(/Клієнти дали на матеріал/)).toBeTruthy();
+    // No balance block below, so the line points at nothing.
+    expect(screen.queryByText(/Скільки з них лишилось/)).toBeNull();
+  });
+
+  /** It says what clients HANDED OVER — what is left after the receipts is the block below, and
+   *  the line says so rather than read as the balance itself. */
+  it('points at the balance below when there is one', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      income: 0, expense: 0, refunds: 5000, earned: 0,
+      materials: [{ projectId: 'p1', projectName: 'Тест Б', bought: 763.72, given: 5000, outstanding: -4236.28 }],
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText(/Клієнти дали на матеріал .*Скільки з них лишилось — нижче/)).toBeTruthy();
   });
 
   it('does not explain a gap that is not there', async () => {
@@ -95,7 +130,7 @@ describe('CashFlowPage', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Дизель')).toBeTruthy());
-    expect(screen.queryByText(/повернення за матеріал/)).toBeNull();
+    expect(screen.queryByText(/Клієнти дали на матеріал/)).toBeNull();
   });
 
   /**
@@ -112,6 +147,7 @@ describe('CashFlowPage', () => {
     }));
 
     renderPage();
+    await openObject('Квартира на Лесі');
 
     const label = await screen.findByText('Плитка');
     expect(screen.getByText(/у підписаному акті/)).toBeTruthy();
@@ -121,19 +157,46 @@ describe('CashFlowPage', () => {
     expect(screen.queryByRole('button', { name: 'Зберегти' })).toBeNull();
   });
 
-  /** An off-object row says so: «без обʼєкта» is an answer, a blank line is a question. */
-  it('names the object a row came from, or says there is none', async () => {
+  /**
+   * Objects and «особисте» apart (master's ask): a job's rows fold under that object's line with
+   * what it earned, his own rows sit in their own block — never one mixed list.
+   */
+  it('splits the rows into objects and «Особисте», each object folded under its line', async () => {
     vi.mocked(cashApi.flow).mockResolvedValue(flow({
       entries: [
-        entry(),
-        entry({ id: 'e2', kind: 'OBJECT_EXPENSE', projectId: 'p1', projectName: 'Квартира на Лесі' }),
+        entry({ note: 'Робочий одяг', amount: 800 }),
+        entry({ id: 'e2', kind: 'OBJECT_EXPENSE', projectId: 'p1', projectName: 'Квартира на Лесі', note: 'Доставка', amount: 500 }),
+        entry({ id: 'e3', kind: 'OBJECT_PAYMENT', direction: 'INCOME', projectId: 'p1', projectName: 'Квартира на Лесі', note: 'За роботу', amount: 10000, category: null }),
       ],
+      income: 10000, expense: 1300, earned: 8700,
     }));
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Без обʼєкта')).toBeTruthy());
-    expect(screen.getByText('Квартира на Лесі')).toBeTruthy();
+    expect(await screen.findByText(/Особисте$/)).toBeTruthy();
+    expect(screen.getByText('Робочий одяг')).toBeTruthy();
+    // The object's line carries what it earned; its rows wait for a tap.
+    const line = screen.getByRole('button', { name: /Квартира на Лесі/ });
+    expect(line.textContent).toMatch(/9\D*500/);
+    expect(screen.queryByText('Доставка')).toBeNull();
+    // «Заробив» split the same way, adding up: 9 500 − 800 = 8 700.
+    expect(screen.getByText('по обʼєктах')).toBeTruthy();
+
+    fireEvent.click(line);
+    expect(screen.getByText('Доставка')).toBeTruthy();
+    expect(line.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('one object filtered in shows its rows without a tap', async () => {
+    localStorage.setItem('majstr.cash-object', 'p1');
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      entries: [entry({ id: 'e2', kind: 'OBJECT_EXPENSE', projectId: 'p1', projectName: 'Квартира на Лесі', note: 'Доставка' })],
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText('Доставка')).toBeTruthy();
+    localStorage.removeItem('majstr.cash-object');
   });
 
   /**
@@ -151,6 +214,7 @@ describe('CashFlowPage', () => {
     vi.mocked(cashApi.update).mockResolvedValue(entry());
 
     renderPage();
+    await openObject('Квартира на Лесі');
     fireEvent.click(await screen.findByText('Завдаток'));
 
     // No bouncing away to the object — it opens right here.
@@ -181,6 +245,7 @@ describe('CashFlowPage', () => {
     }));
 
     renderPage();
+    await openObject('Квартира на Лесі');
     fireEvent.click(await screen.findByText('Аванс'));
 
     expect(screen.getByDisplayValue('Аванс').hasAttribute('disabled')).toBe(true);
@@ -196,6 +261,7 @@ describe('CashFlowPage', () => {
     vi.mocked(cashApi.remove).mockResolvedValue(undefined);
 
     renderPage();
+    await openObject('Квартира на Лесі');
     fireEvent.click(await screen.findByText('Дизель'));
     fireEvent.click(screen.getByRole('button', { name: 'Видалити' }));
     // Asked first (review P-27): the write goes through that object's own service and there is no
@@ -288,14 +354,14 @@ describe('CashFlowPage', () => {
     renderPage();
     // The default tab, computed on his own phone: Monday 7 Sep to Sunday 13 Sep.
     await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
-      from: '2026-09-07', to: '2026-09-13', monthly: false,
+      from: '2026-09-07', to: '2026-09-13', monthly: false, object: 'ALL',
     }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Період' }));
     fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-09-30' } });
 
     await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
-      from: '2026-09-13', to: '2026-09-30', monthly: false,
+      from: '2026-09-13', to: '2026-09-30', monthly: false, object: 'ALL',
     }));
     vi.useRealTimers();
   });
@@ -332,13 +398,13 @@ describe('CashFlowPage', () => {
     fireEvent.change(screen.getByLabelText('Від'), { target: { value: '2026-08-01' } });
     fireEvent.change(screen.getByLabelText('До'), { target: { value: '2026-08-31' } });
     await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
-      from: '2026-08-01', to: '2026-08-31', monthly: false,
+      from: '2026-08-01', to: '2026-08-31', monthly: false, object: 'ALL',
     }));
 
     fireEvent.change(screen.getByLabelText('До'), { target: { value: '' } });
 
     await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith({
-      from: '2026-08-01', to: '2026-08-01', monthly: false,
+      from: '2026-08-01', to: '2026-08-01', monthly: false, object: 'ALL',
     }));
     expect(vi.mocked(cashApi.flow).mock.calls.every(([p]) => p?.to !== '')).toBe(true);
   });
@@ -373,12 +439,11 @@ describe('CashFlowPage', () => {
     expect(screen.queryByText('Без обʼєкта')).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '5000' } });
-    fireEvent.click(screen.getByRole('checkbox')); // «це повернення за матеріал»
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(cashApi.add).toHaveBeenCalled());
     expect(vi.mocked(cashApi.add).mock.calls[0][0]).toMatchObject({
-      direction: 'INCOME', amount: 5000, materialRefund: true, kind: null,
+      direction: 'INCOME', amount: 5000, materialRefund: false, kind: null,
     });
   });
 
@@ -432,13 +497,14 @@ describe('CashFlowPage', () => {
   });
 
   /** The refund tick is an income idea; on spending it would skew «Заробив» the other way. */
-  it('offers the refund tick only on income', async () => {
+  /** His own row is his own money: «на матеріал» belongs to an object's payment (object-money). */
+  it('never asks «на матеріал» on a row of his own', async () => {
     vi.mocked(cashApi.flow).mockResolvedValue(flow());
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Додати запис/ }));
 
-    expect(screen.getByRole('checkbox')).toBeTruthy(); // opens on «Отримав»
+    expect(screen.queryByRole('checkbox')).toBeNull(); // opens on «Отримав»
     fireEvent.click(screen.getByRole('button', { name: 'Витратив' }));
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
@@ -502,5 +568,82 @@ describe('CashFlowPage', () => {
     // And the screen says out loud that it already covers every object — the thing that was
     // missing when the object picker read as «pick one or nothing happens».
     expect(screen.getByText('Усі обʼєкти разом')).toBeTruthy();
+  });
+});
+
+/**
+ * Object-money iteration: a filter on the READ (never a step in front of adding) and the clients'
+ * material debts, which are in none of the three figures and so need a line of their own.
+ */
+describe('CashFlowPage — object filter and material debts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('opens on every object, and asks the server about one once it is picked', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow());
+
+    renderPage();
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith(
+      expect.objectContaining({ object: 'ALL' })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Обʼєкт' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Квартира на Лесі' }));
+
+    await waitFor(() => expect(cashApi.flow).toHaveBeenCalledWith(
+      expect.objectContaining({ object: 'p1' })));
+    expect(localStorage.getItem('majstr.cash-object')).toBe('p1');
+  });
+
+  it("lists what clients owe for material, and opens that object's receipts", async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      materials: [
+        { projectId: 'p1', projectName: 'Квартира на Лесі', bought: 5000, given: 1200, outstanding: 3800 },
+        { projectId: 'p2', projectName: 'Садова 4', bought: 0, given: 3000, outstanding: -3000 },
+      ],
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText(/Клієнти винні за матеріал/)).toBeTruthy();
+    expect(screen.getByText(/лишилось його/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Квартира на Лесі'));
+    expect(navigateMock).toHaveBeenCalledWith('/receipts/p1', expect.anything());
+  });
+
+  /** Part of an act's purchase paid with the client's material money: the row is his own share,
+   *  the paper's total said beside it, and the edit opens on the paper's figure. */
+  it('shows the part of a purchase the client paid, and edits the whole paper', async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      entries: [entry({
+        id: 'x1', kind: 'OBJECT_EXPENSE', amount: 12151.72, clientShare: 4236.28,
+        note: 'Чек до акта № 9: Електромаркет', category: 'MATERIALS',
+        projectId: 'p1', projectName: 'Тест Б',
+      })],
+    }));
+
+    renderPage();
+    await openObject('Тест Б');
+
+    expect(await screen.findByText(/з них .*4\D*236,28.* з грошей клієнта на матеріал/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Чек до акта № 9: Електромаркет'));
+    expect(screen.getByPlaceholderText<HTMLInputElement>('0').value).toBe('16388');
+  });
+
+  it("draws the client's material money without a sign", async () => {
+    vi.mocked(cashApi.flow).mockResolvedValue(flow({
+      entries: [entry({
+        id: 't1', kind: 'OBJECT_RECEIPT', note: 'Епіцентр', amount: 4300, clientMaterial: true,
+        projectId: 'p1', projectName: 'Квартира на Лесі', category: 'MATERIALS',
+      })],
+    }));
+
+    renderPage();
+    await openObject('Квартира на Лесі');
+
+    // Neutral: paid ahead or not, the balance line says who owes whom — not the row.
+    expect(await screen.findByText(/куплено для клієнта/)).toBeTruthy();
+    expect(screen.queryByText(/−\s*4\s*300/)).toBeNull();
   });
 });

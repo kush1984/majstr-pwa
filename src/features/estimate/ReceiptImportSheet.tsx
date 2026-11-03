@@ -12,12 +12,10 @@ import { useMe } from '@/features/auth/useMe.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
-import { economyApi } from '@/api/economy.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
-import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
-import { formatMoney } from '@/lib/format.ts';
+import { parseMoney, parseQuantity } from '@/lib/decimal.ts';
 import { downscaleImage } from '@/lib/image.ts';
 import { BATCH_QR_BUDGET_MS, decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
 import { cn } from '@/lib/cn.ts';
@@ -90,8 +88,6 @@ export function ReceiptImportSheet({
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
   const heldFiles = useRef<File[]>([]);
-  const receiptTotal = useRef(0);
-  const [expenseOpen, setExpenseOpen] = useState(false);
   const [savePhotoOpen, setSavePhotoOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -116,9 +112,7 @@ export function ReceiptImportSheet({
     setProgress({ done: 0, total: 0 });
     setDrafts([]);
     heldFiles.current = [];
-    receiptTotal.current = 0;
     setCommitting(false);
-    setExpenseOpen(false);
     setSavePhotoOpen(false);
   };
 
@@ -258,40 +252,14 @@ export function ReceiptImportSheet({
       noticeSentChange(qc, estimateId);
       invalidateEstimate();
       toast.success(t('receipt.added', { count: included.length }));
-      // The receipts are also the master's real cost — offer to log them as ONE object expense
-      // (closes the cash-flow loop). Then offer to keep the photos.
-      // Line by line at the scale money is stored at, then summed in kopecks — the figure goes
-      // into an `ObjectExpense`, so a float chain here lands a kopeck off the master's own cost
-      // (review P-52/P-39).
-      receiptTotal.current = sumMoney(
-        included.map((d) => roundMoney(num(d.quantity, 'quantity') * num(d.price, 'money'))),
-      );
-      if (receiptTotal.current > 0) setExpenseOpen(true);
-      else offerToKeepPhoto();
+      // Positions only. This import used to offer to post the receipt total as an object expense
+      // too, which made it the third door for one paper (object-money iteration): the money side
+      // of a receipt is answered on the object, «📷 Чек» → «клієнт поверне / моя витрата».
+      offerToKeepPhoto();
     } catch (err) {
       toast.error(toAppError(err).message);
       setCommitting(false);
     }
-  };
-
-  const saveExpense = async (save: boolean) => {
-    setExpenseOpen(false);
-    if (save && receiptTotal.current > 0) {
-      try {
-        await economyApi.addExpense(projectId, {
-          amount: receiptTotal.current,
-          category: 'MATERIALS',
-          note: t('receipt.expenseNote'),
-          spentAt: null,
-          source: 'RECEIPT',
-        });
-        void qc.invalidateQueries({ queryKey: ['object-economy', projectId] });
-        toast.success(t('receipt.expenseSaved'));
-      } catch (err) {
-        toast.error(toAppError(err).message); // fail-soft — the estimate lines already committed
-      }
-    }
-    offerToKeepPhoto();
   };
 
   const offerToKeepPhoto = () => {
@@ -497,15 +465,6 @@ export function ReceiptImportSheet({
       </Modal>
 
       <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
-
-      <ConfirmDialog
-        open={expenseOpen}
-        title={t('receipt.expenseTitle')}
-        message={t('receipt.expenseMessage', { amount: formatMoney(receiptTotal.current) })}
-        confirmLabel={t('receipt.expenseYes')}
-        onConfirm={() => void saveExpense(true)}
-        onClose={() => void saveExpense(false)}
-      />
 
       <ConfirmDialog
         open={savePhotoOpen}

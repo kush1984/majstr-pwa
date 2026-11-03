@@ -33,8 +33,9 @@ import type {
  * expenses — with the home strip's summary under the same ['cash'] prefix. A payment entered on the
  * object used to leave both showing the old figures until they happened to refetch (review P1-19).
  */
-function invalidateObjectMoney(qc: QueryClient, objectId: string): void {
+export function invalidateObjectMoney(qc: QueryClient, objectId: string): void {
   void qc.invalidateQueries({ queryKey: economyKeys.economy(objectId) });
+  void qc.invalidateQueries({ queryKey: ['object-money', objectId] });
   void qc.invalidateQueries({ queryKey: ['cash'] });
 }
 

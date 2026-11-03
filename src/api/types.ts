@@ -776,8 +776,6 @@ export interface ExpenseRequest {
   category: ExpenseCategory;
   note?: string | null;
   spentAt?: string | null;
-  /** Only the receipt flow sends RECEIPT; a hand-entered expense omits it → MANUAL. */
-  source?: ExpenseSource;
 }
 
 /** REGULAR — the master authored it; ADDENDUM — the auto-created «Додаткові роботи до акта № N»
@@ -903,7 +901,8 @@ export interface PaymentsSummaryResponse {
   remaining: number;
   /** Σ of the receipts ticked «повернення за матеріал» — why `received` and `workPaid` differ. */
   materialRefunds: number;
-  /** How much of that a till receivable actually absorbed: `min(materialRefunds, reimbursable)`. */
+  /** The material money taken out of the work axis — all of `materialRefunds` (object-money
+   *  iteration; B-65 used to cap it at the receipts). */
   refundApplied: number;
   /** `received - refundApplied` — the only half that may be measured against the contract. */
   workPaid: number;
@@ -952,9 +951,10 @@ export interface ObjectEconomyActsResponse {
 export interface ObjectEconomyMaterialsResponse {
   /** Gross — what the receipts still marked «клієнт відшкодовує» add up to. */
   reimbursable: number;
-  /** How much of it a «повернення за матеріал» payment has already settled (B-65). */
+  /** Σ of the client's payments «на матеріал» — before or after the purchase. */
   refundApplied: number;
-  /** `reimbursable - refundApplied`: what the client still owes. THIS is what the card asks for. */
+  /** `reimbursable - refundApplied`: positive = the client still owes for material, NEGATIVE = his
+   *  money the master has not spent on material yet. */
   outstanding: number;
   receiptCount: number;
   /** Photographed but not priced yet — they add nothing to `reimbursable` until a sum is on them. */
@@ -2217,9 +2217,19 @@ export interface CashEntryResponse {
   happenedAt?: string | null;
   projectId?: string | null;
   projectName?: string | null;
-  /** Income the client paid back for material. Since B-33 it LABELS the row and nothing more —
-   *  the material it repays is itself a feed row now, so «Заробив» nets out on its own. */
+  /** Income the client handed over for material — before or after the purchase. */
   materialRefund: boolean;
+  /** The CLIENT's material money, not the master's (object-money iteration): a payment «на
+   *  матеріал» or a till receipt «клієнт поверне». Shown without a sign and counted in none of
+   *  `income` / `expense` / `earned` — what is still owed is `CashFlowResponse.materials`.
+   *  Optional so a cached answer from before this field reads as `false`. */
+  clientMaterial?: boolean;
+  /** A photo of the paper is stored with the row. */
+  hasPhoto?: boolean;
+  /** Of a receipt bought for a signed act, the part the client's «на матеріал» money paid — then
+   *  `amount` is only what left the master's own pocket, and the paper says `amount + clientShare`.
+   *  Absent otherwise. */
+  clientShare?: number | null;
   /** The text belongs to something else, so an edit would be a silent no-op: a PLANNED receipt
    *  is named by its payment stage. The sheet shows it read-only. */
   noteLocked: boolean;
@@ -2241,15 +2251,66 @@ export interface CashFlowResponse {
   to: string;
   income: number;
   expense: number;
-  /** `income - expense`, ONE subtraction (B-33): the material the client pays back is netted by
-   *  its own cost being in `expense`. Never subtract `refunds` again on this side. */
+  /** `income - expense` over the MASTER's money only — the client's material money is in neither. */
   earned: number;
-  /** An INFO line: which part of «Прийшло» was not payment for work. Subtracted from nothing. */
+  /** The client's material money that arrived in the period — an INFO line, counted nowhere. */
   refunds: number;
   /** Empty for the YEAR view, which answers `months` instead. */
   entries: CashEntryResponse[];
   months: CashMonthTotal[];
   /** The LIST was cut at the server's cap; the totals above still cover everything. */
+  truncated: boolean;
+  /** What each client owes for material, or has unspent with the master — ALL TIME, not the
+   *  period. Only non-zero balances, largest debt first, narrowed by the object filter. Optional so
+   *  a cached answer from before the object-money iteration still renders. */
+  materials?: CashMaterialBalance[];
+  /** The period's totals per object, most recently active first — the same rule as the top three,
+   *  so Σ objects + personal adds up to them. An object that only moved the client's material money
+   *  is listed with zeros. Optional: a cached answer from before the split has none. */
+  objects?: CashScopeTotal[];
+  /** The rows that belong to no object, totalled; absent when there are none. */
+  personal?: CashScopeTotal | null;
+}
+
+/** One slice of «Мої гроші»'s totals: an object, or (no `projectId`) the personal rows. */
+export interface CashScopeTotal {
+  projectId?: string | null;
+  projectName?: string | null;
+  income: number;
+  expense: number;
+  earned: number;
+}
+
+/** One object's material balance with its client. */
+export interface CashMaterialBalance {
+  projectId: string;
+  projectName?: string | null;
+  /** Σ of the till receipts «клієнт поверне» not billed on an act. */
+  bought: number;
+  /** Σ of the client's payments «на матеріал». */
+  given: number;
+  /** Of `given`, what paid for the receipts on signed acts — no longer the client's. Optional: a
+   *  cached answer from before this field has none. */
+  toActs?: number;
+  /** `bought − given`: positive = the client owes, negative = his money not spent yet. */
+  outstanding: number;
+}
+
+/**
+ * «Гроші обʼєкта» — «Мої гроші» narrowed to one object over its whole life. The same rows and the
+ * same arithmetic, so the card and the filtered screen can never disagree.
+ */
+export interface ObjectMoneyResponse {
+  /** Payment for the work that arrived on this object. */
+  income: number;
+  /** The master's own spending on it. */
+  expense: number;
+  earned: number;
+  /** The client's material balance here — always present, zero included. */
+  materials: CashMaterialBalance;
+  /** Any crew pay recorded at all. Without one, «Заробив» may be his gross — the card says so. */
+  crewRecorded: boolean;
+  entries: CashEntryResponse[];
   truncated: boolean;
 }
 

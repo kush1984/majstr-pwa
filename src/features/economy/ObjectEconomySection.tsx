@@ -8,7 +8,7 @@ import { useMe } from '@/features/auth/useMe.ts';
 import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { track } from '@/lib/posthog.ts';
-import { formatMoney, formatMoneyExact, formatNumber } from '@/lib/format.ts';
+import { formatMoney, formatNumber } from '@/lib/format.ts';
 import { sumMoney } from '@/lib/decimal.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -20,8 +20,8 @@ import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useEconomy, useToggleEstimateCounted } from './useEconomy.ts';
 import { useActs } from '@/features/acts/useActs.ts';
 import { actCreateBlock, useNewAct } from '@/features/acts/useNewAct.ts';
-import { PaymentsBlock } from './PaymentsBlock.tsx';
-import type { CrewMarginResponse, ObjectEconomyActsResponse, ObjectEconomyMaterialsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
+import { ObjectMoneyCard } from './ObjectMoneyCard.tsx';
+import type { CrewMarginResponse, ObjectEconomyActsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
 
 // «Прибуток/Витрати» and the expense journal were parked here behind a flag in August and are now
 // GONE for good (crew-margin iteration). The reason they never came back is not the formula's
@@ -32,10 +32,13 @@ import type { CrewMarginResponse, ObjectEconomyActsResponse, ObjectEconomyMateri
 // wrong in the opposite direction for the one бригадир who records everything.
 //
 // The object keeps money (contract / acts / received) and facts the master typed himself (the
-// margin over the crew's prices). The question «скільки я заробив» is answered in «Мої гроші»,
-// where it counts everything and where the master asked for it.
+// margin over the crew's prices).
 //
-// The journal's backend CRUD is untouched: «Мої гроші» edits an object's rows through it.
+// object-money iteration: the missing input now has a door — «Гроші обʼєкта» (ObjectMoneyCard)
+// takes «Витратив» straight into `object_expenses`, and its «Заробив» is «Мої гроші» narrowed to
+// this object, read from the same server code. It says so when no crew pay is recorded. The
+// payments card (plan stages, «Розбити на частки») is no longer rendered: prod held eight stages
+// over 150 objects, every one an advance.
 
 /** A small reference figure (label + amount) in the economy breakdown. */
 function EcoRef({ label, value }: { label: string; value: number }) {
@@ -311,73 +314,6 @@ function AxisStrip({ label, value, total, info }: {
 }
 
 /**
- * The materials axis (V129) — FREE-visible, and deliberately its OWN axis rather than a line inside
- * {@link ActsAxis}. «Прийнято актами» ⊆ «За договором» counts one estimate set; a receipt joins the
- * contract only when an act picks it up, so folding it in would quietly break that invariant and
- * make the works figures wrong.
- *
- * <p>What it answers is the question the master actually has after the builders' merchant: how much
- * of his money is out there waiting to come back. Own-cost receipts never appear here — they are
- * already object expenses, and counting them twice is exactly the confusion this feature removes.</p>
- *
- * <p>Absent until there is a receipt, like every other card here: a permanent 0 ₴ row is the kind of
- * thing that «збиває з толку», and the door for adding one is the shopping list, not the economy.</p>
- */
-function MaterialsAxis({ materials, objectId }: {
-  materials: ObjectEconomyMaterialsResponse; objectId: string;
-}) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  if (materials.receiptCount === 0) return null;
-  return (
-    // The card is a DIV with the navigate button inside it, and the InfoPopover a SIBLING of that
-    // button — the same shape the estimate panel above uses (see its comment). InfoPopover is itself
-    // a button, so nested it swallowed the ⓘ tap and navigated to the receipts list instead.
-    <div className="w-full rounded-card border border-border bg-surface p-3 text-left">
-      <button
-        type="button"
-        onClick={() =>
-          navigate(routes.receipts(objectId), { state: { from: routes.project(objectId) } })
-        }
-        className="block w-full text-left"
-      >
-        {/* Phrasing content only: a <div>/<p> inside a <button> is invalid markup. */}
-        <span className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted">🧾 {t('receipts.axisTitle')}</span>
-          {/* Exact, unlike the estimate axes above: this figure is the sum of the very receipts the
-              card opens, and that list prints kopecks. Rounded here, the same receivable read
-              «13 ₴» on the object and «12,50 ₴» one tap later. */}
-          {/* What is still OWED, not what was spent (B-65): a client who has already handed the
-              money back was being asked for it again on the very screen that had just counted his
-              payment. `reimbursable` stays the gross figure and is shown below when it differs. */}
-          <span className="font-mono text-sm font-semibold tabular-nums text-primary">
-            {formatMoneyExact(materials.outstanding)}
-          </span>
-        </span>
-      </button>
-      <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted">
-        <span>
-          {t('receipts.axisCount', { count: materials.receiptCount })}
-          {materials.refundApplied > 0 && (
-            <span className="text-success">
-              {' · '}
-              {t('receipts.axisRefunded', { amount: formatMoneyExact(materials.refundApplied) })}
-            </span>
-          )}
-          {materials.unpricedCount > 0 && (
-            <span className="text-warning">
-              {' · '}
-              {t('receipts.axisUnpriced', { count: materials.unpricedCount })}
-            </span>
-          )}
-        </span>
-        <InfoPopover text={t('receipts.axisInfo')} label={t('receipts.axisTitle')} />
-      </p>
-    </div>
-  );
-}
-
-/**
  * Object economy tab. Two tiers (economy-polish iteration tightened the split):
  * <ul>
  *   <li><b>FREE + PRO, always real data:</b> per-SIGNED-estimate act panels, clickable → the
@@ -452,9 +388,10 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
           .filter((p) => p.kind === 'ADDENDUM' && p.countedInEconomy).map((p) => p.total))} />
       )}
 
-      {/* Materials axis (V129) — FREE-visible for the same reason, and NEVER folded into the works
-          figures above: those count one estimate set, this is money spent, not work accepted. */}
-      {eco?.materials && <MaterialsAxis materials={eco.materials} objectId={objectId} />}
+      {/* The object's money: income for the work, his spending, «Заробив», and the client's
+          material balance on its own line (it replaces the materials axis that stood here). Read
+          for every plan; writes ride OBJECT_ECONOMY. */}
+      <ObjectMoneyCard objectId={objectId} canWrite={isPro} onLocked={openTeaser} />
 
       {/* economy-polish: FREE stops at the acts list above now — the summary/payments/internals
           trio is ONE PRO-locked block, not three separate gates. Backend nulls payments AND
@@ -480,22 +417,6 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
         eco?.payments && (
           <>
             <EstimatesSummaryPanel panels={panels} />
-
-            {/* economy-contracted-signed-only-fix once replaced this whole section with a flat
-                «ще немає підписаних кошторисів» when nothing was signed. The 0/0/0 noise it was
-                removing is real, but it took «+ Платіж» down with it — and an ADVANCE is money
-                that arrives before anything is signed, so the first payment a master records had
-                no entry point at all. It also keyed off PLAN rows alone, so an object carrying
-                only unplanned receipts hid money already recorded. The block now stands down its
-                own zero-denominator parts instead (see PaymentsBlock). */}
-            {eco?.payments && (
-              <PaymentsBlock
-                objectId={objectId}
-                summary={eco.payments}
-                materialsOutstanding={eco.materials.outstanding}
-                objectCreatedAt={objectCreatedAt}
-              />
-            )}
 
           </>
         )

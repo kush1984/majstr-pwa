@@ -222,7 +222,6 @@
     "amount": "number",
     "category": "string",
     "note": "string?",
-    "source": "string?",
     "spentAt": "string?"
   },
   "FiscalQrRequest": {

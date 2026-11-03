@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectReceiptsApi } from '@/api/projectReceipts.ts';
 import { economyKeys } from '@/features/economy/useEconomy.ts';
-import type { ProjectReceiptRequest, ProjectReceiptResponse } from '@/api/types.ts';
+import type { ProjectReceiptRequest, ProjectReceiptsResponse } from '@/api/types.ts';
 
 export const projectReceiptsKey = (projectId: string) => ['project-receipts', projectId] as const;
 
@@ -27,6 +27,8 @@ export function useProjectReceiptsWriter(projectId: string) {
   return () => {
     void qc.invalidateQueries({ queryKey: projectReceiptsKey(projectId) });
     void qc.invalidateQueries({ queryKey: economyKeys.economy(projectId) });
+    // A receipt moves the client's material balance on «Гроші обʼєкта».
+    void qc.invalidateQueries({ queryKey: ['object-money', projectId] });
     // «Це моя витрата» posts an `ObjectExpense`, and the screen that shows one is «Мої гроші» —
     // the object's own journal screen is gone, so the key this used to refresh had no reader.
     void qc.invalidateQueries({ queryKey: ['cash'] });
@@ -49,9 +51,11 @@ export function useUpdateProjectReceipt(projectId: string) {
     mutationFn: ({ receiptId, req }: { receiptId: string; req: ProjectReceiptRequest }) =>
       projectReceiptsApi.update(projectId, receiptId, req),
     onSuccess: (saved) => {
-      qc.setQueryData<ProjectReceiptResponse[]>(
+      // The list is `{ items, totals }`, not an array — typing the updater as one hid that, and
+      // every edit died with «old?.map is not a function». Totals arrive with the refetch below.
+      qc.setQueryData<ProjectReceiptsResponse>(
         projectReceiptsKey(projectId),
-        (old) => old?.map((r) => (r.id === saved.id ? saved : r)),
+        (old) => old && { ...old, items: old.items.map((r) => (r.id === saved.id ? saved : r)) },
       );
       invalidate();
     },
@@ -66,9 +70,9 @@ export function useDeleteProjectReceipt(projectId: string) {
     onSuccess: (_void, receiptId) => {
       // Gone from the list at once: the row carries a photo, and a deleted receipt lingering for
       // the length of a refetch is the one state that reads as «it did not work, tap again».
-      qc.setQueryData<ProjectReceiptResponse[]>(
+      qc.setQueryData<ProjectReceiptsResponse>(
         projectReceiptsKey(projectId),
-        (old) => old?.filter((r) => r.id !== receiptId),
+        (old) => old && { ...old, items: old.items.filter((r) => r.id !== receiptId) },
       );
       invalidate();
     },

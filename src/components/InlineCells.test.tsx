@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { InlineNumberCell } from './InlineNumberCell.tsx';
@@ -243,6 +243,61 @@ describe('InlineTextCell', () => {
     fireEvent.mouseDown(cancel);
     fireEvent.click(cancel);
     fireEvent.blur(input);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * System «Назад» and the cells' history entry. A run of cells shares ONE entry, handed over on
+ * close: each cell used to pop its own with an async `history.go(-1)`, and a cell opened by a mouse
+ * click in between had its fresh entry taken by that pop — read as Back, it closed at once.
+ */
+describe('inline cells — system back', () => {
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  // Cells closed by the tests above still hold the shared entry for its handover window.
+  beforeEach(() => pause(450));
+
+  it('a click from one cell to the next hands the entry over — history is not touched', async () => {
+    const go = vi.spyOn(window.history, 'go');
+    const push = vi.spyOn(window.history, 'pushState');
+    render(
+      <>
+        <InlineNumberCell value={1} kind="quantity" ariaLabel="Кількість, Перша" onCommit={vi.fn()} />
+        <InlineNumberCell value={2} kind="quantity" ariaLabel="Кількість, Друга" onCommit={vi.fn()} />
+      </>,
+    );
+    const first = openCell('Кількість, Перша');
+    expect(push).toHaveBeenCalledTimes(1);
+    fireEvent.change(first, { target: { value: '5' } });
+    fireEvent.blur(first); // the mousedown on the next cell
+    await act(() => pause(20));
+    openCell('Кількість, Друга'); // …and its click, a moment later
+
+    await act(() => pause(450));
+
+    expect(go).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('textbox', { name: 'Кількість, Друга' })).toBeTruthy();
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Кількість, Друга' }), { key: 'Escape' });
+    await act(() => pause(450));
+    // Once nothing takes it over, the entry goes — one step back.
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(go).toHaveBeenCalledWith(-1);
+    go.mockRestore();
+    push.mockRestore();
+    await act(() => pause(50));
+  });
+
+  it('Back cancels the open cell and saves nothing', async () => {
+    const onCommit = vi.fn();
+    render(<InlineNumberCell value={1} kind="quantity" ariaLabel="Кількість, Стяжка" onCommit={onCommit} />);
+    const input = openCell('Кількість, Стяжка');
+    fireEvent.change(input, { target: { value: '9' } });
+
+    act(() => { window.history.back(); });
+
+    await vi.waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
     expect(onCommit).not.toHaveBeenCalled();
   });
 });

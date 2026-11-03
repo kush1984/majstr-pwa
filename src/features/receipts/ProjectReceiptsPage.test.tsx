@@ -317,6 +317,19 @@ describe('ProjectReceiptsPage', () => {
     expect(screen.queryByText('Сервіс тимчасово недоступний')).toBeNull();
   });
 
+  /** The server drops a vision-read date a year back or in the future (a «2009» off a faded
+   *  footer); the card says so instead of showing nothing. */
+  it('asks to check the date of a priced receipt that has none — and only of a priced one', () => {
+    seed([
+      receipt({ id: 'r1', label: 'Епіцентр', issuedAt: null }),
+      receipt({ id: 'r2', label: 'Чек №2', amount: 0, issuedAt: null, sortOrder: 1 }),
+      receipt({ id: 'r3', label: 'Нова Лінія', sortOrder: 2 }),
+    ]);
+    renderPage();
+
+    expect(screen.getAllByText(/Дату не прочитано/)).toHaveLength(1);
+  });
+
   it('goes back to the screen that opened it, not always to the object', () => {
     seed([receipt()]);
     const { router } = renderPage('/shopping/p1');
@@ -326,13 +339,14 @@ describe('ProjectReceiptsPage', () => {
     expect(router.state.location.pathname).toBe('/shopping/p1');
   });
 
-  it('falls back to the object when there is no state to go back to', () => {
+  it('falls back to «Економіка» when there is no state to go back to', () => {
     seed([receipt()]);
     const { router } = renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
 
     expect(router.state.location.pathname).toBe('/projects/p1');
+    expect(router.state.location.search).toBe('?tab=economy');
   });
 
   /**

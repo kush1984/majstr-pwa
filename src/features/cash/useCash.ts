@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { cashApi } from '@/api/cash.ts';
+import { cashApi, type CashObjectFilter } from '@/api/cash.ts';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { newUuid } from '@/lib/uuid.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { dropPendingEntity, patchPendingCreate } from '@/lib/outbox/outbox.ts';
 import type {
-  CashEntryKind, CashEntryRequest, CashEntryResponse, CashFlowResponse, CashSummaryResponse,
+  CashEntryKind, CashEntryRequest, CashEntryResponse, CashFlowResponse, CashScopeTotal, CashSummaryResponse,
 } from '@/api/types.ts';
 
 /** Which window of time the screen is showing. */
@@ -20,9 +20,9 @@ export interface CashPeriod {
   monthly: boolean;
 }
 
-/** Exported so the offline prefetch primes the SAME key the screen reads. */
-export const CASH_KEY = (from: string, to: string, monthly: boolean) =>
-  ['cash', from, to, monthly] as const;
+/** Exported so the offline prefetch primes the SAME key the screen reads (the unfiltered one). */
+export const CASH_KEY = (from: string, to: string, monthly: boolean, object: CashObjectFilter = 'ALL') =>
+  ['cash', from, to, monthly, object] as const;
 export const CASH_SUMMARY_KEY = ['cash', 'summary'] as const;
 
 const iso = (d: Date) =>
@@ -79,10 +79,12 @@ export function monthPeriod(firstDay: string): CashPeriod {
   return cashPeriod('MONTH', new Date(y, m - 1, 1));
 }
 
-export function useCashFlow(period: CashPeriod) {
+export function useCashFlow(period: CashPeriod, object: CashObjectFilter = 'ALL') {
   return useQuery({
-    queryKey: CASH_KEY(period.from, period.to, period.monthly),
-    queryFn: () => cashApi.flow({ from: period.from, to: period.to, monthly: period.monthly }),
+    queryKey: CASH_KEY(period.from, period.to, period.monthly, object),
+    queryFn: () => cashApi.flow({
+      from: period.from, to: period.to, monthly: period.monthly, object,
+    }),
   });
 }
 
@@ -103,12 +105,16 @@ export interface CashDelta {
   added?: CashEntryResponse | null;
 }
 
-/** What one row contributes to the figures the screen adds up. */
+/**
+ * What one row contributes to the figures the screen adds up. The client's material money moves
+ * none of the master's three — exactly as the server counts it (object-money iteration).
+ */
 function contribution(e: CashEntryResponse) {
+  const own = e.clientMaterial !== true;
   return {
-    income: e.direction === 'INCOME' ? e.amount : 0,
-    expense: e.direction === 'EXPENSE' ? e.amount : 0,
-    refunds: e.materialRefund ? e.amount : 0,
+    income: own && e.direction === 'INCOME' ? e.amount : 0,
+    expense: own && e.direction === 'EXPENSE' ? e.amount : 0,
+    refunds: !own && e.direction === 'INCOME' ? e.amount : 0,
   };
 }
 
@@ -122,11 +128,9 @@ function contribution(e: CashEntryResponse) {
  * Both showed a figure that was not stale but invented, and offline it stayed that way until the
  * next reconnect.</p>
  *
- * <p>`earned` is ONE subtraction (review B-33): the material a client pays back is already netted
- * by its own COST sitting in `expense`, because the till receipt he is owed for is a feed row of
- * its own. Subtracting `refunds` on top charged the master for it twice, so «Заробив» dropped the
- * moment a row was touched and jumped back on refetch. `refunds` survives as a LABEL — it explains
- * the gap between «Прийшло» and «Заробив» — and is never subtracted again.</p>
+ * <p>`earned` is ONE subtraction over the master's own money. The client's material money — a
+ * receipt «клієнт поверне», a payment «на матеріал» — moves neither side (object-money iteration),
+ * so «Заробив» cannot swing with a purchase and its repayment. `refunds` is an info line only.</p>
  */
 export function applyCashDelta(flow: CashFlowResponse, change: CashDelta): CashFlowResponse {
   // Only what falls inside the window on screen moves its figures (review P-64): a 15 Sep row added
@@ -141,7 +145,43 @@ export function applyCashDelta(flow: CashFlowResponse, change: CashDelta): CashF
     expense,
     refunds: flow.refunds - out.refunds + inc.refunds,
     earned: income - expense,
+    ...sliceDelta(flow, inWindow(flow, change.removed), inWindow(flow, change.added)),
   };
+}
+
+/**
+ * The same delta, applied to the object / personal slices, so «по обʼєктах» and «особисте» keep
+ * adding up to «Заробив» while a write is in flight or queued offline. A row moved to another
+ * object leaves one slice and enters the other; a slice that did not exist yet is opened.
+ */
+function sliceDelta(
+  flow: CashFlowResponse,
+  removed: CashEntryResponse | null,
+  added: CashEntryResponse | null,
+): Pick<CashFlowResponse, 'objects' | 'personal'> {
+  if (flow.objects === undefined) return {};
+  let objects = [...flow.objects];
+  let personal = flow.personal ?? null;
+  const apply = (e: CashEntryResponse | null, sign: 1 | -1) => {
+    if (!e) return;
+    const c = contribution(e);
+    const move = (s: CashScopeTotal): CashScopeTotal => {
+      const income = s.income + sign * c.income;
+      const expense = s.expense + sign * c.expense;
+      return { ...s, income, expense, earned: income - expense };
+    };
+    const blank = { income: 0, expense: 0, earned: 0 };
+    if (e.projectId == null) {
+      personal = move(personal ?? { projectId: null, projectName: null, ...blank });
+    } else if (objects.some((o) => o.projectId === e.projectId)) {
+      objects = objects.map((o) => (o.projectId === e.projectId ? move(o) : o));
+    } else {
+      objects = [move({ projectId: e.projectId, projectName: e.projectName ?? null, ...blank }), ...objects];
+    }
+  };
+  apply(removed, -1);
+  apply(added, 1);
+  return { objects, personal };
 }
 
 /** The row, if it falls inside the window `period` covers — the same test `summaryDelta` makes. */
@@ -164,7 +204,8 @@ export function placeRow(flow: CashFlowResponse, id: string, row: CashEntryRespo
 /** A row that contributes nothing — «no row on this side» written once instead of three times. */
 const EMPTY_ROW: CashEntryResponse = {
   id: '', kind: 'PERSONAL', direction: 'INCOME', amount: 0,
-  happenedOn: '', materialRefund: false, noteLocked: false, readOnly: false,
+  happenedOn: '', materialRefund: false, clientMaterial: false, noteLocked: false, readOnly: false,
+  hasPhoto: false,
 };
 
 /**
@@ -186,7 +227,7 @@ function insertByDay(entries: CashEntryResponse[], row: CashEntryResponse): Cash
  * of the point. ONE outbox entity covers all three kinds: adding is always his own row, and an edit
  * or a delete carries the `kind` that says which table the server should write through.
  */
-export function useCashActions(period: CashPeriod) {
+export function useCashActions(period: CashPeriod, object: CashObjectFilter = 'ALL') {
   const qc = useQueryClient();
 
   /**
@@ -198,6 +239,7 @@ export function useCashActions(period: CashPeriod) {
   const invalidate = (kind: CashEntryKind = 'PERSONAL') => {
     void qc.invalidateQueries({ queryKey: ['cash'] });
     if (kind === 'PERSONAL') return;
+    void qc.invalidateQueries({ queryKey: ['object-money'] });
     void qc.invalidateQueries({ queryKey: ['object-economy'] });
     void qc.invalidateQueries({ queryKey: ['dashboard'] });
     void qc.invalidateQueries({ queryKey: ['projects'] });
@@ -224,7 +266,7 @@ export function useCashActions(period: CashPeriod) {
     edit: (flow: CashFlowResponse) => CashFlowResponse,
     change: CashDelta,
   ) => {
-    const key = CASH_KEY(period.from, period.to, period.monthly);
+    const key = CASH_KEY(period.from, period.to, period.monthly, object);
     const old = qc.getQueryData<CashFlowResponse>(key);
     const oldSummary = qc.getQueryData<CashSummaryResponse>(CASH_SUMMARY_KEY);
     if (!old) return () => undefined;
@@ -257,14 +299,15 @@ export function useCashActions(period: CashPeriod) {
 
   /** The row as it stands now — the «before» half of every delta below. */
   const current = (id: string) => qc
-    .getQueryData<CashFlowResponse>(CASH_KEY(period.from, period.to, period.monthly))
+    .getQueryData<CashFlowResponse>(CASH_KEY(period.from, period.to, period.monthly, object))
     ?.entries.find((e) => e.id === id) ?? null;
 
   return {
     add: useMutation({
       networkMode: 'always',
       onError,
-      mutationFn: (req: CashEntryRequest) => {
+      /** Resolves with the new row's id — a photo of the paper is attached to it right after. */
+      mutationFn: async (req: CashEntryRequest): Promise<string> => {
         const id = newUuid();
         const now = new Date();
         const row: CashEntryResponse = {
@@ -279,11 +322,15 @@ export function useCashActions(period: CashPeriod) {
           projectId: null,
           projectName: null,
           materialRefund: req.materialRefund,
+          clientMaterial: false, // his own row is always his own money
           noteLocked: false,
           readOnly: false, // his own `cash_entry`: nothing has frozen it into an act
+          hasPhoto: false,
         };
-        return optimistically(
-          (flow) => applyCashDelta(placeRow(flow, id, row), { added: row }),
+        // A row the current filter would not list (an object is picked) is not put on screen.
+        const shown = object === 'ALL' || object === 'NONE';
+        await optimistically(
+          (flow) => (shown ? applyCashDelta(placeRow(flow, id, row), { added: row }) : flow),
           { added: row },
           () => offlineMutate<void>({
             entity: 'cashEntry', entityId: id, type: 'create', payload: { req },
@@ -292,6 +339,7 @@ export function useCashActions(period: CashPeriod) {
             optimistic: () => undefined, // the cache is patched above, on BOTH paths
           }),
         );
+        return id;
       },
     }),
     update: useMutation({

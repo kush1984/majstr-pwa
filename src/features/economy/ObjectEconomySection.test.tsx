@@ -9,8 +9,9 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { economyApi } from '@/api/economy.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { actsApi } from '@/api/acts.ts';
-import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
-import type { ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse, WorkActResponse } from '@/api/types.ts';
+import { paymentsApi } from '@/api/payments.ts';
+import { formatMoney } from '@/lib/format.ts';
+import type { CashEntryResponse, ObjectMoneyResponse, ObjectEconomyResponse, SignedEstimatePanelResponse, UserResponse, WorkActResponse } from '@/api/types.ts';
 
 // Intl.NumberFormat('uk-UA') groups digits with U+00A0 (NBSP). RTL's default text normalizer
 // collapses whitespace in the RENDERED node text before comparing, but does NOT touch a plain
@@ -20,19 +21,17 @@ function money(n: number): string {
   return formatMoney(n).replace(/\s+/g, ' ');
 }
 
-/** The materials axis prints kopecks — a receipt is a paper sum, not a rounded one. */
-function moneyExact(n: number): string {
-  return formatMoneyExact(n).replace(/\s+/g, ' ');
-}
 
 vi.mock('@/api/economy.ts', () => ({
   economyApi: {
     economy: vi.fn(),
+    money: vi.fn(),
     addExpense: vi.fn(),
     updateExpense: vi.fn(),
     deleteExpense: vi.fn(),
   },
 }));
+vi.mock('@/api/payments.ts', () => ({ paymentsApi: { addReceipt: vi.fn() } }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn() } }));
 vi.mock('@/api/acts.ts', () => ({ actsApi: { list: vi.fn(() => Promise.resolve([])), create: vi.fn() } }));
@@ -55,12 +54,28 @@ function baseMe(plan: UserResponse['plan']): UserResponse {
   };
 }
 
-/** The payments card, addressed through its own heading — the section holds several cards and
- *  «· 0 %» is a legitimate reading in the acts and materials axes above it. */
-function paymentsCard(heading: HTMLElement): HTMLElement {
+/** «Гроші обʼєкта», addressed through its own heading. */
+function moneyCard(heading: HTMLElement): HTMLElement {
   const card = heading.closest('section');
-  if (!card) throw new Error('payments heading is not inside a <section>');
+  if (!card) throw new Error('money heading is not inside a <section>');
   return card;
+}
+
+function moneyRow(over: Partial<CashEntryResponse> = {}): CashEntryResponse {
+  return {
+    id: 'm1', kind: 'OBJECT_PAYMENT', direction: 'INCOME', amount: 20000, category: null,
+    note: 'Завдаток', happenedOn: '2026-10-12', projectId: 'p1', projectName: 'Франка 12',
+    materialRefund: false, clientMaterial: false, noteLocked: false, readOnly: false,
+    hasPhoto: false, ...over,
+  };
+}
+
+function moneyFixture(over: Partial<ObjectMoneyResponse> = {}): ObjectMoneyResponse {
+  return {
+    income: 0, expense: 0, earned: 0,
+    materials: { projectId: 'p1', projectName: 'Франка 12', bought: 0, given: 0, outstanding: 0 },
+    crewRecorded: false, entries: [], truncated: false, ...over,
+  };
 }
 
 function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEstimatePanelResponse {
@@ -136,7 +151,10 @@ function renderSection(plan: UserResponse['plan']) {
   return render(<ObjectEconomySection objectId="p1" />, { wrapper });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(economyApi.money).mockResolvedValue(moneyFixture());
+});
 
 describe('ObjectEconomySection', () => {
   it('FREE: temporarily gets the full economy tab too — no lock teaser, summary + payments unlocked', async () => {
@@ -151,7 +169,7 @@ describe('ObjectEconomySection', () => {
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
     expect(await screen.findByText('Кухня')).toBeTruthy(); // per-estimate panel
     expect(await screen.findByText('Загалом по підписаних')).toBeTruthy(); // summary panel
-    expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
+    expect(await screen.findByText('Гроші обʼєкта')).toBeTruthy(); // the money card
     expect(screen.queryByText(/у PRO$/)).toBeNull(); // no lock teaser
   });
 
@@ -162,7 +180,7 @@ describe('ObjectEconomySection', () => {
 
     await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
     expect(await screen.findByText('Загалом по підписаних')).toBeTruthy(); // summary panel
-    expect(screen.getByText('Аванс')).toBeTruthy(); // payment row
+    expect(await screen.findByText('Гроші обʼєкта')).toBeTruthy(); // the money card
     // «Прибуток» is GONE from the object, not hidden behind a flag: the formula subtracted
     // expenses no screen lets a master enter against an object, so it read ≈ «За договором» for
     // everyone. Earnings live in «Мої гроші». Asserted on the FIGURES the fixture carries (review
@@ -255,71 +273,124 @@ describe('ObjectEconomySection', () => {
     expect(screen.queryByText('Твоя націнка')).toBeNull();
   });
 
-  it('nothing signed yet: the block stands down its zero figures but KEEPS «+ Платіж» — an advance comes first', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      estimates: [],
-      pro: { expenses: 0, profit: 0 },
-      payments: {
-        contractedTotal: 0, received: 0, remaining: 0, materialRefunds: 0, refundApplied: 0,
-        workPaid: 0, overpaid: 0, payments: [], unplannedReceipts: [],
-      },
+  /**
+   * «Гроші обʼєкта» (object-money iteration): what came in for the work, what he spent, what he
+   * earned — the same arithmetic as «Мої гроші», read from the server. The payments card with its
+   * plan stages and «Розбити на частки» is gone from the screen.
+   */
+  it('the money card shows income, spending and earnings, and no plan controls', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({ pro: { expenses: 0, profit: 0 } }));
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({
+      income: 42000, expense: 18500, earned: 23500, crewRecorded: true,
+      entries: [moneyRow(), moneyRow({ id: 'm2', kind: 'OBJECT_EXPENSE', direction: 'EXPENSE', amount: 12000, category: 'CREW', note: 'Сашко' })],
     }));
 
     renderSection('PRO');
 
-    await waitFor(() => expect(economyApi.economy).toHaveBeenCalledWith('p1'));
-    // The one entry point for the first payment a master ever records has to be on the screen:
-    // an advance arrives BEFORE the estimate is signed. Replacing the section with a flat
-    // «ще немає підписаних кошторисів» took it away, and the save simply had nowhere to start.
-    expect(await screen.findByText('Платежі')).toBeTruthy();
-    expect(screen.getByText('+ Платіж')).toBeTruthy();
-    expect(screen.getByText(/Ще нічого не записано/)).toBeTruthy();
-    // The 0/0/0 noise that fix was right about still stays away: no percent against a zero
-    // denominator, no splitting a contract that doesn't exist, no summary panel. Scoped to the
-    // payments card — the acts and materials axes above legitimately print their own «· 0 %».
-    expect(within(paymentsCard(screen.getByText('Платежі'))).queryByText(/%/)).toBeNull();
+    const card = moneyCard(await screen.findByText('Гроші обʼєкта'));
+    expect(within(card).getByText(new RegExp(money(23500)))).toBeTruthy();
     expect(screen.queryByText('Розбити на частки')).toBeNull();
-    expect(screen.queryByText('Загалом по підписаних')).toBeNull();
+    expect(screen.queryByText('+ Платіж')).toBeNull();
+    expect(screen.queryByText(/Бригаді нічого не записано/)).toBeNull();
   });
 
-  it('manually-created payments still show even with no SIGNED acts', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      estimates: [],
-      pro: { expenses: 0, profit: 0 },
-      payments: {
-        contractedTotal: 0, received: 0, remaining: 0, materialRefunds: 0, refundApplied: 0,
-        workPaid: 0, overpaid: 0, payments: [SAMPLE_PAYMENTS.payments[0]], unplannedReceipts: [],
-      },
+  /** The rows fold under «✓ Отримано · N» / «Витрачено · N», as the payments card did: a year of
+   *  crew pay would otherwise push the rest of the economy tab off screen. */
+  it('folds the rows into an income group and a spending group, each opened on its own', async () => {
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({
+      income: 42000, expense: 12000, earned: 30000, crewRecorded: true,
+      entries: [
+        moneyRow({ note: 'Аванс від Олени' }),
+        moneyRow({ id: 'm2', kind: 'OBJECT_EXPENSE', direction: 'EXPENSE', amount: 12000, category: 'CREW', note: 'Сашко' }),
+      ],
     }));
 
     renderSection('PRO');
 
-    // The master already logged a payment by hand — show it as-is, and no empty-state line.
-    expect(await screen.findByText('Аванс')).toBeTruthy();
-    expect(screen.queryByText(/Ще нічого не записано/)).toBeNull();
+    const card = moneyCard(await screen.findByText('Гроші обʼєкта'));
+    const inGroup = within(card).getByRole('button', { name: /Отримано · 1 платіж/ });
+    const outGroup = within(card).getByRole('button', { name: /Витрачено · 1 запис/ });
+    expect(within(card).queryByText('Сашко')).toBeNull();
+    expect(within(card).queryByText('Аванс від Олени')).toBeNull();
+
+    fireEvent.click(outGroup);
+    expect(within(card).getByText('Сашко')).toBeTruthy();
+    expect(within(card).queryByText('Аванс від Олени')).toBeNull();
+    expect(outGroup.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(inGroup);
+    expect(within(card).getByText('Аванс від Олени')).toBeTruthy();
   });
 
-  it('an object carrying only unplanned receipts keeps them — and says how much landed', async () => {
-    // These used to vanish outright: the old guard asked about PLAN rows and signed panels only,
-    // so money already recorded against the object was simply not on the screen.
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      estimates: [],
-      pro: { expenses: 0, profit: 0 },
-      payments: {
-        contractedTotal: 0, received: 4000, remaining: 0, materialRefunds: 0, refundApplied: 0,
-        workPaid: 4000, overpaid: 0, payments: [],
-        unplannedReceipts: [{ id: 'u1', planPaymentId: null, label: 'Завдаток', displayLabel: 'Завдаток', amount: 4000, receivedAt: '2026-09-01', materialRefund: false }],
-      },
-    }));
+  /** Most masters have no crew — a «nothing paid to the crew» line that never goes away for them
+   *  was noise, and the owner had it removed. */
+  it('says nothing about a crew, even with money in and no crew pay recorded', async () => {
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({ income: 20000, earned: 20000 }));
 
     renderSection('PRO');
 
-    // A percent needs a denominator, but the sum does not — the collapsed row only says «· 1».
-    const card = paymentsCard(await screen.findByText('Платежі'));
-    expect(within(card).getByText(new RegExp(money(4000)))).toBeTruthy();
-    expect(within(card).queryByText(/%/)).toBeNull();
-    fireEvent.click(screen.getByText(/Отримано · 1/));
-    expect(screen.getByText('Завдаток')).toBeTruthy();
+    expect(await screen.findByText('Гроші обʼєкта')).toBeTruthy();
+    expect(screen.queryByText(/Бригаді/)).toBeNull();
+  });
+
+  it('«Отримав» posts an object payment named by its purpose — the first one is the advance', async () => {
+    vi.mocked(paymentsApi.addReceipt).mockResolvedValue([]);
+
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Додати' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Отримав/ }));
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '20000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(paymentsApi.addReceipt).toHaveBeenCalled());
+    expect(vi.mocked(paymentsApi.addReceipt).mock.calls[0][1]).toMatchObject({
+      label: 'Завдаток', amount: 20000, materialRefund: false,
+    });
+  });
+
+  it('«На матеріал» is the client\'s money, sent as such', async () => {
+    vi.mocked(paymentsApi.addReceipt).mockResolvedValue([]);
+
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Додати' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Отримав/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'На матеріал' }));
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '10000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(paymentsApi.addReceipt).toHaveBeenCalled());
+    expect(vi.mocked(paymentsApi.addReceipt).mock.calls[0][1]).toMatchObject({
+      label: 'На матеріал', amount: 10000, materialRefund: true,
+    });
+  });
+
+  it('«Витратив» posts an object expense — the crew by default', async () => {
+    vi.mocked(economyApi.addExpense).mockResolvedValue(undefined as never);
+
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Додати' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Витратив/ }));
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '12000' } });
+    fireEvent.change(screen.getByPlaceholderText(/Сашко/), { target: { value: 'Сашко' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(economyApi.addExpense).toHaveBeenCalled());
+    expect(vi.mocked(economyApi.addExpense).mock.calls[0][1]).toMatchObject({
+      amount: 12000, category: 'LABOR', note: 'Сашко',
+    });
+  });
+
+  it('«📷 Чек» goes to the object\'s receipts, where «хто платить» is decided', async () => {
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Додати' }));
+    fireEvent.click(screen.getByRole('button', { name: /📷 Чек/ }));
+
+    // «←» on the receipts must land back on «Економіка», not the object's default tab.
+    expect(mockNavigate).toHaveBeenCalledWith('/receipts/p1', { state: { from: '/projects/p1?tab=economy' } });
   });
 
   /**
@@ -486,32 +557,6 @@ describe('ObjectEconomySection', () => {
     expect(within(summary).queryByText(/Знижка/)).toBeNull();
   });
 
-  it('the materials card ⓘ explains itself instead of navigating away', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
-    }));
-
-    renderSection('FREE');
-
-    // InfoPopover is itself a <button>. Nested inside the card's navigate button the ⓘ tap
-    // bubbled and the master landed on the receipts list, never having read the explanation.
-    fireEvent.click(await screen.findByRole('button', { name: 'Матеріали за чеками' }));
-
-    expect(await screen.findByRole('dialog', { name: 'Матеріали за чеками' })).toBeTruthy();
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('the materials card still opens the receipts list when the card itself is tapped', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
-    }));
-
-    renderSection('FREE');
-
-    fireEvent.click(await screen.findByText(/Матеріали за чеками/));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
-  });
-
   it('no summary panel when nothing is counted (even on PRO)', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       pro: { expenses: 0, profit: 0 },
@@ -526,38 +571,48 @@ describe('ObjectEconomySection', () => {
 });
 
 /**
- * Review B-65. The materials axis answers «скільки клієнт мені ще винен за чеки» — so once he has
- * handed some of it back, the headline figure has to come DOWN. Showing the gross `reimbursable`
- * after a refund told the master he was owed money he had already been paid, on the same screen
- * that had just counted that refund as payment for work.
+ * The client's material money, on its own line of «Гроші обʼєкта»: what he gave, what was bought
+ * for him, and where that leaves him — owes, money left, or settled.
  */
-describe('ObjectEconomySection — the materials axis nets what came back (B-65)', () => {
-  it('shows what is still OWED, not what was ever laid out, and names the difference', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, refundApplied: 2000, outstanding: 2200, receiptCount: 3, unpricedCount: 0 },
+describe('ObjectEconomySection — the client\'s material line', () => {
+  it('names the debt when the receipts outrun what he gave, and opens the receipts', async () => {
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({
+      materials: { projectId: 'p1', bought: 12500, given: 10000, outstanding: 2500 },
     }));
 
     renderSection('FREE');
 
-    const card = (await screen.findByText(/Матеріали за чеками/)).closest('button')!;
-    expect(within(card).getByText(moneyExact(2200))).toBeTruthy();
-    // The gross figure is not the answer to this question any more — and the refund is SAID, or
-    // the drop from 4 200 to 2 200 reads as receipts having gone missing.
-    expect(within(card).queryByText(moneyExact(4200))).toBeNull();
-    // The refund line sits under the tappable part, not inside it — a whole card that navigates
-    // would swallow the ⓘ next to it.
-    expect(screen.getByText(new RegExp('повернуто'))).toBeTruthy();
+    const line = await screen.findByText(new RegExp('Клієнт винен за матеріал ' + money(2500)));
+    fireEvent.click(line);
+    expect(mockNavigate).toHaveBeenCalledWith('/receipts/p1', expect.anything());
   });
 
-  it('says nothing about refunds when none came back', async () => {
-    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
-      materials: { reimbursable: 4200, refundApplied: 0, outstanding: 4200, receiptCount: 3, unpricedCount: 0 },
+  /** What was left of his material money paid a signed act's receipts: said, and the line settles. */
+  it('says how much of the material money went into acts', async () => {
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({
+      materials: { projectId: 'p1', projectName: 'Франка 12', bought: 763.72, given: 5000, toActs: 4236.28, outstanding: 0 },
+    }));
+
+    renderSection('PRO');
+
+    expect(await screen.findByText(new RegExp('в акти ' + money(4236.28)))).toBeTruthy();
+    expect(screen.getByText(/За матеріал розраховано/)).toBeTruthy();
+  });
+
+  it('names his money still unspent when he paid ahead', async () => {
+    vi.mocked(economyApi.money).mockResolvedValue(moneyFixture({
+      materials: { projectId: 'p1', bought: 7300, given: 10000, outstanding: -2700 },
     }));
 
     renderSection('FREE');
 
-    const card = (await screen.findByText(/Матеріали за чеками/)).closest('button')!;
-    expect(within(card).getByText(moneyExact(4200))).toBeTruthy();
-    expect(screen.queryByText(/повернуто/)).toBeNull();
+    expect(await screen.findByText(new RegExp('Лишилось з грошей клієнта ' + money(2700)))).toBeTruthy();
+  });
+
+  it('says nothing when there is no material money at all', async () => {
+    renderSection('FREE');
+
+    await screen.findByText('Гроші обʼєкта');
+    expect(screen.queryByText(/Матеріал клієнта/)).toBeNull();
   });
 });

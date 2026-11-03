@@ -9,10 +9,13 @@ export function CollapseGroupRow({
   label,
   expanded,
   onToggle,
+  tone = 'success',
 }: {
   label: string;
   expanded: boolean;
   onToggle: () => void;
+  /** Green for finished rows; `neutral` for a fold that is not a verdict (the money card's spending). */
+  tone?: 'success' | 'neutral';
 }) {
   return (
     <button
@@ -21,9 +24,13 @@ export function CollapseGroupRow({
       // The chevron is aria-hidden, so without this a screen reader announced a bare green line
       // with no hint that it folds anything, let alone which way it currently sits.
       aria-expanded={expanded}
-      className="flex min-h-11 w-full items-center gap-2 border-b border-border py-2 text-left text-[13px] font-semibold text-success last:border-b-0"
+      className={'flex min-h-11 w-full items-center gap-2 border-b border-border py-2 text-left text-[13px] font-semibold last:border-b-0 '
+        + (tone === 'success' ? 'text-success' : 'text-primary')}
     >
-      <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full bg-success" aria-hidden />
+      <span
+        className={'h-2.5 w-2.5 flex-shrink-0 rounded-full ' + (tone === 'success' ? 'bg-success' : 'bg-muted')}
+        aria-hidden
+      />
       <span className="flex-1">{label}</span>
       <span className="flex-shrink-0 font-normal text-muted" aria-hidden>{expanded ? '︿' : '⌄'}</span>
     </button>

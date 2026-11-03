@@ -6,7 +6,6 @@ import '@/lib/i18n.ts';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { receiptImportApi } from '@/api/receiptImport.ts';
 import { photosApi } from '@/api/photos.ts';
-import { economyApi } from '@/api/economy.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { decodeQrFromFile } from '@/lib/qr.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
@@ -20,7 +19,6 @@ vi.mock('@/api/upgrade.ts', () => ({
   upgradeApi: { click: vi.fn(), interest: vi.fn() },
 }));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { upload: vi.fn(), list: vi.fn() } }));
-vi.mock('@/api/economy.ts', () => ({ economyApi: { addExpense: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
@@ -106,7 +104,6 @@ beforeEach(() => {
   vi.mocked(receiptImportApi.parseQr).mockResolvedValue({ items: [], depositAmount: null });
   vi.mocked(receiptImportApi.commit).mockResolvedValue(estimate(0));
   vi.mocked(upgradeApi.click).mockResolvedValue(undefined);
-  vi.mocked(economyApi.addExpense).mockResolvedValue(undefined as never);
   vi.mocked(photosApi.upload).mockResolvedValue(undefined as never);
   vi.mocked(photosApi.list).mockResolvedValue([]);
 });
@@ -193,7 +190,7 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
     );
   });
 
-  it('keeps every picked photo — one expense, then the whole pile into «Чеки»', async () => {
+  it('keeps every picked photo — the whole pile into «Чеки», and asks nothing about money', async () => {
     const files = photos(2);
     vi.mocked(receiptImportApi.parse).mockResolvedValue({
       items: [item('Цемент М500', 180, 1)], depositAmount: null,
@@ -206,12 +203,9 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Додати 2/i }));
 
-    // The money was spent either way — one expense for the whole pile (2 × 180).
-    await waitFor(() => expect(screen.getByText(/Записати у витрати/i)).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /^Записати$/ }));
-    await waitFor(() =>
-      expect(economyApi.addExpense).toHaveBeenCalledWith(
-        'p1', expect.objectContaining({ amount: 360, category: 'MATERIALS' })));
+    // The money side of a receipt lives on the object now (object-money iteration): this import
+    // adds positions and offers to keep the paper, and never posts an expense.
+    expect(screen.queryByText(/Записати у витрати/i)).toBeNull();
 
     // Then the paper itself: every photo, not just the first.
     await waitFor(() => expect(screen.getByText(/Зберегти фото чеків/i)).toBeTruthy());
@@ -237,8 +231,6 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
     pick(files);
     await waitFor(() => expect(screen.getAllByDisplayValue('Цемент М500')).toHaveLength(2));
     fireEvent.click(screen.getByRole('button', { name: /Додати 2/i }));
-    await waitFor(() => expect(screen.getByText(/Записати у витрати/i)).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /^Записати$/ }));
 
     await waitFor(() => expect(screen.getByText(/Зберегти фото чеків/i)).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /^Зберегти$/ }));
@@ -258,8 +250,6 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
     await waitFor(() => expect(screen.getAllByDisplayValue('Шпаклівка')).toHaveLength(3));
 
     fireEvent.click(screen.getByRole('button', { name: /Додати 3/i }));
-    await waitFor(() => expect(screen.getByText(/Записати у витрати/i)).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /^Записати$/ }));
 
     await waitFor(() => expect(screen.getByText(/Збережу перші 1 з 3/)).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /^Зберегти$/ }));
@@ -275,13 +265,14 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
     renderSheet('FREE', { cap: 5, used: 5 });
     pick(photos(1));
     await waitFor(() => expect(screen.getByDisplayValue('Шпаклівка')).toBeTruthy());
+    // The room left is counted off the object's photos, which load with the review.
+    await waitFor(() => expect(photosApi.list).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
 
     fireEvent.click(screen.getByRole('button', { name: /Додати 1/i }));
-    await waitFor(() => expect(screen.getByText(/Записати у витрати/i)).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /^Записати$/ }));
 
     // A «Зберегти» that would save nothing is a lie — the sheet closes and says why instead.
-    await waitFor(() => expect(economyApi.addExpense).toHaveBeenCalled());
+    await waitFor(() => expect(receiptImportApi.commit).toHaveBeenCalled());
     expect(screen.queryByText(/Зберегти фото чеків/i)).toBeNull();
     expect(photosApi.upload).not.toHaveBeenCalled();
   });

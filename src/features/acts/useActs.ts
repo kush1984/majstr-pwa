@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actsApi } from '@/api/acts.ts';
+import { invalidateObjectMoney } from '@/features/economy/useEconomy.ts';
 import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import type {
   WorkActCreateRequest,
@@ -74,6 +75,9 @@ export function useActsInvalidator(projectId: string) {
     void qc.invalidateQueries({ queryKey: actKey(id) });
     void qc.invalidateQueries({ queryKey: actsKey(projectId) });
     void qc.invalidateQueries({ queryKey: progressKey(projectId) });
+    // A signed act's receipts take what is left of the client's «на матеріал» money
+    // (MaterialRefundSplit.toActs): the economy, «Гроші обʼєкта» and «Мої гроші» all move with it.
+    invalidateObjectMoney(qc, projectId);
   };
 }
 
@@ -127,6 +131,7 @@ export function useChangeActStatus(projectId: string) {
       void qc.invalidateQueries({ queryKey: actKey(id) });
       void qc.invalidateQueries({ queryKey: actsKey(projectId) });
       void qc.invalidateQueries({ queryKey: progressKey(projectId) });
+      invalidateObjectMoney(qc, projectId);
     },
   });
 }

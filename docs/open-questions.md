@@ -373,6 +373,19 @@ one-line summary — keep the item in the file as a record.
   journey checks). A PWA-side option would be seeding a user via a test-only
   endpoint, but that's also a backend change.
 
+### Cloudflare Web Analytics beacon vs the CSP — decide before 2026-11-30
+- **Status:** OPEN
+- **Since:** 2026-11-02 (first CSP report in Sentry: JAVASCRIPT-REACT-B)
+- **Context:** Cloudflare injects `static.cloudflareinsights.com/beacon.min.js` at the edge
+  (Web Analytics, automatic setup). Our policy does not list it, so every page load reports a
+  `script-src-elem` violation. Harmless while the header is Report-Only, but
+  `src/lib/cspHeaders.test.ts` goes red after **2026-11-30** if the CSP is still report-only —
+  and once it is enforced, the beacon is blocked for real.
+- **Notes / options:** (a) turn off the automatic injection in Cloudflare (Analytics & Logs →
+  Web Analytics → majstr.pro) — PostHog already covers analytics, recommended; or (b) keep it and
+  add `https://static.cloudflareinsights.com` to `script-src` and `https://cloudflareinsights.com`
+  to `connect-src` in `public/_headers`. Either way, resolve JAVASCRIPT-REACT-B afterwards.
+
 ### Landing SEO — no prerender/SSR for the public home
 - **Status:** OPEN
 - **Since:** landing step

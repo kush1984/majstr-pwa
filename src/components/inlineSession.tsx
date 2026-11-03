@@ -22,7 +22,7 @@ export function useInlineSession(editing: boolean, commit: () => void, cancel: (
   useEffect(() => {
     if (!editing) return undefined;
     let backed = false;
-    const entry = openModalEntry(() => {
+    acquireEntry(() => {
       backed = true;
       handlers.current.cancel();
     });
@@ -32,10 +32,62 @@ export function useInlineSession(editing: boolean, commit: () => void, cancel: (
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      if (backed) dropModalEntry(entry);
-      else closeModalEntry(entry);
+      if (!backed) releaseEntry();
     };
   }, [editing]);
+}
+
+/**
+ * How long a closed cell's history entry waits for the next cell to take it over. Covers a mouse
+ * click or a tap on the next cell: the old cell closes on mousedown (blur), the new one opens on the
+ * click, and a press is held well under this.
+ */
+export const INLINE_ENTRY_HANDOVER_MS = 400;
+
+/**
+ * ONE history entry for a run of inline edits, handed from cell to cell.
+ *
+ * <p>Each cell used to push its own entry and pop it on close. The pop is an async
+ * `history.go(-1)`, and a cell opened by a mouse click lands between the two: its entry went above
+ * the one being popped, the traversal took IT, and the new cell read that as Back and closed at
+ * once — «I click the next quantity and the field closes». Enter never hit it (close and open in one
+ * React commit). Handing the entry over leaves history alone between cells altogether.</p>
+ */
+interface SharedEntry {
+  id: string;
+  /** The open cell's cancel, or null inside the handover. */
+  cancel: (() => void) | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+let shared: SharedEntry | null = null;
+
+function acquireEntry(cancel: () => void): void {
+  if (shared) {
+    if (shared.timer !== null) clearTimeout(shared.timer);
+    shared.timer = null;
+    shared.cancel = cancel;
+    return;
+  }
+  const mine: SharedEntry = { id: '', cancel, timer: null };
+  mine.id = openModalEntry(() => {
+    // Back left the entry: forget it, and cancel the cell open on it (none, inside the handover).
+    dropModalEntry(mine.id);
+    if (mine.timer !== null) clearTimeout(mine.timer);
+    if (shared === mine) shared = null;
+    mine.cancel?.();
+  });
+  shared = mine;
+}
+
+function releaseEntry(): void {
+  const mine = shared;
+  if (!mine) return;
+  mine.cancel = null;
+  mine.timer = setTimeout(() => {
+    if (shared !== mine) return;
+    shared = null;
+    closeModalEntry(mine.id);
+  }, INLINE_ENTRY_HANDOVER_MS);
 }
 
 /** The attribute every EDITABLE cell's wrapper carries; document order is the «Далі» order —

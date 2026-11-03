@@ -5,7 +5,12 @@ import type {
   CashEntryResponse,
   CashFlowResponse,
   CashSummaryResponse,
+  ReceiptRecognizeResponse,
 } from './types.ts';
+
+/** Which rows a read covers: `'ALL'` (every row), `'NONE'` (the rows of no object), or one object's
+ *  id. A plain string because an id is one — the two words are reserved, never an object's id. */
+export type CashObjectFilter = string;
 
 /**
  * «Мої гроші» (V135) — the master's own cash movement.
@@ -22,13 +27,19 @@ export const cashApi = {
    * `monthly` is the YEAR view: per-month totals and an EMPTY entry list. Two thousand rows is not
    * a screen anyone reads on a phone, and the master drills into a month by re-querying it.
    */
-  flow(params: { from?: string; to?: string; monthly?: boolean } = {}): Promise<CashFlowResponse> {
+  flow(
+    params: { from?: string; to?: string; monthly?: boolean; object?: CashObjectFilter } = {},
+  ): Promise<CashFlowResponse> {
+    const object = params.object && params.object !== 'ALL'
+      ? (params.object === 'NONE' ? 'none' : params.object)
+      : undefined;
     return api
       .get<CashFlowResponse>('/api/cash', {
         params: {
           from: params.from,
           to: params.to,
           ...(params.monthly ? { monthly: true } : {}),
+          ...(object ? { object } : {}),
         },
       })
       .then((r) => r.data);
@@ -62,5 +73,26 @@ export const cashApi = {
 
   remove(id: string, kind: CashEntryKind): Promise<void> {
     return api.delete(`/api/cash/${id}`, { params: { kind } }).then(() => undefined);
+  },
+
+  /** Read a receipt's fiscal QR to pre-fill one of his own rows. Free and local; persists nothing. */
+  readQr(payload: string): Promise<ReceiptRecognizeResponse> {
+    return api.post<ReceiptRecognizeResponse>('/api/cash/receipt/qr', { payload }).then((r) => r.data);
+  },
+
+  /** Attach (or replace) the photo of the paper on one of his OWN rows. Online only. */
+  attachPhoto(id: string, file: File): Promise<CashEntryResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<CashEntryResponse>(`/api/cash/${id}/photo`, form).then((r) => r.data);
+  },
+
+  removePhoto(id: string): Promise<CashEntryResponse> {
+    return api.delete<CashEntryResponse>(`/api/cash/${id}/photo`).then((r) => r.data);
+  },
+
+  /** Authenticated — read through `photosApi.fetchBlob`, never a bare `<img src>`. */
+  photoUrl(id: string): string {
+    return `/api/cash/${id}/photo`;
   },
 };

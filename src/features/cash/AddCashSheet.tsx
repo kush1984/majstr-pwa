@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toAppError } from '@/api/errors.ts';
+import { cashApi } from '@/api/cash.ts';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
+import { decodeQrFromFile, looksFiscal } from '@/lib/qr.ts';
+import { ReceiptPhoto } from '@/features/photos/ReceiptPhoto.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Modal } from '@/components/Modal.tsx';
@@ -12,6 +16,13 @@ import {
   type CashCategory, type CashDirection, type CashEntryRequest, type CashEntryResponse,
 } from '@/api/types.ts';
 
+/** What the sheet hands back about the paper's photo, beside the row itself. */
+export interface CashPhotoChange {
+  /** A newly picked photo to attach once the row exists. */
+  file?: File | null;
+  /** The stored photo was taken off. */
+  remove?: boolean;
+}
 
 const today = () => {
   const d = new Date();
@@ -31,9 +42,14 @@ const today = () => {
  * and no direction to change — it is income by being a payment — and a PLANNED one is named by its
  * stage, so its text is read-only rather than a field that silently discards what he types.</p>
  *
- * <p>«Повернення за матеріал» shows on income of either kind. Since review B-33 it LABELS the row
- * and nothing more — the material it repays is itself a feed row, so «Заробив» nets out on its
- * own — but the label is what explains the gap between «Прийшло» and «Заробив».</p>
+ * <p>«На матеріал» is offered only on an OBJECT's payment: that money is the client's, kept off
+ * «Прийшло» and settled against his receipts (object-money iteration). His own row is his own money
+ * by definition, so a new one never asks — an old row that carries the flag still shows it, so it
+ * can be cleared.</p>
+ *
+ * <p>His own row can carry a photo of the paper — робочий одяг, a drill. Picking one reads the
+ * fiscal QR first and fills what is still empty; the photo is attached once the row exists, and
+ * online only, like every other receipt photo.</p>
  *
  * <p>There is deliberately no TIME field. It is stamped server-side, and its only job is ordering
  * rows inside a day — a time picker on every entry is friction for nothing else.</p>
@@ -46,7 +62,7 @@ export function AddCashSheet({
   entry?: CashEntryResponse | null;
   onClose: () => void;
   /** Rejecting keeps the sheet open with the server's own words under the field (review P-20). */
-  onSubmit: (req: CashEntryRequest) => void | Promise<unknown>;
+  onSubmit: (req: CashEntryRequest, photo: CashPhotoChange) => void | Promise<unknown>;
   onDelete?: () => void | Promise<unknown>;
 }) {
   const { t } = useTranslation();
@@ -65,6 +81,16 @@ export function AddCashSheet({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [reading, setReading] = useState(false);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const { online } = useOnlineGuard();
+  // Only HIS rows take a photo here: an object's money already has its own papers, read on the
+  // object's receipts screen.
+  const takesPhoto = kind === 'PERSONAL';
+  const storedPhoto = entry?.hasPhoto === true && !photoRemoved && photo == null;
 
   // Re-seed whenever the sheet opens: a stale draft from the last entry is worse than an empty one,
   // and the edit sheet is the same component opened on a row.
@@ -73,7 +99,8 @@ export function AddCashSheet({
     // INCOME by default (master's call): what he opens this sheet to write down is most often money
     // he just got. An expense is one tap away.
     setDirection(entry?.direction ?? 'INCOME');
-    setAmount(entry ? String(entry.amount) : '');
+    // The PAPER's figure: a row the client's material money partly paid shows only his own share.
+    setAmount(entry ? String(entry.amount + (entry.clientShare ?? 0)) : '');
     setCategory(entry?.category ?? '');
     setNote(entry?.note ?? '');
     setDay(entry?.happenedOn ?? today());
@@ -81,7 +108,38 @@ export function AddCashSheet({
     setError(null);
     setBusy(false);
     setConfirming(false);
+    setPhoto(null);
+    setPhotoRemoved(false);
+    setReading(false);
   }, [open, entry]);
+
+  /**
+   * A photo of the paper: kept for the row, and read for its fiscal QR on the way in — local and
+   * free. Only empty fields are filled: what he already typed outranks what the paper says.
+   */
+  const pickPhoto = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setPhoto(file);
+    setPhotoRemoved(false);
+    setDirection('EXPENSE');
+    setReading(true);
+    try {
+      const payload = await decodeQrFromFile(file);
+      if (payload && looksFiscal(payload)) {
+        const read = await cashApi.readQr(payload);
+        if (read.recognized) {
+          if (read.amount != null) setAmount((a) => (a.trim() ? a : String(read.amount)));
+          if (read.issuedAt) setDay(read.issuedAt);
+          if (read.label) setNote((n) => (n.trim() ? n : read.label ?? ''));
+        }
+      }
+    } catch {
+      // No readable fiscal code — the common case for a hand-written slip. He types the sum.
+    } finally {
+      setReading(false);
+    }
+  };
 
   // An object's expense has only the three buckets `object_expenses` actually stores: FUEL, TOOLS
   // and TAXES all fold into OTHER on the way in (`CashCategory.toExpenseCategory`), so offering
@@ -121,7 +179,7 @@ export function AddCashSheet({
         materialRefund: direction === 'INCOME' && refund,
         // Which table the server should write through. A create is always his own row.
         kind: entry ? entry.kind : null,
-      });
+      }, { file: photo, remove: photoRemoved });
     } catch (e) {
       setBusy(false);
       setError(toAppError(e).message);
@@ -229,7 +287,66 @@ export function AddCashSheet({
           />
         </FormField>
 
-        {direction === 'INCOME' && (
+        {takesPhoto && (
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-secondary">{t('cash.photo')}</p>
+            {photo ? (
+              <ReceiptPhoto source={{ kind: 'file', file: photo }} title={note || t('cash.photo')} variant="preview" />
+            ) : storedPhoto && entry ? (
+              <ReceiptPhoto
+                source={{ kind: 'stored', fileUrl: cashApi.photoUrl(entry.id) }}
+                title={note || t('cash.photo')}
+                variant="preview"
+              />
+            ) : null}
+            {reading && <p className="mt-1 text-xs text-muted">{t('cash.photoReading')}</p>}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => { void pickPhoto(e.target.files); e.target.value = ''; }}
+            />
+            <input
+              ref={galleryRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { void pickPhoto(e.target.files); e.target.value = ''; }}
+            />
+            <div className="mt-2 flex gap-2">
+              <Button
+                variant="secondary"
+                fullWidth
+                disabled={!online || busy}
+                onClick={() => cameraRef.current?.click()}
+              >
+                📷 {t('cash.photoTake')}
+              </Button>
+              <Button
+                variant="secondary"
+                fullWidth
+                disabled={!online || busy}
+                onClick={() => galleryRef.current?.click()}
+              >
+                🖼 {t('cash.photoPick')}
+              </Button>
+            </div>
+            {(photo != null || storedPhoto) && (
+              <button
+                type="button"
+                className="mt-1.5 min-h-11 text-xs font-semibold text-danger"
+                onClick={() => { setPhoto(null); setPhotoRemoved(entry?.hasPhoto === true); }}
+              >
+                {t('cash.photoRemove')}
+              </button>
+            )}
+            {!online && <p className="mt-1 text-xs text-muted">{t('cash.photoOffline')}</p>}
+          </div>
+        )}
+
+        {direction === 'INCOME' && (kind === 'OBJECT_PAYMENT' || entry?.materialRefund === true) && (
           <label className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5">
             <input
               type="checkbox"
