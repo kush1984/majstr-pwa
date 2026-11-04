@@ -41,6 +41,20 @@ describe('applyMoneyDelta', () => {
     expect(after.materials.outstanding).toBe(-10000);
   });
 
+  it('the part of the client money that paid a signed act stays off the balance', () => {
+    // 5 000 given, 763,72 at the till, 4 236,28 went to the act — the server's figures.
+    const settled = money({ materials: { projectId: 'p1', bought: 763.72, given: 5000, toActs: 4236.28, outstanding: 0 } });
+
+    // A crew payment is not material money: the balance stays closed.
+    expect(applyMoneyDelta(settled, { added: row() }).materials.outstanding).toBe(0);
+    // A smaller advance leaves less for the act: never more than what is left after the till.
+    const less = row({ id: 'm1', kind: 'OBJECT_PAYMENT', direction: 'INCOME', amount: 5000, category: null,
+      materialRefund: true, clientMaterial: true });
+    const after = applyMoneyDelta(settled, { removed: less, added: { ...less, amount: 3000 } }).materials;
+    expect(after.toActs).toBe(2236.28);
+    expect(after.outstanding).toBe(0);
+  });
+
   it('an edit is a removal and an addition', () => {
     const before = row({ amount: 3000 });
     const after = applyMoneyDelta(money({ expense: 5000, earned: 5000, entries: [before] }), {

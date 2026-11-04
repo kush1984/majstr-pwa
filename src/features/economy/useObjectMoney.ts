@@ -58,6 +58,10 @@ export function applyMoneyDelta(
   const expense = roundMoney(money.expense - out.expense + inc.expense);
   const given = roundMoney(money.materials.given - out.given + inc.given);
   const bought = roundMoney(money.materials.bought - out.bought + inc.bought);
+  // The server's MaterialRefundSplit: what is left of the client's money after the till receipts
+  // pays the receipts on signed acts. Those receipts are not on this card, so the cached share is
+  // kept — but never more than is left now (exact whenever the leftover shrinks).
+  const toActs = roundMoney(Math.min(money.materials.toActs ?? 0, Math.max(given - bought, 0)));
   let entries = money.entries.filter((e) => e.id !== change.removed?.id && e.id !== change.added?.id);
   if (change.added) {
     const at = entries.findIndex((e) => e.happenedOn <= change.added!.happenedOn);
@@ -69,7 +73,7 @@ export function applyMoneyDelta(
     income,
     expense,
     earned: roundMoney(income - expense),
-    materials: { ...money.materials, given, bought, outstanding: roundMoney(bought - given) },
+    materials: { ...money.materials, given, bought, toActs, outstanding: roundMoney(bought - given + toActs) },
     crewRecorded: money.crewRecorded || change.added?.category === 'CREW',
     entries,
   };

@@ -2292,7 +2292,7 @@ export interface CashMaterialBalance {
   /** Of `given`, what paid for the receipts on signed acts — no longer the client's. Optional: a
    *  cached answer from before this field has none. */
   toActs?: number;
-  /** `bought − given`: positive = the client owes, negative = his money not spent yet. */
+  /** `bought − (given − toActs)`: positive = the client owes, negative = his money not spent yet. */
   outstanding: number;
 }
 

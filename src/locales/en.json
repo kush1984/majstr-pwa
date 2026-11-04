@@ -2186,7 +2186,7 @@
     "hideAll": "Remove everything from the portal",
     "hiddenAll": "Portal cleared — estimates hidden",
     "showPayments": "Show payments to the client",
-    "showPaymentsHint": "The client will see the contracted total, how much is already paid, and the payment schedule"
+    "showPaymentsHint": "The client will see the contracted total and how much is already paid"
   },
   "projectImport": {
     "button": "📁 Import project",
