@@ -291,17 +291,7 @@
     "amount": "number",
     "label": "string?",
     "materialRefund": "boolean?",
-    "planPaymentId": "string?",
-    "receivedAt": "string",
-    "resolution": "string?"
-  },
-  "PaymentSplitRequest": {
-    "customPercents": "array?",
-    "preset": "string"
-  },
-  "PaymentSurplusTransferRequest": {
-    "fromPaymentId": "string",
-    "toPaymentId": "string"
+    "receivedAt": "string"
   },
   "PhotoFolderRequest": {
     "folder": "string?"
@@ -346,12 +336,6 @@
     "payload": "object",
     "sortOrder": "number?",
     "type": "string"
-  },
-  "ProjectPaymentRequest": {
-    "amount": "number",
-    "dueDate": "string?",
-    "nextStage": "string?",
-    "purpose": "string"
   },
   "ProjectReceiptRequest": {
     "amount": "number",

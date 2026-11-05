@@ -818,43 +818,13 @@ export interface ObjectEconomyInternalsResponse {
   profit: number;
 }
 
-export type ProjectPaymentStatus = 'PLANNED' | 'PARTIAL' | 'RECEIVED' | 'OVERDUE';
-
-/** A PLANNED payment stage. Fact (money actually received) is a separate `PaymentReceiptResponse`
- *  list now (V100, payments PLAN/FACT split) — `received`/`remaining` are computed server-side
- *  from that list, and `receipts` is this stage's own history (possibly several partial ones). */
-export interface ProjectPaymentResponse {
-  id: string;
-  amount: number;
-  dueDate: string | null;
-  nextStage: string | null;
-  purpose: string;
-  received: number;
-  remaining: number;
-  status: ProjectPaymentStatus;
-  sortOrder: number;
-  receipts: PaymentReceiptResponse[];
-}
-
-/** Pure plan — no fact fields. "mark received" is a `PaymentReceiptRequest` now, not a field here. */
-export interface ProjectPaymentRequest {
-  amount: number;
-  dueDate?: string | null;
-  nextStage?: string | null;
-  purpose: string;
-}
-
-/** How to resolve a receipt that overshoots its plan stage's remaining amount. The PWA computes
- *  the overflow itself (it already holds the summary) and shows the choice before submitting. */
-export type PaymentOverflowResolution = 'TRANSFER' | 'INCREASE' | 'RESERVE';
-
-/** A received payment ("Отриманий платіж"). `planPaymentId` null = unplanned ("Своє") — then
- *  `label` is the master's own name for it, validated distinct from every plan stage's purpose. */
+/** A payment the client made on the object («Отриманий платіж»). */
 export interface PaymentReceiptResponse {
   id: string;
-  planPaymentId: string | null;
+  /** The master's own name for it — null only on a receipt recorded against a stage of the
+   *  removed payment plan. */
   label: string | null;
-  /** Resolved name to show: `label` if set, else the linked stage's purpose, else a fallback. */
+  /** Resolved name to show: `label` if set, else the old stage's purpose, else a fallback. */
   displayLabel: string;
   amount: number;
   receivedAt: string;
@@ -864,15 +834,13 @@ export interface PaymentReceiptResponse {
 }
 
 export interface PaymentReceiptRequest {
-  planPaymentId?: string | null;
+  /** Required by the server (400 when blank). */
   label?: string | null;
   amount: number;
   receivedAt: string;
   /** Money coming BACK for material, not payment for work — it settles the materials axis and is
    *  kept off the contract (B-65). Omitted = an ordinary payment. */
   materialRefund?: boolean;
-  /** Only meaningful when the amount exceeds the targeted stage's remaining balance. */
-  resolution?: PaymentOverflowResolution | null;
 }
 
 export interface PaymentReceiptEditRequest {
@@ -883,19 +851,12 @@ export interface PaymentReceiptEditRequest {
   materialRefund?: boolean;
 }
 
-/** Moves an over-received stage's surplus onto another stage as a partial receipt — offered when
- *  creating a new plan stage while another one is sitting over-received (RESERVE). */
-export interface PaymentSurplusTransferRequest {
-  fromPaymentId: string;
-  toPaymentId: string;
-}
-
 /** The owner's money summary — PRO-only on `ObjectEconomyResponse.payments` (economy-polish
  *  iteration; null for FREE). Distinct from the portal's own payments card, which stays gated
  *  only by the `payments_visible` toggle regardless of plan. */
 export interface PaymentsSummaryResponse {
   contractedTotal: number;
-  /** Every hryvnia that arrived, refunds included — the itemized rows add up to THIS. */
+  /** Every hryvnia that arrived, refunds included — `receipts` add up to THIS. */
   received: number;
   /** What is still owed for the WORK: `max(0, contractedTotal - workPaid)` (B-65). */
   remaining: number;
@@ -908,27 +869,8 @@ export interface PaymentsSummaryResponse {
   workPaid: number;
   /** `max(0, workPaid - contractedTotal)`. Said out loud, never clamped away in silence. */
   overpaid: number;
-  payments: ProjectPaymentResponse[];
-  /** Receipts with no matching plan stage — their own nodes on the timeline. */
-  unplannedReceipts: PaymentReceiptResponse[];
-}
-
-export type PaymentSplitPreset = 'FIFTY_FIFTY' | 'THIRTY_FORTY_THIRTY' | 'THIRTY_THIRTY_FORTY' | 'CUSTOM';
-
-export interface PaymentSplitRequest {
-  preset: PaymentSplitPreset;
-  /** Required (and must sum to 100) only when `preset === 'CUSTOM'`. */
-  customPercents?: number[];
-}
-
-export interface PaymentSplitRow {
-  purpose: string;
-  amount: number;
-}
-
-export interface PaymentSplitPreviewResponse {
-  contractedTotal: number;
-  rows: PaymentSplitRow[];
+  /** Every payment that arrived, oldest first. */
+  receipts: PaymentReceiptResponse[];
 }
 
 /** The works axis (acts iteration) — FREE-visible, like `estimates`. How much of the contract the

@@ -23,7 +23,7 @@ import type {
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
-  NoteRequest, PaymentReceiptEditRequest, PaymentReceiptRequest, ProjectPaymentRequest,
+  NoteRequest, PaymentReceiptEditRequest, PaymentReceiptRequest,
   ProjectRequest,
   ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
   TemplateItemRequest, TemplateItemsOrderRequest, Trade,
@@ -235,31 +235,17 @@ export function initOutbox(qc: QueryClient): () => void {
     }
   });
 
-  // Object payments — the PLAN side (`project_payment`, V93). entityId is the STAGE id; the
-  // object id rides the payload. Hyphenated names, because that is what the call sites have
-  // always enqueued: a queue outlives an app update, so renaming them to camelCase would strand
-  // every op a master already has in IndexedDB.
-  //
-  // These two handlers were MISSING while both hooks queued against them (review P-33). A queued
-  // op with no handler is skipped by every flush and never retried, so an «Отримати платіж»
-  // authored with no signal showed as received, sat in the queue forever, and vanished from the
-  // screen at the next global invalidate — the money was never sent and nothing said so.
-  registerOutboxHandler('project-payment', async (op) => {
-    const p = op.payload as { objectId: string; req?: ProjectPaymentRequest };
-    if (op.type === 'create') {
-      await paymentsApi.add(p.objectId, p.req!, op.entityId);
-    } else if (op.type === 'update') {
-      await paymentsApi.update(p.objectId, op.entityId, p.req!);
-    } else {
-      await paymentsApi.remove(p.objectId, op.entityId);
-    }
-  });
+  // A stage of the payment plan — which no longer exists on either side. A phone may still hold
+  // one queued by an older build, and its endpoints are gone, so the op is DISCARDED: a 404 would
+  // block it in the sync sheet, asking the master about a thing no screen shows any more. Without
+  // a handler at all it would sit in the queue forever (review P-33). Hyphenated names, because
+  // a queue outlives an app update.
+  registerOutboxHandler('project-payment', async () => {});
 
   // Received money — the FACT side (`payment_receipt`, V100). entityId is the RECEIPT id.
   //
   // The create replays under its own X-Entity-Uuid, so a retry can never bill the same money
-  // twice. A TRANSFER overflow never reaches here: it creates TWO receipts from one submission
-  // and is online-only by design (`useAddReceiptTransfer`).
+  // twice.
   registerOutboxHandler('payment-receipt', async (op) => {
     const p = op.payload as {
       objectId: string; req?: PaymentReceiptRequest & PaymentReceiptEditRequest;

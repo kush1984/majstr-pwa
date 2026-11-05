@@ -3,7 +3,6 @@ import { api, COMMIT_TIMEOUT_MS, LLM_TIMEOUT_MS, uploadTimeoutMs } from './clien
 import { sendOnce } from './submission.ts';
 import { photosApi } from './photos.ts';
 import { dictationApi } from './dictation.ts';
-import { paymentsApi } from './payments.ts';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -79,14 +78,6 @@ describe('the writes that needed it', () => {
     };
     expect(configOf(1).headers['X-Entity-Uuid']).toBe(configOf(0).headers['X-Entity-Uuid']);
     expect(configOf(0).timeout).toBe(COMMIT_TIMEOUT_MS);
-  });
-
-  it('a payment split carries one too', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: [] });
-
-    await paymentsApi.commitSplit('o1', { total: 100 } as never);
-
-    expect((post.mock.calls[0][2] as { headers: Record<string, string> }).headers['X-Entity-Uuid']).toBeTruthy();
   });
 });
 

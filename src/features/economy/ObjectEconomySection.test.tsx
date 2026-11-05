@@ -86,10 +86,7 @@ function panel(overrides: Partial<SignedEstimatePanelResponse> = {}): SignedEsti
   };
 }
 
-// PARTIAL (not RECEIVED) so the compact payments list shows "Аванс" directly as an upcoming row
-// — a fully-RECEIVED-only fixture would collapse to the "Усе сплачено ✓" terminal state instead,
-// which is what these tests are NOT exercising (they're checking FREE/PRO gating around the
-// block, not its own collapse/expand behavior — that's covered in PaymentsBlock.test.tsx).
+// Part of the contract paid — these tests check FREE/PRO gating around the block.
 const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
   contractedTotal: 15000,
   received: 1500,
@@ -98,14 +95,7 @@ const SAMPLE_PAYMENTS: NonNullable<ObjectEconomyResponse['payments']> = {
   refundApplied: 0,
   workPaid: 1500,
   overpaid: 0,
-  payments: [
-    {
-      id: 'p1', amount: 3000, dueDate: null, nextStage: null, purpose: 'Аванс',
-      received: 1500, remaining: 1500, status: 'PARTIAL', sortOrder: 0,
-      receipts: [{ id: 'r1', planPaymentId: 'p1', label: null, displayLabel: 'Аванс', amount: 1500, receivedAt: '2026-07-01', materialRefund: false }],
-    },
-  ],
-  unplannedReceipts: [],
+  receipts: [{ id: 'r1', label: 'Аванс', displayLabel: 'Аванс', amount: 1500, receivedAt: '2026-07-01', materialRefund: false }],
 };
 
 /** Mirrors the real backend: `payments`/`internals` are gated TOGETHER (economy-polish
