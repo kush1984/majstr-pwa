@@ -139,6 +139,23 @@ export interface RegisterRequest {
   promoCode?: string;
 }
 
+export type VisitKind = 'PAGEVIEW' | 'REGISTER_STARTED';
+
+/** POST /api/public/visit — one anonymous view of a public page (V187). The source fields are the
+ *  stored first touch, the same values {@link RegisterRequest} sends, so the two meet on one key. */
+export interface VisitRequest {
+  kind: VisitKind;
+  /** Path only, never the query. */
+  path: string;
+  referrerHost?: string;
+  entryPath?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  timeZone?: string;
+  language?: string;
+}
+
 /** PUT /api/profile (#16). `email` is honoured only while the current email is
  *  unverified; when already verified the backend ignores it (or 409
  *  EMAIL_ALREADY_VERIFIED) and keeps the rest. Returns the updated UserResponse. */

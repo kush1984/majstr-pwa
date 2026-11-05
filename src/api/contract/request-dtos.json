@@ -502,6 +502,17 @@
   "VerifyEmailRequest": {
     "token": "string"
   },
+  "VisitRequest": {
+    "entryPath": "string?",
+    "kind": "string",
+    "language": "string?",
+    "path": "string",
+    "referrerHost": "string?",
+    "timeZone": "string?",
+    "utmCampaign": "string?",
+    "utmMedium": "string?",
+    "utmSource": "string?"
+  },
   "WorkActCreateRequest": {
     "advanceOffset": "number?",
     "contractRef": "string?",

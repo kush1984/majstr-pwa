@@ -385,6 +385,8 @@ one-line summary — keep the item in the file as a record.
   Web Analytics → majstr.pro) — PostHog already covers analytics, recommended; or (b) keep it and
   add `https://static.cloudflareinsights.com` to `script-src` and `https://cloudflareinsights.com`
   to `connect-src` in `public/_headers`. Either way, resolve JAVASCRIPT-REACT-B afterwards.
+- **2026-11-05 (1.70.0):** the admin now has its own anonymous visit counts («👀 Відвідування», backend
+  V187), which makes option (a), turning the Cloudflare injection off, the simpler answer. Still the owner's call.
 
 ### Landing SEO — no prerender/SSR for the public home
 - **Status:** OPEN

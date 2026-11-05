@@ -78,7 +78,7 @@ describe(FILE, () => {
     }
   });
 
-  it('runs one script, and it only records where the visitor came from', () => {
+  it('runs one script, and it only records where the visitor came from and that he came', () => {
     const scripts = [...read(FILE).matchAll(/<script([^>]*)>/g)]
       .map((m) => m[1])
       .filter((attrs) => !attrs.includes('application/ld+json'));
@@ -86,6 +86,7 @@ describe(FILE, () => {
     const page = read('src/seo/samplePage.ts');
     expect(page).toContain('captureUtmFromUrl(window.location.search)');
     expect(page).toContain('captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname)');
+    expect(page).toContain("sendVisit('PAGEVIEW', window.location.pathname)");
   });
 
   it('is its own canonical page with its own 1200 × 630 preview', () => {

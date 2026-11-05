@@ -20,6 +20,7 @@ import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import { getStoredFirstTouch, getStoredRef, getStoredUtm } from '@/lib/referral.ts';
+import { sendVisit } from '@/lib/visit.ts';
 
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
@@ -145,9 +146,18 @@ export function RegisterPage() {
   const goToLogin = () =>
     void navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
 
+  // «Почали заповнювати» in the admin's visit funnel: the first thing typed, once per page. Only that
+  // it happened is sent, never what was typed.
+  const started = useRef(false);
+  const onFirstInput = () => {
+    if (started.current) return;
+    started.current = true;
+    sendVisit('REGISTER_STARTED', routes.register);
+  };
+
   return (
     <AuthShell title={t('auth.registerTitle')}>
-      <form noValidate onSubmit={onSubmit} className="space-y-4">
+      <form noValidate onSubmit={onSubmit} onInput={onFirstInput} className="space-y-4">
         <FormField label={t('common.email')} htmlFor="email" required error={errors.email?.message}>
           <Input
             id="email"

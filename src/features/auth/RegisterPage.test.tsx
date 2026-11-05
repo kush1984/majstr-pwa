@@ -7,6 +7,7 @@ import '@/lib/i18n.ts';
 import { RegisterPage } from './RegisterPage.tsx';
 import { authApi } from '@/api/auth.ts';
 import { routes } from '@/lib/config.ts';
+import { sendVisit } from '@/lib/visit.ts';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -17,6 +18,7 @@ vi.mock('@/api/auth.ts', () => ({ authApi: { register: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
+vi.mock('@/lib/visit.ts', () => ({ sendVisit: vi.fn() }));
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -39,6 +41,18 @@ function fillValid(container: HTMLElement) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('RegisterPage — the visit funnel', () => {
+  it('says once that the form was started, and never what was typed', () => {
+    const { container } = renderPage();
+
+    fireEvent.input(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
+    fireEvent.input(container.querySelector('#fullName')!, { target: { value: 'Іван' } });
+
+    expect(sendVisit).toHaveBeenCalledOnce();
+    expect(sendVisit).toHaveBeenCalledWith('REGISTER_STARTED', routes.register);
+  });
 });
 
 describe('RegisterPage — privacy consent', () => {

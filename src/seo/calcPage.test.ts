@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// One instance across vi.resetModules(), so a test can see what the freshly imported page sent.
+const { sendVisit } = vi.hoisted(() => ({ sendVisit: vi.fn() }));
+vi.mock('@/lib/visit.ts', () => ({ sendVisit }));
+
 /**
  * The calculator pages' script against the page's OWN markup: the real HTML file is loaded into the
  * document and calcPage.ts is imported fresh, as the browser would run it.
@@ -35,6 +39,14 @@ function visibleText(form: HTMLFormElement, selector: string): string[] {
 describe('kalkulyator-gipsokartonu', () => {
   beforeEach(() => {
     document.body.replaceChildren();
+  });
+
+  it('counts its own visit, by its own path', async () => {
+    sendVisit.mockClear();
+    await load('kalkulyator-gipsokartonu.html');
+
+    expect(sendVisit).toHaveBeenCalledOnce();
+    expect(sendVisit).toHaveBeenCalledWith('PAGEVIEW', window.location.pathname);
   });
 
   it('names the area of a partition as ONE face, and only for a partition', async () => {

@@ -13,6 +13,8 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { initSentry } from './lib/sentry.ts';
 import { initPostHog } from './lib/posthog.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from './lib/referral.ts';
+import { trackPublicVisits } from './lib/visit.ts';
+import { router } from './routes/routes.tsx';
 import { shouldRetryQuery, queryRetryDelay } from './lib/queryRetry.ts';
 import { installOnlineTracking } from './lib/onlineStatus.ts';
 import './lib/i18n.ts';
@@ -38,6 +40,9 @@ captureRefFromUrl(window.location.search);
 captureUtmFromUrl(window.location.search);
 // …and the referrer host + entry page (V178): search sets no UTM.
 captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
+// Anonymous visit counting for a logged-out visitor's public pages, after the first touch above
+// is stored so the very first view already carries its source.
+trackPublicVisits(router);
 
 // One shared QueryClient. Sensible defaults for this app:
 //   - staleTime 30s: avoid hammering /me on every navigation

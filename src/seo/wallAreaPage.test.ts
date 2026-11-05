@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// One instance across vi.resetModules(), so a test can see what the freshly imported page sent.
+const { sendVisit } = vi.hoisted(() => ({ sendVisit: vi.fn() }));
+vi.mock('@/lib/visit.ts', () => ({ sendVisit }));
+
 /** The wall-area page's script against the page's OWN markup, as the browser would run it. */
 const root = path.resolve(__dirname, '../..');
 
@@ -40,6 +44,14 @@ const result = () => document.querySelector<HTMLElement>('#result');
 describe('kalkulyator-ploshchi-stin', () => {
   beforeEach(() => {
     document.body.replaceChildren();
+  });
+
+  it('counts its own visit, by its own path', async () => {
+    sendVisit.mockClear();
+    await load();
+
+    expect(sendVisit).toHaveBeenCalledOnce();
+    expect(sendVisit).toHaveBeenCalledWith('PAGEVIEW', window.location.pathname);
   });
 
   it('shows only the chosen plan, drawn with the letters its fields carry', async () => {
