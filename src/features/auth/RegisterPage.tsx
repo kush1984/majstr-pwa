@@ -21,6 +21,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import { getStoredFirstTouch, getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 import { sendVisit } from '@/lib/visit.ts';
+import { suggestEmail } from '@/lib/emailSuggestion.ts';
 
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
@@ -32,6 +33,8 @@ export function RegisterPage() {
   const { t } = useTranslation();
   const register$ = useRegister();
   const [emailTaken, setEmailTaken] = useState(false);
+  // «Може, ivan@gmail.com?» — offered when the field is left, cleared as soon as it is edited.
+  const [emailHint, setEmailHint] = useState<string | null>(null);
   // Custom trade names are collected locally and created alongside the account on submit —
   // there's no user yet to attach them to individually (unlike ProfileEditModal, which saves
   // each one instantly through its own endpoint).
@@ -84,6 +87,16 @@ export function RegisterPage() {
   const companyField = register('companyName', {
     onChange: () => { companyEdited.current = true; },
   });
+  const emailField = register('email', {
+    onChange: () => setEmailHint(null),
+    onBlur: (e: { target: { value: string } }) => setEmailHint(suggestEmail(e.target.value)),
+  });
+  const applyEmailHint = () => {
+    if (!emailHint) return;
+    setValue('email', emailHint, { shouldValidate: true, shouldDirty: true });
+    setEmailHint(null);
+    setEmailTaken(false);
+  };
 
   const syncCustomTrades = (next: string[]) => {
     setCustomTrades(next);
@@ -136,11 +149,12 @@ export function RegisterPage() {
       });
       if (e.code === 'EMAIL_ALREADY_REGISTERED' || e.status === 409) {
         // Dup email — show a clear field error + a "log in" shortcut (email prefilled).
-        setError('email', { message: t('auth.emailAlreadyRegistered') });
+        showEmailError(t('auth.emailAlreadyRegistered'));
         setEmailTaken(true);
-      } else if (e.code === 'EMAIL_DOMAIN_BLOCKED') {
-        // Disposable / non-mail domain — inline under the email field (server message is localized).
-        setError('email', { message: e.message });
+      } else if (e.code === 'EMAIL_NO_MAIL' || e.code === 'EMAIL_DISPOSABLE') {
+        // A typo (gmal.com) or a throwaway, in the server's own words, under the field.
+        showEmailError(e.message);
+        if (e.code === 'EMAIL_NO_MAIL') setEmailHint(suggestEmail(values.email));
       } else if (e.status === 400) {
         toast.error(e.message); // server-side validation details
       } else {
@@ -166,6 +180,14 @@ export function RegisterPage() {
     sendVisit('REGISTER_FIELD', routes.register, { target: name });
   };
 
+  // On a phone the email field is a screen above the button: an error written there and not shown
+  // looked like a button that does nothing, and three people pressed it ten times into the rate limit.
+  const showEmailError = (message: string) => {
+    ignoreFocusUntil.current = Date.now() + 500;
+    setError('email', { message }, { shouldFocus: true });
+    document.getElementById('email')?.scrollIntoView({ block: 'center' });
+  };
+
   const goToLogin = () =>
     void navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
 
@@ -188,8 +210,18 @@ export function RegisterPage() {
             autoComplete="email"
             inputMode="email"
             invalid={Boolean(errors.email)}
-            {...register('email')}
+            {...emailField}
           />
+          {emailHint && (
+            <button
+              type="button"
+              data-track="register:email-fix"
+              onClick={applyEmailHint}
+              className="mt-1.5 block text-left text-sm font-semibold text-brand underline"
+            >
+              {t('auth.emailSuggestion', { email: emailHint })}
+            </button>
+          )}
           {emailTaken && (
             <button
               type="button"

@@ -337,6 +337,7 @@
     "wrongCredentials": "Невірний email або пароль",
     "emailAlreadyRegistered": "Цей email вже зареєстрований",
     "emailTakenLogin": "Ця пошта вже зареєстрована — Увійти",
+    "emailSuggestion": "Може, {{email}}?",
     "companyNameHint": "Можна змінити пізніше в профілі."
   },
   "reset": {

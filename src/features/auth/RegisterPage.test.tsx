@@ -101,6 +101,51 @@ describe('RegisterPage — the visit funnel', () => {
   });
 });
 
+describe('RegisterPage — a refused email is seen, not pressed into the rate limit', () => {
+  it('offers the domain it most likely meant when the field is left, and takes it in one tap', async () => {
+    const { container } = renderPage();
+    const email = container.querySelector<HTMLInputElement>('#email')!;
+
+    fireEvent.change(email, { target: { value: 'ivan@gmal.com' } });
+    fireEvent.blur(email);
+    fireEvent.click(await screen.findByRole('button', { name: 'Може, ivan@gmail.com?' }));
+
+    await waitFor(() => expect(email.value).toBe('ivan@gmail.com'));
+    expect(screen.queryByRole('button', { name: /Може,/ })).toBeNull();
+  });
+
+  it('suggests nothing for an address that is fine', () => {
+    const { container } = renderPage();
+    const email = container.querySelector<HTMLInputElement>('#email')!;
+
+    fireEvent.change(email, { target: { value: 'ivan@ukr.net' } });
+    fireEvent.blur(email);
+
+    expect(screen.queryByRole('button', { name: /Може,/ })).toBeNull();
+  });
+
+  it('scrolls to the field and focuses it when the server refuses the address', async () => {
+    vi.mocked(authApi.register).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 400, data: { status: 400, message: 'Схоже, в адресі помилка.', code: 'EMAIL_NO_MAIL' } },
+    });
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const { container } = renderPage();
+    fillValid(container);
+    fireEvent.change(container.querySelector('#email')!, { target: { value: 'ivan@gmal.com' } });
+    fireEvent.click(container.querySelector('input[name="consent"]')!);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    expect(await screen.findByText('Схоже, в адресі помилка.')).toBeTruthy();
+    expect(document.activeElement).toBe(container.querySelector('#email'));
+    expect(scroll).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Може, ivan@gmail.com?' })).toBeTruthy();
+    expect(sendVisit).toHaveBeenCalledWith('REGISTER_ERROR', routes.register, { target: 'server:email_no_mail' });
+    scroll.mockRestore();
+  });
+});
+
 describe('RegisterPage — privacy consent', () => {
   it('blocks submit until the consent box is ticked', async () => {
     const { container } = renderPage();

@@ -337,6 +337,7 @@
     "wrongCredentials": "Wrong email or password",
     "emailAlreadyRegistered": "This email is already registered",
     "emailTakenLogin": "This email is already registered — Log in",
+    "emailSuggestion": "Did you mean {{email}}?",
     "companyNameHint": "You can change it later in your profile."
   },
   "reset": {
