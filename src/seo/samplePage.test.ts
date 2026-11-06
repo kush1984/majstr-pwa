@@ -86,7 +86,7 @@ describe(FILE, () => {
     const page = read('src/seo/samplePage.ts');
     expect(page).toContain('captureUtmFromUrl(window.location.search)');
     expect(page).toContain('captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname)');
-    expect(page).toContain("sendVisit('PAGEVIEW', window.location.pathname)");
+    expect(page).toContain('trackPage(window.location.pathname)');
   });
 
   it('is its own canonical page with its own 1200 × 630 preview', () => {

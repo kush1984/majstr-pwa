@@ -503,11 +503,14 @@
     "token": "string"
   },
   "VisitRequest": {
+    "engagedSeconds": "number?",
     "entryPath": "string?",
     "kind": "string",
     "language": "string?",
     "path": "string",
     "referrerHost": "string?",
+    "scrollDepth": "number?",
+    "target": "string?",
     "timeZone": "string?",
     "utmCampaign": "string?",
     "utmMedium": "string?",

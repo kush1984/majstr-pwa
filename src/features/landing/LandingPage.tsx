@@ -85,11 +85,17 @@ function LandingNav() {
           >
             {t('landing.navSignIn')}
           </Link>
-          <Link to={routes.register} className={CTA_CLASS + ' hidden !px-5 !py-2.5 !text-sm lg:inline-flex'}>
+          {/* data-track names the three «/register» buttons apart in the admin's click report. */}
+          <Link
+            to={routes.register}
+            data-track="nav:register"
+            className={CTA_CLASS + ' hidden !px-5 !py-2.5 !text-sm lg:inline-flex'}
+          >
             {t('landing.ctaTry')}
           </Link>
           <button
             type="button"
+            data-track="nav:menu"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls="landing-menu"
@@ -177,7 +183,7 @@ function Hero() {
             ))}
           </ul>
           <div className="mt-8">
-            <Link to={routes.register} className={CTA_CLASS + ' w-full sm:w-auto'}>
+            <Link to={routes.register} data-track="hero:register" className={CTA_CLASS + ' w-full sm:w-auto'}>
               {t('landing.ctaTry')} <span aria-hidden>→</span>
             </Link>
             <p className="mt-3 text-sm text-landing-muted">{t('landing.heroNote')}</p>
@@ -581,12 +587,15 @@ function Faq() {
       <div className="mx-auto max-w-[760px]">
         <SectionTitle>{t('landing.faqTitle')}</SectionTitle>
         <div className="space-y-3">
-          {items.map((item) => (
+          {items.map((item, i) => (
             <details
               key={item.q}
               className="group rounded-2xl border border-landing-line/60 bg-white px-5 py-1 transition open:border-landing-amber/60"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold marker:hidden">
+              <summary
+                data-track={`faq:${i + 1}`}
+                className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold marker:hidden"
+              >
                 {item.q}
                 <span
                   aria-hidden
@@ -615,6 +624,7 @@ function FinalCTA() {
         </div>
         <Link
           to={routes.register}
+          data-track="final:register"
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-landing-amber-deep transition hover:-translate-y-px sm:w-auto"
         >
           {t('landing.ctaTry')} <span aria-hidden>→</span>

@@ -3,8 +3,8 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // One instance across vi.resetModules(), so a test can see what the freshly imported page sent.
-const { sendVisit } = vi.hoisted(() => ({ sendVisit: vi.fn() }));
-vi.mock('@/lib/visit.ts', () => ({ sendVisit }));
+const { trackPage } = vi.hoisted(() => ({ trackPage: vi.fn() }));
+vi.mock('@/lib/visit.ts', () => ({ trackPage }));
 
 /**
  * The calculator pages' script against the page's OWN markup: the real HTML file is loaded into the
@@ -42,11 +42,11 @@ describe('kalkulyator-gipsokartonu', () => {
   });
 
   it('counts its own visit, by its own path', async () => {
-    sendVisit.mockClear();
+    trackPage.mockClear();
     await load('kalkulyator-gipsokartonu.html');
 
-    expect(sendVisit).toHaveBeenCalledOnce();
-    expect(sendVisit).toHaveBeenCalledWith('PAGEVIEW', window.location.pathname);
+    expect(trackPage).toHaveBeenCalledOnce();
+    expect(trackPage).toHaveBeenCalledWith(window.location.pathname);
   });
 
   it('names the area of a partition as ONE face, and only for a partition', async () => {

@@ -2,7 +2,7 @@ import './seo.css';
 import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
-import { sendVisit } from '@/lib/visit.ts';
+import { trackPage } from '@/lib/visit.ts';
 
 /**
  * The static calculator pages (kalkulyator-plytky / -gipsokartonu / -shtukaturky / -styazhky .html):
@@ -385,7 +385,7 @@ async function submit(event: SubmitEvent): Promise<void> {
 captureRefFromUrl(window.location.search);
 captureUtmFromUrl(window.location.search);
 captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
-sendVisit('PAGEVIEW', window.location.pathname);
+trackPage(window.location.pathname);
 
 /**
  * `?area=34.1&perimeter=14` — handed on by the wall-area page's result. Fills only an empty field

@@ -139,7 +139,14 @@ export interface RegisterRequest {
   promoCode?: string;
 }
 
-export type VisitKind = 'PAGEVIEW' | 'REGISTER_STARTED';
+export type VisitKind =
+  | 'PAGEVIEW'
+  | 'REGISTER_STARTED'
+  | 'LEAVE'
+  | 'CLICK'
+  | 'REGISTER_FIELD'
+  | 'REGISTER_SUBMIT'
+  | 'REGISTER_ERROR';
 
 /** POST /api/public/visit — one anonymous view of a public page (V187). The source fields are the
  *  stored first touch, the same values {@link RegisterRequest} sends, so the two meet on one key. */
@@ -154,6 +161,12 @@ export interface VisitRequest {
   utmCampaign?: string;
   timeZone?: string;
   language?: string;
+  /** CLICK: what was pressed; REGISTER_FIELD / REGISTER_ERROR: the field or error code. Never a typed value. */
+  target?: string;
+  /** LEAVE: per cent of the page that reached the bottom of the screen. */
+  scrollDepth?: number;
+  /** LEAVE: seconds on screen. */
+  engagedSeconds?: number;
 }
 
 /** PUT /api/profile (#16). `email` is honoured only while the current email is

@@ -53,6 +53,52 @@ describe('RegisterPage — the visit funnel', () => {
     expect(sendVisit).toHaveBeenCalledOnce();
     expect(sendVisit).toHaveBeenCalledWith('REGISTER_STARTED', routes.register);
   });
+
+  it('says how far down the form the visitor got, each field once', () => {
+    const { container } = renderPage();
+
+    container.querySelector<HTMLInputElement>('#email')!.focus();
+    container.querySelector<HTMLInputElement>('#password')!.focus();
+    container.querySelector<HTMLInputElement>('#email')!.focus();
+
+    expect(vi.mocked(sendVisit).mock.calls).toEqual([
+      ['REGISTER_FIELD', routes.register, { target: 'email' }],
+      ['REGISTER_FIELD', routes.register, { target: 'password' }],
+    ]);
+  });
+
+  it("names the field the form's own check stopped on", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    await waitFor(() =>
+      expect(sendVisit).toHaveBeenCalledWith('REGISTER_ERROR', routes.register, { target: 'field:email' }),
+    );
+    expect(sendVisit).not.toHaveBeenCalledWith('REGISTER_SUBMIT', routes.register);
+    // The form focuses the failed field itself; that is not the visitor reaching it.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sendVisit).not.toHaveBeenCalledWith('REGISTER_FIELD', routes.register, { target: 'email' });
+  });
+
+  it('says a valid form was sent, and which server error came back', async () => {
+    vi.mocked(authApi.register).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { status: 409, message: 'taken', code: 'EMAIL_ALREADY_REGISTERED' } },
+    });
+    const { container } = renderPage();
+    fillValid(container);
+    fireEvent.click(container.querySelector('input[name="consent"]')!);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    await waitFor(() =>
+      expect(sendVisit).toHaveBeenCalledWith('REGISTER_ERROR', routes.register, {
+        target: 'server:email_already_registered',
+      }),
+    );
+    expect(sendVisit).toHaveBeenCalledWith('REGISTER_SUBMIT', routes.register);
+  });
 });
 
 describe('RegisterPage — privacy consent', () => {

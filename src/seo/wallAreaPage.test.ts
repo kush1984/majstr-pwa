@@ -3,8 +3,8 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // One instance across vi.resetModules(), so a test can see what the freshly imported page sent.
-const { sendVisit } = vi.hoisted(() => ({ sendVisit: vi.fn() }));
-vi.mock('@/lib/visit.ts', () => ({ sendVisit }));
+const { trackPage } = vi.hoisted(() => ({ trackPage: vi.fn() }));
+vi.mock('@/lib/visit.ts', () => ({ trackPage }));
 
 /** The wall-area page's script against the page's OWN markup, as the browser would run it. */
 const root = path.resolve(__dirname, '../..');
@@ -47,11 +47,11 @@ describe('kalkulyator-ploshchi-stin', () => {
   });
 
   it('counts its own visit, by its own path', async () => {
-    sendVisit.mockClear();
+    trackPage.mockClear();
     await load();
 
-    expect(sendVisit).toHaveBeenCalledOnce();
-    expect(sendVisit).toHaveBeenCalledWith('PAGEVIEW', window.location.pathname);
+    expect(trackPage).toHaveBeenCalledOnce();
+    expect(trackPage).toHaveBeenCalledWith(window.location.pathname);
   });
 
   it('shows only the chosen plan, drawn with the letters its fields carry', async () => {

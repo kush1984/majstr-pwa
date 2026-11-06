@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { clearSessionDrafts, readSessionDraft, writeSessionDraft } from '@/lib/sessionDraft.ts';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,6 +24,8 @@ import { sendVisit } from '@/lib/visit.ts';
 
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
+/** The form's fields in screen order, as the visit report names them. */
+const FORM_FIELDS = ['email', 'password', 'fullName', 'trades', 'phone', 'companyName', 'promoCode', 'consent'];
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -112,6 +114,7 @@ export function RegisterPage() {
 
   const onSubmit = handleSubmit(async (values) => {
     setEmailTaken(false);
+    sendVisit('REGISTER_SUBMIT', routes.register);
     try {
       await register$.mutateAsync({
         ...values,
@@ -128,6 +131,9 @@ export function RegisterPage() {
       });
     } catch (err) {
       const e = toAppError(err);
+      sendVisit('REGISTER_ERROR', routes.register, {
+        target: `server:${String(e.code ?? e.status ?? 'unknown').toLowerCase()}`,
+      });
       if (e.code === 'EMAIL_ALREADY_REGISTERED' || e.status === 409) {
         // Dup email — show a clear field error + a "log in" shortcut (email prefilled).
         setError('email', { message: t('auth.emailAlreadyRegistered') });
@@ -141,7 +147,24 @@ export function RegisterPage() {
         toast.error(e.message);
       }
     }
+  }, (invalid) => {
+    // The form's own check stopped the submit: which field, never what was in it. The form then focuses
+    // that field itself, which is not the visitor reaching it.
+    ignoreFocusUntil.current = Date.now() + 500;
+    const first = FORM_FIELDS.find((field) => field in invalid);
+    sendVisit('REGISTER_ERROR', routes.register, { target: `field:${first ?? 'other'}` });
   });
+
+  // How far down the form people get: each field once, when the visitor first focuses it.
+  const reached = useRef(new Set<string>());
+  const ignoreFocusUntil = useRef(0);
+  const onFieldFocus = (event: FocusEvent<HTMLFormElement>) => {
+    const name = event.target instanceof Element ? event.target.getAttribute('name') : null;
+    if (Date.now() < ignoreFocusUntil.current) return;
+    if (!name || !FORM_FIELDS.includes(name) || reached.current.has(name)) return;
+    reached.current.add(name);
+    sendVisit('REGISTER_FIELD', routes.register, { target: name });
+  };
 
   const goToLogin = () =>
     void navigate(routes.login, { state: { email: getValues('email').trim().toLowerCase() } });
@@ -157,7 +180,7 @@ export function RegisterPage() {
 
   return (
     <AuthShell title={t('auth.registerTitle')}>
-      <form noValidate onSubmit={onSubmit} onInput={onFirstInput} className="space-y-4">
+      <form noValidate onSubmit={onSubmit} onInput={onFirstInput} onFocus={onFieldFocus} className="space-y-4">
         <FormField label={t('common.email')} htmlFor="email" required error={errors.email?.message}>
           <Input
             id="email"

@@ -1,7 +1,7 @@
 import './seo.css';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
-import { sendVisit } from '@/lib/visit.ts';
+import { trackPage } from '@/lib/visit.ts';
 import { buildPlaneOutline, type Built } from '@/lib/shapes.ts';
 import { DIAGRAM_H, DIAGRAM_W, layoutDiagram } from '@/lib/shapeDiagramLayout.ts';
 import { PLAN_SHAPES, buildPlan, wallArea, type Opening, type PlanShape, type Room, type WallArea } from './wallArea.ts';
@@ -227,7 +227,7 @@ function addRow(kind: string): void {
 captureRefFromUrl(window.location.search);
 captureUtmFromUrl(window.location.search);
 captureFirstTouch(document.referrer, window.location.pathname, window.location.hostname);
-sendVisit('PAGEVIEW', window.location.pathname);
+trackPage(window.location.pathname);
 
 form?.addEventListener('submit', submit);
 form?.addEventListener('change', syncShape);
