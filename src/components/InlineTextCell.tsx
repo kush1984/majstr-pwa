@@ -16,6 +16,11 @@ export interface InlineTextCellProps {
   readOnly?: boolean;
   maxLength?: number;
   className?: string;
+  /** An optional field (an object's address, V192): emptying it commits `''` — «take it back» —
+   *  instead of restoring the old value the way a required name does. */
+  allowEmpty?: boolean;
+  /** What the cell says while the value is empty, e.g. «Додати адресу». */
+  placeholder?: string;
 }
 
 /** The box both states share, so the text does not move when the field opens over it. */
@@ -65,7 +70,7 @@ function fieldStyle(text: Element): CSSProperties {
  * On a phone «Скасувати · Готово» sit above the keyboard; with a mouse a quiet hint names the keys.
  */
 export function InlineTextCell({
-  value, ariaLabel, onCommit, readOnly = false, maxLength = 255, className,
+  value, ariaLabel, onCommit, readOnly = false, maxLength = 255, className, allowEmpty = false, placeholder,
 }: InlineTextCellProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -96,7 +101,7 @@ export function InlineTextCell({
     if (!open.current) return;
     open.current = false;
     setEditing(false);
-    const next = normalizeInlineText(text);
+    const next = normalizeInlineText(text) ?? (allowEmpty ? '' : null);
     if (next !== null && next !== value) onCommit(next);
   };
   const cancel = () => {
@@ -134,7 +139,7 @@ export function InlineTextCell({
   };
 
   if (readOnly) {
-    return <span className={cn('break-words', className)}>{value}</span>;
+    return <span className={cn('break-words', className)}>{value || placeholder}</span>;
   }
 
   if (!editing) {
@@ -159,7 +164,7 @@ export function InlineTextCell({
             'cursor-text select-text rounded-[5px] [-webkit-touch-callout:default] hover:bg-cell-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand',
           )}
         >
-          {value}
+          {value || <span className="text-muted">{placeholder}</span>}
         </span>
       </span>
     );

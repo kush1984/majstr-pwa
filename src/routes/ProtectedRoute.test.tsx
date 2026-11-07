@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
@@ -69,5 +69,70 @@ describe('auth gate — offline behaviour', () => {
 
     expect(screen.queryByText('LOGIN PAGE')).toBeNull();
     expect(screen.getByText('HOME')).toBeTruthy();
+  });
+});
+
+// V190: registration no longer asks for trades — the first screen inside does.
+describe('auth gate — «Чим займаєтесь?» first for a master with no trade', () => {
+  function renderWithWelcome(path: string, seedMe: UserResponse) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, seedMe);
+    vi.mocked(authApi.me).mockResolvedValue(seedMe);
+    return render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/app" element={<ProtectedRoute><div>APP CONTENT</div></ProtectedRoute>} />
+            <Route path="/welcome" element={<ProtectedRoute><div>WELCOME</div></ProtectedRoute>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  beforeEach(() => localStorage.removeItem('majstr.tradesSkipped.new'));
+
+  it('sends a master with no trade to /welcome, and /welcome itself does not loop', () => {
+    renderWithWelcome('/app', aUser({ id: 'new', trades: [], customTrades: [] }));
+
+    expect(screen.getByText('WELCOME')).toBeTruthy();
+    expect(screen.queryByText('APP CONTENT')).toBeNull();
+  });
+
+  it('lets him in once he said «пропустити» on this device', () => {
+    localStorage.setItem('majstr.tradesSkipped.new', '1');
+    renderWithWelcome('/app', aUser({ id: 'new', trades: [], customTrades: [] }));
+
+    expect(screen.getByText('APP CONTENT')).toBeTruthy();
+  });
+
+  /** A reload restores `me` from the device, up to a second stale: a trade saved just before it
+   *  must not bounce him back to «Чим займаєтесь?» while the server is still answering. */
+  it('does not redirect on a restored, stale `me` while the fresh one is on its way', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, aUser({ id: 'new', trades: [], customTrades: [] }));
+    void qc.invalidateQueries({ queryKey: ME_QUERY_KEY, refetchType: 'none' }); // what markRestoredStale does
+    vi.mocked(authApi.me).mockResolvedValue(aUser({ id: 'new', trades: ['ELECTRICAL'] }));
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/app']}>
+          <Routes>
+            <Route path="/app" element={<ProtectedRoute><div>APP CONTENT</div></ProtectedRoute>} />
+            <Route path="/welcome" element={<div>WELCOME</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText('WELCOME')).toBeNull();
+    await waitFor(() => expect(authApi.me).toHaveBeenCalled());
+    expect(await screen.findByText('APP CONTENT')).toBeTruthy();
+    expect(screen.queryByText('WELCOME')).toBeNull();
+  });
+
+  it('never asks a master who has a trade, a custom one included', () => {
+    renderWithWelcome('/app', aUser({ trades: [], customTrades: [{ id: 'c1', name: 'Стелі', sortOrder: 0 }] }));
+
+    expect(screen.getByText('APP CONTENT')).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { passTradesScreen } from '../e2e/onboarding.ts';
 
 /**
  * A crew shares one phone. Master A's session dies with unsynced work in the queue, and master B
@@ -10,13 +11,9 @@ async function register(page: Page, label: string): Promise<void> {
   await page.goto('/register');
   await page.fill('#email', `e2e-phone+${label}${Date.now()}@majstr.test`);
   await page.fill('#password', 'Test1234!');
-  await page.fill('#fullName', `Майстер ${label}`);
-  await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
-  await page.fill('#phone', '+380501112233');
-  await page.fill('#companyName', `ФОП ${label}`);
   await page.locator('input[name="consent"]').check();
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
-  await expect(page).not.toHaveURL(/\/register/, { timeout: 20_000 });
+  await passTradesScreen(page, ['Електрика'], 20_000);
 }
 
 test('чужа черга не йде в новий акаунт, а відвідувача не викидає на логін', async ({ page, context }) => {

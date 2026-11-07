@@ -29,6 +29,7 @@
 /privacy               /               200
 /new                   /               200
 /finance               /               200
+/welcome               /               200
 /profile               /               200
 /templates             /               200
 /projects              /               200

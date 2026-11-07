@@ -6,7 +6,7 @@ import '@/lib/i18n.ts'; // self-initialises on import → real UA strings in ass
 import { ProfileEditModal } from './ProfileEditModal.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
-import { catalogApi } from '@/api/catalog.ts';
+import { toast } from '@/hooks/useToast.ts';
 import type { UserResponse } from '@/api/types.ts';
 import { aUser } from '@/test/factories.ts';
 
@@ -19,9 +19,6 @@ vi.mock('@/api/profile.ts', () => ({
     renameCustomTrade: vi.fn(),
     deleteCustomTrade: vi.fn(),
   },
-}));
-vi.mock('@/api/catalog.ts', () => ({
-  catalogApi: { addFromTemplate: vi.fn() },
 }));
 // Toasts would reach into a store / DOM portal — stub them out.
 vi.mock('@/hooks/useToast.ts', () => ({
@@ -47,54 +44,34 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ProfileEditModal — add-trade starter-set prompt', () => {
+describe('ProfileEditModal — an added trade fills its catalog unasked (V190)', () => {
   /**
-   * Regression for the bug where adding a trade never offered its starter set:
-   * `useUpdateProfile` primes + invalidates the `['me']` cache, so `me` changes
-   * the instant the save resolves. Without the `seededRef` guard the modal's
-   * seed effect re-fired and called `setAddPrompt(null)`, wiping the prompt
-   * before it rendered. This test drives the real save → me-change flow and
-   * asserts the prompt SURVIVES.
+   * The modal used to ask «додати набір?» after a trade was added, and «Не зараз» left the trade's
+   * bundles in the picker with every line at 0 ₴. The server now fills the starter catalog itself;
+   * the modal saves, says so, and closes.
    */
-  it('shows the "add starter set?" prompt after adding a trade and saving', async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    qc.setQueryData(ME_QUERY_KEY, me);
-    // The save resolves with the user now carrying the added trade — this is what
-    // flips the `['me']` cache and used to wipe the prompt.
-    vi.mocked(profileApi.update).mockResolvedValue({ ...me, trades: ['ELECTRICAL', 'PLUMBING'] });
-
-    renderModal(qc);
-
-    // Add PLUMBING ("Сантехніка") and save.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Сантехніка' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
-
-    // The prompt appears AND stays — its "Не зараз" button only exists in prompt
-    // mode, and the edit form's "Зберегти" is gone (we didn't revert to the form).
-    expect(await screen.findByRole('button', { name: 'Не зараз' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Зберегти' })).toBeNull();
-    expect(profileApi.update).toHaveBeenCalledOnce();
-  });
-
-  it('merges the added trade\'s starter set when the prompt is confirmed', async () => {
+  it('saves an added trade in one step, with no «Не зараз» question, and says what was added', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(ME_QUERY_KEY, me);
     vi.mocked(profileApi.update).mockResolvedValue({ ...me, trades: ['ELECTRICAL', 'PLUMBING'] });
-    vi.mocked(catalogApi.addFromTemplate).mockResolvedValue({ itemsAdded: 7 });
-
-    renderModal(qc);
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Сантехніка' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Додати' }));
-
-    // Only the newly-added trade is sent to the merge endpoint.
-    await waitFor(() =>
-      expect(catalogApi.addFromTemplate).toHaveBeenCalledWith(['PLUMBING']),
+    const onClose = vi.fn();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
+    render(<ProfileEditModal open onClose={onClose} />, { wrapper });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Сантехніка' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(profileApi.update).toHaveBeenCalledWith(
+      expect.objectContaining({ trades: ['ELECTRICAL', 'PLUMBING'] }),
+    );
+    expect(screen.queryByRole('button', { name: 'Не зараз' })).toBeNull();
+    expect(toast.info).toHaveBeenCalledWith('Додали шаблони і позиції каталогу для: Сантехніка');
   });
 
-  it('does not prompt when no trade was added (plain profile edit)', async () => {
+  it('says nothing about templates when no trade was added (plain profile edit)', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(ME_QUERY_KEY, me);
     vi.mocked(profileApi.update).mockResolvedValue(me); // same trades
@@ -107,8 +84,7 @@ describe('ProfileEditModal — add-trade starter-set prompt', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(profileApi.update).toHaveBeenCalledOnce());
-    expect(screen.queryByRole('button', { name: 'Не зараз' })).toBeNull();
-    expect(catalogApi.addFromTemplate).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalledWith(expect.stringContaining('Додали шаблони'));
   });
 
   it('saves fine with every system trade unchecked (custom trades are a supported end state)', async () => {
@@ -124,7 +100,39 @@ describe('ProfileEditModal — add-trade starter-set prompt', () => {
     await waitFor(() =>
       expect(profileApi.update).toHaveBeenCalledWith(expect.objectContaining({ trades: [] })),
     );
-    expect(screen.queryByText('Оберіть хоча б один тип робіт')).toBeNull();
+  });
+});
+
+describe('ProfileEditModal — name, phone and company are optional (V190)', () => {
+  it('saves with all three empty — a master who skipped them can still save his trades', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const bare = aUser({ fullName: undefined, phone: undefined, companyName: undefined, trades: [] });
+    qc.setQueryData(ME_QUERY_KEY, bare);
+    vi.mocked(profileApi.update).mockResolvedValue({ ...bare, trades: ['TILING'] });
+
+    renderModal(qc);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Плитка' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() =>
+      expect(profileApi.update).toHaveBeenCalledWith(
+        expect.objectContaining({ fullName: '', phone: '', companyName: '', trades: ['TILING'] }),
+      ),
+    );
+  });
+
+  it('still refuses a phone that was typed but is too short to be one', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, me);
+
+    renderModal(qc);
+
+    fireEvent.change(screen.getByDisplayValue('+380501112233'), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    expect(await screen.findByText('Введіть телефон')).toBeTruthy();
+    expect(profileApi.update).not.toHaveBeenCalled();
   });
 });
 

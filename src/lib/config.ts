@@ -75,6 +75,9 @@ export const routes = {
   newObject: '/projects/new',
   estimateImport: '/estimates/import',
   billingReturn: '/billing/return',
+  // «Чим займаєтесь?» — the first screen after registration (V190), and where the empty template
+  // picker sends him back to.
+  welcome: '/welcome',
   // «Мої гроші» (V135) — his OWN cash movement, not any object's. Full-screen and reached from a
   // one-line strip on the home screen, deliberately NOT a sixth item in the bottom nav: five
   // icons already share a 375px phone.

@@ -8,6 +8,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
+import { isSenderNameRequired, senderSheetStore } from '@/features/sender/senderGate.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
@@ -51,7 +52,17 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         void qc.invalidateQueries({ queryKey: ['acts'] });
       })
       // A failed publish offers a retry instead of shutting the sheet the master just opened.
-      .catch((err) => { if (alive) { toast.error(toAppError(err).message); setPublishError(true); } })
+      .catch((err) => {
+        if (!alive) return;
+        // No name yet (V190) — ask for it instead of a retry button that would fail the same way.
+        if (isSenderNameRequired(err)) {
+          onCloseRef.current();
+          void senderSheetStore.request();
+          return;
+        }
+        toast.error(toAppError(err).message);
+        setPublishError(true);
+      })
       .finally(() => { if (alive) setPublishing(false); });
     return () => { alive = false; };
   }, [open, actId, qc, attempt]);
@@ -92,7 +103,12 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
       toast.success(t('estimate.emailSent'));
       onClose();
     } catch (err) {
-      toast.error(toAppError(err).message);
+      if (isSenderNameRequired(err)) {
+        onClose();
+        void senderSheetStore.request();
+      } else {
+        toast.error(toAppError(err).message);
+      }
     } finally { setBusy(null); }
   };
 

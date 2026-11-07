@@ -6,6 +6,8 @@ import 'fake-indexeddb/auto';
 import '@/lib/i18n.ts';
 import { clearOutbox } from '@/lib/outbox/outbox.ts';
 import { ActEditorPage } from './ActEditorPage.tsx';
+import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { aUser } from '@/test/factories.ts';
 import { actsApi } from '@/api/acts.ts';
 import { formatMoney, formatMoneyExact } from '@/lib/format.ts';
 import { economyApi } from '@/api/economy.ts';
@@ -87,6 +89,8 @@ function progress(): ActProgressResponse {
 
 function renderEditor(search = '') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // A signed-in master with a name — sharing and the PDF ask for one first (V190, SenderGate).
+  qc.setQueryData(ME_QUERY_KEY, aUser());
   // A DATA router (createMemoryRouter), not <MemoryRouter> — the editor's leave guard uses
   // useBlocker, which only exists there. The wildcard route is where a permitted exit lands.
   const router = createMemoryRouter(
@@ -110,6 +114,7 @@ function renderEditor(search = '') {
  */
 function renderNewEditor(search = '?project=p1&from=2026-08-01') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc.setQueryData(ME_QUERY_KEY, aUser());
   const router = createMemoryRouter(
     [
       { path: '/acts/new', element: <ActEditorPage /> },

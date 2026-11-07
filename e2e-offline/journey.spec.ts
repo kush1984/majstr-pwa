@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { passTradesScreen } from '../e2e/onboarding.ts';
 
 /**
  * The offline guarantee, walked exactly as a master on a no-signal site would:
@@ -24,12 +25,9 @@ async function registerAndSeed(page: Page): Promise<{ projectUrl: string }> {
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', 'Test1234!');
-  await page.fill('#fullName', 'Офлайн Тест');
-  await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
-  await page.fill('#phone', '+380501112233');
-  await page.fill('#companyName', 'Офлайн ФОП');
   await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
+  await passTradesScreen(page, ['Електрика']);
 
   // Create an object + estimate so there is real data to see offline (object-first: the object,
   // then «Що далі?» on it).

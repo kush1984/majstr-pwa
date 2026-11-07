@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { catalogApi } from '@/api/catalog.ts';
 import type {
-  CatalogItemRequest, CatalogItemResponse, CatalogSyncRequest, ItemType, Trade, UserResponse,
+  CatalogItemRequest, CatalogItemResponse, CatalogSyncRequest, ItemType, UserResponse,
 } from '@/api/types.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { newUuid } from '@/lib/uuid.ts';
@@ -242,16 +242,6 @@ export function useResetCatalog() {
   const invalidate = useInvalidateCatalog();
   return useMutation({
     mutationFn: () => catalogApi.resetFromTemplate(),
-    onSuccess: invalidate,
-  });
-}
-
-/** Merge the starter set for the given trades into the catalog (no overwrite,
- *  no duplicates). Used after a trade is added to the profile. */
-export function useAddCatalogTemplates() {
-  const invalidate = useInvalidateCatalog();
-  return useMutation({
-    mutationFn: (trades: Trade[]) => catalogApi.addFromTemplate(trades),
     onSuccess: invalidate,
   });
 }

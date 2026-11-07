@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import '@/lib/i18n.ts';
 import { TemplatePickerSheet, type TemplatePick } from './TemplatePickerSheet.tsx';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
@@ -26,7 +27,7 @@ const def: EstimateTemplateSummary = {
 function renderPicker(onPick: (picks: TemplatePick[]) => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>
   );
   return render(<TemplatePickerSheet open onClose={() => {}} onPick={onPick} />, { wrapper });
 }
@@ -34,6 +35,11 @@ function renderPicker(onPick: (picks: TemplatePick[]) => void) {
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+function WelcomeProbe() {
+  const state = useLocation().state as { from?: string } | null;
+  return <p data-testid="welcome-from">{state?.from}</p>;
+}
 
 /**
  * The toggle half of a row. Not `getByRole('button', { name })` — the row holds TWO buttons whose
@@ -217,7 +223,30 @@ describe('TemplatePickerSheet', () => {
 
     await waitFor(() => expect(screen.queryAllByText(/Нічого не знайдено/).length).toBe(2));
     expect(screen.queryByText(/не створили жодного шаблону/)).toBeNull();
-    expect(screen.queryByText(/Немає доступних шаблонів/)).toBeNull();
+    expect(screen.queryByText(/виберіть, чим займаєтесь/)).toBeNull();
+  });
+
+  /** V190: no trade (he skipped the question) means no default bundle — say why, and lead there. */
+  it('explains an empty default list and leads to the trades screen, coming back after', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    const onClose = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/projects/p1']}>
+          <Routes>
+            <Route path="/projects/:id" element={<TemplatePickerSheet open onClose={onClose} onPick={vi.fn()} />} />
+            <Route path="/welcome" element={<WelcomeProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Шаблонів ще немає — виберіть, чим займаєтесь/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Вибрати напрям' }));
+
+    expect(onClose).toHaveBeenCalled();
+    expect((await screen.findByTestId('welcome-from')).textContent).toBe('/projects/p1');
   });
 
   it('hides the search box for a list short enough to just read', async () => {

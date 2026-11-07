@@ -13,7 +13,7 @@ import type { EstimateSummary, ProjectResponse } from '@/api/types.ts';
  * opens with «Що далі?» up — once, never on an ordinary visit; the «＋» is the open tab's action;
  * what the FAB menu used to carry is in the header's ⋮.
  */
-vi.mock('@/api/projects.ts', () => ({ projectsApi: { get: vi.fn(), list: vi.fn() } }));
+vi.mock('@/api/projects.ts', () => ({ projectsApi: { get: vi.fn(), list: vi.fn(), update: vi.fn() } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { listForProject: vi.fn(), createForProject: vi.fn() } }));
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn().mockResolvedValue([]) } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn().mockResolvedValue({ maxEstimatesPerProject: null }) } }));
@@ -156,5 +156,40 @@ describe('ProjectDetailPage — the «＋» and the header ⋮ (object-first)', 
     expect(screen.queryByText('Поділитися з клієнтом')).toBeNull();
     expect(screen.queryByText('Посилання на чат')).toBeNull();
     expect(screen.getByText('Створити нотатку')).toBeTruthy();
+  });
+});
+
+/** V192: the header shows the name and the address, so the header edits them — the address included,
+ *  which an object may now be created without. */
+describe('ProjectDetailPage — the header edits what it shows', () => {
+  it('offers «Додати адресу» on an object without one, and saves it in place', async () => {
+    vi.mocked(projectsApi.get).mockResolvedValue({ ...project, address: undefined });
+    vi.mocked(projectsApi.update).mockResolvedValue({ ...project, address: 'вул. Нова 3' });
+    renderPage('/projects/p1');
+
+    const cell = await screen.findByRole('button', { name: "Адреса об'єкта" });
+    expect(cell.textContent).toBe('Додати адресу');
+    fireEvent.click(cell);
+    const field = screen.getByRole('textbox', { name: "Адреса об'єкта" });
+    fireEvent.change(field, { target: { value: 'вул. Нова 3' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(projectsApi.update).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Ванна', address: 'вул. Нова 3' })),
+    );
+  });
+
+  it('renames the object in place, keeping its address', async () => {
+    vi.mocked(projectsApi.update).mockResolvedValue({ ...project, name: 'Санвузол' });
+    renderPage('/projects/p1');
+
+    fireEvent.click(await screen.findByRole('button', { name: "Назва об'єкта" }));
+    const field = screen.getByRole('textbox', { name: "Назва об'єкта" });
+    fireEvent.change(field, { target: { value: 'Санвузол' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(projectsApi.update).toHaveBeenCalledWith('p1', expect.objectContaining({ name: 'Санвузол', address: 'вул. 1' })),
+    );
   });
 });

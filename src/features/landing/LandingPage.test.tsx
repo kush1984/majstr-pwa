@@ -40,6 +40,15 @@ describe('LandingPage', () => {
     for (const cta of ctas) expect(cta.getAttribute('href')).toBe('/register');
   });
 
+  /** The visit stats: nobody scrolled to the footer, the only place the sample was linked from. */
+  it('links the sample estimate from the first screen, under the main button, and counts the tap', () => {
+    renderLanding();
+
+    const sample = screen.getByRole('link', { name: /Подивитися приклад кошторису/ });
+    expect(sample.getAttribute('href')).toBe('/zrazok-koshtorysu');
+    expect(sample.getAttribute('data-track')).toBe('hero:sample');
+  });
+
   it('shows all nine questions', () => {
     renderLanding();
 

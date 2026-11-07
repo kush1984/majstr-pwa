@@ -41,6 +41,7 @@ import { speechAvailability } from '@/lib/speech.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
+import { isSenderNameRequired, senderSheetStore, useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimateName } from './estimateName.ts';
 import { crewMarginOf } from './crewMargin.ts';
 import { track } from '@/lib/posthog.ts';
@@ -146,6 +147,7 @@ export function EstimateEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const ensureEmailVerified = useEmailGate();
+  const ensureSender = useSenderGate();
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -291,6 +293,10 @@ export function EstimateEditorPage() {
       const failure = toAppError(err);
       if (failure.code === 'EMAIL_NOT_VERIFIED') {
         setEmailGateOpen(true);
+      } else if (isSenderNameRequired(err)) {
+        // The cache said there was a name and the server disagrees: ask, then a fresh tap prints.
+        setPdfSheetOpen(false);
+        if (await senderSheetStore.request()) toast.info(t('sender.tapAgainPdf'));
       } else if (failure.code === 'NETWORK') {
         // The request never left the phone — signal dropped after the guard let it through. Say
         // that, because «Не вдалося сформувати PDF» reads as a fault in the estimate or the server.
@@ -335,6 +341,14 @@ export function EstimateEditorPage() {
       setEmailGateOpen(true);
       return;
     }
+    // The PDF prints his name (V190: registration no longer asks for it). The sheet spends the tap the
+    // tab was reserved in, so a name given here prints on the NEXT tap.
+    const sender = await ensureSender(() => tab.cancel());
+    if (sender !== 'ready') {
+      // Saved or skipped, the sheet spent the tap the tab was reserved in.
+      if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
+      return;
+    }
     if (!(await estimateQueueClear())) {
       tab.cancel();
       return;
@@ -357,6 +371,9 @@ export function EstimateEditorPage() {
       setEmailGateOpen(true);
       return;
     }
+    // …and the name the client will read on it (V190). A share sheet is no new tab, so it simply
+    // opens once the name is saved.
+    if ((await ensureSender()) === 'cancelled') return;
     if (!(await estimateQueueClear())) return;
     setShareOpen(true);
   };
@@ -1427,7 +1444,7 @@ function ClientBanner({ project }: { project: ProjectResponse }) {
         <div className="truncate text-sm font-semibold text-primary">
           {project.clientFullName ?? t('estimate.noClient')}
         </div>
-        <div className="truncate text-xs text-ink-2/70">{project.address}</div>
+        {project.address && <div className="truncate text-xs text-ink-2/70">{project.address}</div>}
       </div>
     </div>
   );

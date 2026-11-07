@@ -185,6 +185,21 @@ describe('InlineTextCell', () => {
     expect(screen.getByRole('button', { name: 'Назва, Стяжка' }).textContent).toBe('Стяжка');
   });
 
+  /** V192: an optional field (an object's address) can be taken back, and says what it is while empty. */
+  it('an optional field commits an emptied value, and shows its placeholder when empty', () => {
+    const onCommit = vi.fn();
+    const { rerender } = render(
+      <InlineTextCell value="вул. Нова 3" ariaLabel="Адреса" allowEmpty placeholder="Додати адресу" onCommit={onCommit} />,
+    );
+    const input = openCell('Адреса');
+    fireEvent.change(input, { target: { value: '  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledWith('');
+
+    rerender(<InlineTextCell value="" ariaLabel="Адреса" allowEmpty placeholder="Додати адресу" onCommit={onCommit} />);
+    expect(screen.getByRole('button', { name: 'Адреса' }).textContent).toBe('Додати адресу');
+  });
+
   it('a tap puts the caret at the end of the TAPPED word, never selecting the whole name', () => {
     render(<InlineTextCell value="Укладання плитки 300×600" ariaLabel="Назва, Плитка" onCommit={vi.fn()} />);
     const shown = screen.getByRole('button', { name: 'Назва, Плитка' });

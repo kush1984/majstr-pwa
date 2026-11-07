@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { passTradesScreen } from './onboarding.ts';
 
 /**
  * Deeper contractor-journey coverage derived from the manual prod scenario
@@ -29,14 +30,11 @@ async function registerMaster(page: Page, label: string): Promise<string> {
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  await page.fill('#fullName', 'Журі Тестовий');
-  await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
-  await page.fill('#phone', '+380501110000');
-  await page.fill('#companyName', 'Журі ФОП');
   await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
-  // Generous timeout: the first spec alphabetically pays the cold-Vite compile.
-  await expect(page).toHaveURL('http://localhost:5173/', { timeout: 25_000 });
+  // Generous timeout: the first spec alphabetically pays the cold-Vite compile. The trades are the
+  // first screen inside now (V190), and they fill the starter catalog the journey goes on to use.
+  await passTradesScreen(page, ['Електрика']);
   return email;
 }
 

@@ -1,15 +1,68 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { profileApi } from '@/api/profile.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
-import type { ProfileUpdateRequest, UserResponse } from '@/api/types.ts';
+import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
+import { ESTIMATE_TEMPLATE_KEY } from '@/features/estimate/useEstimateTemplates.ts';
+import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, SenderProfileRequest, UserResponse } from '@/api/types.ts';
+
+/** A trade that was not there before brings its starter catalog server-side, and its bundles join
+ *  the picker — both caches are stale the moment the trade set grows. */
+function useRefreshAfterTrades() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: CATALOG_KEY });
+    void qc.invalidateQueries({ queryKey: ESTIMATE_TEMPLATE_KEY });
+  };
+}
 
 /** Update the contractor's own profile (#16). Seeds the `['me']` cache with the
  *  returned user so the profile screen reflects changes immediately, then
  *  revalidates. */
 export function useUpdateProfile() {
   const qc = useQueryClient();
+  const refreshAfterTrades = useRefreshAfterTrades();
   return useMutation({
     mutationFn: (req: ProfileUpdateRequest) => profileApi.update(req),
+    onSuccess: (user: UserResponse, req) => {
+      const before = qc.getQueryData<UserResponse>(ME_QUERY_KEY)?.trades ?? [];
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      if (req.trades.some((t) => !before.includes(t))) refreshAfterTrades();
+    },
+  });
+}
+
+/** The trades screen after registration (V190): sets the system trades; an empty set is a skip. */
+export function useUpdateTrades() {
+  const qc = useQueryClient();
+  const refreshAfterTrades = useRefreshAfterTrades();
+  return useMutation({
+    mutationFn: (req: ProfileTradesRequest) => profileApi.updateTrades(req),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      refreshAfterTrades();
+    },
+  });
+}
+
+/** «Залиште телефон — передзвонимо» (V191). */
+export function useRequestHelp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: HelpRequest) => profileApi.requestHelp(req),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    },
+  });
+}
+
+/** «Як вас підписати в документі?» — the three fields a document prints, saved to the profile. */
+export function useUpdateSender() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: SenderProfileRequest) => profileApi.updateSender(req),
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });

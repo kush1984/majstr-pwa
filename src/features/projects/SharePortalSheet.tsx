@@ -7,6 +7,7 @@ import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
+import { senderSheetStore } from '@/features/sender/senderGate.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
@@ -203,6 +204,11 @@ export function SharePortalSheet({
     if (e.code === 'EMAIL_NOT_VERIFIED') {
       onClose();
       onNeedEmailVerify();
+    } else if (e.code === 'SENDER_NAME_REQUIRED') {
+      // Also a 403 — it must not fall through to «only on PRO» below. The opener asks first
+      // (useSenderGate); this is the cache that said there was a name when there was none.
+      onClose();
+      void senderSheetStore.request();
     } else if (e.code === 'CLIENT_EMAIL_MISSING') {
       toast.error(t('estimate.clientEmailMissing'));
       setShowAddEmail(true);

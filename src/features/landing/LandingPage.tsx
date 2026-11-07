@@ -186,7 +186,16 @@ function Hero() {
             <Link to={routes.register} data-track="hero:register" className={CTA_CLASS + ' w-full sm:w-auto'}>
               {t('landing.ctaTry')} <span aria-hidden>→</span>
             </Link>
-            <p className="mt-3 text-sm text-landing-muted">{t('landing.heroNote')}</p>
+            {/* A look before the door: the visit stats showed nobody scrolling to the footer, where
+                this link was the only way to see what the app makes. */}
+            <a
+              href="/zrazok-koshtorysu"
+              data-track="hero:sample"
+              className="mt-3 flex min-h-[44px] w-full items-center justify-center text-[15px] font-semibold text-landing-ink underline decoration-landing-amber underline-offset-4 sm:w-auto sm:justify-start"
+            >
+              {t('landing.heroSample')} <span aria-hidden className="ml-1">→</span>
+            </a>
+            <p className="mt-1 text-sm text-landing-muted">{t('landing.heroNote')}</p>
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { passTradesScreen } from './onboarding.ts';
 
 /**
  * Reliability / error-handling flow (BLOCK 1).
@@ -28,14 +29,10 @@ test('backend недоступний → дружній екран помилк�
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', 'Test1234!');
-  await page.fill('#fullName', 'Релі Тест');
-  await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
-  await page.fill('#phone', '+380501119999');
-  await page.fill('#companyName', 'Релі ФОП');
   await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
-  await expect(page).toHaveURL('http://localhost:5173/', { timeout: 25_000 });
+  await passTradesScreen(page, ['Електрика']);
 
   // Friendly error state appears after the network retries/backoff are exhausted.
   await expect(page.getByText('Сервіс тимчасово недоступний')).toBeVisible({ timeout: 20_000 });

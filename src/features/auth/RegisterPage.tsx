@@ -6,15 +6,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { Input } from '@/components/Input.tsx';
-import { Checkbox } from '@/components/Checkbox.tsx';
 import { FormField } from '@/components/FormField.tsx';
-import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useRegister } from './useRegister.ts';
-import {
-  registerSchema,
-  TRADE_VALUES,
-  type RegisterFormValues,
-} from './registerSchema.ts';
+import { registerSchema, type RegisterFormValues } from './registerSchema.ts';
 import { AuthShell } from './LoginPage.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -26,8 +20,13 @@ import { suggestEmail } from '@/lib/emailSuggestion.ts';
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
 /** The form's fields in screen order, as the visit report names them. */
-const FORM_FIELDS = ['email', 'password', 'fullName', 'trades', 'phone', 'companyName', 'promoCode', 'consent'];
+const FORM_FIELDS = ['email', 'password', 'promoCode', 'consent'] as const;
 
+/**
+ * The door (V190): email, password, consent — nothing about the person, so nothing to trust us with
+ * yet. Trades are asked on the first screen inside (`TradesOnboardingPage`), the name before the first
+ * document leaves (`SenderGate`).
+ */
 export function RegisterPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -35,14 +34,8 @@ export function RegisterPage() {
   const [emailTaken, setEmailTaken] = useState(false);
   // «Може, ivan@gmail.com?» — offered when the field is left, cleared as soon as it is edited.
   const [emailHint, setEmailHint] = useState<string | null>(null);
-  // Custom trade names are collected locally and created alongside the account on submit —
-  // there's no user yet to attach them to individually (unlike ProfileEditModal, which saves
-  // each one instantly through its own endpoint).
   // The half-filled form survives a reload (review P1-2) — everything but the password and consent.
   const [draft] = useState(() => readSessionDraft<RegisterDraft>(REGISTER_DRAFT));
-  const [customTrades, setCustomTrades] = useState<string[]>(draft?.customTrades ?? []);
-  const [addingCustomTrade, setAddingCustomTrade] = useState(false);
-  const [newCustomTradeName, setNewCustomTradeName] = useState('');
   const {
     register,
     handleSubmit,
@@ -50,43 +43,22 @@ export function RegisterPage() {
     setValue,
     getValues,
     watch,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, submitCount },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       email: draft?.email ?? '',
       password: '',
-      fullName: draft?.fullName ?? '',
-      trades: draft?.trades ?? [],
-      customTrades: draft?.customTrades ?? [],
-      phone: draft?.phone ?? '',
-      companyName: draft?.companyName ?? '',
       consent: false,
       promoCode: draft?.promoCode ?? '',
     },
   });
 
   useEffect(() => {
-    const sub = watch((v) => writeSessionDraft(REGISTER_DRAFT, {
-      email: v.email, fullName: v.fullName, phone: v.phone, companyName: v.companyName,
-      trades: v.trades, customTrades: v.customTrades, promoCode: v.promoCode,
-    }));
+    const sub = watch((v) => writeSessionDraft(REGISTER_DRAFT, { email: v.email, promoCode: v.promoCode }));
     return () => sub.unsubscribe();
   }, [watch]);
 
-  // «Назва компанії» follows the name until the master types his own (review P1-16): most register
-  // as themselves, and a sixth required field to retype the same words was a step on the way in.
-  // The documents already print whatever is here, so his name is what they show — as before, when
-  // he typed it himself.
-  const companyEdited = useRef(Boolean(draft?.companyName && draft.companyName !== draft.fullName));
-  const fullNameField = register('fullName', {
-    onChange: (e: { target: { value: string } }) => {
-      if (!companyEdited.current) setValue('companyName', e.target.value);
-    },
-  });
-  const companyField = register('companyName', {
-    onChange: () => { companyEdited.current = true; },
-  });
   const emailField = register('email', {
     onChange: () => setEmailHint(null),
     onBlur: (e: { target: { value: string } }) => setEmailHint(suggestEmail(e.target.value)),
@@ -98,30 +70,11 @@ export function RegisterPage() {
     setEmailTaken(false);
   };
 
-  const syncCustomTrades = (next: string[]) => {
-    setCustomTrades(next);
-    setValue('customTrades', next, { shouldValidate: true });
-  };
-
-  const onAddCustomTrade = () => {
-    const name = newCustomTradeName.trim();
-    if (!name || customTrades.some((t) => t.toLowerCase() === name.toLowerCase())) {
-      setNewCustomTradeName('');
-      setAddingCustomTrade(false);
-      return;
-    }
-    syncCustomTrades([...customTrades, name]);
-    setNewCustomTradeName('');
-    setAddingCustomTrade(false);
-  };
-
-  const onRemoveCustomTrade = (name: string) =>
-    syncCustomTrades(customTrades.filter((t) => t !== name));
-
   useEffect(() => {
     if (register$.isSuccess) {
       clearSessionDrafts(REGISTER_DRAFT);
-      void navigate(routes.home, { replace: true });
+      // Straight to «Чим займаєтесь?» — the account is there, the app is not set up yet.
+      void navigate(routes.welcome, { replace: true });
     }
   }, [register$.isSuccess, navigate]);
 
@@ -130,9 +83,9 @@ export function RegisterPage() {
     sendVisit('REGISTER_SUBMIT', routes.register);
     try {
       await register$.mutateAsync({
-        ...values,
-        trades: values.trades,
-        customTrades: values.customTrades.length > 0 ? values.customTrades : undefined,
+        email: values.email,
+        password: values.password,
+        consent: values.consent,
         // First-touch attribution: the stored ?ref= wins, the typed promo code is
         // a fallback. Absent → the backend attributes DIRECT.
         ref: getStoredRef(),
@@ -175,7 +128,7 @@ export function RegisterPage() {
   const onFieldFocus = (event: FocusEvent<HTMLFormElement>) => {
     const name = event.target instanceof Element ? event.target.getAttribute('name') : null;
     if (Date.now() < ignoreFocusUntil.current) return;
-    if (!name || !FORM_FIELDS.includes(name) || reached.current.has(name)) return;
+    if (!name || !(FORM_FIELDS as readonly string[]).includes(name) || reached.current.has(name)) return;
     reached.current.add(name);
     sendVisit('REGISTER_FIELD', routes.register, { target: name });
   };
@@ -199,6 +152,14 @@ export function RegisterPage() {
     started.current = true;
     sendVisit('REGISTER_STARTED', routes.register);
   };
+
+  const fieldLabels: Record<(typeof FORM_FIELDS)[number], string> = {
+    email: t('common.email'),
+    password: t('auth.password'),
+    promoCode: t('auth.promoCode'),
+    consent: t('auth.missingConsent'),
+  };
+  const missing = FORM_FIELDS.filter((field) => errors[field]).map((field) => fieldLabels[field]);
 
   return (
     <AuthShell title={t('auth.registerTitle')}>
@@ -243,122 +204,6 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField label={t('common.fullName')} htmlFor="fullName" required error={errors.fullName?.message}>
-          <Input
-            id="fullName"
-            autoComplete="name"
-            invalid={Boolean(errors.fullName)}
-            {...fullNameField}
-          />
-        </FormField>
-
-        <fieldset>
-          <legend className="mb-1 block text-sm font-medium text-gray-700">
-            {t('auth.tradeType')}
-            <span className="ml-0.5 text-red-500" aria-hidden>*</span>
-            <span className="ml-2 font-normal text-gray-500">{t('auth.chooseSeveral')}</span>
-          </legend>
-          {/* Two columns from the narrowest phone up (review P1-16): eleven trades in one column were
-              a whole screen of scrolling before the account even existed. */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {TRADE_VALUES.map((value) => (
-              <Checkbox
-                key={value}
-                value={value}
-                label={t('trades.' + value)}
-                {...register('trades')}
-              />
-            ))}
-          </div>
-          {errors.trades && (
-            <span className="mt-1 block text-xs text-red-600">{errors.trades.message}</span>
-          )}
-        </fieldset>
-
-        <fieldset>
-          <legend className="mb-1 block text-sm font-medium text-gray-700">
-            {t('profile.customTradesTitle')}
-          </legend>
-          {customTrades.length > 0 && (
-            <div className="space-y-1.5">
-              {customTrades.map((name) => (
-                <div
-                  key={name}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                >
-                  <span className="truncate">
-                    {CUSTOM_TRADE_EMOJI} {name}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex-shrink-0 text-xs font-semibold text-danger"
-                    onClick={() => onRemoveCustomTrade(name)}
-                  >
-                    {t('common.delete')}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {addingCustomTrade ? (
-            <div className="mt-2 space-y-1.5">
-              <Input
-                autoFocus
-                placeholder={t('profile.customTradeNamePlaceholder')}
-                value={newCustomTradeName}
-                onChange={(e) => setNewCustomTradeName(e.target.value)}
-              />
-              <p className="text-xs text-muted">{t('profile.customTradeHonestNote')}</p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => {
-                    setAddingCustomTrade(false);
-                    setNewCustomTradeName('');
-                  }}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button type="button" fullWidth onClick={onAddCustomTrade}>
-                  {t('common.add')}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="mt-2 text-sm font-semibold text-brand"
-              onClick={() => setAddingCustomTrade(true)}
-            >
-              {t('profile.addCustomTrade')}
-            </button>
-          )}
-        </fieldset>
-
-        <FormField label={t('common.phone')} htmlFor="phone" required error={errors.phone?.message}>
-          <Input
-            id="phone"
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            placeholder={t('auth.phonePlaceholder')}
-            invalid={Boolean(errors.phone)}
-            {...register('phone')}
-          />
-        </FormField>
-
-        <FormField label={t('auth.companyName')} htmlFor="companyName" required error={errors.companyName?.message}
-          hint={t('auth.companyNameHint')}>
-          <Input
-            id="companyName"
-            autoComplete="organization"
-            invalid={Boolean(errors.companyName)}
-            {...companyField}
-          />
-        </FormField>
-
         <details className="text-sm">
           <summary className="cursor-pointer text-gray-600">{t('auth.havePromo')}</summary>
           <div className="mt-2">
@@ -399,9 +244,16 @@ export function RegisterPage() {
           )}
         </div>
 
-        <Button type="submit" fullWidth loading={isSubmitting || register$.isPending}>
-          {t('auth.signUp')}
-        </Button>
+        <div>
+          <Button type="submit" fullWidth loading={isSubmitting || register$.isPending}>
+            {t('auth.signUp')}
+          </Button>
+          {/* What is still missing, where the thumb already is: the field's own message may be a
+              screen above, and a press that «did nothing» was being repeated into the rate limit. */}
+          <p role="status" aria-live="polite" className="mt-2 min-h-[1.25rem] text-center text-sm text-red-600">
+            {submitCount > 0 && missing.length > 0 ? t('auth.missingFields', { fields: missing.join(', ') }) : ''}
+          </p>
+        </div>
 
         <p className="text-center text-sm text-gray-600">
           {t('auth.haveAccount')}{' '}

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { NewObjectPage } from './NewObjectPage.tsx';
 import { projectsApi } from '@/api/projects.ts';
+import { toast } from '@/hooks/useToast.ts';
 import { clientsApi } from '@/api/clients.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 
@@ -59,6 +60,30 @@ describe('NewObjectPage', () => {
     );
     expect(clientsApi.create).not.toHaveBeenCalled();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/projects/p9', { replace: true, state: { justCreated: true } }));
+  });
+
+  /** V192: a name is enough; the address can be added later in the object's header. */
+  it('creates an object with a name and no address', async () => {
+    vi.mocked(projectsApi.create).mockResolvedValue({ ...proj, address: undefined });
+
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('#pr-name')!, { target: { value: 'Ванна' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Створити обʼєкт' }));
+
+    await waitFor(() =>
+      expect(projectsApi.create).toHaveBeenCalledWith(
+        { name: 'Ванна', address: undefined, clientId: undefined }, expect.any(String),
+      ),
+    );
+  });
+
+  it('still refuses an object with no name', async () => {
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('#pr-addr')!, { target: { value: 'вул. 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Створити обʼєкт' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Вкажіть назву об'єкта"));
+    expect(projectsApi.create).not.toHaveBeenCalled();
   });
 
   it('creates a NEW client inline when chosen, then the object', async () => {

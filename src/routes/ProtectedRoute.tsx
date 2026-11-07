@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useMe } from '@/features/auth/useMe.ts';
+import { needsTradesScreen } from '@/features/onboarding/tradesOnboarding.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { useOnline } from '@/lib/useOnline.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -23,12 +24,20 @@ interface ProtectedRouteProps {
  *  - /me failed transiently (offline / backend down / 5xx) → keep the tokens
  *    and show a friendly retry screen. Logging the user out over a network
  *    blip would just lose their session for nothing.
+ *  - a master with no trade who has not skipped the question → «Чим займаєтесь?» first (V190:
+ *    registration no longer asks), remembering where he was going.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const hasToken = tokens.hasAny();
   const me = useMe();
+  const location = useLocation();
 
   if (!hasToken) return <Navigate to={routes.login} replace />;
+  // Not while `me` is being refetched: a reload restores the cache from the device, written up to a
+  // second behind, so a trade saved just before it reads as «none» until the server answers.
+  if (me.data && !me.isFetching && needsTradesScreen(me.data) && location.pathname !== routes.welcome) {
+    return <Navigate to={routes.welcome} replace state={{ from: location.pathname + location.search, redirected: true }} />;
+  }
   // A CACHED user (restored from the offline cache) is enough to open the app — the master must be
   // able to work in a basement. Checked before isPending/isError so a failed refetch never locks
   // them out of data they already have on the device.

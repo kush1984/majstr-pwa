@@ -230,6 +230,9 @@
   "ForgotPasswordRequest": {
     "email": "string"
   },
+  "HelpRequest": {
+    "phone": "string"
+  },
   "LoginRequest": {
     "email": "string",
     "password": "string"
@@ -305,17 +308,20 @@
   "PortalUpdateRequest": {
     "estimateIds": "array"
   },
+  "ProfileTradesRequest": {
+    "trades": "array"
+  },
   "ProfileUpdateRequest": {
     "actNumberFormat": "string?",
     "bankName": "string?",
-    "companyName": "string",
+    "companyName": "string?",
     "docCity": "string?",
     "email": "string?",
-    "fullName": "string",
+    "fullName": "string?",
     "iban": "string?",
     "legalAddress": "string?",
     "legalName": "string?",
-    "phone": "string",
+    "phone": "string?",
     "taxGroup": "number?",
     "taxId": "string?",
     "taxRate": "number?",
@@ -346,7 +352,7 @@
     "reimbursable": "boolean?"
   },
   "ProjectRequest": {
-    "address": "string",
+    "address": "string?",
     "clientId": "string?",
     "description": "string?",
     "name": "string"
@@ -416,18 +422,18 @@
     "refreshToken": "string"
   },
   "RegisterRequest": {
-    "companyName": "string",
+    "companyName": "string?",
     "consent": "boolean?",
     "customTrades": "array?",
     "email": "string",
     "entryPath": "string?",
-    "fullName": "string",
+    "fullName": "string?",
     "password": "string",
-    "phone": "string",
+    "phone": "string?",
     "promoCode": "string?",
     "ref": "string?",
     "referrerHost": "string?",
-    "trades": "array",
+    "trades": "array?",
     "utmCampaign": "string?",
     "utmMedium": "string?",
     "utmSource": "string?"
@@ -441,6 +447,11 @@
     "description": "string?",
     "name": "string",
     "trade": "string?"
+  },
+  "SenderProfileRequest": {
+    "companyName": "string?",
+    "fullName": "string",
+    "phone": "string?"
   },
   "ShoppingListItemRequest": {
     "materialId": "string?",

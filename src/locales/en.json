@@ -151,7 +151,8 @@
     "footerSampleEstimate": "Sample estimate",
     "footerSampleAct": "Sample work act",
     "footerYoutube": "Majstr on YouTube",
-    "footerTelegram": "Majstr on Telegram"
+    "footerTelegram": "Majstr on Telegram",
+    "heroSample": "See a sample estimate"
   },
   "units": {
     "M2": "m²",
@@ -338,7 +339,8 @@
     "emailAlreadyRegistered": "This email is already registered",
     "emailTakenLogin": "This email is already registered — Log in",
     "emailSuggestion": "Did you mean {{email}}?",
-    "companyNameHint": "You can change it later in your profile."
+    "missingFields": "Still missing: {{fields}}",
+    "missingConsent": "consent to the privacy policy"
   },
   "reset": {
     "forgotTitle": "Reset password",
@@ -382,7 +384,8 @@
     "quickAllProjects": "All objects",
     "quickAllProjectsSub": "View the list",
     "quickNewObject": "New object",
-    "quickNewObjectSub": "The estimate goes inside"
+    "quickNewObjectSub": "The estimate goes inside",
+    "noNameGreeting": "master"
   },
   "projects": {
     "noLiveTitle": "No active projects",
@@ -452,7 +455,11 @@
     "nextFromTemplate": "Estimate from a template",
     "nextEmpty": "Empty estimate",
     "nextFromFile": "From a file or photo",
-    "nextLater": "Later"
+    "nextLater": "Later",
+    "editName": "Object name",
+    "editAddress": "Object address",
+    "addAddress": "Add an address",
+    "saved": "Saved"
   },
   "estimate": {
     "shareNative": "📤 Share (Viber, Telegram, SMS)",
@@ -474,7 +481,6 @@
     "clientAttached": "Client added to the object",
     "enterClientNamePhone": "Enter the client's name and phone",
     "chooseOrCreateClient": "Pick a client or create a new one",
-    "enterObjectNameAddress": "Enter the object's name and address",
     "notFoundTitle": "Estimate not found",
     "notFoundText": "It may have been deleted.",
     "toObjects": "To objects",
@@ -717,7 +723,9 @@
       "noCrewPrices": "Crew prices never go into the catalog",
       "applied_one": "Catalog updated: {{count}} position",
       "applied_other": "Catalog updated: {{count}} positions"
-    }
+    },
+    "enterObjectName": "Enter the object name",
+    "addressOptionalHint": "Optional — you can add it later"
   },
   "economy": {
     "addendumBadge": "from an act",
@@ -1799,7 +1807,6 @@
     "emptyComposition": "This template has no positions yet",
     "emptyMy": "You haven’t created a template yet. An estimate can be saved as one from its menu; a template built from scratch lives on the «My templates» page.",
     "emptyMyPage": "You haven’t created a template yet. Tap «＋» to build your own sequence of works, or save an existing estimate as a template.",
-    "emptyNone": "No templates available for your lines of work",
     "pricesHint": "Prices are filled from your catalog on creation",
     "loadError": "Couldn't load templates",
     "tradeLabel": "Trade",
@@ -1833,7 +1840,9 @@
     "inline": {
       "fromCatalog": "from catalog {{price}}",
       "notInCatalog": "not in the catalog"
-    }
+    },
+    "noTradeHint": "No templates yet — tell us what you do and we will add ready ones with prices.",
+    "noTradeAction": "Pick a trade"
   },
   "profile": {
     "title": "Profile",
@@ -1874,11 +1883,6 @@
     "emailEditableHint": "Confirm your email, or fix it if you mistyped it at registration",
     "emailChangedSent": "A confirmation email was sent to the new address",
     "emailAlreadyVerified": "Email is already verified — it can't be changed",
-    "addSetTitle": "Starter set",
-    "addSetPrompt": "You added the trade “{{trades}}”. Add its starter set of works and materials to your catalog?",
-    "addSet": "Add",
-    "notNow": "Not now",
-    "tradeSetAdded": "Added {{count}} items to the catalog",
     "tradeRemovedNote": "Items of the removed trade stayed in your catalog — remove them manually if needed.",
     "customTradesTitle": "Custom trades",
     "addCustomTrade": "+ Custom trade",
@@ -1933,7 +1937,11 @@
     "pushDescription": "Notifications about signatures and client questions",
     "pushNotSupported": "The browser doesn't support push notifications",
     "pushNotConfigured": "Push notifications aren't configured on the server",
-    "pushPermissionDenied": "Notification permission not granted"
+    "pushPermissionDenied": "Notification permission not granted",
+    "fullNameHint": "How your estimates and acts are signed",
+    "phoneHint": "Optional — so the client can call you",
+    "companyNameHint": "Optional — if empty, documents show your name",
+    "tradeSetAddedAuto": "Added templates and catalog positions for: {{trades}}"
   },
   "clientPicker": {
     "none": "No client",
@@ -2005,7 +2013,7 @@
   "consent": {
     "registerPre": "I agree to the ",
     "privacyLink": "Privacy Policy",
-    "registerPost": " and consent to the processing of my personal data (email, name, company name) for using the Majstr service.",
+    "registerPost": " and consent to the processing of my personal data (email, and the name, company name and phone if I give them) for using the Majstr service.",
     "loginTitle": "Consent to data processing",
     "loginBody": "To keep using Majstr, please confirm your consent to the processing of your personal data per our policy.",
     "loginReadPolicy": "Read the Privacy Policy",
@@ -2090,10 +2098,8 @@
     "passwordsMismatch": "Passwords don't match",
     "enterFullName": "Enter your full name",
     "valueTooLong": "Value is too long",
-    "chooseTrade": "Choose at least one type of work or add your own trade",
     "consentRequired": "You must agree to the Privacy Policy",
     "enterPhone": "Enter a phone number",
-    "enterCompanyName": "Enter the company name",
     "enterName": "Enter a name",
     "nameTooLong": "Name is too long",
     "chooseType": "Choose a type",
@@ -2318,5 +2324,46 @@
     "keys": "Enter — save · Esc — cancel",
     "keysWithTab": "Enter — save · Esc — cancel · Tab — next",
     "noQuantity": "qty?"
+  },
+  "onboarding": {
+    "trades": {
+      "title": "What do you do?",
+      "subtitle": "We will pick estimate templates and prices for your work. You can choose several.",
+      "customTitle": "Your trade is not listed?",
+      "customNote": "A trade of your own has no ready templates — you add its positions yourself.",
+      "next": "Next",
+      "skip": "Skip",
+      "saved": "Done — templates and prices are in your catalog",
+      "skipTitle": "No trade, no templates",
+      "skipBody": "Your catalog and templates will be empty — every estimate starts from scratch, each position typed by hand.",
+      "skipLater": "You can pick a trade any time: Profile → Trades, and templates with prices appear.",
+      "skipBack": "Pick a trade",
+      "skipConfirm": "Skip anyway"
+    }
+  },
+  "sender": {
+    "title": "How should documents be signed?",
+    "intro": "The client sees this on the estimate, the act and the shared page.",
+    "fullName": "Full name",
+    "fullNameHint": "The name you sign documents with",
+    "phoneHint": "Optional — so the client can call you",
+    "companyHint": "Optional — if empty, your name is shown",
+    "preview": "What the client sees",
+    "savedToProfile": "Saved to your profile — we will not ask again. You can change it in Profile.",
+    "continue": "Save and continue",
+    "saved": "Saved to your profile",
+    "tapAgainPdf": "Tap «PDF» again to make the document",
+    "reminderTitle": "Add a company name and phone?",
+    "reminderIntro": "Right now the document carries only your name. With a company and a phone the client finds and calls you more easily.",
+    "reminderSavedToProfile": "Saved to your profile — for the next estimates too. You can change it in Profile.",
+    "skip": "Skip",
+    "saveToProfile": "Save to profile"
+  },
+  "helpOffer": {
+    "title": "Need help setting up?",
+    "body": "Leave your phone — we will call and help you build your first estimate.",
+    "send": "Call me back",
+    "dismiss": "No, thanks",
+    "thanks": "Thank you! We will call you soon."
   }
 }

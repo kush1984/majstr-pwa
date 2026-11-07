@@ -7,6 +7,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage.tsx';
 import { ProjectsPage } from '@/features/projects/ProjectsPage.tsx';
 import { ProjectDetailPage } from '@/features/projects/ProjectDetailPage.tsx';
 import { NewObjectPage } from '@/features/projects/NewObjectPage.tsx';
+import { TradesOnboardingPage } from '@/features/onboarding/TradesOnboardingPage.tsx';
 import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { CatalogImportPage } from '@/features/catalog/CatalogImportPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
@@ -133,6 +134,8 @@ export const appRoutes: RouteObject[] = [
       { path: routes.cash, element: <CashFlowPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },
+      // «Чим займаєтесь?» (V190) — full screen, no nav: it comes before the app is set up.
+      { path: routes.welcome, element: <TradesOnboardingPage /> },
     ],
   },
   // Unknown route → home; ProtectedRoute bounces to /login if needed.

@@ -16,6 +16,7 @@ import { routes } from '@/lib/config.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
+import { HelpOfferCard } from './HelpOfferCard.tsx';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -73,7 +74,7 @@ export function DashboardPage() {
           <div>
             <div className="text-sm text-muted">{greeting()},</div>
             <h1 className="mt-0.5 flex items-center gap-2 text-2xl font-extrabold tracking-tight text-primary">
-              {firstName || '...'}
+              {me ? (firstName || t('dashboard.noNameGreeting')) : '...'}
               {trades.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">
                   {trades.map((trade) => (
@@ -98,6 +99,8 @@ export function DashboardPage() {
           {t('common.newObject')}
         </Button>
       </div>
+
+      <HelpOfferCard />
 
       {atProjectLimit && (
         <div className="mb-5">

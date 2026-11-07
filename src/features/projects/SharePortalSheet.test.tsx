@@ -8,6 +8,7 @@ import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
 import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
 import { asInput } from '@/test/dom.ts';
 import { isHandheld } from '@/lib/deviceInput.ts';
+import { senderSheetStore } from '@/features/sender/senderGate.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
@@ -159,6 +160,20 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     renderSingle('e2', onNeedEmailVerify);
 
     await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
+  });
+
+  /** V190: SENDER_NAME_REQUIRED is a 403 too, and must not read as «only on PRO». */
+  it('a missing name asks for it instead of claiming the portal is PRO-only', async () => {
+    vi.mocked(estimateShareApi.create).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 403, data: { status: 403, code: 'SENDER_NAME_REQUIRED', message: 'x' } },
+    });
+    const ask = vi.spyOn(senderSheetStore, 'request').mockResolvedValue(true);
+    renderSingle('e2', vi.fn());
+
+    await waitFor(() => expect(ask).toHaveBeenCalled());
+    expect(screen.queryByText(/PRO/)).toBeNull();
+    ask.mockRestore();
   });
 
   it('unticking everything offers "hide all" instead of copy', async () => {

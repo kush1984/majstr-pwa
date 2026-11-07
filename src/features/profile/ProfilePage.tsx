@@ -135,7 +135,7 @@ export function ProfilePage() {
         <div className="mx-auto mb-3 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-brand text-3xl font-bold text-white shadow-cta">
           {initials(me?.fullName) || '—'}
         </div>
-        <div className="text-lg font-bold text-primary">{me?.fullName ?? '...'}</div>
+        <div className="text-lg font-bold text-primary">{me ? (me.fullName ?? me.email) : '...'}</div>
         {me && me.trades.length > 0 && (
           <div className="mt-1.5 inline-block rounded-full bg-surface px-3 py-1 text-xs font-semibold text-secondary">
             {me.trades.map((trade) => `${TRADE_EMOJI[trade]} ${t('trades.' + trade)}`).join(' · ')}

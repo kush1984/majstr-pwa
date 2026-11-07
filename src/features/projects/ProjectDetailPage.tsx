@@ -13,6 +13,7 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
+import { useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -24,7 +25,8 @@ import { routes } from '@/lib/config.ts';
 import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
-import { useProject, useObjectStatusAction, isTerminalStage } from './useProjects.ts';
+import { useProject, useObjectStatusAction, isTerminalStage, useUpdateProject } from './useProjects.ts';
+import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
@@ -95,6 +97,8 @@ export function ProjectDetailPage() {
   const notes = useNotes(id);
   const noteCount = notes.data?.length ?? 0;
   const [emailGateOpen, setEmailGateOpen] = useState(false);
+  const ensureSender = useSenderGate();
+  const updateProject = useUpdateProject();
   const [editClientOpen, setEditClientOpen] = useState(false);
   // The action a row asked for, waiting on its confirm dialog.
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
@@ -250,13 +254,28 @@ export function ProjectDetailPage() {
         : toAppError(err).message);
     }
   };
+  const saveHeader = (change: { name?: string; address?: string }) => {
+    if (!project.data) return;
+    const current = project.data;
+    void updateProject.mutateAsync({
+      id: current.id,
+      req: {
+        name: change.name ?? current.name,
+        address: change.address ?? current.address ?? '',
+        description: current.description ?? undefined,
+        clientId: current.clientId ?? undefined,
+      },
+    }).then(() => toast.success(t('projects.saved'))).catch((err) => toast.error(toAppError(err).message));
+  };
+
   // Sharing mints a portal link on the server — online-only, so say so plainly when offline.
   const openShare = guard(() => {
     if (list.length === 0) {
       toast.info(t('projects.createEstimateFirst'));
       return;
     }
-    setShareOpen(true);
+    // The portal carries his name in its header (V190: registration no longer asks for it).
+    void ensureSender().then((sender) => { if (sender !== 'cancelled') setShareOpen(true); });
   });
 
   return (
@@ -408,9 +427,27 @@ export function ProjectDetailPage() {
           {/* An object is named and addressed after the CLIENT («Квартира Петренка», the street
               he lives on), so the header is personal data in a replay even though no field on it
               is called a name. Same treatment as the client block below. */}
-          <span className="ph-mask min-w-0 truncate">{p.name}</span>
+          {/* What the header shows, the header edits (V192 made the address optional, so it must be
+              addable later): the name may not be emptied, the address may. */}
+          <InlineTextCell
+            className="ph-mask min-w-0 flex-1"
+            value={p.name}
+            ariaLabel={t('projects.editName')}
+            onCommit={(name) => saveHeader({ name })}
+          />
         </div>
-        <div className="ph-mask mb-3 text-xs text-muted">📍 {p.address}</div>
+        <div className="ph-mask mb-3 flex items-center gap-1 text-xs text-muted">
+          <span aria-hidden>📍</span>
+          <InlineTextCell
+            className="min-w-0 flex-1"
+            value={p.address ?? ''}
+            allowEmpty
+            maxLength={512}
+            placeholder={t('projects.addAddress')}
+            ariaLabel={t('projects.editAddress')}
+            onCommit={(address) => saveHeader({ address })}
+          />
+        </div>
         <Badge variant={OBJECT_STAGE_VARIANT[p.stage]}>{t('status.stage.' + p.stage)}</Badge>
         {p.clientFullName && (
           <div className="ph-mask mt-3 flex items-center gap-2 border-t border-border pt-3">

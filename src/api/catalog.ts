@@ -8,7 +8,6 @@ import type {
   CatalogUpdateNoticeResponse,
   ItemType,
   TemplateUpdatesResponse,
-  Trade,
 } from './types.ts';
 
 /** Contractor's reusable library of works and materials. */
@@ -86,14 +85,6 @@ export const catalogApi = {
   resetFromTemplate(): Promise<CatalogResetResponse> {
     return api
       .post<CatalogResetResponse>('/api/catalog/reset-from-template')
-      .then((r) => r.data);
-  },
-
-  /** Merge the starter set for the given trades into the catalog — adds only
-   *  missing items, never overwrites or duplicates. Used after adding a trade. */
-  addFromTemplate(trades: Trade[]): Promise<CatalogResetResponse> {
-    return api
-      .post<CatalogResetResponse>('/api/catalog/add-from-template', { trades })
       .then((r) => r.data);
   },
 

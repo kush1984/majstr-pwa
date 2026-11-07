@@ -17,6 +17,8 @@ import { openPdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatDate } from '@/lib/format.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { isSenderNameRequired, senderGateWouldAsk, senderSheetStore, useSenderGate } from '@/features/sender/senderGate.ts';
 import { useActs, useChangeActStatus, useDeleteAct } from './useActs.ts';
 import { actCreateBlock, useNewAct } from './useNewAct.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
@@ -120,14 +122,30 @@ function ActRow({ act, onDelete, onMoveStatus }: {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [shareOpen, setShareOpen] = useState(false);
+  const { data: me } = useMe();
+  const ensureSender = useSenderGate();
 
   const onPdf = async () => {
+    // The act prints his name as «Виконавець» (V190). openPdfTab reserves its tab in this tap, so the
+    // name is checked without awaiting first; a missing one is asked for, and the next tap prints.
+    if (senderGateWouldAsk(me)) {
+      if ((await ensureSender()) !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
+      return;
+    }
     try {
       // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
       await openPdfTab(() => actsApi.fetchPdf(act.id), `akt-${act.number}.pdf`);
     } catch (err) {
+      if (isSenderNameRequired(err)) {
+        if (await senderSheetStore.request()) toast.info(t('sender.tapAgainPdf'));
+        return;
+      }
       toast.error(toAppError(err).message);
     }
+  };
+
+  const onShare = async () => {
+    if ((await ensureSender()) !== 'cancelled') setShareOpen(true);
   };
 
   return (
@@ -156,7 +174,7 @@ function ActRow({ act, onDelete, onMoveStatus }: {
           <>
             <ActionMenuItem icon="📂" label={t('common.open')} onClick={() => { close(); void navigate(routes.act(act.id)); }} />
             {act.status !== 'REJECTED' && (
-              <ActionMenuItem icon="📤" label={t('acts.share')} onClick={() => { close(); setShareOpen(true); }} />
+              <ActionMenuItem icon="📤" label={t('acts.share')} onClick={() => { close(); void onShare(); }} />
             )}
             <ActionMenuItem icon="📄" label={t('acts.pdf')} onClick={() => { close(); void onPdf(); }} />
             {/* The client did NOT sign — the owner records the outcome (review fix: REJECTED was

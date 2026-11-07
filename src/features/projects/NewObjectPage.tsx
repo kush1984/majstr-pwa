@@ -56,8 +56,9 @@ export function NewObjectPage() {
       toast.error(t(clientErr));
       return;
     }
-    if (!project.name.trim() || !project.address.trim()) {
-      toast.error(t('estimate.enterObjectNameAddress'));
+    // A name is enough to find the object again (V192); the address can come later, in its header.
+    if (!project.name.trim()) {
+      toast.error(t('estimate.enterObjectName'));
       return;
     }
 
@@ -67,7 +68,7 @@ export function NewObjectPage() {
       createdClient.current ??= { id: await resolveClientId(clientDraft, createClient) };
       const proj = await createProject.mutateAsync({
         name: project.name.trim(),
-        address: project.address.trim(),
+        address: project.address.trim() || undefined,
         clientId: createdClient.current.id,
       });
       clearSessionDrafts('newObject.');
@@ -108,7 +109,7 @@ export function NewObjectPage() {
                 onChange={(e) => setProject((s) => ({ ...s, name: e.target.value }))}
               />
             </FormField>
-            <FormField label={t('common.address')} htmlFor="pr-addr" required>
+            <FormField label={t('common.address')} htmlFor="pr-addr" hint={t('estimate.addressOptionalHint')}>
               <Input
                 id="pr-addr"
                 placeholder={t('estimate.addressPlaceholder')}

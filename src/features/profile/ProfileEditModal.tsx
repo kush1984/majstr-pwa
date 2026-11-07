@@ -13,7 +13,6 @@ import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { rnokppWarning, vatIdWarning } from '@/lib/requisites.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useAddCatalogTemplates } from '@/features/catalog/useCatalog.ts';
 import { useAddCustomTrade, useDeleteCustomTrade, useRenameCustomTrade, useUpdateProfile } from './useProfile.ts';
 import type { ActNumberFormat, Trade } from '@/api/types.ts';
 
@@ -47,15 +46,19 @@ const EMPTY_REQUISITES: RequisitesState = {
 
 /**
  * Edit the contractor's own profile (#16). Name / phone / company / trades are
- * always editable. Email is conditional: editable only while it's **unverified**
+ * always editable, and since V190 none of the first three is required: registration no longer asks
+ * for them, and a master must be able to save a trade before he has given a name (the first document
+ * asks for it — `SenderGate`). Email is conditional: editable only while it's **unverified**
  * (the master may have mistyped it at registration) — changing it triggers a
  * fresh verification email on the backend; once verified it's read-only.
+ *
+ * <p>An ADDED trade fills its starter catalog server-side, unasked. This screen used to ask «додати
+ * набір?», and «Не зараз» left the trade's bundles in the picker with every line at 0 ₴.</p>
  */
 export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const update = useUpdateProfile();
-  const addTemplates = useAddCatalogTemplates();
   const addCustomTrade = useAddCustomTrade();
   const renameCustomTrade = useRenameCustomTrade();
   const deleteCustomTrade = useDeleteCustomTrade();
@@ -67,13 +70,8 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   // the master already has some filled in so they don't have to hunt for them.
   const [req, setReq] = useState<RequisitesState>(EMPTY_REQUISITES);
   const [reqOpen, setReqOpen] = useState(false);
-  // After saving, if the user ADDED a trade we offer (with consent) to merge its
-  // starter set into the catalog. Never auto-add, never delete on trade removal.
-  const [addPrompt, setAddPrompt] = useState<Trade[] | null>(null);
   const [errors, setErrors] = useState<{
-    fullName?: boolean;
     phone?: boolean;
-    companyName?: boolean;
     email?: boolean;
   }>({});
 
@@ -88,7 +86,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   // Seed the form ONCE per open (when `me` is first available), not on every `me`
   // change. Saving the profile primes + invalidates the `['me']` cache, so `me`
   // changes right after save — without this guard that re-fires the effect and
-  // wipes the "add starter set?" prompt (and any in-progress edit) before it shows.
+  // wipes any in-progress edit.
   const seededRef = useRef(false);
   useEffect(() => {
     if (!open) {
@@ -96,7 +94,9 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       return;
     }
     if (me && !seededRef.current) {
-      setForm({ fullName: me.fullName, phone: me.phone, companyName: me.companyName, email: me.email });
+      setForm({
+        fullName: me.fullName ?? '', phone: me.phone ?? '', companyName: me.companyName ?? '', email: me.email,
+      });
       setTrades(me.trades);
       const seededReq: RequisitesState = {
         legalName: me.legalName ?? '',
@@ -115,7 +115,6 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       // Auto-expand if anything is already filled — otherwise keep it out of the way.
       setReqOpen(Object.values(seededReq).some((v) => v !== '' && v !== false && v !== 'PLAIN'));
       setErrors({});
-      setAddPrompt(null);
       seededRef.current = true;
     }
   }, [open, me]);
@@ -132,10 +131,10 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     setTrades((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
 
   const onSave = async () => {
+    // Nothing here is required any more — only a phone that was typed must look like one.
+    const phone = form.phone.trim();
     const next = {
-      fullName: !form.fullName.trim(),
-      phone: form.phone.trim().length < 5,
-      companyName: !form.companyName.trim(),
+      phone: phone.length > 0 && phone.length < 5,
       email: emailEditable && !form.email.includes('@'),
     };
     setErrors(next);
@@ -171,9 +170,11 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
       // Removing a trade never touches the catalog (the master's data) — just a
       // quiet note that those items remain.
       if (removedTrades.length > 0) toast.info(t('profile.tradeRemovedNote'));
+      // The server already filled the new trades' starter catalog — just say so.
       if (addedTrades.length > 0) {
-        setAddPrompt(addedTrades); // keep the modal open to offer the starter set
-        return;
+        toast.info(t('profile.tradeSetAddedAuto', {
+          trades: addedTrades.map((tr) => t('trades.' + tr)).join(', '),
+        }));
       }
       onClose();
     } catch (err) {
@@ -184,24 +185,6 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
         toast.error(e.message);
       }
     }
-  };
-
-  const confirmAddSet = async () => {
-    if (!addPrompt) return;
-    try {
-      const res = await addTemplates.mutateAsync(addPrompt);
-      toast.success(t('profile.tradeSetAdded', { count: res.itemsAdded }));
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    } finally {
-      setAddPrompt(null);
-      onClose();
-    }
-  };
-
-  const skipAddSet = () => {
-    setAddPrompt(null);
-    onClose();
   };
 
   const onAddCustomTrade = async () => {
@@ -243,40 +226,15 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
 
   return (
     <>
-    <Modal
-      open={open}
-      onClose={addPrompt ? skipAddSet : onClose}
-      title={addPrompt ? t('profile.addSetTitle') : t('profile.editTitle')}
-    >
-      {addPrompt ? (
-        <div>
-          <p className="mb-5 text-sm text-muted">
-            {t('profile.addSetPrompt', {
-              trades: addPrompt.map((tr) => t('trades.' + tr)).join(', '),
-            })}
-          </p>
-          <div className="flex gap-2">
-            <Button variant="secondary" fullWidth onClick={skipAddSet}>
-              {t('profile.notNow')}
-            </Button>
-            <Button fullWidth loading={addTemplates.isPending} onClick={confirmAddSet}>
-              {t('profile.addSet')}
-            </Button>
-          </div>
-        </div>
-      ) : (
+    <Modal open={open} onClose={onClose} title={t('profile.editTitle')}>
       <div className="ph-mask space-y-4">
-        <FormField
-          label={t('common.fullName')}
-          required
-          error={errors.fullName ? t('validation.enterFullName') : undefined}
-        >
-          <Input value={form.fullName} onChange={set('fullName')} invalid={errors.fullName} />
+        <FormField label={t('common.fullName')} hint={t('profile.fullNameHint')}>
+          <Input value={form.fullName} onChange={set('fullName')} autoComplete="name" />
         </FormField>
 
         <FormField
           label={t('common.phone')}
-          required
+          hint={errors.phone ? undefined : t('profile.phoneHint')}
           error={errors.phone ? t('validation.enterPhone') : undefined}
         >
           <Input
@@ -288,12 +246,8 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
           />
         </FormField>
 
-        <FormField
-          label={t('auth.companyName')}
-          required
-          error={errors.companyName ? t('validation.enterCompanyName') : undefined}
-        >
-          <Input value={form.companyName} onChange={set('companyName')} invalid={errors.companyName} />
+        <FormField label={t('auth.companyName')} hint={t('profile.companyNameHint')}>
+          <Input value={form.companyName} onChange={set('companyName')} autoComplete="organization" />
         </FormField>
 
         <fieldset>
@@ -514,7 +468,6 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
           </Button>
         </div>
       </div>
-      )}
     </Modal>
 
     <ConfirmDialog

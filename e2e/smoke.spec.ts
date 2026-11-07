@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { passTradesScreen } from './onboarding.ts';
 
 /**
  * The contractor happy path — the same journey we walk by hand:
@@ -13,21 +14,15 @@ test('повний сценарій підрядника: реєстрація �
 }) => {
   const email = `e2e+${Date.now()}@majstr.test`;
 
-  // 1 — Register (also exercises the multi-trade checkboxes from Fix A)
+  // 1 — Register: email, password, consent (V190), then «Чим займаєтесь?» with two trades
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', 'Test1234!');
-  await page.fill('#fullName', 'Е2Е Тестовий');
-  await page.locator('input[type="checkbox"][value="ELECTRICAL"]').check();
-  await page.locator('input[type="checkbox"][value="TILING"]').check();
-  await page.fill('#phone', '+380501112233');
-  await page.fill('#companyName', 'Е2Е ФОП');
   await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
+  await passTradesScreen(page, ['Електрика', 'Плитка']);
 
   // 2 — Dashboard (new user → teaching empty state)
-  await expect(page).toHaveURL('http://localhost:5173/');
-  await expect(page.getByText('Е2Е', { exact: false }).first()).toBeVisible();
   const startCta = page.getByRole('button', { name: "Новий об'єкт" }).first();
   await expect(startCta).toBeVisible();
 
@@ -79,15 +74,14 @@ test('повний сценарій підрядника: реєстрація �
     ).toBeVisible();
   }
 
-  // 8 — Profile edit (#16): the modal opens prefilled with the current data.
-  // (UI only — the backend PUT /api/profile is still in progress, so we don't
-  // submit here; this just guards the form renders and is wired up.)
+  // 8 — Profile edit (#16): the modal opens with the name still empty — registration no longer
+  // asks for it, the first document does (V190). UI only: nothing is submitted here.
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Редагувати профіль' }).click();
   const editDialog = page.getByRole('dialog', { name: 'Редагувати профіль' });
   await expect(editDialog).toBeVisible();
-  // First textbox is the prefilled full-name field.
-  await expect(editDialog.getByRole('textbox').first()).toHaveValue('Е2Е Тестовий');
+  // First textbox is the full-name field.
+  await expect(editDialog.getByRole('textbox').first()).toHaveValue('');
   await editDialog.getByRole('button', { name: 'Скасувати' }).click();
   await expect(editDialog).not.toBeVisible();
 

@@ -101,7 +101,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
           </span>
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-semibold text-primary">
-              {me?.fullName ?? '...'}
+              {me ? (me.fullName ?? me.email) : '...'}
             </span>
             <span className="block text-[11px] text-muted">
               {t('app.planShort', { plan: me?.plan ?? '' })}

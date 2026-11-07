@@ -29,12 +29,16 @@ export interface UserTradeResponse {
 export interface UserResponse {
   id: string;
   email: string;
-  fullName: string;
+  /** Optional since V190: registration asks for none of these three. The name is asked before the
+   *  first document leaves (`SenderGate`); phone and company stay optional. Absent when unset
+   *  (the backend writes non-null only), so read them with `?.` / `!= null`. */
+  fullName?: string;
+  /** Empty until the master picks his trades on the screen after registration (or skips it). */
   trades: Trade[];
   /** Master-invented trades — ordered by the master's own arrangement. */
   customTrades: UserTradeResponse[];
-  phone: string;
-  companyName: string;
+  phone?: string;
+  companyName?: string;
   logoUrl: string | null;
   plan: Plan;
   role: Role;
@@ -69,6 +73,8 @@ export interface UserResponse {
   taxRate: number | null;
   docCity: string | null;
   actNumberFormat: ActNumberFormat;
+  /** When he asked for a setup call (V191); absent = never. Stops the offer on the home screen. */
+  helpRequestedAt?: string;
 }
 
 /** How a work act's number is displayed — «7» vs «7/2026». */
@@ -114,15 +120,13 @@ export interface AuthResponse {
 export interface RegisterRequest {
   email: string;
   password: string;
-  fullName: string;
-  /** May be empty — a master can rely entirely on `customTrades` below. At least one of
-   *  the two is required (enforced by the register form and again by the backend). */
-  trades: Trade[];
-  /** Master-invented trade names to create alongside the account (e.g. "Натяжні стелі") —
-   *  the same free-text flow the profile screen offers post-registration. */
+  /** The form asks for none of the next five (V190) — they are asked inside the app, when needed.
+   *  Kept because the backend still takes them from an older build. */
+  fullName?: string;
+  trades?: Trade[];
   customTrades?: string[];
-  phone: string;
-  companyName: string;
+  phone?: string;
+  companyName?: string;
   /** Explicit privacy-policy consent (the registration checkbox). */
   consent: boolean;
   /** First-touch attribution: stored ?ref= value + optional typed promo code.
@@ -173,9 +177,11 @@ export interface VisitRequest {
  *  unverified; when already verified the backend ignores it (or 409
  *  EMAIL_ALREADY_VERIFIED) and keeps the rest. Returns the updated UserResponse. */
 export interface ProfileUpdateRequest {
-  fullName: string;
-  phone: string;
-  companyName: string;
+  /** Optional since V190 — blank clears; the next document asks for the name again. */
+  fullName?: string;
+  phone?: string;
+  companyName?: string;
+  /** A trade not there before brings its starter catalog — the backend fills it unasked. */
   trades: Trade[];
   email?: string;
   // Document requisites (acts iteration) — all optional.
@@ -190,6 +196,25 @@ export interface ProfileUpdateRequest {
   taxRate?: number | null;
   docCity?: string;
   actNumberFormat?: ActNumberFormat;
+}
+
+/** PUT /api/profile/trades — «Чим займаєтесь?» after registration. An empty set is a skip; a
+ *  newly added trade brings its starter catalog. */
+export interface ProfileTradesRequest {
+  trades: Trade[];
+}
+
+/** PATCH /api/profile/sender — «Як вас підписати в документі?» before the first send. Writes these
+ *  three and nothing else (the full PUT would clear the requisites). */
+/** POST /api/profile/help-request — «Залиште телефон — передзвонимо» (V191). */
+export interface HelpRequest {
+  phone: string;
+}
+
+export interface SenderProfileRequest {
+  fullName: string;
+  phone?: string;
+  companyName?: string;
 }
 
 export interface LoginRequest {
@@ -322,7 +347,8 @@ export interface ClientRequest {
 export interface ProjectResponse {
   id: string;
   name: string;
-  address: string;
+  /** Optional since V192 — absent while the object has none; the header offers «Додати адресу». */
+  address?: string;
   status: ProjectStatus;
   stage: ObjectStage;
   description: string | null;
@@ -340,7 +366,8 @@ export interface ProjectResponse {
 
 export interface ProjectRequest {
   name: string;
-  address: string;
+  /** Optional since V192; `''` on an edit clears it. */
+  address?: string;
   description?: string;
   clientId?: string;
 }

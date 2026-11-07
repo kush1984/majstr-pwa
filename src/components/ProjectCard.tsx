@@ -46,10 +46,10 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
             {project.name}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-            <span className="break-words">{project.address}</span>
+            {project.address && <span className="break-words">{project.address}</span>}
             {project.clientFullName && (
               <>
-                <span className="h-[3px] w-[3px] flex-shrink-0 rounded-full bg-faint" />
+                {project.address && <span className="h-[3px] w-[3px] flex-shrink-0 rounded-full bg-faint" />}
                 <span className="break-words">{project.clientFullName}</span>
               </>
             )}

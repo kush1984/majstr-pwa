@@ -41,6 +41,7 @@ import {
   usePendingActReceipts,
 } from './offlineReceipts.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
+import { isSenderNameRequired, senderSheetStore, useSenderGate } from '@/features/sender/senderGate.ts';
 import { ACT_UNITS } from '@/api/types.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
 import type {
@@ -145,6 +146,7 @@ export function ActEditorPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const online = useOnline();
+  const ensureSender = useSenderGate();
 
   // «/acts/new»: the act has no server row yet — «Зберегти» is what creates it (master feedback:
   // «кожен раз коли ми натиснули Новий акт і повернулись назад, то акт вже створюється»). Its
@@ -788,6 +790,8 @@ export function ActEditorPage() {
   };
 
   const onShare = once(async () => {
+    // The act's link carries his name (V190: registration no longer asks for it).
+    if ((await ensureSender()) === 'cancelled') return;
     if (await beforeHandingOver()) setShareOpen(true);
   });
 
@@ -795,6 +799,14 @@ export function ActEditorPage() {
     // Reserved BEFORE the save: on iOS the first await spends the tap, and a tab opened after it is
     // dropped without a word (review P1-18). Closed again if the save does not let us through.
     const tab = reservePdfTab();
+    // «Виконавець» prints his name. A sheet spends the tap the tab was reserved in, so a name given
+    // here prints on the next tap.
+    const sender = await ensureSender(() => tab.cancel());
+    if (sender !== 'ready') {
+      // Saved or skipped, the sheet spent the tap the tab was reserved in.
+      if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
+      return;
+    }
     if (!(await beforeHandingOver())) {
       tab.cancel();
       return;
@@ -802,6 +814,10 @@ export function ActEditorPage() {
     try {
       await tab.open(() => actsApi.fetchPdf(id), `akt-${act.data?.number ?? ''}.pdf`);
     } catch (err) {
+      if (isSenderNameRequired(err)) {
+        if (await senderSheetStore.request()) toast.info(t('sender.tapAgainPdf'));
+        return;
+      }
       toast.error(toAppError(err).message);
     }
   });

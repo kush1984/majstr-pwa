@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
+import { routes } from '@/lib/config.ts';
 import { TradeLevel } from '@/features/catalog/TradeLevel.tsx';
 import type { EstimateTemplateSummary } from '@/api/types.ts';
 import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
@@ -68,6 +70,8 @@ export function TemplatePickerSheet({
 }) {
   const { t } = useTranslation();
   const online = useOnline();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data, isPending, isError } = useEstimateTemplates();
   const [preview, setPreview] = useState<EstimateTemplateSummary | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
@@ -236,9 +240,27 @@ export function TemplatePickerSheet({
             <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-brand">
               {t('templates.defaultTemplates')}
             </h3>
-            {defaultBranches.length === 0 ? (
+            {defaultBranches.length === 0 && !needle ? (
+              // No default bundle at all means no trade chosen (V190: he may skip the question).
+              // Say what is missing and lead straight to it — an empty list he cannot explain is
+              // where a new master gives up.
+              <div className="rounded-xl border border-dashed border-border px-3 py-3">
+                <p className="text-sm text-primary">{t('templates.noTradeHint')}</p>
+                <Button
+                  className="mt-2.5"
+                  fullWidth
+                  variant="secondary"
+                  onClick={() => {
+                    onClose();
+                    void navigate(routes.welcome, { state: { from: location.pathname + location.search } });
+                  }}
+                >
+                  {t('templates.noTradeAction')}
+                </Button>
+              </div>
+            ) : defaultBranches.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted">
-                {t(needle ? 'templates.nothingFound' : 'templates.emptyNone')}
+                {t('templates.nothingFound')}
               </p>
             ) : (
               renderBranches('default', defaultBranches, defaults.length)

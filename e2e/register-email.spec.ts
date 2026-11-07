@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { passTradesScreen } from './onboarding.ts';
 
 /**
  * The registration door against the real server, on a phone: a refused address is seen, corrected, and
@@ -11,9 +12,6 @@ test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true
 
 async function fillAllButEmail(page: Page): Promise<void> {
   await page.fill('#password', 'Test1234!');
-  await page.fill('#fullName', 'Майстер Реєстрація');
-  await page.locator('input[type="checkbox"][value="TILING"]').check();
-  await page.fill('#phone', '+380501112233');
   await page.locator('input[name="consent"]').check();
 }
 
@@ -34,11 +32,14 @@ test('тимчасову пошту відхилено, людина її бач
   await page.fill('#email', `e2e-reg+${Date.now()}@majstr.test`);
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
-  await expect(page).not.toHaveURL(/\/register/, { timeout: 20_000 });
+  // In, and straight to «Чим займаєтесь?» (V190).
+  await passTradesScreen(page, ['Плитка'], 20_000);
 });
 
 test('описку в домені виправляє підказка, і з виправленою адресою акаунт створюється', async ({ page }) => {
-  const local = `e2e-reg-hint+${Date.now()}`;
+  // No «+»: the server folds a gmail alias to its base (canonical email), so a «+tag» rerun would
+  // collide with the previous run's account and get 409.
+  const local = `e2e-reg-hint-${Date.now()}`;
   await page.goto('/register');
   await page.fill('#email', `${local}@gmal.com`);
   await page.locator('#password').focus();
@@ -52,5 +53,5 @@ test('описку в домені виправляє підказка, і з в
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
   expect((await registered).status()).toBe(201);
-  await expect(page).not.toHaveURL(/\/register/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/welcome$/, { timeout: 20_000 });
 });

@@ -33,11 +33,12 @@ function renderPage() {
 function fillValid(container: HTMLElement) {
   fireEvent.change(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
   fireEvent.change(container.querySelector('#password')!, { target: { value: 'Sup3rPass!' } });
-  fireEvent.change(container.querySelector('#fullName')!, { target: { value: 'Іван' } });
-  fireEvent.click(container.querySelector('input[value="ELECTRICAL"]')!);
-  fireEvent.change(container.querySelector('#phone')!, { target: { value: '+380501112233' } });
-  fireEvent.change(container.querySelector('#companyName')!, { target: { value: 'ФОП' } });
 }
+
+const REGISTERED = {
+  accessToken: 'a', refreshToken: 'r', tokenType: 'Bearer', expiresInSeconds: 900,
+  user: {} as never,
+} as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,7 +49,7 @@ describe('RegisterPage — the visit funnel', () => {
     const { container } = renderPage();
 
     fireEvent.input(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
-    fireEvent.input(container.querySelector('#fullName')!, { target: { value: 'Іван' } });
+    fireEvent.input(container.querySelector('#password')!, { target: { value: 'Sup3rPass!' } });
 
     expect(sendVisit).toHaveBeenCalledOnce();
     expect(sendVisit).toHaveBeenCalledWith('REGISTER_STARTED', routes.register);
@@ -158,10 +159,7 @@ describe('RegisterPage — privacy consent', () => {
   });
 
   it('registers with consent:true once ticked', async () => {
-    vi.mocked(authApi.register).mockResolvedValue({
-      accessToken: 'a', refreshToken: 'r', tokenType: 'Bearer', expiresInSeconds: 900,
-      user: {} as never,
-    } as never);
+    vi.mocked(authApi.register).mockResolvedValue(REGISTERED);
 
     const { container } = renderPage();
     fillValid(container);
@@ -173,62 +171,50 @@ describe('RegisterPage — privacy consent', () => {
   });
 });
 
-describe('RegisterPage — custom trade', () => {
-  function fillValidExceptTrade(container: HTMLElement) {
-    fireEvent.change(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
-    fireEvent.change(container.querySelector('#password')!, { target: { value: 'Sup3rPass!' } });
-    fireEvent.change(container.querySelector('#fullName')!, { target: { value: 'Іван' } });
-    fireEvent.change(container.querySelector('#phone')!, { target: { value: '+380501112233' } });
-    fireEvent.change(container.querySelector('#companyName')!, { target: { value: 'ФОП' } });
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
-  }
-
-  it('blocks submit when neither a system trade nor a custom trade is chosen', async () => {
+describe('RegisterPage — the door asks three things (V190)', () => {
+  it('has no name, phone, company or trade field — those are asked inside the app', () => {
     const { container } = renderPage();
-    fillValidExceptTrade(container);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
-
-    expect(await screen.findByText(/Оберіть хоча б один тип робіт/i)).toBeTruthy();
-    expect(authApi.register).not.toHaveBeenCalled();
+    for (const id of ['#fullName', '#phone', '#companyName']) {
+      expect(container.querySelector(id)).toBeNull();
+    }
+    expect(container.querySelector('input[value="ELECTRICAL"]')).toBeNull();
+    expect(screen.queryByText('+ Свій напрям')).toBeNull();
   });
 
-  it('registers with only a custom trade and no system trade selected', async () => {
-    vi.mocked(authApi.register).mockResolvedValue({
-      accessToken: 'a', refreshToken: 'r', tokenType: 'Bearer', expiresInSeconds: 900,
-      user: {} as never,
-    } as never);
-
+  it('sends email, password and consent only, then opens «Чим займаєтесь?»', async () => {
+    vi.mocked(authApi.register).mockResolvedValue(REGISTERED);
     const { container } = renderPage();
-    fillValidExceptTrade(container);
-
-    fireEvent.click(screen.getByText('+ Свій напрям'));
-    fireEvent.change(screen.getByPlaceholderText('Напр. Натяжні стелі'), {
-      target: { value: 'Натяжні стелі' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
-    expect(screen.getByText(/Натяжні стелі/)).toBeTruthy();
+    fillValid(container);
+    fireEvent.click(container.querySelector('input[name="consent"]')!);
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
     await waitFor(() => expect(authApi.register).toHaveBeenCalled());
-    expect(vi.mocked(authApi.register).mock.calls[0][0]).toMatchObject({
-      trades: [],
-      customTrades: ['Натяжні стелі'],
-    });
+    const sent = vi.mocked(authApi.register).mock.calls[0][0];
+    expect(sent).toMatchObject({ email: 'a@b.com', password: 'Sup3rPass!', consent: true });
+    for (const key of ['fullName', 'phone', 'companyName', 'trades', 'customTrades']) {
+      expect(sent).not.toHaveProperty(key);
+    }
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith(routes.welcome, { replace: true }));
   });
 
-  it('removes a custom trade from the local list before submit', () => {
+  it('says at the button what is still missing — the field itself may be a screen above', async () => {
     renderPage();
-    fireEvent.click(screen.getByText('+ Свій напрям'));
-    fireEvent.change(screen.getByPlaceholderText('Напр. Натяжні стелі'), {
-      target: { value: 'Стеля' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
-    expect(screen.getByText(/Стеля/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Видалити' }));
-    expect(screen.queryByText(/Стеля/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    expect(await screen.findByText('Заповніть: Email, Пароль, згоду з політикою конфіденційності')).toBeTruthy();
+    expect(authApi.register).not.toHaveBeenCalled();
+  });
+
+  it('names only what is left once the rest is filled', async () => {
+    const { container } = renderPage();
+    fillValid(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
+
+    expect(await screen.findByText('Заповніть: згоду з політикою конфіденційності')).toBeTruthy();
   });
 });
 
@@ -251,31 +237,16 @@ describe('RegisterPage — duplicate email', () => {
   });
 });
 
-describe('RegisterPage — the company name follows the name (review P1-16)', () => {
-  it('copies the full name into «Назва компанії» until the master types his own', () => {
-    const { container } = renderPage();
-    const fullName = container.querySelector('#fullName')!;
-    const company = container.querySelector<HTMLInputElement>('#companyName')!;
-
-    fireEvent.change(fullName, { target: { value: 'Іван Петренко' } });
-    expect(company.value).toBe('Іван Петренко');
-
-    fireEvent.change(company, { target: { value: 'ФОП Петренко' } });
-    fireEvent.change(fullName, { target: { value: 'Іван Петренко-Мельник' } });
-    expect(company.value).toBe('ФОП Петренко');
-  });
-});
-
 describe('RegisterPage — a draft survives a reload, the password never does (review P1-2)', () => {
   it('restores the typed fields and leaves the password empty', () => {
     const first = renderPage();
-    fireEvent.change(first.container.querySelector('#fullName')!, { target: { value: 'Іван Петренко' } });
+    fireEvent.change(first.container.querySelector('#email')!, { target: { value: 'ivan@ukr.net' } });
     fireEvent.change(first.container.querySelector('#password')!, { target: { value: 'secret-pass-1' } });
     first.unmount();
 
     expect(sessionStorage.getItem('majstr.draft.register')).not.toContain('secret-pass-1');
     const again = renderPage();
-    expect(again.container.querySelector('#fullName')).toHaveProperty('value', 'Іван Петренко');
+    expect(again.container.querySelector('#email')).toHaveProperty('value', 'ivan@ukr.net');
     expect(again.container.querySelector('#password')).toHaveProperty('value', '');
   });
 });
