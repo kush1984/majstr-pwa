@@ -85,7 +85,8 @@ describe('TradesOnboardingPage — «Чим займаєтесь?» (V190)', () 
     expect(needsTradesScreen(fresh)).toBe(true);
   });
 
-  it('a confirmed skip is remembered and leaves without saving anything', async () => {
+  /** V193: the skip is the server's answer, sent with the trades he has — never a wipe. */
+  it('a confirmed skip is saved on the server with the trades he already has, and leaves', async () => {
     renderScreen();
 
     fireEvent.click(screen.getByRole('button', { name: 'Пропустити' }));
@@ -93,8 +94,7 @@ describe('TradesOnboardingPage — «Чим займаєтесь?» (V190)', () 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Все одно пропустити' }));
 
     expect(await screen.findByText('home')).toBeTruthy();
-    expect(profileApi.updateTrades).not.toHaveBeenCalled();
-    expect(needsTradesScreen(fresh)).toBe(false);
+    expect(profileApi.updateTrades).toHaveBeenCalledWith({ trades: [] });
   });
 
   it('creates a trade of his own alongside the picked ones', async () => {
@@ -127,8 +127,10 @@ describe('TradesOnboardingPage — sent here, but the trades are there after all
 });
 
 describe('needsTradesScreen', () => {
-  it('asks a master with no trade at all, and nobody else', () => {
+  it('asks only a master who never answered and has no trade at all', () => {
     expect(needsTradesScreen(fresh)).toBe(true);
+    // A skip, or every trade unticked later in the profile: answered, never asked again.
+    expect(needsTradesScreen({ ...fresh, tradesOnboardedAt: '2026-11-07T10:00:00Z' })).toBe(false);
     expect(needsTradesScreen(aUser({ trades: ['TILING'] }))).toBe(false);
     expect(needsTradesScreen(aUser({ trades: [], customTrades: [{ id: 'c', name: 'Стелі', sortOrder: 0 }] }))).toBe(false);
   });

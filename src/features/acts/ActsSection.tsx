@@ -128,8 +128,10 @@ function ActRow({ act, onDelete, onMoveStatus }: {
   const onPdf = async () => {
     // The act prints his name as «Виконавець» (V190). openPdfTab reserves its tab in this tap, so the
     // name is checked without awaiting first; a missing one is asked for, and the next tap prints.
-    if (senderGateWouldAsk(me)) {
-      if ((await ensureSender()) !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
+    // A PDF is not a link to a client: no phone reminder, and an act PDF needs no verified email.
+    const pdfGate = { remind: false, emailFirst: false } as const;
+    if (senderGateWouldAsk(me, pdfGate)) {
+      if ((await ensureSender(undefined, pdfGate)) !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
       return;
     }
     try {

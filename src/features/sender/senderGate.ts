@@ -18,9 +18,11 @@ export function hasSenderName(me: UserResponse | undefined): boolean {
   return Boolean(me?.fullName?.trim());
 }
 
-/** No company or no phone: the document goes out with the name alone — worth a light reminder. */
-export function missesSenderExtras(me: UserResponse | undefined): boolean {
-  return !me?.companyName?.trim() || !me.phone?.trim();
+/** No phone: the client on the portal has no way to call him — the one gap worth a reminder. The
+ *  company is not reminded about (review): most masters work under their own name, and being asked
+ *  every session about a company they do not have would only annoy. */
+export function missesSenderPhone(me: UserResponse | undefined): boolean {
+  return !me?.phone?.trim();
 }
 
 export function isSenderNameRequired(err: unknown): boolean {
@@ -28,9 +30,10 @@ export function isSenderNameRequired(err: unknown): boolean {
 }
 
 /**
- * `name` — required, the document cannot leave without it. `extras` — a light reminder that the
- * company and the phone are empty: «Пропустити» is one tap, and it is asked once per app session so a
- * PDF and a share in a row do not ask twice (owner, 2026-11-07: remind, gently, every time he works).
+ * `name` — required, the document cannot leave without it. `extras` — a light reminder that the phone
+ * is empty: «Пропустити» is one tap, it is asked once per app session (owner, 2026-11-07: remind,
+ * gently, every time he works), never right after the name sheet, and never before a PDF — only before
+ * a link goes to a client (review: a first PDF cost three taps).
  */
 export type SenderSheetMode = 'name' | 'extras';
 
@@ -79,10 +82,28 @@ export function resetSenderReminder(): void {
   remindedThisSession = false;
 }
 
+export interface SenderGateOptions {
+  /** Offer the phone reminder. Off for a PDF. Default on. */
+  remind?: boolean;
+  /** Leave an unverified email to the action's own email gate first (the backend checks the email,
+   *  then the name — asking the name first had him type it and then hear «підтвердіть email»).
+   *  Off for an act's paper signature and its PDF, which need no verified email. Default on. */
+  emailFirst?: boolean;
+}
+
+function wouldAskName(me: UserResponse | undefined, opts: SenderGateOptions): boolean {
+  if (hasSenderName(me)) return false;
+  return !(opts.emailFirst !== false && me?.emailVerified === false);
+}
+
+function wouldRemind(me: UserResponse | undefined, opts: SenderGateOptions): boolean {
+  return opts.remind !== false && !remindedThisSession && hasSenderName(me) && missesSenderPhone(me);
+}
+
 /** Whether `ensureSender` would open a sheet right now — for a caller that must decide inside the
  *  tap (a PDF tab reserved by `openPdfTab`) without awaiting first. */
-export function senderGateWouldAsk(me: UserResponse | undefined): boolean {
-  return !hasSenderName(me) || (missesSenderExtras(me) && !remindedThisSession);
+export function senderGateWouldAsk(me: UserResponse | undefined, opts: SenderGateOptions = {}): boolean {
+  return wouldAskName(me, opts) || wouldRemind(me, opts);
 }
 
 /**
@@ -104,7 +125,7 @@ export type SenderGateResult = 'ready' | 'saved' | 'skipped' | 'cancelled';
  */
 export function useSenderGate() {
   const qc = useQueryClient();
-  return useCallback(async (onAsk?: () => void): Promise<SenderGateResult> => {
+  return useCallback(async (onAsk?: () => void, opts: SenderGateOptions = {}): Promise<SenderGateResult> => {
     let me = qc.getQueryData<UserResponse>(ME_QUERY_KEY);
     if (!hasSenderName(me)) {
       try {
@@ -113,11 +134,13 @@ export function useSenderGate() {
         // Offline: the sheet says so when he tries to save.
       }
     }
-    if (!hasSenderName(me)) {
+    if (wouldAskName(me, opts)) {
       onAsk?.();
+      // The name sheet holds the phone field too: a reminder about it in the same session is a repeat.
+      remindedThisSession = true;
       return (await senderSheetStore.request('name')) ? 'saved' : 'cancelled';
     }
-    if (missesSenderExtras(me) && !remindedThisSession) {
+    if (wouldRemind(me, opts)) {
       remindedThisSession = true;
       onAsk?.();
       return (await senderSheetStore.request('extras')) ? 'saved' : 'skipped';

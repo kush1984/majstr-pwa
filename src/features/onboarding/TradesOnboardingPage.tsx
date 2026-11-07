@@ -13,7 +13,7 @@ import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useAddCustomTrade, useUpdateTrades } from '@/features/profile/useProfile.ts';
 import type { Trade } from '@/api/types.ts';
-import { markTradesSkipped, needsTradesScreen } from './tradesOnboarding.ts';
+import { needsTradesScreen } from './tradesOnboarding.ts';
 
 /** Where to go once he has answered — the screen that sent him here, else home. */
 function returnTo(state: unknown): string {
@@ -31,7 +31,7 @@ function returnTo(state: unknown): string {
  * an empty catalog, every line typed by hand.</p>
  *
  * <p>Saving goes through `PUT /api/profile/trades`, which fills the starter catalog of every newly
- * picked trade in the same request. Custom trades are created one by one through their own endpoint,
+ * picked trade in the same request and stamps the answer (V193) — a skip goes the same way. Custom trades are created one by one through their own endpoint,
  * as on the profile screen.</p>
  */
 export function TradesOnboardingPage() {
@@ -95,10 +95,19 @@ export function TradesOnboardingPage() {
     }
   };
 
-  const onSkip = () => {
-    if (me) markTradesSkipped(me.id);
-    setConfirmSkip(false);
-    done();
+  // The skip is an answer the SERVER keeps (V193), sent with the trades he already has — opened from
+  // the template picker, a skip must not wipe them.
+  const onSkip = async () => {
+    setSaving(true);
+    try {
+      await updateTrades.mutateAsync({ trades: me?.trades ?? [] });
+      setConfirmSkip(false);
+      done();
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -206,7 +215,7 @@ export function TradesOnboardingPage() {
         <p className="mt-2 text-sm text-muted">{t('onboarding.trades.skipLater')}</p>
         <div className="mt-5 flex flex-col gap-2">
           <Button fullWidth onClick={() => setConfirmSkip(false)}>{t('onboarding.trades.skipBack')}</Button>
-          <Button variant="secondary" fullWidth onClick={onSkip}>{t('onboarding.trades.skipConfirm')}</Button>
+          <Button variant="secondary" fullWidth loading={saving} onClick={() => void onSkip()}>{t('onboarding.trades.skipConfirm')}</Button>
         </div>
       </Modal>
     </div>

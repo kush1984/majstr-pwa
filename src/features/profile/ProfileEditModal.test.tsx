@@ -122,6 +122,20 @@ describe('ProfileEditModal — name, phone and company are optional (V190)', () 
     );
   });
 
+  /** Review: once given, the name may change but not go — documents may already carry it. */
+  it('refuses to erase a name that was already given', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, me);
+
+    renderModal(qc);
+
+    fireEvent.change(screen.getByDisplayValue('Іван Майстер'), { target: { value: '  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    expect(await screen.findByText("Ім'я вже стоїть у ваших документах — його можна змінити, але не стерти")).toBeTruthy();
+    expect(profileApi.update).not.toHaveBeenCalled();
+  });
+
   it('still refuses a phone that was typed but is too short to be one', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(ME_QUERY_KEY, me);

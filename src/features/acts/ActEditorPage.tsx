@@ -741,6 +741,12 @@ export function ActEditorPage() {
       }
     } catch (err) {
       selfSigning.current = false;
+      if (isSenderNameRequired(err)) {
+        // The cache said there was a name; the server disagrees — ask, and he signs again.
+        setSignOpen(false);
+        void senderSheetStore.request();
+        return;
+      }
       toast.error(toAppError(err).message);
     }
   });
@@ -786,6 +792,9 @@ export function ActEditorPage() {
       return;
     }
     if (!(await queuedReceiptsClear())) return;
+    // A paper signature freezes the act and mails its copy: «Виконавець» needs a name (V190 review).
+    // No email is needed to sign on paper, and no reminder interrupts a signature.
+    if ((await ensureSender(undefined, { remind: false, emailFirst: false })) === 'cancelled') return;
     setSignOpen(true);
   };
 
@@ -801,7 +810,7 @@ export function ActEditorPage() {
     const tab = reservePdfTab();
     // «Виконавець» prints his name. A sheet spends the tap the tab was reserved in, so a name given
     // here prints on the next tap.
-    const sender = await ensureSender(() => tab.cancel());
+    const sender = await ensureSender(() => tab.cancel(), { remind: false, emailFirst: false });
     if (sender !== 'ready') {
       // Saved or skipped, the sheet spent the tap the tab was reserved in.
       if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));

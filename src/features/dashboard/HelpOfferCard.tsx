@@ -6,6 +6,11 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useRequestHelp } from '@/features/profile/useProfile.ts';
+import { isCallablePhone, normalizeUaPhone } from '@/lib/phone.ts';
+
+/** A day in, and still no object: the moment a call helps — not the first visit, where the card would
+ *  push «Новий об'єкт» down for someone who has not tried anything yet (review). */
+const STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const DISMISSED = (userId: string) => `majstr.helpOfferDismissed.${userId}`;
 
@@ -22,10 +27,10 @@ function wasDismissed(userId: string): boolean {
  *
  * <p>Registration stopped asking for a phone (V190): a number asked of a stranger at the door was the
  * biggest reason to leave. Here it is OFFERED, to someone already inside, for something he gets back —
- * a call. Shown only while there is no phone on the account and he has neither asked nor said «Ні,
- * дякую» on this device. The number lands in the profile and in the admin's call list.</p>
+ * a call. Shown once he looks stuck (a day in, no object), until he asks or says «Ні, дякую» on this
+ * device. The number goes to the admin's call list only — never onto his documents (V193).</p>
  */
-export function HelpOfferCard() {
+export function HelpOfferCard({ hasObjects }: { hasObjects: boolean }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const requestHelp = useRequestHelp();
@@ -42,16 +47,17 @@ export function HelpOfferCard() {
       </div>
     );
   }
-  if (dismissed || me.phone || me.helpRequestedAt || wasDismissed(me.id)) return null;
+  const stuck = !hasObjects && Date.now() - new Date(me.createdAt).getTime() > STUCK_AFTER_MS;
+  if (!stuck || dismissed || me.helpRequestedAt || wasDismissed(me.id)) return null;
 
   const onSend = async () => {
     const value = phone.trim();
-    if (value.length < 5) {
+    if (!isCallablePhone(value)) {
       setInvalid(true);
       return;
     }
     try {
-      await requestHelp.mutateAsync({ phone: value });
+      await requestHelp.mutateAsync({ phone: normalizeUaPhone(value) ?? value });
       setSent(true);
     } catch (err) {
       toast.error(toAppError(err).message);
@@ -82,7 +88,9 @@ export function HelpOfferCard() {
           invalid={invalid}
           onChange={(e) => { setPhone(e.target.value); setInvalid(false); }}
         />
-        {invalid && <p className="mt-1 text-xs text-red-600">{t('validation.enterPhone')}</p>}
+        {invalid
+          ? <p className="mt-1 text-xs text-red-600">{t('helpOffer.phoneInvalid')}</p>
+          : <p className="mt-1 text-xs text-muted">{t('helpOffer.onlyForTheCall')}</p>}
       </div>
       <div className="mt-3 flex gap-2">
         <Button variant="secondary" fullWidth onClick={onDismiss}>{t('helpOffer.dismiss')}</Button>

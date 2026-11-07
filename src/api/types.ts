@@ -75,6 +75,8 @@ export interface UserResponse {
   actNumberFormat: ActNumberFormat;
   /** When he asked for a setup call (V191); absent = never. Stops the offer on the home screen. */
   helpRequestedAt?: string;
+  /** When he answered «Чим займаєтесь?» — picked or skipped (V193); absent = not asked yet. */
+  tradesOnboardedAt?: string;
 }
 
 /** How a work act's number is displayed — «7» vs «7/2026». */

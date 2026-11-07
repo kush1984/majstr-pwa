@@ -1941,7 +1941,8 @@
     "fullNameHint": "How your estimates and acts are signed",
     "phoneHint": "Optional — so the client can call you",
     "companyNameHint": "Optional — if empty, documents show your name",
-    "tradeSetAddedAuto": "Added templates and catalog positions for: {{trades}}"
+    "tradeSetAddedAuto": "Added templates and catalog positions for: {{trades}}",
+    "nameLocked": "Your name is already on your documents — it can be changed, not erased"
   },
   "clientPicker": {
     "none": "No client",
@@ -2353,17 +2354,20 @@
     "continue": "Save and continue",
     "saved": "Saved to your profile",
     "tapAgainPdf": "Tap «PDF» again to make the document",
-    "reminderTitle": "Add a company name and phone?",
-    "reminderIntro": "Right now the document carries only your name. With a company and a phone the client finds and calls you more easily.",
+    "reminderTitle": "Add a phone?",
+    "reminderIntro": "Without a phone the client on the estimate page has no way to call you.",
     "reminderSavedToProfile": "Saved to your profile — for the next estimates too. You can change it in Profile.",
     "skip": "Skip",
-    "saveToProfile": "Save to profile"
+    "saveToProfile": "Save to profile",
+    "phoneCheck": "Check the number, e.g. 067 123 45 67"
   },
   "helpOffer": {
     "title": "Need help setting up?",
     "body": "Leave your phone — we will call and help you build your first estimate.",
     "send": "Call me back",
     "dismiss": "No, thanks",
-    "thanks": "Thank you! We will call you soon."
+    "thanks": "Thank you! We will call you soon.",
+    "phoneInvalid": "Check the number, e.g. 067 123 45 67",
+    "onlyForTheCall": "Only for the call — it does not appear on your documents."
   }
 }

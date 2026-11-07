@@ -112,16 +112,16 @@ describe('useSenderGate — «Як вас підписати в документ
   });
 });
 
-describe('useSenderGate — the light reminder for an empty company or phone', () => {
-  const nameOnly = aUser({ fullName: 'Іван', companyName: undefined, phone: undefined });
+describe('useSenderGate — the light reminder for an empty phone', () => {
+  const noPhone = aUser({ fullName: 'Іван', companyName: undefined, phone: undefined });
 
   it('reminds once per session, and «Пропустити» lets the document go as it is', async () => {
-    const { gate } = setup(nameOnly);
+    const { gate } = setup(noPhone);
     const onAsk = vi.fn();
 
     let outcome: Promise<SenderGateResult> = Promise.resolve('ready');
     act(() => { outcome = gate.result.current(onAsk); });
-    const dialog = await screen.findByRole('dialog', { name: 'Додати назву компанії і телефон?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Додати телефон?' });
     expect(onAsk).toHaveBeenCalledOnce();
     expect(within(dialog).getByText(/так буде і в наступних кошторисах/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Пропустити' }));
@@ -130,28 +130,73 @@ describe('useSenderGate — the light reminder for an empty company or phone', (
     expect(profileApi.updateSender).not.toHaveBeenCalled();
     // The second document in the same session is not asked again.
     await expect(gate.result.current()).resolves.toBe('ready');
-    expect(senderGateWouldAsk(nameOnly)).toBe(false);
+    expect(senderGateWouldAsk(noPhone)).toBe(false);
   });
 
-  it('«Зберегти в профілі» saves the company and phone with the name', async () => {
-    vi.mocked(profileApi.updateSender).mockResolvedValue(aUser({ fullName: 'Іван', companyName: 'ФОП Іван' }));
-    const { gate } = setup(nameOnly);
+  it('«Зберегти в профілі» saves the phone with the name', async () => {
+    vi.mocked(profileApi.updateSender).mockResolvedValue(aUser({ fullName: 'Іван', phone: '+380501112233' }));
+    const { gate } = setup(noPhone);
 
     let outcome: Promise<SenderGateResult> = Promise.resolve('ready');
     act(() => { outcome = gate.result.current(); });
-    const dialog = await screen.findByRole('dialog', { name: 'Додати назву компанії і телефон?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Додати телефон?' });
     expect(within(dialog).getByLabelText<HTMLInputElement>(/Ім'я та прізвище/).value).toBe('Іван');
-    fireEvent.change(within(dialog).getByLabelText(/Назва компанії/), { target: { value: 'ФОП Іван' } });
+    fireEvent.change(within(dialog).getByLabelText(/Телефон/), { target: { value: '+380501112233' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Зберегти в профілі' }));
 
     await expect(outcome).resolves.toBe('saved');
-    expect(profileApi.updateSender).toHaveBeenCalledWith({ fullName: 'Іван', phone: '', companyName: 'ФОП Іван' });
+    expect(profileApi.updateSender).toHaveBeenCalledWith({ fullName: 'Іван', phone: '+380501112233', companyName: '' });
   });
 
-  it('asks nothing of a master whose name, company and phone are all there', async () => {
-    const { gate } = setup(aUser());
+  /** Review: the company is not reminded about — most masters work under their own name. */
+  it('says nothing about a missing company when the phone is there', async () => {
+    const { gate } = setup(aUser({ companyName: undefined }));
     await expect(gate.result.current()).resolves.toBe('ready');
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  /** Review: a PDF is not a link to a client — and a first PDF used to cost three taps. */
+  it('never reminds before a PDF', async () => {
+    const { gate } = setup(noPhone);
+    await expect(gate.result.current(undefined, { remind: false })).resolves.toBe('ready');
+    expect(senderGateWouldAsk(noPhone, { remind: false })).toBe(false);
+  });
+
+  /** Review: the name sheet already offered the phone; a reminder right after it is a repeat. */
+  it('does not remind in the session the name sheet was shown', async () => {
+    vi.mocked(profileApi.updateSender).mockResolvedValue(noPhone);
+    const { gate, qc } = setup();
+
+    let first: Promise<SenderGateResult> = Promise.resolve('ready');
+    act(() => { first = gate.result.current(); });
+    const dialog = await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' });
+    fireEvent.change(within(dialog).getByLabelText(/Ім'я та прізвище/), { target: { value: 'Іван' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Зберегти і продовжити' }));
+    await expect(first).resolves.toBe('saved');
+    qc.setQueryData(ME_QUERY_KEY, noPhone);
+
+    await expect(gate.result.current()).resolves.toBe('ready');
+    expect(screen.queryByRole('dialog', { name: 'Додати телефон?' })).toBeNull();
+  });
+});
+
+describe('useSenderGate — the email is asked before the name', () => {
+  it("leaves an unverified master to the action's own email gate first", async () => {
+    const unverified = aUser({ fullName: undefined, emailVerified: false });
+    vi.mocked(authApi.me).mockResolvedValue(unverified);
+    const { gate } = setup(unverified);
+
+    await expect(gate.result.current()).resolves.toBe('ready');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('still asks the name where no email is needed — a paper signature', async () => {
+    const unverified = aUser({ fullName: undefined, emailVerified: false });
+    vi.mocked(authApi.me).mockResolvedValue(unverified);
+    const { gate } = setup(unverified);
+
+    act(() => { void gate.result.current(undefined, { emailFirst: false, remind: false }); });
+    expect(await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' })).toBeTruthy();
   });
 });
 

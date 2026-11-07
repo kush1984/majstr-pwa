@@ -9,6 +9,7 @@ import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useUpdateSender } from '@/features/profile/useProfile.ts';
 import { senderSheetStore } from './senderGate.ts';
+import { isCallablePhone } from '@/lib/phone.ts';
 
 /**
  * The «Як вас підписати в документі?» sheet (V190) — one instance for the whole app, opened by
@@ -19,8 +20,8 @@ import { senderSheetStore } from './senderGate.ts';
  * only place a document's header comes from, so «don't save» would only mean being asked again on
  * every send. A signed document keeps its own copy (V150), so changing it later rewrites nothing.</p>
  *
- * <p>The same sheet, in `extras` mode, is the light reminder when the name is there but the company
- * or the phone is empty: «Пропустити» sends the document as it is. A one-off value «just for this
+ * <p>The same sheet, in `extras` mode, is the light reminder when the name is there but the phone is
+ * empty: «Пропустити» sends the document as it is. A one-off value «just for this
  * document» is not offered — the header has no other source than the profile, so it would print
  * nothing; the button says plainly that it saves for the next estimates too.</p>
  */
@@ -94,7 +95,11 @@ export function SenderSheetHost() {
           />
         </FormField>
 
-        <FormField label={t('common.phone')} htmlFor="sender-phone" hint={t('sender.phoneHint')}>
+        <FormField
+          label={t('common.phone')}
+          htmlFor="sender-phone"
+          hint={phone.trim() && !isCallablePhone(phone) ? t('sender.phoneCheck') : t('sender.phoneHint')}
+        >
           <Input
             id="sender-phone"
             type="tel"

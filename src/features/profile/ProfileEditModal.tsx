@@ -71,9 +71,13 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
   const [req, setReq] = useState<RequisitesState>(EMPTY_REQUISITES);
   const [reqOpen, setReqOpen] = useState(false);
   const [errors, setErrors] = useState<{
+    fullName?: boolean;
     phone?: boolean;
     email?: boolean;
   }>({});
+  // Optional until first given, then it may change but not go (V190 review): documents may already
+  // carry it, and the backend refuses the erase (400 PROFILE_NAME_REQUIRED).
+  const nameLocked = Boolean(me?.fullName?.trim());
 
   // Custom trades are saved instantly (their own endpoint), independent of the
   // "Зберегti"/save-profile flow below — same reasoning as the logo upload.
@@ -134,6 +138,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     // Nothing here is required any more — only a phone that was typed must look like one.
     const phone = form.phone.trim();
     const next = {
+      fullName: nameLocked && !form.fullName.trim(),
       phone: phone.length > 0 && phone.length < 5,
       email: emailEditable && !form.email.includes('@'),
     };
@@ -228,8 +233,13 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
     <>
     <Modal open={open} onClose={onClose} title={t('profile.editTitle')}>
       <div className="ph-mask space-y-4">
-        <FormField label={t('common.fullName')} hint={t('profile.fullNameHint')}>
-          <Input value={form.fullName} onChange={set('fullName')} autoComplete="name" />
+        <FormField
+          label={t('common.fullName')}
+          required={nameLocked}
+          hint={errors.fullName ? undefined : t('profile.fullNameHint')}
+          error={errors.fullName ? t('profile.nameLocked') : undefined}
+        >
+          <Input value={form.fullName} onChange={set('fullName')} autoComplete="name" invalid={errors.fullName} />
         </FormField>
 
         <FormField

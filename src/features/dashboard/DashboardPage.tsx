@@ -100,7 +100,7 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <HelpOfferCard />
+      {projects.isSuccess && <HelpOfferCard hasObjects={projects.data.length > 0} />}
 
       {atProjectLimit && (
         <div className="mb-5">

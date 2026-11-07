@@ -343,7 +343,8 @@ export function EstimateEditorPage() {
     }
     // The PDF prints his name (V190: registration no longer asks for it). The sheet spends the tap the
     // tab was reserved in, so a name given here prints on the NEXT tap.
-    const sender = await ensureSender(() => tab.cancel());
+    // A PDF is not a link to a client: no phone reminder before it (review — it cost three taps).
+    const sender = await ensureSender(() => tab.cancel(), { remind: false });
     if (sender !== 'ready') {
       // Saved or skipped, the sheet spent the tap the tab was reserved in.
       if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));

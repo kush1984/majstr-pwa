@@ -90,7 +90,6 @@ describe('auth gate — «Чим займаєтесь?» first for a master with
     );
   }
 
-  beforeEach(() => localStorage.removeItem('majstr.tradesSkipped.new'));
 
   it('sends a master with no trade to /welcome, and /welcome itself does not loop', () => {
     renderWithWelcome('/app', aUser({ id: 'new', trades: [], customTrades: [] }));
@@ -99,9 +98,9 @@ describe('auth gate — «Чим займаєтесь?» first for a master with
     expect(screen.queryByText('APP CONTENT')).toBeNull();
   });
 
-  it('lets him in once he said «пропустити» on this device', () => {
-    localStorage.setItem('majstr.tradesSkipped.new', '1');
-    renderWithWelcome('/app', aUser({ id: 'new', trades: [], customTrades: [] }));
+  /** V193: the answer is the server's — a skip on another phone, or every trade unticked later. */
+  it('lets him in once the server holds his answer, with no trade at all', () => {
+    renderWithWelcome('/app', aUser({ id: 'new', trades: [], customTrades: [], tradesOnboardedAt: '2026-11-07T10:00:00Z' }));
 
     expect(screen.getByText('APP CONTENT')).toBeTruthy();
   });
