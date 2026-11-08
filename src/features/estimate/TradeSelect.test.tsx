@@ -6,7 +6,7 @@ import { TradeSelect } from './TradeSelect.tsx';
 describe('TradeSelect', () => {
   it('picking a system trade reports it with customTradeId null', () => {
     const onChange = vi.fn();
-    render(<TradeSelect value={{ trade: null, customTradeId: null }} onChange={onChange} />);
+    render(<TradeSelect value={{ trade: null, customTradeId: null }} onChange={onChange} trades={['TILING']} />);
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'TILING' } });
 
@@ -15,7 +15,7 @@ describe('TradeSelect', () => {
 
   it('picking "Загальна" reports trade null', () => {
     const onChange = vi.fn();
-    render(<TradeSelect value={{ trade: 'TILING', customTradeId: null }} onChange={onChange} />);
+    render(<TradeSelect value={{ trade: 'TILING', customTradeId: null }} onChange={onChange} trades={['TILING']} />);
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'GENERAL' } });
 
@@ -28,6 +28,7 @@ describe('TradeSelect', () => {
       <TradeSelect
         value={{ trade: null, customTradeId: null }}
         onChange={onChange}
+        trades={[]}
         customTrades={[{ id: 'ct1', name: 'Натяжні стелі' }]}
       />,
     );
@@ -38,11 +39,22 @@ describe('TradeSelect', () => {
     expect(onChange).toHaveBeenCalledWith({ trade: null, customTradeId: 'ct1' });
   });
 
+  it('offers only the trades in his profile, and keeps the current filing even when it is not one', () => {
+    render(
+      <TradeSelect value={{ trade: 'ELECTRICAL', customTradeId: null }} onChange={vi.fn()} trades={['TILING', 'FLOORING']} />,
+    );
+
+    const offered = Array.from(document.querySelector('select')?.options ?? []).map((o) => o.value);
+    expect(offered).toEqual(['ELECTRICAL', 'TILING', 'FLOORING', 'GENERAL']);
+    expect(document.querySelector('select')?.value).toBe('ELECTRICAL');
+  });
+
   it('selects the current custom trade as the initial value', () => {
     render(
       <TradeSelect
         value={{ trade: null, customTradeId: 'ct1' }}
         onChange={vi.fn()}
+        trades={[]}
         customTrades={[{ id: 'ct1', name: 'Натяжні стелі' }]}
       />,
     );

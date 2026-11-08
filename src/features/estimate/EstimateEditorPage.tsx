@@ -877,6 +877,7 @@ export function EstimateEditorPage() {
             value={templateTradeChoice}
             onChange={setTemplateTradeChoice}
             label={t('templates.tradeLabel')}
+            trades={me?.trades ?? []}
             customTrades={me?.customTrades ?? []}
           />
         </div>

@@ -1811,7 +1811,6 @@
     "loadError": "Couldn't load templates",
     "tradeLabel": "Trade",
     "tradeGeneral": "General (all trades)",
-    "tradeMoved": "Moved",
     "applyCount": "Create estimate ({{count}})",
     "select": "Select this template",
     "deselect": "Remove from selection",

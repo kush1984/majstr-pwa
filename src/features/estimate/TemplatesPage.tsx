@@ -46,7 +46,8 @@ import type {
   Unit,
 } from '@/api/types.ts';
 import { TradeLevel } from '@/features/catalog/TradeLevel.tsx';
-import { TradeSelect } from './TradeSelect.tsx';
+import { TradeSelect, type TradeChoice } from './TradeSelect.tsx';
+import { CUSTOM_TRADE_EMOJI, TRADE_EMOJI } from '@/lib/labels.ts';
 import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
 import { catalogKey, indexCatalog } from '@/lib/catalogMatch.ts';
@@ -220,10 +221,9 @@ export function TemplatesPage() {
       >
         {preview && (
           <>
-            {/* Re-file into any trade — the master's own setting, for own AND system templates. */}
-            <div className="mb-3">
-              <TradeMove template={preview} onMoved={(next) => setPreview(next)} />
-            </div>
+            {/* Where it is filed, read-only: a preview changes nothing. A ready-made template lives
+                under the trade it ships for (V194); the master's own one is re-filed in its editor. */}
+            <TradeTag template={preview} />
             <Preview templateId={preview.id} />
           </>
         )}
@@ -401,50 +401,18 @@ function Row({
   );
 }
 
-/** Re-file a template into a trade — an instant save on change, per-master. */
-function TradeMove({
-  template,
-  onMoved,
-}: {
-  template: EstimateTemplateSummary;
-  onMoved: (next: EstimateTemplateSummary) => void;
-}) {
+/** The trade a template is filed under, as a label. */
+function TradeTag({ template }: { template: EstimateTemplateSummary }) {
   const { t } = useTranslation();
-  const { data: me } = useMe();
-  const setTrade = useSetTemplateTrade();
+  const label = template.customTradeId
+    ? `${CUSTOM_TRADE_EMOJI} ${template.customTradeName ?? t('trades.OTHER')}`
+    : template.trade
+      ? `${TRADE_EMOJI[template.trade]} ${t('trades.' + template.trade)}`
+      : `${TRADE_EMOJI.GENERAL} ${t('templates.tradeGeneral')}`;
   return (
-    <div className="flex items-end gap-2">
-      <div className="flex-1">
-        <TradeSelect
-          value={{ trade: template.trade ?? null, customTradeId: template.customTradeId }}
-          label={t('templates.tradeLabel')}
-          // A system default is re-filed through the per-master override, which has no
-          // place for a custom trade — offer the picker only on the master's own template.
-          customTrades={template.isDefault ? [] : (me?.customTrades ?? [])}
-          onChange={(next) => {
-            const customTradeName = next.customTradeId
-              ? (me?.customTrades ?? []).find((ct) => ct.id === next.customTradeId)?.name ?? null
-              : null;
-            setTrade.mutate(
-              { id: template.id, trade: next.trade, customTradeId: next.customTradeId, customTradeName },
-              {
-                onSuccess: () => {
-                  onMoved({
-                    ...template,
-                    trade: next.customTradeId ? 'OTHER' : next.trade,
-                    customTradeId: next.customTradeId,
-                    customTradeName,
-                  });
-                  toast.success(t('templates.tradeMoved'));
-                },
-                onError: (err) => toast.error(toAppError(err).message),
-              },
-            );
-          }}
-        />
-      </div>
-      {setTrade.isPending && <Spinner size="sm" />}
-    </div>
+    <p className="mb-3 text-sm text-muted" data-testid="template-trade">
+      {t('templates.tradeLabel')}: <span className="font-medium text-primary">{label}</span>
+    </p>
   );
 }
 
@@ -626,6 +594,15 @@ function EditModal({
   const updateItem = useUpdateTemplateItem(activeId);
   const removeItem = useRemoveTemplateItem(activeId);
   const reorder = useReorderTemplateItems(activeId);
+  const setTrade = useSetTemplateTrade();
+  const { data: me } = useMe();
+  // Only the master's OWN template is re-filed (a ready-made one stays under its trade, V194), and
+  // like the name it is part of the draft — written by «Зберегти», never by touching the select.
+  const tradeOf = (x: EstimateTemplateSummary): TradeChoice =>
+    ({ trade: x.customTradeId ? null : x.trade ?? null, customTradeId: x.customTradeId ?? null });
+  const [trade, setTradeChoice] = useState<TradeChoice>(tradeOf(template));
+  const [baselineTrade, setBaselineTrade] = useState<TradeChoice>(tradeOf(template));
+  const tradeChanged = trade.trade !== baselineTrade.trade || trade.customTradeId !== baselineTrade.customTradeId;
 
   // The draft IS the editor. Seeded from the composition once it arrives; the name is editable from
   // the first frame because the summary always carries it, even offline with no cached detail.
@@ -659,7 +636,7 @@ function EditModal({
 
   const items = draft.items;
   const trimmed = draft.name.trim();
-  const dirty = trimmed !== baseline.name || !sameItems(items, baseline.items);
+  const dirty = trimmed !== baseline.name || tradeChanged || !sameItems(items, baseline.items);
   /**
    * Rows that differ from what is on the server — added this session, or edited and not yet written.
    * Derived, not tracked: with an explicit save the highlight means «ще не збережено», so it lights
@@ -730,6 +707,13 @@ function EditModal({
         // exactly what a rename would otherwise do the first time it forks that default.
         follow(await rename.mutateAsync({ id: activeId, name: trimmed }));
         name = trimmed;
+      }
+      if (tradeChanged) {
+        const customTradeName = trade.customTradeId
+          ? (me?.customTrades ?? []).find((ct) => ct.id === trade.customTradeId)?.name ?? null
+          : null;
+        await setTrade.mutateAsync({ id: activeId, ...trade, customTradeName });
+        setBaselineTrade(trade);
       }
       for (const gone of baseline.items.filter((b) => !working.some((i) => i.id === b.id))) {
         latest = (await removeItem.mutateAsync(gone.id)) ?? latest;
@@ -816,6 +800,18 @@ function EditModal({
           {t('common.save')}
         </Button>
       </div>
+
+      {!template.isDefault && (
+        <div className="mt-3">
+          <TradeSelect
+            value={trade}
+            onChange={setTradeChoice}
+            label={t('templates.tradeLabel')}
+            trades={me?.trades ?? []}
+            customTrades={me?.customTrades ?? []}
+          />
+        </div>
+      )}
 
       {/* NO description field here (master, 2026-09-21): «хіба ми десь в порталі чи ПДФ щось
          показуємо?» — we do not. V122 took both client surfaces and PWA v1.43.1 took the

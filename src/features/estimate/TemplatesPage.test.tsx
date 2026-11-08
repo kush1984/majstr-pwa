@@ -152,7 +152,8 @@ describe('TemplatesPage — edit own template', () => {
     expect(screen.queryByText('Додати позицію')).toBeNull();
   });
 
-  it('re-files a SYSTEM template into another trade from the preview (own setting)', async () => {
+  /** Master, 2026-11-08: one tap in a preview moved a tiling bundle under a trade he never picked. */
+  it('a ready-made template only NAMES its trade — no way to move it, not in the preview, not in the editor', async () => {
     const sys: EstimateTemplateSummary = {
       id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: true, itemCount: 5,
     };
@@ -160,33 +161,43 @@ describe('TemplatesPage — edit own template', () => {
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue({
       id: 's1', name: 'ГІПСОКАРТОН', trade: 'DRYWALL', customTradeId: null, customTradeName: null, isDefault: true, items: [],
     });
-    vi.mocked(estimateTemplatesApi.setTrade).mockResolvedValue({ ...sys, trade: 'PAINTER' });
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
 
     renderPage();
     fireEvent.click(await screen.findByText('ГІПСОКАРТОН'));
 
-    // The trade select in the preview → move to a different trade.
-    const select = await screen.findByDisplayValue(/Гіпсокартон/);
-    fireEvent.change(select, { target: { value: 'PAINTER' } });
+    expect((await screen.findByTestId('template-trade')).textContent).toMatch(/Напрям:.*Гіпсокартон/);
+    expect(screen.queryByRole('combobox')).toBeNull();
 
-    await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith(
-      's1', { trade: 'PAINTER', customTradeId: null }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Закрити' })[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await screen.findByTestId('template-save');
+    expect(screen.queryByText('Напрям')).toBeNull();
+    expect(estimateTemplatesApi.setTrade).not.toHaveBeenCalled();
   });
 
-  it('re-files MY OWN template into a custom trade — the picker offers it, a system default would not', async () => {
-    const meWithCustom = aUser({ customTrades: [{ id: 'ct1', name: 'Натяжні стелі', sortOrder: 0 }] });
+  it('MY OWN template is re-filed in its editor, among my trades, and only on «Зберегти»', async () => {
+    const meWithCustom = aUser({
+      trades: ['TILING', 'FLOORING'],
+      customTrades: [{ id: 'ct1', name: 'Натяжні стелі', sortOrder: 0 }],
+    });
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue([]);
     vi.mocked(estimateTemplatesApi.setTrade).mockResolvedValue({
       ...own, trade: 'OTHER', customTradeId: 'ct1', customTradeName: 'Натяжні стелі',
     });
 
     renderPage(meWithCustom);
-    fireEvent.click(await screen.findByText('Моя ванна'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    const select = await screen.findByRole('combobox', { name: 'Напрям' });
 
-    const select = await screen.findByRole('combobox');
-    expect(screen.getByText(/Натяжні стелі/)).toBeTruthy();
+    const offered = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+    expect(offered).toEqual(['TILING', 'FLOORING', 'GENERAL', 'custom:ct1']);
+
     fireEvent.change(select, { target: { value: 'custom:ct1' } });
+    expect(estimateTemplatesApi.setTrade).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('template-save'));
 
     await waitFor(() => expect(estimateTemplatesApi.setTrade).toHaveBeenCalledWith(
       'own1', { trade: null, customTradeId: 'ct1' }));
