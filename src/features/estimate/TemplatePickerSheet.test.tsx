@@ -249,6 +249,38 @@ describe('TemplatePickerSheet', () => {
     expect((await screen.findByTestId('welcome-from')).textContent).toBe('/projects/p1');
   });
 
+  it('lets him go on without a template — an empty list is not a dead end', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    const onSkip = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TemplatePickerSheet open onClose={vi.fn()} onPick={vi.fn()} onSkip={onSkip} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Без шаблону — порожній кошторис' }));
+    expect(onSkip).toHaveBeenCalled();
+  });
+
+  it('offers no skip once a template is ticked — the footer applies it instead', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TemplatePickerSheet open onClose={vi.fn()} onPick={vi.fn()} onSkip={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText('Моя ванна');
+    fireEvent.click(toggleFor('Моя ванна'));
+    expect(screen.queryByRole('button', { name: 'Без шаблону — порожній кошторис' })).toBeNull();
+  });
+
   it('hides the search box for a list short enough to just read', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own, def]);
     renderPicker(vi.fn());

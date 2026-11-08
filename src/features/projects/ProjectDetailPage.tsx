@@ -361,7 +361,8 @@ export function ProjectDetailPage() {
         open={templatePickerOpen}
         onClose={() => { setTemplatePickerOpen(false); setJustCreated(false); }}
         onPick={onPickTemplate}
-        applying={applyTemplate.isPending}
+        onSkip={() => { setTemplatePickerOpen(false); createEmpty(); }}
+        applying={applyTemplate.isPending || createEstimate.isPending}
       />
 
       <ConsolidateSheet
@@ -584,11 +585,9 @@ export function ProjectDetailPage() {
                   onDismissSuperseded={() => dismissSuperseded.mutate(s.id)}
                 />
               ))}
-              {/* The same orange, the same size as the primary buttons elsewhere — full width only on a
-                  phone, where every CTA is. */}
-              <div className="mt-1 flex justify-center">
+              {/* Its own width, set apart from the last row — full width it read as part of the list. */}
+              <div className="flex justify-center pt-4">
                 <Button
-                  className="w-full sm:w-auto"
                   onClick={addEstimate}
                   disabled={atEstimateLimit}
                   title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
@@ -661,7 +660,7 @@ function EstimateRow({
   const full = useEstimate(summary.id);
   const pairHint = economyPairHint(summary, isCrewSource);
   return (
-    <div className="rounded-card border border-border bg-surface">
+    <div className="rounded-card border border-border bg-brand-soft">
       {/* A duplicate got signed while this one was still SIGNED. As of the acts iteration the
           parent is NO LONGER auto-reopened — it keeps its signature and just stops counting in the
           economy (shown on its Економіка panel instead). The only rows that still carry a

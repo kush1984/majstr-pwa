@@ -1842,7 +1842,8 @@
       "notInCatalog": "not in the catalog"
     },
     "noTradeHint": "No templates yet — tell us what you do and we will add ready ones with prices.",
-    "noTradeAction": "Pick a trade"
+    "noTradeAction": "Pick a trade",
+    "skipEmpty": "No template — empty estimate"
   },
   "profile": {
     "title": "Profile",

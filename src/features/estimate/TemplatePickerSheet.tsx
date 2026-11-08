@@ -61,11 +61,14 @@ export function TemplatePickerSheet({
   open,
   onClose,
   onPick,
+  onSkip,
   applying = false,
 }: {
   open: boolean;
   onClose: () => void;
   onPick: (picks: TemplatePick[]) => void;
+  /** «Без шаблону»: the way on without a template — an empty list with only «Вибрати напрям» was a dead end. */
+  onSkip?: () => void;
   applying?: boolean;
 }) {
   const { t } = useTranslation();
@@ -274,6 +277,11 @@ export function TemplatePickerSheet({
                 {t('templates.applyCount', { count: chosen.length })}
               </Button>
             </div>
+          )}
+          {chosen.length === 0 && onSkip && (
+            <Button fullWidth variant="secondary" loading={applying} onClick={onSkip}>
+              {t('templates.skipEmpty')}
+            </Button>
           )}
         </div>
       )}
