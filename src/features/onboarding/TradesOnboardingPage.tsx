@@ -13,7 +13,7 @@ import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { useAddCustomTrade, useUpdateTrades } from '@/features/profile/useProfile.ts';
 import type { Trade } from '@/api/types.ts';
-import { needsTradesScreen } from './tradesOnboarding.ts';
+import { needsTradesScreen, rememberTradesAnswer, type PendingTradesAnswer } from './tradesOnboarding.ts';
 
 /** Where to go once he has answered — the screen that sent him here, else home. */
 function returnTo(state: unknown): string {
@@ -31,7 +31,8 @@ function returnTo(state: unknown): string {
  * an empty catalog, every line typed by hand.</p>
  *
  * <p>Saving goes through `PUT /api/profile/trades`, which fills the starter catalog of every newly
- * picked trade in the same request and stamps the answer (V193) — a skip goes the same way. Custom trades are created one by one through their own endpoint,
+ * picked trade in the same request and stamps the answer (V193) — a skip goes the same way. With no connection either answer is kept on the
+ * device and sent later (`useTradesAnswerSync`), so the screen never locks him out. Custom trades are created one by one through their own endpoint,
  * as on the profile screen.</p>
  */
 export function TradesOnboardingPage() {
@@ -61,6 +62,13 @@ export function TradesOnboardingPage() {
   const nothingChosen = picked.length === 0 && customNames.length === 0 && existingCustom.length === 0;
   const done = () => void navigate(returnTo(location.state), { replace: true });
 
+  /** No connection: the answer waits on the device (`useTradesAnswerSync`) and he goes on into the app. */
+  const keptOffline = (err: unknown, answer: PendingTradesAnswer): boolean => {
+    if (!me || toAppError(err).code !== 'NETWORK') return false;
+    rememberTradesAnswer(me.id, answer);
+    return true;
+  };
+
   const toggle = (trade: Trade) =>
     setPicked((prev) => (prev.includes(trade) ? prev.filter((x) => x !== trade) : [...prev, trade]));
 
@@ -89,6 +97,11 @@ export function TradesOnboardingPage() {
       if (picked.length > 0) toast.success(t('onboarding.trades.saved'));
       done();
     } catch (err) {
+      if (keptOffline(err, { trades: picked, customNames })) {
+        toast.info(t('onboarding.trades.savedOffline'));
+        done();
+        return;
+      }
       toast.error(toAppError(err).message);
     } finally {
       setSaving(false);
@@ -104,6 +117,11 @@ export function TradesOnboardingPage() {
       setConfirmSkip(false);
       done();
     } catch (err) {
+      if (keptOffline(err, { trades: me?.trades ?? [], customNames: [] })) {
+        setConfirmSkip(false);
+        done();
+        return;
+      }
       toast.error(toAppError(err).message);
     } finally {
       setSaving(false);

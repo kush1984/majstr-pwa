@@ -4,10 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import '@/lib/i18n.ts';
 import { TradesOnboardingPage } from './TradesOnboardingPage.tsx';
-import { needsTradesScreen } from './tradesOnboarding.ts';
+import {
+  needsTradesScreen, pendingTradesAnswer, rememberTradesAnswer, useTradesAnswerSync,
+} from './tradesOnboarding.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { profileApi } from '@/api/profile.ts';
 import { aUser } from '@/test/factories.ts';
+import { toast } from '@/hooks/useToast.ts';
+import { tokens } from '@/lib/tokens.ts';
+import type { UserResponse } from '@/api/types.ts';
 
 vi.mock('@/api/profile.ts', () => ({
   profileApi: { updateTrades: vi.fn(), addCustomTrade: vi.fn() },
@@ -133,5 +138,99 @@ describe('needsTradesScreen', () => {
     expect(needsTradesScreen({ ...fresh, tradesOnboardedAt: '2026-11-07T10:00:00Z' })).toBe(false);
     expect(needsTradesScreen(aUser({ trades: ['TILING'] }))).toBe(false);
     expect(needsTradesScreen(aUser({ trades: [], customTrades: [{ id: 'c', name: 'Стелі', sortOrder: 0 }] }))).toBe(false);
+  });
+});
+
+/** Review: «Далі» and «Пропустити» are PUTs — offline they failed and the gate kept him on this screen. */
+describe('TradesOnboardingPage — no connection never locks him out', () => {
+  const offline = () => Promise.reject(new TypeError('Failed to fetch'));
+
+  it('a skip with no connection lets him in, and is kept to send later', async () => {
+    vi.mocked(profileApi.updateTrades).mockImplementation(offline);
+    renderScreen();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Пропустити' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Без напряму шаблонів не буде' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Все одно пропустити' }));
+
+    expect(await screen.findByText('home')).toBeTruthy();
+    expect(pendingTradesAnswer('u-new')).toEqual({ trades: [], customNames: [] });
+    expect(needsTradesScreen(fresh)).toBe(false);
+  });
+
+  it('picked trades with no connection are kept too, and he is told they wait for the network', async () => {
+    vi.mocked(profileApi.updateTrades).mockImplementation(offline);
+    renderScreen();
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
+
+    expect(await screen.findByText('home')).toBeTruthy();
+    expect(pendingTradesAnswer('u-new')).toEqual({ trades: ['TILING'], customNames: [] });
+    expect(toast.info).toHaveBeenCalledWith("Немає інтернету — напрями збережемо, щойно з'явиться мережа");
+  });
+
+  it('a refusal from the server still keeps him here with its message', async () => {
+    vi.mocked(profileApi.updateTrades).mockRejectedValue(new Error('Щось пішло не так'));
+    renderScreen();
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Щось пішло не так'));
+    expect(screen.queryByText('home')).toBeNull();
+    expect(pendingTradesAnswer('u-new')).toBeNull();
+  });
+});
+
+describe('useTradesAnswerSync', () => {
+  function Sync() {
+    useTradesAnswerSync();
+    return null;
+  }
+  function mount(me: UserResponse) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, me);
+    render(<QueryClientProvider client={qc}><Sync /></QueryClientProvider>);
+  }
+
+  beforeEach(() => {
+    vi.spyOn(tokens, 'hasAny').mockReturnValue(false); // the cache is the truth here; no /me refetch
+  });
+
+  it('sends a 1.72.0 skip the server never heard of, then forgets it', async () => {
+    localStorage.setItem('majstr.tradesSkipped.u-new', '1');
+    mount(fresh);
+
+    await waitFor(() => expect(profileApi.updateTrades).toHaveBeenCalledWith({ trades: [] }));
+    await waitFor(() => expect(pendingTradesAnswer('u-new')).toBeNull());
+  });
+
+  it('sends an offline answer with its own trades', async () => {
+    rememberTradesAnswer('u-new', { trades: ['TILING'], customNames: ['Стелі'] });
+    vi.mocked(profileApi.addCustomTrade).mockResolvedValue(fresh);
+    mount(fresh);
+
+    await waitFor(() => expect(profileApi.updateTrades).toHaveBeenCalledWith({ trades: ['TILING'] }));
+    await waitFor(() => expect(profileApi.addCustomTrade).toHaveBeenCalledWith('Стелі'));
+    await waitFor(() => expect(pendingTradesAnswer('u-new')).toBeNull());
+  });
+
+  it('never overwrites an answer the server already has (another phone)', async () => {
+    rememberTradesAnswer('u-new', { trades: [], customNames: [] });
+    mount({ ...fresh, trades: ['PAINTER'] });
+
+    await waitFor(() => expect(pendingTradesAnswer('u-new')).toBeNull());
+    expect(profileApi.updateTrades).not.toHaveBeenCalled();
+  });
+
+  it('still offline: the answer is kept for the next connection', async () => {
+    rememberTradesAnswer('u-new', { trades: [], customNames: [] });
+    vi.mocked(profileApi.updateTrades).mockRejectedValue(new TypeError('Failed to fetch'));
+    mount(fresh);
+
+    await waitFor(() => expect(profileApi.updateTrades).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pendingTradesAnswer('u-new')).toEqual({ trades: [], customNames: [] });
   });
 });

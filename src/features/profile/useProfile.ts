@@ -38,6 +38,8 @@ export function useUpdateTrades() {
   const refreshAfterTrades = useRefreshAfterTrades();
   return useMutation({
     mutationFn: (req: ProfileTradesRequest) => profileApi.updateTrades(req),
+    // Fails at once offline instead of pausing: «Чим займаєтесь?» then keeps the answer and lets him in.
+    networkMode: 'always',
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
@@ -99,6 +101,7 @@ export function useAddCustomTrade() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => profileApi.addCustomTrade(name),
+    networkMode: 'always',
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });

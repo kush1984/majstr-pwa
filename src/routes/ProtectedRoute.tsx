@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useMe } from '@/features/auth/useMe.ts';
-import { needsTradesScreen } from '@/features/onboarding/tradesOnboarding.ts';
+import { needsTradesScreen, useTradesAnswerSync } from '@/features/onboarding/tradesOnboarding.ts';
 import { tokens } from '@/lib/tokens.ts';
 import { useOnline } from '@/lib/useOnline.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -31,6 +31,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const hasToken = tokens.hasAny();
   const me = useMe();
   const location = useLocation();
+  useTradesAnswerSync();
 
   if (!hasToken) return <Navigate to={routes.login} replace />;
   // Not while `me` is being refetched: a reload restores the cache from the device, written up to a

@@ -2335,6 +2335,7 @@
       "next": "Next",
       "skip": "Skip",
       "saved": "Done — templates and prices are in your catalog",
+      "savedOffline": "No connection — your trades are saved as soon as it is back",
       "skipTitle": "No trade, no templates",
       "skipBody": "Your catalog and templates will be empty — every estimate starts from scratch, each position typed by hand.",
       "skipLater": "You can pick a trade any time: Profile → Trades, and templates with prices appear.",
