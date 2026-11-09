@@ -60,28 +60,36 @@ test('повний сценарій підрядника: реєстрація �
   await expect(total).toContainText('₴');
   await expect(total).not.toHaveText(/^0\s*₴$/);
 
-  // 7 — Sharing opens a sheet with options; triggering "copy link" gives clear
-  // feedback, never a silent failure. Tolerant of every policy outcome: a copied
-  // link, the verify-email gate (unverified contractor), or the PRO gate.
+  // 7 — Sharing needs only a NAME, not a verified email (share-without-verification, 2026-11-09):
+  // the unverified, nameless master is asked «Як вас підписати» BEFORE anything leaves, then the share
+  // sheet opens and the link copies. Once «Посилання скопійовано» fades he is offered the PRO trial,
+  // N days from the server's config. Tolerant of the PRO gate only.
   await page.getByRole('button', { name: /Надіслати клієнту/ }).first().click();
-  const shareSheet = page.getByRole('dialog', { name: 'Поділитися з клієнтом' });
-  const verifyEmail = page.getByRole('dialog', { name: 'Підтвердіть email' });
-  await expect(shareSheet.or(verifyEmail).first()).toBeVisible();
-  if (await shareSheet.isVisible()) {
-    await page.getByRole('button', { name: /Копіювати посилання/ }).click();
-    await expect(
-      page.getByText(/Посилання скопійовано|доступний у плані PRO/).or(verifyEmail).first(),
-    ).toBeVisible();
+  const nameSheet = page.getByRole('dialog', { name: 'Як вас підписати в документі?' });
+  await expect(nameSheet).toBeVisible();
+  await nameSheet.getByLabel(/Ім'я та прізвище/).fill('Іван Е2Е');
+  await nameSheet.getByRole('button', { name: 'Зберегти і продовжити' }).click();
+  const shareSheet = page.getByRole('dialog', { name: 'Портал для клієнта' });
+  await expect(shareSheet).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Підтвердіть email' })).toHaveCount(0);
+  await shareSheet.getByRole('button', { name: /Копіювати посилання/ }).click();
+  const copied = page.getByText('Посилання скопійовано');
+  await expect(copied.or(page.getByText(/доступний у плані PRO/)).first()).toBeVisible();
+  if (await copied.isVisible()) {
+    const trial = page.getByRole('dialog', { name: /Підтвердіть пошту — і зможете ввімкнути \d+ (день|дні|днів|дня) PRO/ });
+    await expect(trial).toBeVisible();
+    await trial.getByRole('button', { name: 'Пізніше' }).click();
+    await expect(trial).not.toBeVisible();
   }
 
-  // 8 — Profile edit (#16): the modal opens with the name still empty — registration no longer
-  // asks for it, the first document does (V190). UI only: nothing is submitted here.
+  // 8 — Profile edit (#16): the modal opens with the name the first document asked for (V190) —
+  // registration no longer asks for it. UI only: nothing is submitted here.
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Редагувати профіль' }).click();
   const editDialog = page.getByRole('dialog', { name: 'Редагувати профіль' });
   await expect(editDialog).toBeVisible();
   // First textbox is the full-name field.
-  await expect(editDialog.getByRole('textbox').first()).toHaveValue('');
+  await expect(editDialog.getByRole('textbox').first()).toHaveValue('Іван Е2Е');
   await editDialog.getByRole('button', { name: 'Скасувати' }).click();
   await expect(editDialog).not.toBeVisible();
 

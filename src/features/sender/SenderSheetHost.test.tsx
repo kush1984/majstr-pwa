@@ -180,23 +180,24 @@ describe('useSenderGate — the light reminder for an empty phone', () => {
   });
 });
 
-describe('useSenderGate — the email is asked before the name', () => {
-  it("leaves an unverified master to the action's own email gate first", async () => {
+describe('useSenderGate — the name is asked whatever the email (share-without-verification)', () => {
+  /** An unverified master without a name used to be let through to share, and heard a 403 after. */
+  it('asks an unverified master for the name BEFORE anything leaves', async () => {
     const unverified = aUser({ fullName: undefined, emailVerified: false });
     vi.mocked(authApi.me).mockResolvedValue(unverified);
     const { gate } = setup(unverified);
 
-    await expect(gate.result.current()).resolves.toBe('ready');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    act(() => { void gate.result.current(); });
+    expect(await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' })).toBeTruthy();
+    expect(senderGateWouldAsk(unverified)).toBe(true);
   });
 
-  it('still asks the name where no email is needed — a paper signature', async () => {
-    const unverified = aUser({ fullName: undefined, emailVerified: false });
-    vi.mocked(authApi.me).mockResolvedValue(unverified);
+  it('lets an unverified master with a name share straight away', async () => {
+    const unverified = aUser({ emailVerified: false });
     const { gate } = setup(unverified);
 
-    act(() => { void gate.result.current(undefined, { emailFirst: false, remind: false }); });
-    expect(await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' })).toBeTruthy();
+    await expect(gate.result.current(undefined, { remind: false })).resolves.toBe('ready');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

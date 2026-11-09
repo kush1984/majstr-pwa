@@ -315,6 +315,23 @@ describe('ActEditorPage', () => {
     expect(vi.mocked(toast.info)).toHaveBeenCalled();
   });
 
+  it('a paper signature from an unverified account lands, and says the client copy was not sent', async () => {
+    // The copy is OUR letter — it needs a verified email; the signature never waits for it.
+    vi.mocked(actsApi.signOffline).mockResolvedValueOnce(
+      { ...draftAct(), status: 'SIGNED', signerName: 'Олена', clientCopyWithheld: true });
+    renderEditor();
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox'));
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Підписати'));
+    fireEvent.change(await screen.findByPlaceholderText('Хто підписав (замовник)'), { target: { value: 'Олена' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Підтвердити підписання' }));
+
+    const { toast } = await import('@/hooks/useToast.ts');
+    await waitFor(() => expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Акт підписано'));
+    expect(vi.mocked(toast.info)).toHaveBeenCalledWith('Копію клієнту не надіслано — підтвердіть пошту', 8000);
+  });
+
   /**
    * A receipt the phone is still carrying may not be left out of a signature (review P-36).
    *

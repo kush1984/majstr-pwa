@@ -8,6 +8,8 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { senderSheetStore } from '@/features/sender/senderGate.ts';
+import { useEmailGate } from '@/features/email/useEmailGate.ts';
+import { trialOfferStore } from '@/features/email/trialOffer.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
@@ -40,7 +42,9 @@ import {
  *   neither read nor touched, so sharing one estimate can never add to — or quietly drop things
  *   from — what an already-sent object link shows.
  *
- * Gate handling is shared: an unverified contractor (403 EMAIL_NOT_VERIFIED) bounces to the
+ * Gate handling is shared: sharing and copying need only the name (asked before the sheet opens);
+ * «надіслати листом» alone needs a verified email — we send that letter from our domain — so it asks
+ * the server first, and an unverified contractor (or a 403 EMAIL_NOT_VERIFIED) bounces to the
  * parent's verify modal; a missing client email (400 CLIENT_EMAIL_MISSING) reveals the inline
  * add-email field.
  */
@@ -76,6 +80,7 @@ export function SharePortalSheet({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const nativeShare = canShareNatively();
+  const ensureEmailVerified = useEmailGate();
   // Object-level share only — a single-estimate share has no set to seed from, so it never asks.
   const portal = useQuery({
     queryKey: ['portal', project.id, mode],
@@ -284,6 +289,7 @@ export function SharePortalSheet({
       if (outcome === 'shared') {
         await afterLinkLeft('share');
         onClose();
+        trialOfferStore.afterSend();
       } else if (outcome === 'blocked') {
         // The publish spent the tap (iOS): the link is ready now, one more tap shares it.
         setShowUrl(true);
@@ -310,6 +316,7 @@ export function SharePortalSheet({
         await afterLinkLeft('link');
         toast.success(t('estimate.linkCopied'));
         onClose();
+        trialOfferStore.afterSend();
       } else {
         setShowUrl(true);
         toast.error(t('estimate.linkCopyFailed'));
@@ -324,6 +331,12 @@ export function SharePortalSheet({
   const onEmail = async () => {
     setBusy('email');
     try {
+      // The letter goes from OUR domain, so it alone needs a verified email (share-without-verification).
+      if (!(await ensureEmailVerified())) {
+        onClose();
+        onNeedEmailVerify();
+        return;
+      }
       if (singleEstimateId) {
         // The estimate's link is already minted — nothing to publish, just mail it.
         await estimateShareApi.sendEmail(singleEstimateId);

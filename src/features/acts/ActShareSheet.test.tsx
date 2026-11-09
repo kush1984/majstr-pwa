@@ -10,6 +10,8 @@ vi.mock('@/api/portal.ts', () => ({
   actPortalApi: { publish: vi.fn(), sendEmail: vi.fn(), state: vi.fn() },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+const emailVerified = vi.fn(() => Promise.resolve(true));
+vi.mock('@/features/email/useEmailGate.ts', () => ({ useEmailGate: () => emailVerified }));
 
 // Publishing flips DRAFT→SENT, so the sheet invalidates the act it just changed (review P-50) —
 // which needs a real client behind it.
@@ -22,6 +24,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  emailVerified.mockImplementation(() => Promise.resolve(true));
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 
@@ -70,5 +73,31 @@ describe('ActShareSheet — a failed publish (review P1-9)', () => {
     expect(await screen.findByDisplayValue(/\?a=TOK/)).toBeTruthy();
     expect(actPortalApi.publish).toHaveBeenCalledTimes(2);
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+/** Share without verification (2026-11-09): publishing needs a name only; WE send the letter. */
+describe('ActShareSheet — the letter alone needs a verified email', () => {
+  it('publishes for an unverified master, and «надіслати листом» opens the verify modal instead', async () => {
+    emailVerified.mockImplementation(() => Promise.resolve(false));
+    vi.mocked(actPortalApi.publish).mockResolvedValue({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
+    render(<ActShareSheet actId="a1" open onClose={vi.fn()} />, { wrapper });
+    await screen.findByDisplayValue(/\?a=TOK/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Надіслати на email' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Підтвердіть email' })).toBeTruthy();
+    expect(actPortalApi.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('sends the letter for a verified master', async () => {
+    vi.mocked(actPortalApi.publish).mockResolvedValue({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
+    vi.mocked(actPortalApi.sendEmail).mockResolvedValue({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
+    render(<ActShareSheet actId="a1" open onClose={vi.fn()} />, { wrapper });
+    await screen.findByDisplayValue(/\?a=TOK/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Надіслати на email' }));
+
+    await waitFor(() => expect(actPortalApi.sendEmail).toHaveBeenCalledWith('a1'));
   });
 });

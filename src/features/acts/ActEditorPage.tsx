@@ -722,11 +722,12 @@ export function ActEditorPage() {
       // Persist current edits first so the signed act reflects the screen (creating it, if this is
       // still «/acts/new» — the master may fill an act and sign it in one sitting).
       const actId = await persist();
+      let signed;
       if (isNew) {
-        await actsApi.signOffline(actId, { signerName: signerName.trim() });
+        signed = await actsApi.signOffline(actId, { signerName: signerName.trim() });
         invalidateAct(actId);
       } else {
-        await signOffline.mutateAsync(signerName.trim());
+        signed = await signOffline.mutateAsync(signerName.trim());
       }
       // The OFFLINE signature only — the master signing on the client's behalf, in their own
       // browser. A portal signature happens in the client's browser and is never measured.
@@ -735,6 +736,7 @@ export function ActEditorPage() {
       setSavedMoney(currentMoney);
       setSignOpen(false);
       toast.success(t('acts.signed'));
+      if (signed.clientCopyWithheld) toast.info(t('acts.clientCopyNeedsVerifiedEmail'), 8000);
       if (isNew) {
         skipLeaveGuard.current = true;
         void navigate(routes.act(actId), { replace: true });
@@ -793,8 +795,8 @@ export function ActEditorPage() {
     }
     if (!(await queuedReceiptsClear())) return;
     // A paper signature freezes the act and mails its copy: «Виконавець» needs a name (V190 review).
-    // No email is needed to sign on paper, and no reminder interrupts a signature.
-    if ((await ensureSender(undefined, { remind: false, emailFirst: false })) === 'cancelled') return;
+    // No reminder interrupts a signature.
+    if ((await ensureSender(undefined, { remind: false })) === 'cancelled') return;
     setSignOpen(true);
   };
 
@@ -810,7 +812,7 @@ export function ActEditorPage() {
     const tab = reservePdfTab();
     // «Виконавець» prints his name. A sheet spends the tap the tab was reserved in, so a name given
     // here prints on the next tap.
-    const sender = await ensureSender(() => tab.cancel(), { remind: false, emailFirst: false });
+    const sender = await ensureSender(() => tab.cancel(), { remind: false });
     if (sender !== 'ready') {
       // Saved or skipped, the sheet spent the tap the tab was reserved in.
       if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));

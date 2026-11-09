@@ -4,6 +4,7 @@ import { ToastViewport } from '@/components/Toast.tsx';
 import { OfflineBanner } from '@/components/OfflineBanner.tsx';
 import { UpdateBanner } from '@/components/UpdateBanner.tsx';
 import { SenderSheetHost } from '@/features/sender/SenderSheetHost.tsx';
+import { TrialOfferHost } from '@/features/email/TrialOfferHost.tsx';
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
       <OfflineBanner />
       <RouterProvider router={router} />
       <SenderSheetHost />
+      <TrialOfferHost />
       <UpdateBanner />
       <ToastViewport />
     </>

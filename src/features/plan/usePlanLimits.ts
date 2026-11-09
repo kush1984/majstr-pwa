@@ -6,8 +6,9 @@ export const PLAN_LIMITS_KEY = ['plan', 'limits'] as const;
 
 /**
  * The current user's plan caps. Used to disable "create" buttons before the
- * user starts (prevention, not reject-at-the-end). Plan changes are admin-manual
- * so a 5-minute staleTime is plenty; the cache is cleared on login.
+ * user starts (prevention, not reject-at-the-end). A plan changes rarely, so a
+ * 5-minute staleTime is plenty; the cache is cleared on login and invalidated by
+ * `useStartTrial`.
  */
 export function usePlanLimits() {
   return useQuery({

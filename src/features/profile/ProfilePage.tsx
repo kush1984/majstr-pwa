@@ -9,6 +9,8 @@ import { useLogout } from '@/features/auth/useLogout.ts';
 import { useOnline, useSyncStatus } from '@/lib/useOnline.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
+import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
+import { useStartTrial } from '@/features/plan/useStartTrial.ts';
 import {
   lastPrefetchAt, prefetchForOffline, type PrefetchProgress,
 } from '@/lib/offlinePrefetch.ts';
@@ -57,6 +59,7 @@ export function ProfilePage() {
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [proVerifyOpen, setProVerifyOpen] = useState(false);
   const ensureEmailVerified = useEmailGate();
+  const { data: limits } = usePlanLimits();
 
   // Used object count for the limit bar — the real list, not a guess.
   const projects = useQuery({
@@ -90,21 +93,7 @@ export function ProfilePage() {
   };
 
   const qc = useQueryClient();
-  const startTrial = async () => {
-    try {
-      const updated = await billingApi.startTrial();
-      qc.setQueryData(ME_QUERY_KEY, updated);
-      toast.success(
-        t('billing.trialStarted', {
-          date: updated.planExpiresAt
-            ? new Date(updated.planExpiresAt).toLocaleDateString('uk-UA')
-            : '',
-        }),
-      );
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    }
-  };
+  const { start: startTrial } = useStartTrial();
 
   const toggleAutoRenew = async (enabled: boolean) => {
     try {
@@ -239,7 +228,7 @@ export function ProfilePage() {
             onClick={() => void onTrialClick()}
             className="mt-2 w-full rounded-xl border border-brand py-2.5 text-sm font-bold text-brand"
           >
-            {t('billing.tryTrial')}
+            {limits?.trialDays ? t('billing.tryTrial', { count: limits.trialDays }) : t('billing.tryTrialPlain')}
           </button>
         )}
       </div>

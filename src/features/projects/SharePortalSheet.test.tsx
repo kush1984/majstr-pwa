@@ -9,6 +9,7 @@ import type { PortalStateResponse, ProjectResponse } from '@/api/types.ts';
 import { asInput } from '@/test/dom.ts';
 import { isHandheld } from '@/lib/deviceInput.ts';
 import { senderSheetStore } from '@/features/sender/senderGate.ts';
+import { trialOfferStore } from '@/features/email/trialOffer.ts';
 
 vi.mock('@/api/portal.ts', () => ({
   portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
@@ -16,6 +17,9 @@ vi.mock('@/api/portal.ts', () => ({
   estimateShareApi: { create: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock('@/lib/deviceInput.ts', () => ({ isHandheld: vi.fn(() => false) }));
+// «Надіслати листом» asks the server whether the email is verified — the one button that does.
+const emailVerified = vi.fn(() => Promise.resolve(true));
+vi.mock('@/features/email/useEmailGate.ts', () => ({ useEmailGate: () => emailVerified }));
 vi.mock('@/features/clients/useClients.ts', () => ({
   useClient: () => ({ data: { id: 'c1', fullName: 'Клієнт', phone: '+380', email: 'client@x.ua' } }),
   useCreateClient: () => ({ isPending: false }),
@@ -33,6 +37,8 @@ vi.mock('@/features/clients/ClientPicker.tsx', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(isHandheld).mockReturnValue(false);
+  emailVerified.mockImplementation(() => Promise.resolve(true));
+  trialOfferStore.clear();
 });
 
 const project = {
@@ -150,14 +156,47 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(portalApi.update).not.toHaveBeenCalled();
   });
 
-  it('shared from one estimate: an unverified contractor bounces to the verify modal', async () => {
-    // Minting is what trips the gate here, so a failed mint must land where a failed publish does.
-    vi.mocked(estimateShareApi.create).mockRejectedValue({
+  /** Share without verification (2026-11-09): copying needs no verified email, the letter does. */
+  it('an unverified contractor copies the link without the verify modal, then is offered the trial', async () => {
+    emailVerified.mockImplementation(() => Promise.resolve(false));
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    const onNeedEmailVerify = vi.fn();
+    renderSingle('e2', onNeedEmailVerify);
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
+
+    await waitFor(() => expect(estimateShareApi.markSent).toHaveBeenCalledWith('e2'));
+    expect(onNeedEmailVerify).not.toHaveBeenCalled();
+    expect(emailVerified).not.toHaveBeenCalled();
+    expect(trialOfferStore.pending()).toBe(true);
+  });
+
+  it('«надіслати листом» bounces an unverified contractor to the verify modal and sends nothing', async () => {
+    emailVerified.mockImplementation(() => Promise.resolve(false));
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    const onNeedEmailVerify = vi.fn();
+    renderSingle('e2', onNeedEmailVerify);
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Надіслати на/ }));
+
+    await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
+    expect(estimateShareApi.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('a 403 EMAIL_NOT_VERIFIED from the server still lands in the verify modal', async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    vi.mocked(estimateShareApi.sendEmail).mockRejectedValue({
       isAxiosError: true,
       response: { status: 403, data: { status: 403, code: 'EMAIL_NOT_VERIFIED', message: 'x' } },
     });
     const onNeedEmailVerify = vi.fn();
     renderSingle('e2', onNeedEmailVerify);
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Надіслати на/ }));
 
     await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
   });

@@ -10,6 +10,11 @@ import type { UserResponse } from '@/api/types.ts';
  * to leave for a client (V190). Registration no longer asks for it, and the backend refuses a share
  * link, a portal, a letter or a PDF without it (403 `SENDER_NAME_REQUIRED`, `SendReadiness`).
  *
+ * <p>The name is ALWAYS asked here, verified email or not (share-without-verification, 2026-11-09):
+ * what the master sends himself needs only the name. A verified email is asked only where WE send a
+ * letter — `useEmailGate` on the «надіслати листом» buttons, and `EMAIL_NOT_VERIFIED` from the
+ * server.</p>
+ *
  * <p>One sheet for the whole app ({@link SenderSheetHost}, mounted in `App`), opened from wherever a
  * document leaves: call {@link useSenderGate} before the action, and {@link isSenderNameRequired} on
  * a refusal the action got anyway (an older cache, another device).</p>
@@ -85,15 +90,10 @@ export function resetSenderReminder(): void {
 export interface SenderGateOptions {
   /** Offer the phone reminder. Off for a PDF. Default on. */
   remind?: boolean;
-  /** Leave an unverified email to the action's own email gate first (the backend checks the email,
-   *  then the name — asking the name first had him type it and then hear «підтвердіть email»).
-   *  Off for an act's paper signature and its PDF, which need no verified email. Default on. */
-  emailFirst?: boolean;
 }
 
-function wouldAskName(me: UserResponse | undefined, opts: SenderGateOptions): boolean {
-  if (hasSenderName(me)) return false;
-  return !(opts.emailFirst !== false && me?.emailVerified === false);
+function wouldAskName(me: UserResponse | undefined): boolean {
+  return !hasSenderName(me);
 }
 
 function wouldRemind(me: UserResponse | undefined, opts: SenderGateOptions): boolean {
@@ -103,7 +103,7 @@ function wouldRemind(me: UserResponse | undefined, opts: SenderGateOptions): boo
 /** Whether `ensureSender` would open a sheet right now — for a caller that must decide inside the
  *  tap (a PDF tab reserved by `openPdfTab`) without awaiting first. */
 export function senderGateWouldAsk(me: UserResponse | undefined, opts: SenderGateOptions = {}): boolean {
-  return wouldAskName(me, opts) || wouldRemind(me, opts);
+  return wouldAskName(me) || wouldRemind(me, opts);
 }
 
 /**
@@ -134,7 +134,7 @@ export function useSenderGate() {
         // Offline: the sheet says so when he tries to save.
       }
     }
-    if (wouldAskName(me, opts)) {
+    if (wouldAskName(me)) {
       onAsk?.();
       // The name sheet holds the phone field too: a reminder about it in the same session is a repeat.
       remindedThisSession = true;

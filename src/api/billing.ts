@@ -21,7 +21,8 @@ export const billingApi = {
   },
 
   /**
-   * Activate the one-time self-serve 5-day PRO trial (FREE only, no card).
+   * Activate the one-time self-serve PRO trial (FREE only, no card); its length is the server's
+   * `trialDays` (`/api/plan/limits`).
    * Returns the updated profile; the caller refreshes `me`. 409 TRIAL_UNAVAILABLE
    * if already used or not on FREE.
    */

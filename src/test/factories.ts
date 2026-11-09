@@ -76,6 +76,7 @@ export function aPlanLimits(overrides: Partial<PlanLimits> = {}): PlanLimits {
     maxEstimatesPerProject: 2,
     maxPhotosPerObject: 10,
     maxReceiptPhotosPerObject: 10,
+    trialDays: 30,
     ...overrides,
   };
 }

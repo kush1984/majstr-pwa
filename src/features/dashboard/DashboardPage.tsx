@@ -17,6 +17,7 @@ import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
 import { HelpOfferCard } from './HelpOfferCard.tsx';
+import { VerifiedTrialCard } from './VerifiedTrialCard.tsx';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -100,6 +101,7 @@ export function DashboardPage() {
         </Button>
       </div>
 
+      <VerifiedTrialCard />
       {projects.isSuccess && <HelpOfferCard hasObjects={projects.data.length > 0} />}
 
       {atProjectLimit && (

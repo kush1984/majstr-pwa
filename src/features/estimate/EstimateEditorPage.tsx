@@ -40,7 +40,6 @@ import { hasOnScreenKeyboard } from '@/lib/deviceInput.ts';
 import { speechAvailability } from '@/lib/speech.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { isSenderNameRequired, senderSheetStore, useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimateName } from './estimateName.ts';
 import { crewMarginOf } from './crewMargin.ts';
@@ -146,7 +145,6 @@ export function EstimateEditorPage() {
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [emailGateOpen, setEmailGateOpen] = useState(false);
-  const ensureEmailVerified = useEmailGate();
   const ensureSender = useSenderGate();
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -291,9 +289,7 @@ export function EstimateEditorPage() {
       setPdfSheetOpen(false);
     } catch (err) {
       const failure = toAppError(err);
-      if (failure.code === 'EMAIL_NOT_VERIFIED') {
-        setEmailGateOpen(true);
-      } else if (isSenderNameRequired(err)) {
+      if (isSenderNameRequired(err)) {
         // The cache said there was a name and the server disagrees: ask, then a fresh tap prints.
         setPdfSheetOpen(false);
         if (await senderSheetStore.request()) toast.info(t('sender.tapAgainPdf'));
@@ -332,15 +328,7 @@ export function EstimateEditorPage() {
     if (pdfLoading) return;
     // Reserved on the FIRST line: the checks below await, and on iOS that spends the tap (P1-18).
     const tab = reservePdfTab();
-    // The PDF is a client-facing deliverable and now requires a verified email
-    // (anti-abuse). Bounce an unverified master straight to the verify modal
-    // instead of firing a doomed request — but ask the server first, because a
-    // cached `false` outlives a verification done in the mail app's browser.
-    if (!(await ensureEmailVerified())) {
-      tab.cancel();
-      setEmailGateOpen(true);
-      return;
-    }
+    // No verified email needed: he hands the PDF over himself (share-without-verification).
     // The PDF prints his name (V190: registration no longer asks for it). The sheet spends the tap the
     // tab was reserved in, so a name given here prints on the NEXT tap.
     // A PDF is not a link to a client: no phone reminder before it (review — it cost three taps).
@@ -365,15 +353,9 @@ export function EstimateEditorPage() {
   };
 
   const onShare = async () => {
-    // Sharing reaches a client and requires a verified email — check upfront so an
-    // unverified master gets the verify prompt immediately, not a share dialog that
-    // dead-ends on every option. Confirmed against the server, see useEmailGate.
-    if (!(await ensureEmailVerified())) {
-      setEmailGateOpen(true);
-      return;
-    }
-    // …and the name the client will read on it (V190). A share sheet is no new tab, so it simply
-    // opens once the name is saved.
+    // The name the client will read on it (V190) is all sharing needs; the email is asked on the
+    // sheet's «надіслати листом» alone. A share sheet is no new tab, so it simply opens once the
+    // name is saved.
     if ((await ensureSender()) === 'cancelled') return;
     if (!(await estimateQueueClear())) return;
     setShareOpen(true);

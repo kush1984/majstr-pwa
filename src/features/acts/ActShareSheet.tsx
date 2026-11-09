@@ -13,6 +13,9 @@ import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
 import { actPortalApi } from '@/api/portal.ts';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
+import { useEmailGate } from '@/features/email/useEmailGate.ts';
+import { trialOfferStore } from '@/features/email/trialOffer.ts';
 
 /**
  * Share ONE act with the client (acts iteration, prompt 5). Publishing flips the act DRAFT→SENT and
@@ -29,6 +32,9 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   const [publishError, setPublishError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const nativeShare = canShareNatively();
+  // «Надіслати листом» is the one button here that needs a verified email: WE send that letter.
+  const ensureEmailVerified = useEmailGate();
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
   // Every caller passes an inline `onClose`, so a dependency on it re-ran the publish on each parent
   // render — and the publish itself invalidates the act, which re-renders the parent: a PUT per
   // refetch for as long as the sheet stayed open, each taking the row lock a portal signature needs
@@ -76,6 +82,7 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
       if (await shareNatively(url, t('acts.shareText')) === 'shared') {
         track('act_shared', { channel: 'share' });
         onClose();
+        trialOfferStore.afterSend();
       }
     } finally { setBusy(null); }
   };
@@ -90,6 +97,7 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         track('act_shared', { channel: 'link' });
         toast.success(t('estimate.linkCopied'));
         onClose();
+        trialOfferStore.afterSend();
       }
       else toast.error(t('estimate.linkCopyFailed'));
     } finally { setBusy(null); }
@@ -98,6 +106,11 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   const onEmail = async () => {
     setBusy('email');
     try {
+      if (!(await ensureEmailVerified())) {
+        onClose();
+        setEmailGateOpen(true);
+        return;
+      }
       await actPortalApi.sendEmail(actId);
       track('act_shared', { channel: 'email' });
       toast.success(t('estimate.emailSent'));
@@ -106,6 +119,9 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
       if (isSenderNameRequired(err)) {
         onClose();
         void senderSheetStore.request();
+      } else if (toAppError(err).code === 'EMAIL_NOT_VERIFIED') {
+        onClose();
+        setEmailGateOpen(true);
       } else {
         toast.error(toAppError(err).message);
       }
@@ -113,38 +129,41 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={t('acts.shareTitle')}>
-      <div className="space-y-3">
-        <p className="flex items-center gap-1 text-sm text-muted">
-          {t('acts.shareHint')}
-          <InfoPopover text={t('acts.shareLegalInfo')} />
-        </p>
-        {publishError && !publishing ? (
-          <Button variant="secondary" fullWidth onClick={() => setAttempt((n) => n + 1)}>
-            {t('portal.mintRetry')}
-          </Button>
-        ) : publishing || !url ? (
-          <div className="py-6 text-center text-brand"><Spinner /></div>
-        ) : (
-          <>
-            <Input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-            {/* A phone leads with the system share; copy stays as the fallback (review P1-8). */}
-            {nativeShare && (
-              <Button fullWidth loading={busy === 'share'} onClick={() => void onShare()}>{t('estimate.shareNative')}</Button>
-            )}
-            <Button fullWidth variant={nativeShare ? 'secondary' : 'primary'} loading={busy === 'copy'}
-              onClick={() => void onCopy()}>{t('estimate.copyLink')}</Button>
-            <div className="flex gap-2">
-              <Button variant="secondary" fullWidth loading={busy === 'email'} onClick={() => void onEmail()}>
-                {t('acts.shareEmail')}
-              </Button>
-              <Button variant="secondary" fullWidth onClick={() => window.open(url, '_blank')}>
-                {t('common.open')}
-              </Button>
-            </div>
+    <>
+      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+      <Modal open={open} onClose={onClose} title={t('acts.shareTitle')}>
+        <div className="space-y-3">
+          <p className="flex items-center gap-1 text-sm text-muted">
+            {t('acts.shareHint')}
+            <InfoPopover text={t('acts.shareLegalInfo')} />
+          </p>
+          {publishError && !publishing ? (
+            <Button variant="secondary" fullWidth onClick={() => setAttempt((n) => n + 1)}>
+              {t('portal.mintRetry')}
+            </Button>
+          ) : publishing || !url ? (
+            <div className="py-6 text-center text-brand"><Spinner /></div>
+          ) : (
+            <>
+              <Input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+              {/* A phone leads with the system share; copy stays as the fallback (review P1-8). */}
+              {nativeShare && (
+                <Button fullWidth loading={busy === 'share'} onClick={() => void onShare()}>{t('estimate.shareNative')}</Button>
+              )}
+              <Button fullWidth variant={nativeShare ? 'secondary' : 'primary'} loading={busy === 'copy'}
+                onClick={() => void onCopy()}>{t('estimate.copyLink')}</Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" fullWidth loading={busy === 'email'} onClick={() => void onEmail()}>
+                  {t('acts.shareEmail')}
+                </Button>
+                <Button variant="secondary" fullWidth onClick={() => window.open(url, '_blank')}>
+                  {t('common.open')}
+                </Button>
+              </div>
           </>
         )}
       </div>
     </Modal>
+    </>
   );
 }

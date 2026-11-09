@@ -109,6 +109,9 @@ export interface PlanLimits {
   maxPhotosPerObject: number | null;
   /** Receipt photos per object — a separate budget (null = unlimited). */
   maxReceiptPhotosPerObject: number | null;
+  /** Length of the one-time PRO trial, from the server's tariff config (`BILLING_TRIAL_DAYS`) — an
+   *  offer names it from here, never from a number typed in the app. */
+  trialDays: number;
 }
 
 export interface AuthResponse {
@@ -1789,6 +1792,9 @@ export interface WorkActResponse {
   payable: number;
   createdAt: string;
   updatedAt: string;
+  /** Set only by an offline signature whose client copy was held back: our letter needs a verified
+   *  email. The signature itself landed. */
+  clientCopyWithheld?: boolean;
 }
 
 export interface WorkActCreateRequest {

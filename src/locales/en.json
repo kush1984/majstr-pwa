@@ -931,6 +931,7 @@
     "signerName": "Signed by (client)",
     "signConfirm": "Confirm signing",
     "signed": "Act signed",
+    "clientCopyNeedsVerifiedEmail": "The client's copy was not sent — verify your email",
     "saved": "Act saved",
     "loadError": "Could not load the act",
     "offlineNotCachedTitle": "No connection",
@@ -1972,7 +1973,9 @@
     "enableAutoRenewNoCardHint": "No saved card yet. Paying for the next period saves it for auto-renewal — you can cancel anytime after.",
     "autoRenewOn": "Auto-renewal enabled",
     "autoRenewOff": "Auto-renewal off. PRO active until {{date}}",
-    "tryTrial": "Try PRO free for 30 days",
+    "tryTrial_one": "Try PRO free for {{count}} day",
+    "tryTrial_other": "Try PRO free for {{count}} days",
+    "tryTrialPlain": "Try PRO for free",
     "trialStarted": "PRO activated free until {{date}}",
     "proVerifyTitle": "Verify your email first",
     "proVerifyMessage": "PRO (both the free trial and a purchase) is available once your email is verified — that's how we send receipts and renewal reminders. It's one click on the email.",
@@ -2068,14 +2071,14 @@
   },
   "email": {
     "bannerTitle": "Confirm your email",
-    "bannerText": "We sent a letter to {{email}}. Confirm it to send estimates to clients.",
+    "bannerText": "We sent a letter to {{email}}. Verify your email to keep access to your account, take the PRO trial and send estimates to clients by email.",
     "resend": "Resend the email",
     "sentCheckInbox": "Email sent — check your inbox",
     "waitBeforeResend": "Wait{{seconds}} before resending",
     "waitBeforeResendShort": "Wait before resending",
     "waitSeconds": " {{seconds}} s",
     "modalTitle": "Confirm your email",
-    "modalText": "To send estimates to clients, first confirm your email. We'll send a letter with a link to your inbox.",
+    "modalText": "A letter to your client sent on your behalf, the PRO trial and payment need a verified email. Sharing a link in Viber or Telegram and downloading a PDF work without it. We will send a letter with a link to your inbox.",
     "sendLetter": "Send the email",
     "verifyTitle": "Email confirmation",
     "verifying": "Checking the link…",
@@ -2370,5 +2373,15 @@
     "thanks": "Thank you! We will call you soon.",
     "phoneInvalid": "Check the number, e.g. 067 123 45 67",
     "onlyForTheCall": "Only for the call — it does not appear on your documents."
+  },
+  "trialOffer": {
+    "title_one": "Verify your email — and you can turn on {{count}} day of PRO",
+    "title_other": "Verify your email — and you can turn on {{count}} days of PRO",
+    "body": "And send estimates to clients by email. The letter with the link goes to {{email}}."
+  },
+  "verifiedTrial": {
+    "title_one": "Email verified — turn on {{count}} day of PRO?",
+    "title_other": "Email verified — turn on {{count}} days of PRO?",
+    "enable": "Turn on for free"
   }
 }
