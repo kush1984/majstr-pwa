@@ -332,6 +332,43 @@ describe('ActEditorPage', () => {
     expect(vi.mocked(toast.info)).toHaveBeenCalledWith('Копію клієнту не надіслано — підтвердіть пошту', 8000);
   });
 
+  it('the sign dialog stays locked for the whole signature, the save before it included', async () => {
+    let saved: () => void = () => {};
+    vi.mocked(actsApi.updateHeader).mockReturnValueOnce(
+      new Promise((r) => { saved = () => r({} as WorkActResponse); }));
+    renderEditor();
+    const row = (await screen.findByText('Шпаклювання стін')).closest('.rounded-card') as HTMLElement;
+    fireEvent.click(within(row).getByRole('checkbox')); // an edit, so the save runs first
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Підписати'));
+    const name = await screen.findByPlaceholderText('Хто підписав (замовник)');
+    fireEvent.change(name, { target: { value: 'Олена' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Підтвердити підписання' }));
+
+    expect(screen.getByRole('button', { name: /Підтвердити підписання/ }).hasAttribute('disabled')).toBe(true);
+    expect(name.hasAttribute('disabled')).toBe(true);
+    expect((name as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryByText('✕')).toBeNull(); // the backdrop shares the label, but is disabled
+
+    saved();
+    await waitFor(() => expect(actsApi.signOffline).toHaveBeenCalled());
+  });
+
+  it('an act already saved as it stands signs without saving it again', async () => {
+    // Saved exactly as the screen shows it — the auto-title included, which is what a save stores.
+    vi.mocked(actsApi.get).mockResolvedValue({ ...draftAct(), title: 'Стіни', items: [item()], total: 2900, payable: 2900 });
+    renderEditor();
+    await screen.findByText('Шпаклювання стін');
+    fireEvent.click(screen.getByLabelText('Дії з актом'));
+    fireEvent.click(await screen.findByText('Підписати'));
+    fireEvent.change(await screen.findByPlaceholderText('Хто підписав (замовник)'), { target: { value: 'Олена' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Підтвердити підписання' }));
+
+    await waitFor(() => expect(actsApi.signOffline).toHaveBeenCalled());
+    expect(actsApi.updateHeader).not.toHaveBeenCalled();
+    expect(actsApi.replaceItems).not.toHaveBeenCalled();
+  });
+
   /**
    * A receipt the phone is still carrying may not be left out of a signature (review P-36).
    *

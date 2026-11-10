@@ -1133,6 +1133,7 @@
     "groupOut_one": "Spent · {{count}} entry",
     "groupOut_other": "Spent · {{count}} entries",
     "materialTitle": "Client's material",
+    "materialApart": "not part of «Earned»",
     "materialGiven": "gave {{amount}}",
     "materialBought": "bought {{amount}}",
     "materialOwes": "Client owes for material {{amount}}",

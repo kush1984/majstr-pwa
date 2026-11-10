@@ -194,6 +194,9 @@ export function ActEditorPage() {
   const [catalogPicker, setCatalogPicker] = useState(false);
   const [seeded, setSeeded] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
+  // The WHOLE signature — the receipt flush, the save and the sign itself — not only its last request:
+  // the button span only the sign, so for seconds the dialog looked idle and could be closed.
+  const [signing, setSigning] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -716,12 +719,22 @@ export function ActEditorPage() {
       toast.error(t('acts.fixFields'));
       return;
     }
+    setSigning(true);
+    try {
+      await signNow();
+    } finally {
+      setSigning(false);
+    }
+  });
+
+  const signNow = async () => {
     if (!(await queuedReceiptsClear())) return;
     selfSigning.current = true;
     try {
       // Persist current edits first so the signed act reflects the screen (creating it, if this is
-      // still «/acts/new» — the master may fill an act and sign it in one sitting).
-      const actId = await persist();
+      // still «/acts/new» — the master may fill an act and sign it in one sitting). Nothing changed
+      // = nothing to write: two round trips the signature waited on for no reason.
+      const actId = isNew || dirty ? await persist() : id;
       let signed;
       if (isNew) {
         signed = await actsApi.signOffline(actId, { signerName: signerName.trim() });
@@ -751,7 +764,7 @@ export function ActEditorPage() {
       }
       toast.error(toAppError(err).message);
     }
-  });
+  };
 
   /**
    * Both doors that hand the act to someone ELSE go through the same gate (review P-37).
@@ -1247,11 +1260,12 @@ export function ActEditorPage() {
         </div>
       )}
 
-      <Modal open={signOpen} onClose={() => setSignOpen(false)} title={t('acts.signTitle')}>
+      <Modal open={signOpen} onClose={() => setSignOpen(false)} dismissable={!signing} title={t('acts.signTitle')}>
         <div className="space-y-3">
           <p className="text-sm text-muted">{t('acts.signHint')}</p>
-          <Input placeholder={t('acts.signerName')} value={signerName} onChange={(e) => setSignerName(e.target.value)} />
-          <Button fullWidth loading={signOffline.isPending} disabled={!signerName.trim() || !hasLines} onClick={() => void onSign()}>
+          <Input placeholder={t('acts.signerName')} value={signerName} disabled={signing}
+            onChange={(e) => setSignerName(e.target.value)} />
+          <Button fullWidth loading={signing} disabled={!signerName.trim() || !hasLines} onClick={() => void onSign()}>
             {t('acts.signConfirm')}
           </Button>
         </div>

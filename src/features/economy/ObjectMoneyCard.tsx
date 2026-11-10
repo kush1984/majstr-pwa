@@ -173,22 +173,30 @@ function MaterialLine({ money, onOpen }: { money: ObjectMoneyResponse; onOpen: (
     : outstanding < 0
       ? t('money.materialLeft', { amount: formatMoney(-outstanding) })
       : t('money.materialSettled');
+  // Its own block under a divider, captioned as apart from «Заробив»: right under the total, the
+  // tinted box read as part of the master's earnings (master feedback).
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={
-        'mt-3 block w-full rounded-xl border px-3 py-2 text-left '
-        + (outstanding > 0 ? 'border-warning/40 bg-warning/10' : 'border-border bg-surface-sunken')
-      }
-    >
-      <span className="block text-xs text-muted">
-        🧾 {t('money.materialTitle')}: {t('money.materialGiven', { amount: formatMoney(given) })}
-        {' · '}{t('money.materialBought', { amount: formatMoney(bought) })}
-        {(toActs ?? 0) > 0 && <>{' · '}{t('money.materialToActs', { amount: formatMoney(toActs ?? 0) })}</>}
-      </span>
-      <span className="mt-0.5 block text-sm font-semibold text-primary">{verdict}</span>
-    </button>
+    <div className="mt-3 border-t border-dashed border-border pt-3">
+      <p className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-semibold text-muted">🧾 {t('money.materialTitle')}</span>
+        <span className="text-faint">{t('money.materialApart')}</span>
+      </p>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={
+          'block w-full rounded-xl border px-3 py-2 text-left '
+          + (outstanding > 0 ? 'border-warning/40 bg-warning/10' : 'border-border bg-surface-sunken')
+        }
+      >
+        <span className="block text-xs text-muted">
+          {t('money.materialGiven', { amount: formatMoney(given) })}
+          {' · '}{t('money.materialBought', { amount: formatMoney(bought) })}
+          {(toActs ?? 0) > 0 && <>{' · '}{t('money.materialToActs', { amount: formatMoney(toActs ?? 0) })}</>}
+        </span>
+        <span className="mt-0.5 block text-sm font-semibold text-primary">{verdict}</span>
+      </button>
+    </div>
   );
 }
 

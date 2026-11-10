@@ -1152,6 +1152,7 @@
     "groupOut_many": "Витрачено · {{count}} записів",
     "groupOut_other": "Витрачено · {{count}} запису",
     "materialTitle": "Матеріал клієнта",
+    "materialApart": "не входить у «Заробив»",
     "materialGiven": "дав {{amount}}",
     "materialBought": "куплено {{amount}}",
     "materialOwes": "Клієнт винен за матеріал {{amount}}",
