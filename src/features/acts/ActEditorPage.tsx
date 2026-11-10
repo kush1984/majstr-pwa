@@ -809,12 +809,19 @@ export function ActEditorPage() {
   const onPdf = once(async () => {
     // Reserved BEFORE the save: on iOS the first await spends the tap, and a tab opened after it is
     // dropped without a word (review P1-18). Closed again if the save does not let us through.
-    const tab = reservePdfTab();
-    // «Виконавець» prints his name. A sheet spends the tap the tab was reserved in, so a name given
-    // here prints on the next tap.
-    const sender = await ensureSender(() => tab.cancel(), { remind: false });
-    if (sender !== 'ready') {
-      // Saved or skipped, the sheet spent the tap the tab was reserved in.
+    let tab = reservePdfTab();
+    // «Виконавець» prints his name. A sheet spends the tap the tab was reserved in; its «Зберегти і
+    // продовжити» reserves a new one, and the PDF goes on.
+    let carriedOn = false;
+    const sender = await ensureSender(() => tab.cancel(), {
+      remind: false,
+      onContinueTap: () => {
+        tab = reservePdfTab();
+        carriedOn = true;
+        return () => tab.cancel();
+      },
+    });
+    if (sender === 'cancelled' || (sender !== 'ready' && !carriedOn)) {
       if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
       return;
     }

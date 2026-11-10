@@ -367,6 +367,14 @@ export interface ProjectResponse {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The training sample «Приклад: …» (V197): badged, deletable at any stage, read by no figure.
+   *  Optional so a cached object from before reads as a real one. */
+  sample?: boolean;
+}
+
+/** Mirrors SampleProjectRequest: the trade just picked on «Чим займаєтесь?»; absent = the server picks. */
+export interface SampleProjectRequest {
+  trade?: Trade;
 }
 
 export interface ProjectRequest {
@@ -744,6 +752,9 @@ export interface CatalogItemResponse {
    *  always sends this (empty array when nothing is shared) — optional here only so fixtures/
    *  optimistic objects that predate this field don't all need updating. */
   sharedTrades?: SharedTrade[];
+  /** A position we shipped for a trade he has taken off his profile: kept with his price and
+   *  still priced from, but left off the catalog screen and the pickers (`useVisibleCatalog`). */
+  hidden?: boolean;
 }
 
 /** One foreign trade that ships a position, and the category IT files that position under.
@@ -1887,6 +1898,19 @@ export interface ShareLinkResponse {
   createdAt: string;
   expiresAt: string | null;
   revoked: boolean;
+}
+
+/** Mirrors ClientPreviewResponse: the client's page for one estimate through a ten-minute preview
+ *  pass (`?v=`). Not a share link — nothing is minted, nothing is marked sent. */
+export interface ClientPreviewResponse {
+  url: string;
+  expiresAt: string;
+}
+
+/** Mirrors PortalPreviewRequest: the estimates ticked in the object's share sheet RIGHT NOW — a
+ *  preview of them publishes nothing. */
+export interface PortalPreviewRequest {
+  estimateIds: string[];
 }
 
 // ---------------------------------------------------------------------------

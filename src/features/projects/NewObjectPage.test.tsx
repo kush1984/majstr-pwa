@@ -7,6 +7,8 @@ import { NewObjectPage } from './NewObjectPage.tsx';
 import { projectsApi } from '@/api/projects.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { clientsApi } from '@/api/clients.ts';
+import { planApi } from '@/api/plan.ts';
+import { tokens } from '@/lib/tokens.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 
 const navigateMock = vi.fn();
@@ -119,5 +121,33 @@ describe('NewObjectPage — the one creation form (object-first)', () => {
     expect(screen.queryByText('З шаблону')).toBeNull();
     expect(screen.getByRole('button', { name: /Клієнт — необов/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Створити обʼєкт' })).toBeTruthy();
+  });
+});
+
+describe('NewObjectPage — the FREE object cap', () => {
+  const free = (projectsUsed: number) => ({
+    plan: 'FREE' as const, maxProjects: 2, projectsUsed, maxEstimatesPerProject: null,
+    maxPhotosPerObject: null, maxReceiptPhotosPerObject: null, trialDays: 7,
+  });
+
+  beforeEach(() => { vi.spyOn(tokens, 'hasAny').mockReturnValue(true); });
+
+  it('at the cap the banner names the count, never a raw {{used}}', async () => {
+    vi.mocked(planApi.limits).mockResolvedValue(free(2));
+
+    renderPage();
+
+    expect(await screen.findByText(/ви створили 2/)).toBeTruthy();
+    expect(screen.queryByText(/\{\{/)).toBeNull();
+  });
+
+  it('reads the lifetime count, not the list: the sample in the list does not block', async () => {
+    vi.mocked(planApi.limits).mockResolvedValue(free(1));
+    vi.mocked(projectsApi.list).mockResolvedValue([proj, { ...proj, id: 's1', sample: true }]);
+
+    renderPage();
+
+    await waitFor(() => expect(planApi.limits).toHaveBeenCalled());
+    expect(screen.queryByText(/ви створили/)).toBeNull();
   });
 });

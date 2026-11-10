@@ -18,6 +18,7 @@ import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
 import { HelpOfferCard } from './HelpOfferCard.tsx';
 import { VerifiedTrialCard } from './VerifiedTrialCard.tsx';
+import { useSampleProject } from '@/features/projects/useSampleProject.ts';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export function DashboardPage() {
   const metrics = useDashboardMetrics();
   const projects = useProjects();
   const limits = usePlanLimits();
+  const sample = useSampleProject();
   // The global CTA creates a NEW object, so the FREE object cap gates it — same
   // as the Об'єкти list. Without this the button led to /new and a dead-end
   // (form fills, "Створити" disabled).
@@ -52,6 +54,8 @@ export function DashboardPage() {
   };
 
   const isEmpty = projects.isSuccess && projects.data.length === 0;
+  // The training sample (V197) is read by no figure, so with only it the metrics would be three zeros.
+  const noRealObject = projects.isSuccess && projects.data.every((p) => p.sample === true);
 
   // Full outage (both dashboard queries failed) → one page-level error with a
   // single retry instead of two stacked error blocks. A query that failed but still HAS cached
@@ -111,8 +115,9 @@ export function DashboardPage() {
       )}
 
       {/* Metrics: 2 on mobile, 3 on desktop. An error shows an honest compact
-          strip — silently rendering "0 активних" during an outage would lie. */}
-      {metrics.isError && !metrics.data ? (
+          strip — silently rendering "0 активних" during an outage would lie. None at all before the
+          first object: three zeros are all a newcomer would read, above the one thing to do. */}
+      {noRealObject ? null : metrics.isError && !metrics.data ? (
         <div className="mb-5 flex items-center justify-between gap-3 rounded-card border border-border bg-surface p-4">
           <p className="text-sm text-muted">⚠️ {t('dashboard.metricsError')}</p>
           <Button variant="secondary" onClick={() => void metrics.refetch()}>
@@ -184,7 +189,17 @@ export function DashboardPage() {
           icon="📋"
           title={t('dashboard.createFirstTitle')}
           text={t('dashboard.createFirstText')}
-          action={<Button onClick={newObject}>{t('dashboard.createFirstAction')}</Button>}
+          action={
+            <div className="flex flex-col items-center gap-2">
+              <Button onClick={newObject}>{t('dashboard.createFirstAction')}</Button>
+              {/* A newcomer afraid of spending one of two free objects tries the app on this instead. */}
+              <Button variant="secondary" loading={sample.creating} disabled={!sample.online}
+                title={sample.offlineTitle} onClick={() => sample.open()}>
+                {t('sample.open')}
+              </Button>
+              <p className="max-w-xs text-center text-xs text-muted">{t('sample.openHint')}</p>
+            </div>
+          }
         />
       ) : (
         <div className="lg:grid lg:grid-cols-[1.6fr_1fr] lg:items-start lg:gap-5">

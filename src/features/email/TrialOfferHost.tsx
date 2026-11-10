@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
-import { toast, useToast } from '@/hooks/useToast.ts';
+import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
@@ -21,9 +21,9 @@ const isVisible = () => document.visibilityState === 'visible';
  * the whole app. N is the server's configured trial length (`/api/plan/limits` → `trialDays`), never
  * a number typed here — without it the card waits for the next send rather than guess.
  *
- * <p>It opens only when the page is VISIBLE and NO toast is on screen: «Поділитися» to Viber leaves
- * the app, so the card waits for his return; «Копіювати» shows «Скопійовано», so it waits for that to
- * fade. No fixed delay, and the toasts themselves are untouched.</p>
+ * <p>It opens only when the page is VISIBLE: «Поділитися» to Viber leaves the app, so the card waits
+ * for his return. It no longer waits for «Скопійовано» to fade — while a sheet is open the toasts sit
+ * at the top (`lib/openSheets.ts`), so the two never share the bottom of the screen.</p>
  */
 export function TrialOfferHost() {
   const { t } = useTranslation();
@@ -31,7 +31,6 @@ export function TrialOfferHost() {
   const { data: me } = useMe();
   const { data: limits } = usePlanLimits();
   const resend = useResendVerification();
-  const { toasts } = useToast();
   const visible = useSyncExternalStore(subscribeVisibility, isVisible, () => true);
   const [armed, setArmed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -45,10 +44,10 @@ export function TrialOfferHost() {
   }, [pending, me, limits]);
 
   useEffect(() => {
-    if (!armed || !visible || toasts.length > 0) return;
+    if (!armed || !visible) return;
     setArmed(false);
     setOpen(true);
-  }, [armed, visible, toasts.length]);
+  }, [armed, visible]);
 
   if (!me || !limits?.trialDays) return null;
 

@@ -17,7 +17,7 @@ import {
   resolveClientId,
   type ClientDraft,
 } from '@/features/clients/ClientPicker.tsx';
-import { useCreateProject, useProjects } from '@/features/projects/useProjects.ts';
+import { useCreateProject } from '@/features/projects/useProjects.ts';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
@@ -32,9 +32,9 @@ export function NewObjectPage() {
   const { t } = useTranslation();
   const createClient = useCreateClient();
   const createProject = useCreateProject();
-  const projects = useProjects();
   const limits = usePlanLimits();
-  const atProjectLimit = isAtLimit(projects.data?.length ?? 0, limits.data?.maxProjects);
+  // The cap counts objects EVER made (V107), not the list: a deleted one still counts, the sample never does.
+  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
 
   // Kept in the tab's session until the object is created (review P1-2).
   const [clientDraft, setClientDraft] = useSessionDraft<ClientDraft>('newObject.client', emptyClientDraft);
@@ -48,7 +48,7 @@ export function NewObjectPage() {
   const submit = async () => {
     if (busy) return;
     if (atProjectLimit) {
-      toast.error(t('limits.objectsHint', { max: limits.data?.maxProjects }));
+      toast.error(t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed }));
       return;
     }
     const clientErr = clientDraftError(clientDraft);
@@ -142,7 +142,7 @@ export function NewObjectPage() {
         </section>
 
         {atProjectLimit && (
-          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects })} trigger="OBJECT_LIMIT" />
+          <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
         )}
         <Button
           fullWidth

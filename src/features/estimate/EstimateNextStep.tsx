@@ -34,6 +34,9 @@ export function EstimateNextStep({
   showMaterials,
   onPdf,
   pdfLoading = false,
+  zeroCount = 0,
+  onPreview,
+  previewOpening = false,
 }: {
   status: EstimateStatus;
   /** When the client signed it; absent on anything but a SIGNED estimate. */
@@ -48,6 +51,12 @@ export function EstimateNextStep({
   onPdf: () => void;
   /** The PDF is being made — the row says so and ignores a second tap (review P1-17). */
   pdfLoading?: boolean;
+  /** Works/materials with no quantity — said under the hint, so the master is not surprised by the
+   *  question «Прибрати?» when he taps the button. Never on a signed estimate. */
+  zeroCount?: number;
+  /** «Подивитися, як побачить клієнт»; absent where the server has no client page (an ADDENDUM). */
+  onPreview?: () => void;
+  previewOpening?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -82,6 +91,11 @@ export function EstimateNextStep({
     >
       <h2 className="text-[15px] font-bold leading-snug text-primary">{title}</h2>
       <p className="mt-1 text-xs leading-snug text-muted">{hint}</p>
+      {!signed && zeroCount > 0 && (
+        <p data-testid="estimate-zero-lines" className="mt-1 text-xs font-semibold leading-snug text-amber-strong">
+          {t('estimate.nextStep.zeroLines', { count: zeroCount })}
+        </p>
+      )}
       {primary && (
         <Button fullWidth className="mt-3.5 min-h-[48px] text-[15px] font-semibold" onClick={primary.onClick}>
           {primary.label}
@@ -91,6 +105,10 @@ export function EstimateNextStep({
           target is the whole line rather than the words. */}
       <div className="mt-1.5 flex flex-col">
         {/* Absent, not disabled: on a trade V127 has no norms for there is nothing to explain. */}
+        {onPreview && (
+          <SecondaryAction icon="👁" label={t('estimate.nextStep.preview')} onClick={onPreview}
+            disabled={previewOpening} />
+        )}
         {showMaterials && (
           <SecondaryAction icon="🧮" label={t('estimate.nextStep.materials')} onClick={onMaterials} />
         )}

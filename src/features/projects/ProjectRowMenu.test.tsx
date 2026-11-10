@@ -216,3 +216,37 @@ describe('ProjectRowMenu — a delete the server refuses (objects-list)', () => 
     await waitFor(() => expect(screen.queryByText('Цей обʼєкт не можна видалити')).toBeNull());
   });
 });
+
+describe('ProjectRowMenu — the training sample (V197)', () => {
+  it('is deleted at ANY stage, as «Видалити приклад», while a live real object offers no delete', async () => {
+    vi.mocked(projectsApi.remove).mockResolvedValue(undefined);
+    renderMenu(project({ sample: true }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Дії/ }));
+    fireEvent.click(await screen.findByText('Видалити приклад'));
+    const dialog = await screen.findByRole('dialog', { name: 'Видалити приклад?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Видалити приклад' }));
+
+    await waitFor(() => expect(projectsApi.remove).toHaveBeenCalledWith('p1'));
+  });
+
+  it('a live REAL object still offers no delete in the row', async () => {
+    renderMenu(project());
+    fireEvent.click(screen.getByRole('button', { name: /Дії/ }));
+    await screen.findByRole('menuitem', { name: /Скопіювати посилання/ });
+    expect(screen.queryByText('Видалити обʼєкт')).toBeNull();
+    expect(screen.queryByText('Видалити приклад')).toBeNull();
+  });
+
+  it('the card says «Приклад», a real object’s does not', () => {
+    const qc = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}><MemoryRouter><ProjectCard project={project({ sample: true })} /></MemoryRouter></QueryClientProvider>,
+    );
+    expect(screen.getByTestId('sample-badge').textContent).toBe('Приклад');
+    rerender(
+      <QueryClientProvider client={qc}><MemoryRouter><ProjectCard project={project()} /></MemoryRouter></QueryClientProvider>,
+    );
+    expect(screen.queryByTestId('sample-badge')).toBeNull();
+  });
+});

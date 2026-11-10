@@ -14,11 +14,18 @@ import { useMe } from '@/features/auth/useMe.ts';
 import { useAddCustomTrade, useUpdateTrades } from '@/features/profile/useProfile.ts';
 import type { Trade } from '@/api/types.ts';
 import { needsTradesScreen, rememberTradesAnswer, type PendingTradesAnswer } from './tradesOnboarding.ts';
+import { useSampleProject } from '@/features/projects/useSampleProject.ts';
 
 /** Where to go once he has answered — the screen that sent him here, else home. */
 function returnTo(state: unknown): string {
   const from = (state as { from?: unknown } | null)?.from;
   return typeof from === 'string' && from.startsWith('/') && from !== routes.welcome ? from : routes.home;
+}
+
+/** What the sending screen asked to get back once a trade is saved — the empty template picker
+ *  wants itself reopened, so choosing a trade carries the new estimate on instead of ending it. */
+function resumeState(state: unknown): unknown {
+  return (state as { resume?: unknown } | null)?.resume ?? null;
 }
 
 /**
@@ -42,6 +49,7 @@ export function TradesOnboardingPage() {
   const { data: me } = useMe();
   const updateTrades = useUpdateTrades();
   const addCustomTrade = useAddCustomTrade();
+  const sample = useSampleProject();
 
   const [picked, setPicked] = useState<Trade[]>(() => me?.trades ?? []);
   const [customNames, setCustomNames] = useState<string[]>([]);
@@ -60,7 +68,8 @@ export function TradesOnboardingPage() {
 
   const existingCustom = me?.customTrades ?? [];
   const nothingChosen = picked.length === 0 && customNames.length === 0 && existingCustom.length === 0;
-  const done = () => void navigate(returnTo(location.state), { replace: true });
+  const done = (resume = false) =>
+    void navigate(returnTo(location.state), { replace: true, state: resume ? resumeState(location.state) : null });
 
   /** No connection: the answer waits on the device (`useTradesAnswerSync`) and he goes on into the app. */
   const keptOffline = (err: unknown, answer: PendingTradesAnswer): boolean => {
@@ -82,20 +91,26 @@ export function TradesOnboardingPage() {
     setAddingCustom(false);
   };
 
+  /** The answer itself — «Далі» and «Подивитися приклад» both save it first. */
+  const saveTrades = async () => {
+    await updateTrades.mutateAsync({ trades: picked });
+    for (const name of customNames) {
+      try {
+        await addCustomTrade.mutateAsync(name);
+      } catch (err) {
+        // A duplicate (an older tab added it) is fine — the trade exists either way.
+        if (toAppError(err).status !== 409) throw err;
+      }
+    }
+  };
+
   const onSave = async () => {
     setSaving(true);
     try {
-      await updateTrades.mutateAsync({ trades: picked });
-      for (const name of customNames) {
-        try {
-          await addCustomTrade.mutateAsync(name);
-        } catch (err) {
-          // A duplicate (an older tab added it) is fine — the trade exists either way.
-          if (toAppError(err).status !== 409) throw err;
-        }
-      }
+      await saveTrades();
       if (picked.length > 0) toast.success(t('onboarding.trades.saved'));
-      done();
+      // Only a trade brings bundles; a custom-only answer has none to reopen the picker on.
+      done(picked.length > 0);
     } catch (err) {
       if (keptOffline(err, { trades: picked, customNames })) {
         toast.info(t('onboarding.trades.savedOffline'));
@@ -218,6 +233,15 @@ export function TradesOnboardingPage() {
           <Button fullWidth disabled={nothingChosen} loading={saving} onClick={() => void onSave()}>
             {t('onboarding.trades.next')}
           </Button>
+          {/* After the trade: the same answer saved, then a ready estimate of THAT trade to look at —
+              outside the two free objects. Online only (the server fills it). */}
+          {picked.length > 0 && (
+            <Button variant="secondary" fullWidth className="mt-2" loading={sample.creating}
+              disabled={saving || !sample.online} title={sample.offlineTitle}
+              onClick={() => sample.open(picked[0], saveTrades)}>
+              {t('sample.openForTrade')}
+            </Button>
+          )}
           <button
             type="button"
             className="mt-2 w-full py-1.5 text-center text-sm text-muted underline"

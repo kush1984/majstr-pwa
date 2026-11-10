@@ -141,3 +141,32 @@ describe('FillQuantitiesHint', () => {
     expect(onGo).toHaveBeenCalledOnce();
   });
 });
+
+describe('EstimateNextStep — before it leaves (iteration-first-experience)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('says how many lines have no quantity, but never on a signed estimate', () => {
+    const { unmount } = render(<EstimateNextStep status="DRAFT" onShare={onShare} onMaterials={onMaterials}
+      showMaterials={false} onPdf={onPdf} zeroCount={3} />);
+    expect(screen.getByTestId('estimate-zero-lines').textContent).toBe('3 позиції без кількості');
+    unmount();
+
+    render(<EstimateNextStep status="SIGNED" onShare={onShare} onMaterials={onMaterials}
+      showMaterials={false} onPdf={onPdf} zeroCount={3} />);
+    expect(screen.queryByTestId('estimate-zero-lines')).toBeNull();
+  });
+
+  it('offers the client preview as a quiet row, and only when there is one to open', () => {
+    const onPreview = vi.fn();
+    const { unmount } = render(<EstimateNextStep status="DRAFT" onShare={onShare} onMaterials={onMaterials}
+      showMaterials={false} onPdf={onPdf} onPreview={onPreview} />);
+    fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
+    expect(onPreview).toHaveBeenCalled();
+    expect(onShare).not.toHaveBeenCalled();
+    unmount();
+
+    render(<EstimateNextStep status="DRAFT" onShare={onShare} onMaterials={onMaterials}
+      showMaterials={false} onPdf={onPdf} />);
+    expect(screen.queryByRole('button', { name: /Подивитися, як побачить клієнт/ })).toBeNull();
+  });
+});

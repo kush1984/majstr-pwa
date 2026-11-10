@@ -104,10 +104,13 @@ test('новий майстер: чесний дашборд + FREE-план + �
 }) => {
   await registerMaster(page, 'journey');
 
-  // Step 3 — dashboard metric cards render the honest zero state, NOT an error.
+  // Step 3 — a newcomer's dashboard: no error, and no metric cards before the first object
+  // (three zeros over the one thing to do — iteration-first-experience); the empty state says
+  // only a name is needed.
   await expect(page.getByText('Не вдалося завантажити показники')).toHaveCount(0);
-  await expect(page.getByText('Активних')).toBeVisible();
-  await expect(page.getByText('Очікує')).toBeVisible();
+  await expect(page.getByText('Почніть з назви — адресу й клієнта можна додати потім.')).toBeVisible();
+  await expect(page.getByText('Активних')).toHaveCount(0);
+  await expect(page.getByText('Очікує')).toHaveCount(0);
   await expect(page.getByText('Електрика').first()).toBeVisible(); // chosen trade
 
   // Step 3 — profile shows FREE plan + "0 з 2" object limit + the trade.

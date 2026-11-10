@@ -295,3 +295,17 @@ describe('CatalogPage — trade is a level, not a filter', () => {
       .toEqual(['t1', 't2', 't3', 't4', 't5']);
   });
 });
+
+describe('CatalogPage — a trade taken off the profile', () => {
+  it('leaves that trade’s shipped positions off the screen, keeping what he typed', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([
+      { ...item, id: 'h1', name: 'Позиція прибраного напряму', hidden: true },
+      { ...item, id: 'v1', name: 'Моя позиція' },
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText('Моя позиція')).toBeTruthy();
+    expect(screen.queryByText('Позиція прибраного напряму')).toBeNull();
+  });
+});

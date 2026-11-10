@@ -15,6 +15,7 @@ import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { estimatesApi } from '@/api/estimates.ts';
+import { estimateShareApi } from '@/api/portal.ts';
 import { reservePdfTab, type PdfTab } from '@/lib/openPdfTab.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { flushOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
@@ -27,7 +28,6 @@ import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
 import { TradeSelect, type TradeChoice } from './TradeSelect.tsx';
 import { useProject } from '@/features/projects/useProjects.ts';
-import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
 import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
@@ -51,6 +51,7 @@ import type { InlineCommit } from './InlineItemBody.tsx';
 import { itemRequest } from './inlineItem.ts';
 import {
   useEstimate,
+  useAddItem,
   useRemoveItem,
   useDeleteItems,
   useMarkUpItems,
@@ -66,6 +67,8 @@ import { useSaveAsTemplate } from './useEstimateTemplates.ts';
 import { usePhotos } from '@/features/photos/usePhotos.ts';
 import { useMaterialsAvailability } from '@/features/materials/useMaterialsAvailability.ts';
 import { ReceiptPdfSheet } from './ReceiptPdfSheet.tsx';
+import { ZeroQuantitySheet, zeroQuantityLines } from './ZeroQuantitySheet.tsx';
+import { useClientPreview } from './useClientPreview.ts';
 
 // Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
 // iteration) — the backend endpoint and this component's own handler/dialog stay fully wired so
@@ -144,7 +147,6 @@ export function EstimateEditorPage() {
   };
   const [deletingItem, setDeletingItem] = useState<EstimateItemResponse | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const [emailGateOpen, setEmailGateOpen] = useState(false);
   const ensureSender = useSenderGate();
   const [editOpen, setEditOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -165,6 +167,11 @@ export function EstimateEditorPage() {
   const [markupOpen, setMarkupOpen] = useState(false);
   const [itemMarkupOpen, setItemMarkupOpen] = useState(false);
   const deleteItems = useDeleteItems(id);
+  const addItem = useAddItem(id);
+  // «N позицій без кількості» before the estimate leaves: which action asked, and whether the
+  // master already said «Залишити як є» on this estimate (then it is not asked again).
+  const [zeroAsk, setZeroAsk] = useState<'share' | 'pdf' | null>(null);
+  const [zeroKept, setZeroKept] = useState(false);
   const markUpItems = useMarkUpItems(id);
   const duplicate = useDuplicateEstimate(id);
   // Materials are bought at cost and passed through, and a «%» line rises with the base it measures
@@ -189,7 +196,9 @@ export function EstimateEditorPage() {
 
   // The route component is reused across estimates, so drop the highlight set when the id changes —
   // yesterday's edits must not glow on a different sheet.
-  useEffect(() => { setTouched(new Set()); setLastTouched(new Set()); scrollTo.current = null; }, [id]);
+  useEffect(() => {
+    setTouched(new Set()); setLastTouched(new Set()); scrollTo.current = null; setZeroKept(false);
+  }, [id]);
 
   // Runs on BOTH the mark and the refetch, because their order is not fixed: an offline add is in the
   // cache before `markTouched`, an online one lands after it. Whichever renders the row last finds it
@@ -218,6 +227,27 @@ export function EstimateEditorPage() {
     setDictationOpen(false);
     setReceiptOpen(false);
   }, [signedNow]);
+
+  /**
+   * Nothing the master changed offline may be missing from what leaves the app (review P-62, the
+   * act's own rule since P-37): the PDF and the share link are rendered by the SERVER, from what it
+   * holds. Flush, and refuse while an op on this estimate — or one that waits on it — is left.
+   */
+  const estimateQueueClear = async (): Promise<boolean> => {
+    const touching = async () => (await listOutbox())
+      .filter((op) => op.entityId === id || op.deps.includes(id)).length;
+    if (await touching() === 0) return true;
+    await flushOutbox();
+    const left = await touching();
+    if (left > 0) {
+      toast.error(t('estimate.changesNotSynced', { count: left }));
+      return false;
+    }
+    return true;
+  };
+
+  const preview = useClientPreview(
+    () => estimateShareApi.clientPreview(id).then((r) => r.url), estimateQueueClear);
 
   if (estimate.isPending) {
     return (
@@ -272,6 +302,46 @@ export function EstimateEditorPage() {
   );
   const otherPhotos = (photos.data ?? []).filter((p) => p.source === 'MANUAL');
 
+  // A sheet that sums to 0 ₴ keeps «Заповніть кількість» instead — there is nothing to send yet.
+  const zeroLines = zeroQuantityLines(est);
+  const askAboutZeroLines = () => zeroLines.length > 0 && est.total > 0 && !zeroKept;
+
+  const continueAfterZero = (asked: 'share' | 'pdf', removed: number | null) => {
+    if (asked === 'share') {
+      void onShare(true);
+    } else if (removed === null) {
+      // The question spent the tap the PDF tab would have been opened in.
+      toast.info(t('sender.tapAgainPdf'));
+    }
+  };
+
+  const removeZeroLines = () => {
+    const asked = zeroAsk;
+    const lines = zeroLines;
+    deleteItems.mutate(lines.map((l) => l.id), {
+      onSuccess: () => {
+        setZeroAsk(null);
+        // Undo puts the lines back as they were — through the same offline queue the delete used.
+        toastUndoable(
+          t(asked === 'pdf' ? 'estimate.zeroLines.removedTapPdf' : 'estimate.zeroLines.removed',
+            { count: lines.length }),
+          () => lines.forEach((l) => addItem.mutate(itemRequest(l), {
+            onError: (err) => toast.error(toAppError(err).message),
+          })),
+        );
+        if (asked) continueAfterZero(asked, lines.length);
+      },
+      onError: (err) => toast.error(toAppError(err).message),
+    });
+  };
+
+  const keepZeroLines = () => {
+    const asked = zeroAsk;
+    setZeroKept(true);
+    setZeroAsk(null);
+    if (asked) continueAfterZero(asked, null);
+  };
+
   // Returns to the SAME object tab the master opened this estimate from (economy-nav-and-discount
   // iteration) — `fromTab` came in on this page's own URL, so this works identically whether the
   // master uses this in-app button or the browser's own back (which restores that URL directly).
@@ -305,36 +375,30 @@ export function EstimateEditorPage() {
     }
   };
 
-  /**
-   * Nothing the master changed offline may be missing from what leaves the app (review P-62, the
-   * act's own rule since P-37): the PDF and the share link are rendered by the SERVER, from what it
-   * holds. Flush, and refuse while an op on this estimate — or one that waits on it — is left.
-   */
-  const estimateQueueClear = async (): Promise<boolean> => {
-    const touching = async () => (await listOutbox())
-      .filter((op) => op.entityId === id || op.deps.includes(id)).length;
-    if (await touching() === 0) return true;
-    await flushOutbox();
-    const left = await touching();
-    if (left > 0) {
-      toast.error(t('estimate.changesNotSynced', { count: left }));
-      return false;
-    }
-    return true;
-  };
-
   const onPdf = async () => {
     // One PDF at a time — a second tap while it is being made used to open a second tab (P1-17).
     if (pdfLoading) return;
+    // Before the tab is reserved: the question spends this tap, the next one prints.
+    if (askAboutZeroLines()) {
+      setZeroAsk('pdf');
+      return;
+    }
     // Reserved on the FIRST line: the checks below await, and on iOS that spends the tap (P1-18).
-    const tab = reservePdfTab();
+    let tab = reservePdfTab();
     // No verified email needed: he hands the PDF over himself (share-without-verification).
     // The PDF prints his name (V190: registration no longer asks for it). The sheet spends the tap the
-    // tab was reserved in, so a name given here prints on the NEXT tap.
+    // tab was reserved in; its «Зберегти і продовжити» reserves a new one, and the PDF goes on.
     // A PDF is not a link to a client: no phone reminder before it (review — it cost three taps).
-    const sender = await ensureSender(() => tab.cancel(), { remind: false });
-    if (sender !== 'ready') {
-      // Saved or skipped, the sheet spent the tap the tab was reserved in.
+    let carriedOn = false;
+    const sender = await ensureSender(() => tab.cancel(), {
+      remind: false,
+      onContinueTap: () => {
+        tab = reservePdfTab();
+        carriedOn = true;
+        return () => tab.cancel();
+      },
+    });
+    if (sender === 'cancelled' || (sender !== 'ready' && !carriedOn)) {
       if (sender !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
       return;
     }
@@ -352,7 +416,12 @@ export function EstimateEditorPage() {
     await runPdf([], tab);
   };
 
-  const onShare = async () => {
+  const onShare = async (zeroAnswered = false) => {
+    // Lines at 0 ₴ first — the share sheet holds the link, the system share AND the letter.
+    if (!zeroAnswered && askAboutZeroLines()) {
+      setZeroAsk('share');
+      return;
+    }
     // The name the client will read on it (V190) is all sharing needs; the email is asked on the
     // sheet's «надіслати листом» alone. A share sheet is no new tab, so it simply opens once the
     // name is saved.
@@ -717,6 +786,9 @@ export function EstimateEditorPage() {
                 showMaterials={materialsOffered}
                 onPdf={guard(() => void onPdf())}
                 pdfLoading={pdfLoading}
+                zeroCount={est.total > 0 ? zeroLines.length : 0}
+                onPreview={est.kind === 'ADDENDUM' ? undefined : guard(() => void preview.open())}
+                previewOpening={preview.opening}
               />
             )}
             {CATALOG_SYNC_CARD && !signed && <CatalogSyncCard estimateId={id} items={est.items} />}
@@ -741,7 +813,6 @@ export function EstimateEditorPage() {
           selection bar's «Скасувати». */}
       {!signed && picked === null && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
 
-      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       {pdfSheetOpen && (
         <ReceiptPdfSheet
           receipts={receipts}
@@ -757,9 +828,18 @@ export function EstimateEditorPage() {
           onClose={() => setShareOpen(false)}
           project={project.data}
           singleEstimateId={id}
-          onNeedEmailVerify={() => setEmailGateOpen(true)}
+          onPreview={guard(() => void preview.open())}
+          previewOpening={preview.opening}
         />
       )}
+      <ZeroQuantitySheet
+        open={zeroAsk !== null}
+        count={zeroLines.length}
+        removing={deleteItems.isPending}
+        onRemove={removeZeroLines}
+        onKeep={keepZeroLines}
+        onClose={() => setZeroAsk(null)}
+      />
 
       <AddItemSheet
         estimateId={id}

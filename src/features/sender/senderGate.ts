@@ -43,8 +43,16 @@ export function isSenderNameRequired(err: unknown): boolean {
 export type SenderSheetMode = 'name' | 'extras';
 
 type Listener = () => void;
+/** Undoes what a continue tap reserved (a blank tab) when the save after it fails. */
+type Undo = () => void;
+/** Run INSIDE the sheet's own «Зберегти і продовжити» tap: a new tab may only be opened in a tap. */
+export type ContinueTap = () => Undo;
+interface Waiter {
+  resolve: (ok: boolean) => void;
+  onTap?: ContinueTap;
+}
 /** Everyone waiting on the open sheet; null while it is closed. */
-let waiting: ((ok: boolean) => void)[] | null = null;
+let waiting: Waiter[] | null = null;
 let openMode: SenderSheetMode = 'name';
 let remindedThisSession = false;
 const listeners = new Set<Listener>();
@@ -65,20 +73,29 @@ export const senderSheetStore = {
     return openMode;
   },
   /** Opens the sheet, or joins the one already open — two taps never stack two sheets. Resolves
-   *  true once saved, false when closed or skipped. */
-  request(mode: SenderSheetMode = 'name'): Promise<boolean> {
+   *  true once saved, false when closed or skipped. `onTap` runs in the sheet's continue tap. */
+  request(mode: SenderSheetMode = 'name', onTap?: ContinueTap): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       const opening = waiting === null;
       if (opening) openMode = mode;
-      waiting = [...(waiting ?? []), resolve];
+      waiting = [...(waiting ?? []), { resolve, onTap }];
       if (opening) emit();
     });
+  },
+  /**
+   * The sheet's «Зберегти і продовжити» (or «Пропустити») was tapped: the action that opened the sheet
+   * reserves its tab NOW, in this tap, so it can carry on once the name is saved instead of asking for
+   * a second tap. Returns the undo for a save that then fails.
+   */
+  tapContinue(): Undo {
+    const undos = (waiting ?? []).flatMap((w) => (w.onTap ? [w.onTap()] : []));
+    return () => undos.forEach((undo) => undo());
   },
   settle(ok: boolean): void {
     const current = waiting ?? [];
     waiting = null;
     emit();
-    for (const resolve of current) resolve(ok);
+    for (const w of current) w.resolve(ok);
   },
 };
 
@@ -90,6 +107,11 @@ export function resetSenderReminder(): void {
 export interface SenderGateOptions {
   /** Offer the phone reminder. Off for a PDF. Default on. */
   remind?: boolean;
+  /**
+   * The action opens a new tab (a PDF, the client preview): reserve it here, in the sheet's own
+   * continue tap, and the action goes on after the save — the master pressed it once already.
+   */
+  onContinueTap?: ContinueTap;
 }
 
 function wouldAskName(me: UserResponse | undefined): boolean {
@@ -138,12 +160,12 @@ export function useSenderGate() {
       onAsk?.();
       // The name sheet holds the phone field too: a reminder about it in the same session is a repeat.
       remindedThisSession = true;
-      return (await senderSheetStore.request('name')) ? 'saved' : 'cancelled';
+      return (await senderSheetStore.request('name', opts.onContinueTap)) ? 'saved' : 'cancelled';
     }
     if (wouldRemind(me, opts)) {
       remindedThisSession = true;
       onAsk?.();
-      return (await senderSheetStore.request('extras')) ? 'saved' : 'skipped';
+      return (await senderSheetStore.request('extras', opts.onContinueTap)) ? 'saved' : 'skipped';
     }
     return 'ready';
   }, [qc]);

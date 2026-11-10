@@ -58,13 +58,23 @@ export function SenderSheetHost() {
       setNameMissing(true);
       return;
     }
+    // Before any await: the action that opened the sheet reserves its tab in THIS tap and goes on
+    // after the save — he already pressed «Подивитися» or «PDF» once.
+    const undo = senderSheetStore.tapContinue();
     try {
       await save.mutateAsync({ fullName: name, phone: phone.trim(), companyName: companyName.trim() });
       toast.success(t('sender.saved'));
       senderSheetStore.settle(true);
     } catch (err) {
+      undo();
       toast.error(toAppError(err).message);
     }
+  };
+
+  const onDismiss = () => {
+    // «Пропустити» on the reminder lets the document go as it is: that tap carries the action on too.
+    if (reminder) senderSheetStore.tapContinue();
+    senderSheetStore.settle(false);
   };
 
   const header = companyName.trim() || fullName.trim();
@@ -133,7 +143,7 @@ export function SenderSheetHost() {
 
       <ModalFooter>
         <div className="flex gap-2">
-          <Button variant="secondary" fullWidth onClick={() => senderSheetStore.settle(false)}>
+          <Button variant="secondary" fullWidth onClick={onDismiss}>
             {t(reminder ? 'sender.skip' : 'common.cancel')}
           </Button>
           <Button fullWidth loading={save.isPending} onClick={() => void onSave()}>

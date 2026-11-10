@@ -54,6 +54,7 @@ import { catalogKey, indexCatalog } from '@/lib/catalogMatch.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { track } from '@/lib/posthog.ts';
 import { useCatalog } from '@/features/catalog/useCatalog.ts';
+import { CatalogTabs } from '@/features/catalog/CatalogTabs.tsx';
 import { toTemplateTree, type TemplateBranch } from './templateTree.ts';
 import {
   useAddTemplateItem,
@@ -149,8 +150,9 @@ export function TemplatesPage() {
   return (
     <>
       <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
-        {t('templates.myTemplates')}
+        {t('catalog.title')}
       </h1>
+      <CatalogTabs />
 
       {isPending ? (
         <div className="flex justify-center py-10 text-brand">

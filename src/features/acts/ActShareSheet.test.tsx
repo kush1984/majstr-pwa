@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ActShareSheet } from './ActShareSheet.tsx';
@@ -81,13 +81,19 @@ describe('ActShareSheet — the letter alone needs a verified email', () => {
   it('publishes for an unverified master, and «надіслати листом» opens the verify modal instead', async () => {
     emailVerified.mockImplementation(() => Promise.resolve(false));
     vi.mocked(actPortalApi.publish).mockResolvedValue({ url: 'https://majstr.pro/portal/index.html?a=TOK', shared: true });
-    render(<ActShareSheet actId="a1" open onClose={vi.fn()} />, { wrapper });
+    const onClose = vi.fn();
+    render(<ActShareSheet actId="a1" open onClose={onClose} />, { wrapper });
     await screen.findByDisplayValue(/\?a=TOK/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Надіслати на email' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Підтвердіть email' })).toBeTruthy();
+    const verify = await screen.findByRole('dialog', { name: 'Підтвердіть email' });
     expect(actPortalApi.sendEmail).not.toHaveBeenCalled();
+    // Over the sheet: «Пізніше» returns to the link, nothing to start over.
+    fireEvent.click(within(verify).getByRole('button', { name: 'Пізніше' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Підтвердіть email' })).toBeNull());
+    expect(screen.getByDisplayValue(/\?a=TOK/)).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('sends the letter for a verified master', async () => {

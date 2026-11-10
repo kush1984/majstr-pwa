@@ -38,6 +38,10 @@ export const config = {
   supportPhone: import.meta.env.VITE_SUPPORT_PHONE || '+380978938990',
   // Telegram channel — release news + open discussion. Same `||` rule as the contacts above.
   telegramUrl: import.meta.env.VITE_TELEGRAM_URL || 'https://t.me/majstr_pro',
+  // «Надішліть — перенесемо за вас» (FREE, estimate import): the owner's OWN Telegram chat, where a
+  // master sends the paper or the Excel and a person types it in. Not `telegramUrl` — that is the
+  // public channel, where nobody answers a file. Same `||` rule.
+  conciergeUrl: import.meta.env.VITE_CONCIERGE_URL || 'https://t.me/andriykushka',
   // YouTube channel — the landing footer links it beside Telegram. Same `||` rule.
   youtubeUrl: import.meta.env.VITE_YOUTUBE_URL || 'https://www.youtube.com/@majstrpro',
 

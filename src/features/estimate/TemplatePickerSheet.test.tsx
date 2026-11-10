@@ -37,8 +37,13 @@ beforeEach(() => {
 });
 
 function WelcomeProbe() {
-  const state = useLocation().state as { from?: string } | null;
-  return <p data-testid="welcome-from">{state?.from}</p>;
+  const state = useLocation().state as { from?: string; resume?: unknown } | null;
+  return (
+    <>
+      <p data-testid="welcome-from">{state?.from}</p>
+      <p data-testid="welcome-resume">{JSON.stringify(state?.resume)}</p>
+    </>
+  );
 }
 
 /**
@@ -247,6 +252,8 @@ describe('TemplatePickerSheet', () => {
 
     expect(onClose).toHaveBeenCalled();
     expect((await screen.findByTestId('welcome-from')).textContent).toBe('/projects/p1');
+    // …and asks to be reopened there, so the new estimate carries on once the trade is chosen.
+    expect(screen.getByTestId('welcome-resume').textContent).toBe('{"openTemplates":true}');
   });
 
   it('lets him go on without a template — an empty list is not a dead end', async () => {

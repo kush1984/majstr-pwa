@@ -31,7 +31,6 @@
     "home": "Home",
     "projects": "Objects",
     "catalog": "Catalog",
-    "templates": "Templates",
     "profile": "Me"
   },
   "app": {
@@ -50,7 +49,7 @@
     "navFaq": "FAQ",
     "navMenu": "Menu",
     "ctaTry": "Try it free",
-    "heroBadge": "A PWA for tradespeople and foremen",
+    "heroBadge": "Estimates for tradespeople and foremen, right from your phone",
     "heroLine1": "Price the job.",
     "heroLine2": "Send the estimate.",
     "heroLine3": "Get it signed.",
@@ -375,7 +374,7 @@
     "metricCompleted": "Completed (mo)",
     "metricCompletedHint": "totalling {{amount}}",
     "createFirstTitle": "Create your first project",
-    "createFirstText": "A project is a name, an address and a client. Estimates, measurements, photos and acts go inside it.",
+    "createFirstText": "Start with a name — the address and client can come later.",
     "createFirstAction": "New object",
     "recentProjects": "Recent active objects",
     "quickActions": "Quick actions",
@@ -455,6 +454,7 @@
     "nextFromTemplate": "Estimate from a template",
     "nextEmpty": "Empty estimate",
     "nextFromFile": "From a file or photo",
+    "nextConcierge": "Have an estimate on paper or in Excel? Send it and we'll transfer it for you",
     "nextLater": "Later",
     "editName": "Object name",
     "editAddress": "Object address",
@@ -579,10 +579,24 @@
       "materials": "Materials to buy",
       "pdf": "Save PDF",
       "pdfLoading": "Making the PDF…",
+      "preview": "See it as your client will",
+      "zeroLines_one": "{{count}} position without a quantity",
+      "zeroLines_other": "{{count}} positions without a quantity",
       "fillTitle_one": "Fill in the quantity of {{count}} position",
       "fillTitle_other": "Fill in the quantity of {{count}} positions",
       "fillHint": "While the estimate sums to 0, there is nothing to send the client.",
       "fillGo": "Go to the first one"
+    },
+    "zeroLines": {
+      "title_one": "{{count}} position without a quantity — your client will see it as 0 ₴",
+      "title_other": "{{count}} positions without a quantity — your client will see them as 0 ₴",
+      "hint": "Usually these are template lines you haven't got to yet. Remove them — or keep them if that's on purpose.",
+      "remove": "Remove and continue",
+      "keep": "Keep as is",
+      "removed_one": "Removed {{count}} position",
+      "removed_other": "Removed {{count}} positions",
+      "removedTapPdf_one": "Removed {{count}} position. Tap «PDF» again",
+      "removedTapPdf_other": "Removed {{count}} positions. Tap «PDF» again"
     },
     "menuRename": "Rename",
     "menuSelect": "Delete positions",
@@ -1545,7 +1559,10 @@
     "inline": {
       "priceChanged": "Catalog price changed",
       "nameChanged": "Catalog name changed"
-    }
+    },
+    "tabsLabel": "Catalog sections",
+    "tabItems": "Positions",
+    "tabTemplates": "Templates"
   },
   "measure": {
     "proTitle": "Object measurements — in PRO",
@@ -1806,7 +1823,7 @@
     "addItem": "Add position",
     "addItemName": "Position name",
     "emptyComposition": "This template has no positions yet",
-    "emptyMy": "You haven’t created a template yet. An estimate can be saved as one from its menu; a template built from scratch lives on the «My templates» page.",
+    "emptyMy": "You haven’t created a template yet. An estimate can be saved as one from its menu; a template built from scratch lives in the Catalog, on the «Templates» tab.",
     "emptyMyPage": "You haven’t created a template yet. Tap «＋» to build your own sequence of works, or save an existing estimate as a template.",
     "pricesHint": "Prices are filled from your catalog on creation",
     "loadError": "Couldn't load templates",
@@ -2358,6 +2375,7 @@
     "continue": "Save and continue",
     "saved": "Saved to your profile",
     "tapAgainPdf": "Tap «PDF» again to make the document",
+    "tapAgainPreview": "Tap «See it as your client will» again",
     "reminderTitle": "Add a phone?",
     "reminderIntro": "Without a phone the client on the estimate page has no way to call you.",
     "reminderSavedToProfile": "Saved to your profile — for the next estimates too. You can change it in Profile.",
@@ -2383,5 +2401,18 @@
     "title_one": "Email verified — turn on {{count}} day of PRO?",
     "title_other": "Email verified — turn on {{count}} days of PRO?",
     "enable": "Turn on for free"
+  },
+  "sample": {
+    "open": "See an example",
+    "openForTrade": "See an example estimate",
+    "openHint": "A finished estimate for your trade. It does not count toward the object limit — delete it whenever you like.",
+    "exists": "You already have an example — it is in your objects",
+    "badge": "Example",
+    "bannerTitle": "This is a training example",
+    "bannerText": "It does not count toward the object limit. Try everything: see it as your client will, send it to yourself, sign it, download the PDF. A client will see it marked «Навчальний приклад Majstr».",
+    "delete": "Delete the example",
+    "deleteTitle": "Delete the example?",
+    "deleteConfirm": "The example goes with its estimate, signatures and payments. The object limit does not change, and you can make a new example again.",
+    "deleted": "Example deleted"
   }
 }

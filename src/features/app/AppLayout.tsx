@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn.ts';
 import { initials } from '@/lib/format.ts';
@@ -13,7 +13,7 @@ import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanne
 import { NotificationBell } from '@/components/NotificationBell.tsx';
 import { PrivacyConsentModal } from '@/features/legal/ConsentModals.tsx';
 import { CatalogUpdateNotice } from '@/features/catalog/CatalogUpdateNotice.tsx';
-import { NAV_ITEMS } from './navItems.ts';
+import { NAV_ITEMS, navItemActive } from './navItems.ts';
 
 /**
  * The authenticated shell. One component, two layouts via Tailwind:
@@ -23,6 +23,7 @@ import { NAV_ITEMS } from './navItems.ts';
 export function AppLayout({ children }: { children?: ReactNode }) {
   const { data: me } = useMe();
   const { t } = useTranslation();
+  const { pathname } = useLocation();
 
   // Fill the offline cache in the background (throttled) so every screen works in a basement.
   useAutoPrefetch();
@@ -80,7 +81,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-                  isActive
+                  navItemActive(it, pathname, isActive)
                     ? 'bg-brand-soft font-semibold text-brand'
                     : 'text-muted hover:bg-surface-sunken',
                 )
@@ -139,7 +140,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
             className={({ isActive }) =>
               cn(
                 'flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors',
-                isActive ? 'text-brand' : 'text-muted',
+                navItemActive(it, pathname, isActive) ? 'text-brand' : 'text-muted',
               )
             }
           >

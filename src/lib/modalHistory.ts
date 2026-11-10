@@ -33,6 +33,22 @@ let entries: string[] = [];
 let listening = false;
 let flushQueued = false;
 let nextId = 0;
+/**
+ * Our own `history.go(-n)` is on its way. A sheet that opens in the meantime — the reminder closed,
+ * the share sheet opens in the same tick («Пропустити») — pushes its entry ABOVE the one the jump
+ * lands on, so the landing `popstate` leaves it and used to read as «Back left the top sheet»: the
+ * share sheet closed the moment it opened. Landing from our own jump closes nothing; a sheet whose
+ * entry it skipped gets one again.
+ */
+let jumping = false;
+let jumpTimer: ReturnType<typeof setTimeout> | undefined;
+/** A jump that lands nowhere (out of range) fires no `popstate`; never treat a later pop as ours. */
+const JUMP_LANDS_WITHIN_MS = 400;
+
+function endJump(): void {
+  jumping = false;
+  clearTimeout(jumpTimer);
+}
 
 function currentModalId(): string | undefined {
   const state: unknown = window.history.state;
@@ -61,6 +77,11 @@ function pushEntry(id: string): void {
 
 function onPop(): void {
   syncToCurrent();
+  if (jumping) {
+    endJump();
+    live.filter((e) => !entries.includes(e.id)).forEach((e) => pushEntry(e.id));
+    return;
+  }
   const top = live[live.length - 1];
   // The browser left the top modal's entry (Back, a swipe): that modal answers. Landing on its own
   // entry — our own `go` after a UI close — needs nothing.
@@ -76,6 +97,9 @@ function flush(): void {
   while (n < entries.length && !live.some((e) => e.id === entries[entries.length - 1 - n])) n += 1;
   if (n === 0) return;
   entries = entries.slice(0, entries.length - n);
+  jumping = true;
+  clearTimeout(jumpTimer);
+  jumpTimer = setTimeout(endJump, JUMP_LANDS_WITHIN_MS);
   window.history.go(-n);
 }
 
@@ -112,6 +136,11 @@ export function closeModalEntry(id: string): void {
     flushQueued = true;
     queueMicrotask(flush);
   }
+}
+
+/** Test seam: a jump an earlier case queued must not swallow this case's Back. */
+export function resetModalJumpForTests(): void {
+  endJump();
 }
 
 /**

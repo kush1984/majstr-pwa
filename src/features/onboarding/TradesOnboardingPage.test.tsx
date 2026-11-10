@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import '@/lib/i18n.ts';
 import { TradesOnboardingPage } from './TradesOnboardingPage.tsx';
+import { projectsApi } from '@/api/projects.ts';
+import type { ProjectResponse } from '@/api/types.ts';
 import {
   needsTradesScreen, pendingTradesAnswer, rememberTradesAnswer, useTradesAnswerSync,
 } from './tradesOnboarding.ts';
@@ -17,23 +19,33 @@ import type { UserResponse } from '@/api/types.ts';
 vi.mock('@/api/profile.ts', () => ({
   profileApi: { updateTrades: vi.fn(), addCustomTrade: vi.fn() },
 }));
+vi.mock('@/api/projects.ts', () => ({ projectsApi: { createSample: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
 const fresh = aUser({ id: 'u-new', fullName: undefined, phone: undefined, companyName: undefined, trades: [] });
 
-function renderScreen(from?: string, opts: { me?: typeof fresh; redirected?: boolean } = {}) {
+function ObjectProbe() {
+  return (
+    <>
+      <p>object</p>
+      <p data-testid="object-state">{JSON.stringify(useLocation().state)}</p>
+    </>
+  );
+}
+
+function renderScreen(from?: string, opts: { me?: typeof fresh; redirected?: boolean; resume?: unknown } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, opts.me ?? fresh);
-  const state = from || opts.redirected ? { from, redirected: opts.redirected } : null;
+  const state = from || opts.redirected ? { from, redirected: opts.redirected, resume: opts.resume } : null;
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[{ pathname: '/welcome', state }]}>
         <Routes>
           <Route path="/welcome" element={<TradesOnboardingPage />} />
           <Route path="/" element={<p>home</p>} />
-          <Route path="/projects/:id" element={<p>object</p>} />
+          <Route path="/projects/:id" element={<ObjectProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -44,6 +56,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   vi.mocked(profileApi.updateTrades).mockImplementation(async (req) => ({ ...fresh, trades: req.trades }));
+});
+
+describe('TradesOnboardingPage — «Подивитися приклад» (V197)', () => {
+  it('appears once a trade is picked; saves the answer, then opens THAT trade’s sample', async () => {
+    vi.mocked(projectsApi.createSample).mockResolvedValue({ id: 's1', sample: true } as ProjectResponse);
+    renderScreen();
+    expect(screen.queryByRole('button', { name: 'Подивитися приклад кошторису' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Подивитися приклад кошторису' }));
+
+    expect(await screen.findByText('object')).toBeTruthy();
+    expect(profileApi.updateTrades).toHaveBeenCalledWith({ trades: ['TILING'] });
+    expect(projectsApi.createSample).toHaveBeenCalledWith('TILING');
+    expect(vi.mocked(profileApi.updateTrades).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(projectsApi.createSample).mock.invocationCallOrder[0]);
+  });
 });
 
 describe('TradesOnboardingPage — «Чим займаєтесь?» (V190)', () => {
@@ -65,6 +94,25 @@ describe('TradesOnboardingPage — «Чим займаєтесь?» (V190)', () 
     fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
 
     expect(await screen.findByText('object')).toBeTruthy();
+  });
+
+  it('hands the sending screen back what it asked for once a trade is saved (the empty picker reopens)', async () => {
+    renderScreen('/projects/p1', { resume: { openTemplates: true } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
+
+    expect((await screen.findByTestId('object-state')).textContent).toBe('{"openTemplates":true}');
+  });
+
+  it('a skip goes back without it — no trade, no bundles to reopen the picker on', async () => {
+    renderScreen('/projects/p1', { resume: { openTemplates: true } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Пропустити' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Без напряму шаблонів не буде' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Все одно пропустити' }));
+
+    expect((await screen.findByTestId('object-state')).textContent).toBe('null');
   });
 
   it('keeps «Далі» shut until something is picked — skipping is its own, explained step', () => {

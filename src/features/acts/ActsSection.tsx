@@ -13,7 +13,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { Fab } from '@/components/Fab.tsx';
 import { toAppError } from '@/api/errors.ts';
 import { actsApi } from '@/api/acts.ts';
-import { openPdfTab } from '@/lib/openPdfTab.ts';
+import { reservePdfTab, type PdfTab } from '@/lib/openPdfTab.ts';
 import { formatMoney, formatDate } from '@/lib/format.ts';
 import { ACT_STATUS_VARIANT } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
@@ -130,13 +130,28 @@ function ActRow({ act, onDelete, onMoveStatus }: {
     // name is checked without awaiting first; a missing one is asked for, and the next tap prints.
     // A PDF is not a link to a client: no phone reminder.
     const pdfGate = { remind: false } as const;
+    // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
+    let tab: PdfTab | null = null;
     if (senderGateWouldAsk(me, pdfGate)) {
-      if ((await ensureSender(undefined, pdfGate)) !== 'cancelled') toast.info(t('sender.tapAgainPdf'));
-      return;
+      // The sheet's «Зберегти і продовжити» is a tap: the tab is reserved in it and the PDF goes on.
+      const reserved: { tab?: PdfTab } = {};
+      const sender = await ensureSender(undefined, {
+        ...pdfGate,
+        onContinueTap: () => {
+          const next = reservePdfTab();
+          reserved.tab = next;
+          return () => next.cancel();
+        },
+      });
+      if (sender === 'cancelled') return;
+      if (!reserved.tab) {
+        toast.info(t('sender.tapAgainPdf'));
+        return;
+      }
+      tab = reserved.tab;
     }
     try {
-      // Reserved-tab helper — window.open() after the awaited fetch silently fails on iOS Safari.
-      await openPdfTab(() => actsApi.fetchPdf(act.id), `akt-${act.number}.pdf`);
+      await (tab ?? reservePdfTab()).open(() => actsApi.fetchPdf(act.id), `akt-${act.number}.pdf`);
     } catch (err) {
       if (isSenderNameRequired(err)) {
         if (await senderSheetStore.request()) toast.info(t('sender.tapAgainPdf'));

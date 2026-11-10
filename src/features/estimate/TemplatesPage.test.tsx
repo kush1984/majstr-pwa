@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import '@/lib/i18n.ts';
 import { TemplatesPage } from './TemplatesPage.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
@@ -57,7 +58,7 @@ function renderPage(meOverride: UserResponse = me) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, meOverride);
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}><MemoryRouter>{children}</MemoryRouter></QueryClientProvider>
   );
   return render(<TemplatesPage />, { wrapper });
 }

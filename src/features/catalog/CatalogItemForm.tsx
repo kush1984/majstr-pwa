@@ -20,7 +20,7 @@ import {
   type CatalogItemFormValues,
 } from './catalogItemSchema.ts';
 import {
-  useCatalog,
+  useVisibleCatalog,
   useCreateCatalogItem,
   useDeleteCatalogItem,
   useUpdateCatalogItem,
@@ -61,7 +61,7 @@ export function CatalogItemForm({
   // Categories come from the catalog list rather than the /categories endpoint: this query
   // carries each item's TRADE (so the dropdown can be narrowed to the one being edited) and it is
   // the query the offline prefetch stores, so the dropdown is populated with no connection too.
-  const catalog = useCatalog();
+  const catalog = useVisibleCatalog();
   const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Always offer the item's CURRENT trade as an option, even if the master no longer works in

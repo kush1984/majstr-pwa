@@ -122,6 +122,10 @@ interface EventMap {
   };
   /** «Оновити каталог» from the estimate's card: how many positions were repriced and added. */
   catalog_sync_apply: { updated: number; added: number };
+  /** FREE «Є кошторис на папері чи в Excel? Надішліть — перенесемо за вас»: the tap opens a Telegram
+   *  chat, which the backend never sees — so this is the only count there can be. Nothing else
+   *  travels: not the object, not the file. */
+  concierge_import_tapped: undefined;
 }
 
 type EventName = keyof EventMap;

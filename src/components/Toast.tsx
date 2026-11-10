@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useToast, type ToastKind } from '@/hooks/useToast.ts';
 import { cn } from '@/lib/cn.ts';
+import { useAnySheetOpen } from '@/lib/openSheets.ts';
 
 const kindStyles: Record<ToastKind, string> = {
   success: 'bg-green-50 border-green-300 text-green-900',
@@ -9,8 +10,9 @@ const kindStyles: Record<ToastKind, string> = {
 };
 
 /**
- * Stacks live toasts at the bottom of the screen on mobile, top-right
- * on desktop. Auto-dismisses on a timer set by the `toast()` caller.
+ * Stacks live toasts at the bottom of the screen on mobile — at the TOP while any sheet is open, so
+ * they never cover its buttons — and top-right on desktop. Auto-dismisses on a timer set by the
+ * `toast()` caller.
  *
  * <p>The viewport is `z-[70]` — above every other layer (Modal `z-50`, ActionMenu/InfoPopover
  * `z-[60]/[61]`) — and that is load-bearing rather than cosmetic. This lives inside `#root`, while
@@ -24,10 +26,20 @@ const kindStyles: Record<ToastKind, string> = {
 export function ToastViewport() {
   const { t } = useTranslation();
   const { toasts, dismiss } = useToast();
+  const sheetOpen = useAnySheetOpen();
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[70] flex flex-col items-center gap-2 px-4 sm:bottom-auto sm:right-4 sm:top-4 sm:items-end">
+    <div
+      data-testid="toast-viewport"
+      data-placement={sheetOpen ? 'top' : 'bottom'}
+      className={cn(
+        'z-[70] pointer-events-none fixed inset-x-0 flex flex-col items-center gap-2 px-4 sm:bottom-auto sm:right-4 sm:top-4 sm:items-end',
+        // A sheet's buttons live at the bottom of a phone: while one is open, the toasts go to the
+        // top, under the notch (safe-area), and come back down once it closes.
+        sheetOpen ? 'top-[calc(env(safe-area-inset-top)+0.75rem)]' : 'bottom-4',
+      )}
+    >
       {toasts.map((item) => (
         <div
           key={item.id}

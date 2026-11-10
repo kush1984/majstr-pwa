@@ -4,6 +4,8 @@ import type {
   ProjectRequest,
   ProjectResponse,
   ProjectStatus,
+  SampleProjectRequest,
+  Trade,
 } from './types.ts';
 
 /** Projects (construction sites) CRUD + status changes. */
@@ -27,6 +29,16 @@ export const projectsApi = {
     return api
       .post<ProjectResponse>('/api/projects', req, id ? { headers: { 'X-Entity-Uuid': id } } : undefined)
       .then((r) => r.data);
+  },
+
+  /**
+   * «Подивитися приклад» (V197): the server makes the training sample — an object with a priced
+   * estimate for `trade` (absent = the master's first trade that has one). Outside the FREE cap;
+   * 409 SAMPLE_PROJECT_EXISTS while one is alive. Online only: it is filled on the server.
+   */
+  createSample(trade?: Trade): Promise<ProjectResponse> {
+    const body: SampleProjectRequest = trade ? { trade } : {};
+    return api.post<ProjectResponse>('/api/projects/sample', body).then((r) => r.data);
   },
 
   update(id: string, req: ProjectRequest): Promise<ProjectResponse> {

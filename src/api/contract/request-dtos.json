@@ -305,6 +305,9 @@
   "PlanUpdateRequest": {
     "plan": "string"
   },
+  "PortalPreviewRequest": {
+    "estimateIds": "array"
+  },
   "PortalUpdateRequest": {
     "estimateIds": "array"
   },
@@ -441,6 +444,9 @@
   "ResetPasswordRequest": {
     "newPassword": "string",
     "token": "string"
+  },
+  "SampleProjectRequest": {
+    "trade": "string?"
   },
   "SaveAsTemplateRequest": {
     "customTradeId": "string?",

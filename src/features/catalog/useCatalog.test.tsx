@@ -8,6 +8,7 @@ import {
   useCreateCatalogItem,
   useDeleteCatalogItem,
   useUpdateCatalogItem,
+  useVisibleCatalog,
 } from './useCatalog.ts';
 import { clearOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
@@ -90,5 +91,17 @@ describe('useCatalog — offline authoring (queued)', () => {
     expect(qc.getQueryData<CatalogItemResponse[]>(allKey)?.map((i) => i.id)).toEqual(['k2']);
     const ops = await listOutbox();
     expect(ops[0]).toMatchObject({ entityId: 'k1', entity: 'catalogItem', type: 'delete' });
+  });
+});
+
+describe('useVisibleCatalog', () => {
+  it('drops hidden positions from what is shown, while the shared cache keeps them for pricing', () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(allKey, [item({ id: 'h', hidden: true }), item({ id: 'v' })]);
+
+    const { result } = renderHook(() => useVisibleCatalog(), { wrapper });
+
+    expect(result.current.data?.map((r) => r.id)).toEqual(['v']);
+    expect(qc.getQueryData<CatalogItemResponse[]>(allKey)).toHaveLength(2);
   });
 });

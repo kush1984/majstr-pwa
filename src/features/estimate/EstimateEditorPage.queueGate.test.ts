@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 const source = readFileSync(resolve(process.cwd(), 'src/features/estimate/EstimateEditorPage.tsx'), 'utf8');
 
 function body(name: string): string {
-  const start = source.indexOf(`const ${name} = async () => {`);
+  const start = source.indexOf(`const ${name} = async (`);
   expect(start, `${name} exists`).toBeGreaterThan(-1);
   return source.slice(start, source.indexOf('\n  };', start));
 }
@@ -26,6 +26,17 @@ describe('EstimateEditorPage — what leaves the app is what is on screen', () =
 
   it('flushes and refuses before sharing', () => {
     expect(body('onShare')).toContain('await estimateQueueClear()');
+  });
+
+  it('flushes before the client preview too — the server renders that page from what it holds', () => {
+    expect(source).toMatch(/useClientPreview\([\s\S]{0,120}estimateQueueClear\)/);
+  });
+
+  it('asks about the 0 ₴ lines BEFORE the PDF tab is reserved, so a question never strands a blank tab', () => {
+    const pdf = body('onPdf');
+    expect(pdf.indexOf('askAboutZeroLines()')).toBeGreaterThan(-1);
+    expect(pdf.indexOf('askAboutZeroLines()')).toBeLessThan(pdf.indexOf('reservePdfTab()'));
+    expect(body('onShare')).toContain('askAboutZeroLines()');
   });
 
   it('closes every line-writing sheet when the estimate becomes signed', () => {

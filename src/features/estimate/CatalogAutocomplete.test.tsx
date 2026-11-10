@@ -23,7 +23,7 @@ const item: CatalogItemResponse = {
 
 vi.mock('@/features/catalog/useCatalog.ts', () => ({
   useCatalogSearch: () => ({ isSuccess: true, isFetching: false, data: [item] }),
-  useCatalog: () => ({ data: [item] }),
+  useVisibleCatalog: () => ({ data: [item] }),
 }));
 
 function renderField(onPick = vi.fn()) {

@@ -9,12 +9,15 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { senderSheetStore } from '@/features/sender/senderGate.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
+import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { trialOfferStore } from '@/features/email/trialOffer.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
 import { markShared } from '@/features/projects/markShared.ts';
 import { portalApi, economyPortalApi, estimateShareApi } from '@/api/portal.ts';
+import { flushOutbox } from '@/lib/outbox/outbox.ts';
+import { useClientPreview } from '@/features/estimate/useClientPreview.ts';
 import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
@@ -44,8 +47,8 @@ import {
  *
  * Gate handling is shared: sharing and copying need only the name (asked before the sheet opens);
  * «надіслати листом» alone needs a verified email — we send that letter from our domain — so it asks
- * the server first, and an unverified contractor (or a 403 EMAIL_NOT_VERIFIED) bounces to the
- * parent's verify modal; a missing client email (400 CLIENT_EMAIL_MISSING) reveals the inline
+ * the server first, and an unverified contractor (or a 403 EMAIL_NOT_VERIFIED) gets the verify modal
+ * ON TOP of the sheet — «Пізніше» returns him to the link he came for; a missing client email (400 CLIENT_EMAIL_MISSING) reveals the inline
  * add-email field.
  */
 export function SharePortalSheet({
@@ -53,13 +56,17 @@ export function SharePortalSheet({
   onClose,
   project,
   singleEstimateId,
-  onNeedEmailVerify,
   mode,
+  onPreview,
+  previewOpening = false,
 }: {
   open: boolean;
   onClose: () => void;
   project: ProjectResponse;
-  onNeedEmailVerify: () => void;
+  /** «Подивитися, як побачить клієнт» for ONE estimate (the page owns it); the object's SIGNATURE
+   *  portal previews its ticked set by itself, the ECONOMY one has nothing to preview (no picker). */
+  onPreview?: () => void;
+  previewOpening?: boolean;
 } & (
   /** Sharing ONE estimate on its own `?t=` link — no picker, no set, the object's portal untouched. */
   | { singleEstimateId: string; mode?: never }
@@ -81,6 +88,8 @@ export function SharePortalSheet({
   const qc = useQueryClient();
   const nativeShare = canShareNatively();
   const ensureEmailVerified = useEmailGate();
+  // Over the sheet, never instead of it: closing it on «Пізніше» used to drop him out of sharing.
+  const [emailGateOpen, setEmailGateOpen] = useState(false);
   // Object-level share only — a single-estimate share has no set to seed from, so it never asks.
   const portal = useQuery({
     queryKey: ['portal', project.id, mode],
@@ -183,6 +192,16 @@ export function SharePortalSheet({
     : allEstimates.filter((e) => e.status !== 'SIGNED');
   const ticked = selected ?? new Set<string>();
   const serverVisibleCount = allEstimates.filter((e) => e.visible).length;
+  // The object portal's own «як побачить клієнт»: the set ticked NOW, published or not. The flush
+  // first — an estimate still in the outbox does not exist on the server yet.
+  const portalPreview = useClientPreview(
+    () => portalApi.preview(project.id, [...ticked]).then((r) => r.url),
+    async () => { await flushOutbox(); return true; },
+  );
+  const previewAction = singleEstimateId
+    ? onPreview
+    : mode === 'portal' ? () => void portalPreview.open() : undefined;
+  const previewBusy = singleEstimateId ? previewOpening : portalPreview.opening;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -207,8 +226,7 @@ export function SharePortalSheet({
   const handleError = (err: unknown) => {
     const e = toAppError(err);
     if (e.code === 'EMAIL_NOT_VERIFIED') {
-      onClose();
-      onNeedEmailVerify();
+      setEmailGateOpen(true);
     } else if (e.code === 'SENDER_NAME_REQUIRED') {
       // Also a 403 — it must not fall through to «only on PRO» below. The opener asks first
       // (useSenderGate); this is the cache that said there was a name when there was none.
@@ -333,8 +351,7 @@ export function SharePortalSheet({
     try {
       // The letter goes from OUR domain, so it alone needs a verified email (share-without-verification).
       if (!(await ensureEmailVerified())) {
-        onClose();
-        onNeedEmailVerify();
+        setEmailGateOpen(true);
         return;
       }
       if (singleEstimateId) {
@@ -439,6 +456,7 @@ export function SharePortalSheet({
   };
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={t('portal.sheetTitle')}>
       <div className="space-y-3">
         {filteredEmpty ? (
@@ -550,6 +568,16 @@ export function SharePortalSheet({
               {t('estimate.copyLink')}
             </Button>
 
+            {/* Quiet, after the ways to send: a look before the link leaves, never instead of it. */}
+            {previewAction && (
+              <button type="button" onClick={previewAction}
+                disabled={previewBusy || (!singleEstimateId && ticked.size === 0)} aria-busy={previewBusy}
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold text-brand active:bg-surface-sunken disabled:opacity-60">
+                <span aria-hidden>👁</span>
+                {t('estimate.nextStep.preview')}
+              </button>
+            )}
+
             {mode === 'economy' && portal.data?.url && (
               <Button variant="secondary" fullWidth loading={busy === 'revoke'} onClick={onRevoke}>
                 {t('portal.closeLink')}
@@ -634,5 +662,8 @@ export function SharePortalSheet({
         )}
       </div>
     </Modal>
+    {/* After the sheet, so it stacks above it. */}
+    <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
+    </>
   );
 }

@@ -11,6 +11,7 @@ import {
   openModalEntry,
   restoreModalEntry,
 } from '@/lib/modalHistory.ts';
+import { holdSheetOpen } from '@/lib/openSheets.ts';
 
 /**
  * Responsive modal: a bottom sheet on mobile (slides up, rounded top),
@@ -64,6 +65,9 @@ export function Modal({
   // not as long as one render's callback, so it reads the latest one through a ref.
   const latest = useRef({ onClose, dismissable });
   useEffect(() => { latest.current = { onClose, dismissable }; }, [onClose, dismissable]);
+
+  // Toasts move to the top while a sheet is open (lib/openSheets.ts).
+  useEffect(() => (open ? holdSheetOpen() : undefined), [open]);
 
   useEffect(() => {
     if (!open) return;

@@ -106,8 +106,8 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
   const onEmail = async () => {
     setBusy('email');
     try {
+      // Over the sheet, not instead of it: «Пізніше» brings him back to the link he came for.
       if (!(await ensureEmailVerified())) {
-        onClose();
         setEmailGateOpen(true);
         return;
       }
@@ -120,7 +120,6 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         onClose();
         void senderSheetStore.request();
       } else if (toAppError(err).code === 'EMAIL_NOT_VERIFIED') {
-        onClose();
         setEmailGateOpen(true);
       } else {
         toast.error(toAppError(err).message);
@@ -130,7 +129,6 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
 
   return (
     <>
-      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <Modal open={open} onClose={onClose} title={t('acts.shareTitle')}>
         <div className="space-y-3">
           <p className="flex items-center gap-1 text-sm text-muted">
@@ -164,6 +162,8 @@ export function ActShareSheet({ actId, open, onClose }: { actId: string; open: b
         )}
       </div>
     </Modal>
+      {/* After the sheet, so it stacks above it. */}
+      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
     </>
   );
 }

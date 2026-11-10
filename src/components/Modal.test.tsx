@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@/lib/i18n.ts';
 import { Modal } from './Modal.tsx';
+import { resetModalJumpForTests } from '@/lib/modalHistory.ts';
 
 /**
  * The modal, and specifically where in the DOM it ends up.
@@ -68,6 +69,7 @@ describe('Modal', () => {
  */
 describe('Modal — system back', () => {
   const back = () => act(() => { window.history.back(); });
+  beforeEach(() => resetModalJumpForTests());
 
   it('Back closes the sheet and leaves the screen where it is', async () => {
     const onClose = vi.fn();
@@ -119,6 +121,30 @@ describe('Modal — system back', () => {
     rerender(<Modal open={false} onClose={() => {}} title="Шторка"><p>x</p></Modal>);
 
     await waitFor(() => expect(window.history.state).toEqual({ usr: null, key: 'k1', idx: 3 }));
+  });
+
+  /**
+   * The reminder closed and the share sheet opened in the same tick («Пропустити»): our own jump back
+   * over the reminder's entry used to land AFTER the share sheet had pushed its own, and read as
+   * «Back left the top sheet» — the share sheet closed itself the moment it opened.
+   */
+  it('a sheet that opens as another closes survives the closing sheet’s own jump back', async () => {
+    const shareClosed = vi.fn();
+    const { rerender } = render(<Modal open onClose={() => {}} title="Додати телефон?"><p>r</p></Modal>);
+
+    rerender(
+      <>
+        <Modal open={false} onClose={() => {}} title="Додати телефон?"><p>r</p></Modal>
+        <Modal open onClose={shareClosed} title="Портал для клієнта"><p>s</p></Modal>
+      </>,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(shareClosed).not.toHaveBeenCalled();
+    expect(screen.getByText('Портал для клієнта')).toBeTruthy();
+    // …and Back still closes it, now that its entry is in history.
+    back();
+    await waitFor(() => expect(shareClosed).toHaveBeenCalledOnce());
   });
 
   /**

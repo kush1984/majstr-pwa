@@ -1,23 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ProjectDetailPage } from './ProjectDetailPage.tsx';
 import { projectsApi } from '@/api/projects.ts';
 import { estimatesApi } from '@/api/estimates.ts';
-import type { EstimateSummary, ProjectResponse } from '@/api/types.ts';
+import type { EstimateSummary, ProjectResponse, UserResponse } from '@/api/types.ts';
+import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { aUser } from '@/test/factories.ts';
+import { track } from '@/lib/posthog.ts';
 
 /**
  * Object-first: the object is where an estimate is made. Right after «Створити об'єкт» the page
  * opens with «Що далі?» up — once, never on an ordinary visit; the «＋» is the open tab's action;
  * what the FAB menu used to carry is in the header's ⋮.
  */
-vi.mock('@/api/projects.ts', () => ({ projectsApi: { get: vi.fn(), list: vi.fn(), update: vi.fn() } }));
+vi.mock('@/api/projects.ts', () => ({ projectsApi: { get: vi.fn(), list: vi.fn(), update: vi.fn(), remove: vi.fn() } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { listForProject: vi.fn(), createForProject: vi.fn() } }));
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn().mockResolvedValue([]) } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn().mockResolvedValue({ maxEstimatesPerProject: null }) } }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/posthog.ts', () => ({ track: vi.fn() }));
 // The tab sections and sheets are covered on their own; here they would only drag in their APIs.
 vi.mock('@/features/messages/MessagesSection.tsx', () => ({ MessagesSection: () => null }));
 vi.mock('@/features/messages/ChatLinkSheet.tsx', () => ({ ChatLinkSheet: () => null }));
@@ -41,8 +45,9 @@ const project = {
   unreadQuestions: 0, completedAt: null, createdAt: '2026-10-19T10:00:00Z', updatedAt: '2026-10-19T10:00:00Z',
 } as unknown as ProjectResponse;
 
-function renderPage(entry: string | { pathname: string; state?: unknown; search?: string }) {
+function renderPage(entry: string | { pathname: string; state?: unknown; search?: string }, me?: UserResponse) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (me) qc.setQueryData(ME_QUERY_KEY, me);
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[entry]}>
@@ -67,6 +72,51 @@ describe('ProjectDetailPage — «Що далі?» (object-first)', () => {
     expect(await screen.findByText('Обʼєкт створено. Що далі?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Кошторис із шаблону/ }));
     expect(await screen.findByText('template-picker')).toBeTruthy();
+  });
+
+  it('back from choosing a trade in the empty picker, the picker reopens by itself', async () => {
+    renderPage({ pathname: '/projects/p1', state: { openTemplates: true } });
+
+    expect(await screen.findByText('template-picker')).toBeTruthy();
+    expect(screen.queryByText('Обʼєкт створено. Що далі?')).toBeNull();
+  });
+
+  it('on FREE, «З файлу або фото» becomes «перенесемо за вас» and opens the owner Telegram chat', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderPage({ pathname: '/projects/p1', state: { justCreated: true } }, aUser({ plan: 'FREE' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Надішліть — перенесемо за вас/ }));
+
+    expect(open).toHaveBeenCalledWith('https://t.me/andriykushka', '_blank', 'noopener');
+    expect(track).toHaveBeenCalledWith('concierge_import_tapped');
+    expect(screen.queryByRole('button', { name: 'З файлу або фото' })).toBeNull();
+    open.mockRestore();
+  });
+
+  it('on PRO the import stays the import', async () => {
+    renderPage({ pathname: '/projects/p1', state: { justCreated: true } }, aUser({ plan: 'PRO' }));
+
+    expect(await screen.findByRole('button', { name: 'З файлу або фото' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /перенесемо за вас/ })).toBeNull();
+  });
+
+  it('the training sample says what it is, and is deleted from its own banner at any stage', async () => {
+    vi.mocked(projectsApi.get).mockResolvedValue({ ...project, sample: true });
+    vi.mocked(projectsApi.remove).mockResolvedValue(undefined);
+    renderPage('/projects/p1');
+
+    expect(await screen.findByText('Це навчальний приклад')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Видалити приклад' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Видалити приклад?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Видалити приклад' }));
+
+    await waitFor(() => expect(projectsApi.remove).toHaveBeenCalledWith('p1'));
+  });
+
+  it('a real object carries no sample banner', async () => {
+    renderPage('/projects/p1');
+    await screen.findByText('Ванна');
+    expect(screen.queryByTestId('sample-banner')).toBeNull();
   });
 
   it('does not open on an ordinary visit', async () => {

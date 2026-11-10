@@ -45,6 +45,13 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
           <div className="break-words text-sm font-semibold leading-snug text-primary">
             {project.name}
           </div>
+          {/* The training sample (V197): visibly not a real object, so it is never mistaken for one. */}
+          {project.sample === true && (
+            <span data-testid="sample-badge"
+              className="mt-1 inline-block rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
+              {t('sample.badge')}
+            </span>
+          )}
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
             {project.address && <span className="break-words">{project.address}</span>}
             {project.clientFullName && (

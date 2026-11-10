@@ -80,6 +80,51 @@ describe('useSenderGate — «Як вас підписати в документ
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('runs the continue tap of the action INSIDE «Зберегти і продовжити», before the save is awaited', async () => {
+    let saveStarted = false;
+    vi.mocked(profileApi.updateSender).mockImplementation(() => {
+      saveStarted = true;
+      return Promise.resolve(aUser({ fullName: 'Іван' }));
+    });
+    const { gate } = setup();
+    const order: string[] = [];
+    const onContinueTap = vi.fn(() => { order.push(saveStarted ? 'after-save' : 'in-tap'); return vi.fn(); });
+
+    let outcome: Promise<SenderGateResult> = Promise.resolve('cancelled');
+    act(() => { outcome = gate.result.current(undefined, { remind: false, onContinueTap }); });
+    const dialog = await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' });
+    fireEvent.change(within(dialog).getByLabelText(/Ім'я та прізвище/), { target: { value: 'Іван' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Зберегти і продовжити' }));
+
+    await expect(outcome).resolves.toBe('saved');
+    // A new tab may only open in a tap: the reservation ran in the click, not after the network.
+    expect(order).toEqual(['in-tap']);
+  });
+
+  it('undoes the continue tap when the save fails, and keeps the sheet open', async () => {
+    vi.mocked(profileApi.updateSender).mockRejectedValue(new Error('offline'));
+    const { gate } = setup();
+    const undo = vi.fn();
+    act(() => { void gate.result.current(undefined, { remind: false, onContinueTap: () => undo }); });
+    const dialog = await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' });
+    fireEvent.change(within(dialog).getByLabelText(/Ім'я та прізвище/), { target: { value: 'Іван' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Зберегти і продовжити' }));
+
+    await waitFor(() => expect(undo).toHaveBeenCalledOnce());
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('never runs the continue tap for a blank name', async () => {
+    const { gate } = setup();
+    const onContinueTap = vi.fn(() => vi.fn());
+    act(() => { void gate.result.current(undefined, { remind: false, onContinueTap }); });
+    const dialog = await screen.findByRole('dialog', { name: 'Як вас підписати в документі?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Зберегти і продовжити' }));
+
+    expect(await within(dialog).findByText("Введіть ім'я та прізвище")).toBeTruthy();
+    expect(onContinueTap).not.toHaveBeenCalled();
+  });
+
   it('says «cancelled» when he closes the sheet, and sends nothing', async () => {
     const { gate } = setup();
 

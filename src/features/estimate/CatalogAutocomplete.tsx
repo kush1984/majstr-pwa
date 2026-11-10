@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/Input.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue.ts';
-import { useCatalog, useCatalogSearch } from '@/features/catalog/useCatalog.ts';
+import { useCatalogSearch, useVisibleCatalog } from '@/features/catalog/useCatalog.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
@@ -78,7 +78,7 @@ export function CatalogAutocomplete({
   const term = debounced.trim();
 
   const search = useCatalogSearch(debounced);
-  const all = useCatalog(); // shared (cached) full list — the fallback source
+  const all = useVisibleCatalog(); // shared (cached) full list — the fallback source
 
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);

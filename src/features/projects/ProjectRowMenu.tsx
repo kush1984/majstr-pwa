@@ -37,8 +37,11 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
   // then blamed the master's bookkeeping. Now it is said plainly, with the one thing left to know.
   const [cannotDelete, setCannotDelete] = useState(false);
   // Permanent delete is offered only on a closed-out object (COMPLETED/CANCELLED) — a live object is
-  // deleted by cancelling first, so a mis-tap can't wipe active work.
+  // deleted by cancelling first, so a mis-tap can't wipe active work. The training sample (V197) is
+  // the exception: it holds nothing real, so it goes at any stage, signed or paid.
   const terminal = isTerminalStage(project.stage);
+  const sample = project.sample === true;
+  const deletable = terminal || sample;
 
   return (
     <>
@@ -62,12 +65,12 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
             <div className={terminal ? undefined : 'border-t border-border'}>
               <ObjectStatusMenuItems stage={project.stage} onChoose={(a) => { close(); chooseAction(a); }} />
             </div>
-            {terminal && (
+            {deletable && (
               <div className="border-t border-border">
                 <ActionMenuItem
                   icon="🗑"
                   danger
-                  label={t('projects.deleteObject')}
+                  label={t(sample ? 'sample.delete' : 'projects.deleteObject')}
                   onClick={() => { close(); setConfirmDelete(true); }}
                 />
               </div>
@@ -85,9 +88,9 @@ export function ProjectRowMenu({ project }: { project: ProjectResponse }) {
 
       <ConfirmDialog
         open={confirmDelete}
-        title={t('projects.deleteObjectTitle')}
-        message={t('projects.deleteObjectConfirm')}
-        confirmLabel={t('projects.deleteObject')}
+        title={t(sample ? 'sample.deleteTitle' : 'projects.deleteObjectTitle')}
+        message={t(sample ? 'sample.deleteConfirm' : 'projects.deleteObjectConfirm')}
+        confirmLabel={t(sample ? 'sample.delete' : 'projects.deleteObject')}
         loading={deleteProject.isPending}
         onConfirm={() => deleteProject.mutate(project.id, {
           onSuccess: () => { setConfirmDelete(false); toast.success(t('projects.deleteObjectDone')); },

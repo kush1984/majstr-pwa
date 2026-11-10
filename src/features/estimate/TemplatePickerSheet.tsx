@@ -255,7 +255,9 @@ export function TemplatePickerSheet({
                   variant="secondary"
                   onClick={() => {
                     onClose();
-                    void navigate(routes.welcome, { state: { from: location.pathname + location.search } });
+                    void navigate(routes.welcome, {
+                      state: { from: location.pathname + location.search, resume: { openTemplates: true } },
+                    });
                   }}
                 >
                   {t('templates.noTradeAction')}

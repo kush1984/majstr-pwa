@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { SharePortalSheet } from './SharePortalSheet.tsx';
@@ -10,13 +10,18 @@ import { asInput } from '@/test/dom.ts';
 import { isHandheld } from '@/lib/deviceInput.ts';
 import { senderSheetStore } from '@/features/sender/senderGate.ts';
 import { trialOfferStore } from '@/features/email/trialOffer.ts';
+import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { aUser } from '@/test/factories.ts';
 
 vi.mock('@/api/portal.ts', () => ({
-  portalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
+  portalApi: {
+    state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined), preview: vi.fn(),
+  },
   economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), revoke: vi.fn() },
   estimateShareApi: { create: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
 }));
 vi.mock('@/lib/deviceInput.ts', () => ({ isHandheld: vi.fn(() => false) }));
+vi.mock('@/lib/outbox/outbox.ts', () => ({ flushOutbox: vi.fn().mockResolvedValue(undefined) }));
 // «Надіслати листом» asks the server whether the email is verified — the one button that does.
 const emailVerified = vi.fn(() => Promise.resolve(true));
 vi.mock('@/features/email/useEmailGate.ts', () => ({ useEmailGate: () => emailVerified }));
@@ -65,17 +70,15 @@ function wrapper() {
 /** Object-level share — the master picks a set onto the OBJECT's portal link. */
 function renderSheet(mode: 'portal' | 'economy' = 'portal') {
   render(
-    <SharePortalSheet open onClose={() => {}} project={project}
-      onNeedEmailVerify={() => {}} mode={mode} />,
+    <SharePortalSheet open onClose={() => {}} project={project} mode={mode} />,
     { wrapper: wrapper() },
   );
 }
 
 /** Single-estimate share — mints that ESTIMATE's own link, object portal untouched. */
-function renderSingle(estimateId: string, onNeedEmailVerify: () => void = () => {}) {
+function renderSingle(estimateId: string, onClose: () => void = () => {}) {
   render(
-    <SharePortalSheet open onClose={() => {}} project={project}
-      singleEstimateId={estimateId} onNeedEmailVerify={onNeedEmailVerify} />,
+    <SharePortalSheet open onClose={onClose} project={project} singleEstimateId={estimateId} />,
     { wrapper: wrapper() },
   );
 }
@@ -95,6 +98,32 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     // Two estimate checkboxes only — SIGNATURE never has a payments card.
     expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
     expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
+  });
+
+  it('previews exactly the ticked set — and publishes nothing', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue(state);
+    vi.mocked(portalApi.preview).mockResolvedValue({
+      url: 'https://api.majstr.test/portal/index.html?vp=pass', expiresAt: '2026-11-09T12:10:00Z',
+    });
+    const tab = { opener: 'app', closed: false, location: { href: '' }, close: vi.fn() };
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ME_QUERY_KEY, aUser({ fullName: 'Іван Майстер' }));
+    render(
+      <QueryClientProvider client={qc}>
+        <SharePortalSheet open onClose={() => {}} project={project} mode="portal" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
+
+    await waitFor(() => expect(tab.location.href).toBe('https://api.majstr.test/portal/index.html?vp=pass'));
+    expect(portalApi.preview).toHaveBeenCalledWith('p1', ['e1', 'e2']);
+    expect(portalApi.update).not.toHaveBeenCalled();
+    expect(portalApi.markSent).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
   it('publishes exactly the ticked set before copying the link, via the SIGNATURE endpoint', async () => {
@@ -143,6 +172,22 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(economyPortalApi.update).not.toHaveBeenCalled();
   });
 
+  it('shared from one estimate: «Подивитися, як побачить клієнт» is there, and marks nothing sent', async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    const onPreview = vi.fn();
+    render(
+      <SharePortalSheet open onClose={() => {}} project={project}
+        singleEstimateId="e2" onPreview={onPreview} />,
+      { wrapper: wrapper() },
+    );
+    await screen.findByDisplayValue(shareLink.url);
+
+    fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
+
+    expect(onPreview).toHaveBeenCalledOnce();
+    expect(estimateShareApi.markSent).not.toHaveBeenCalled();
+  });
+
   it("shared from one estimate: email goes out on the estimate's link, not the object's", async () => {
     vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
     vi.mocked(estimateShareApi.sendEmail).mockResolvedValue(shareLink);
@@ -161,29 +206,36 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     emailVerified.mockImplementation(() => Promise.resolve(false));
     vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-    const onNeedEmailVerify = vi.fn();
-    renderSingle('e2', onNeedEmailVerify);
+    renderSingle('e2');
     await screen.findByDisplayValue(shareLink.url);
 
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
     await waitFor(() => expect(estimateShareApi.markSent).toHaveBeenCalledWith('e2'));
-    expect(onNeedEmailVerify).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Підтвердіть email' })).toBeNull();
     expect(emailVerified).not.toHaveBeenCalled();
     expect(trialOfferStore.pending()).toBe(true);
   });
 
-  it('«надіслати листом» bounces an unverified contractor to the verify modal and sends nothing', async () => {
+  it('«надіслати листом» asks to verify OVER the sheet, and «Пізніше» returns to the link', async () => {
     emailVerified.mockImplementation(() => Promise.resolve(false));
     vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
-    const onNeedEmailVerify = vi.fn();
-    renderSingle('e2', onNeedEmailVerify);
+    const onClose = vi.fn();
+    renderSingle('e2', onClose);
     await screen.findByDisplayValue(shareLink.url);
 
     fireEvent.click(screen.getByRole('button', { name: /Надіслати на/ }));
 
-    await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
+    const verify = await screen.findByRole('dialog', { name: 'Підтвердіть email' });
     expect(estimateShareApi.sendEmail).not.toHaveBeenCalled();
+    // The share sheet is still there under it — closing it here is what made him start over.
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(within(verify).getByRole('button', { name: 'Пізніше' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Підтвердіть email' })).toBeNull());
+    expect(screen.getByDisplayValue(shareLink.url)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Копіювати посилання/ })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('a 403 EMAIL_NOT_VERIFIED from the server still lands in the verify modal', async () => {
@@ -192,13 +244,14 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
       isAxiosError: true,
       response: { status: 403, data: { status: 403, code: 'EMAIL_NOT_VERIFIED', message: 'x' } },
     });
-    const onNeedEmailVerify = vi.fn();
-    renderSingle('e2', onNeedEmailVerify);
+    const onClose = vi.fn();
+    renderSingle('e2', onClose);
     await screen.findByDisplayValue(shareLink.url);
 
     fireEvent.click(screen.getByRole('button', { name: /Надіслати на/ }));
 
-    await waitFor(() => expect(onNeedEmailVerify).toHaveBeenCalled());
+    expect(await screen.findByRole('dialog', { name: 'Підтвердіть email' })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   /** V190: SENDER_NAME_REQUIRED is a 403 too, and must not read as «only on PRO». */
@@ -208,7 +261,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
       response: { status: 403, data: { status: 403, code: 'SENDER_NAME_REQUIRED', message: 'x' } },
     });
     const ask = vi.spyOn(senderSheetStore, 'request').mockResolvedValue(true);
-    renderSingle('e2', vi.fn());
+    renderSingle('e2');
 
     await waitFor(() => expect(ask).toHaveBeenCalled());
     expect(screen.queryByText(/PRO/)).toBeNull();

@@ -13,7 +13,7 @@ import { toast } from '@/hooks/useToast.ts';
 import type { UserResponse } from '@/api/types.ts';
 
 vi.mock('@/api/auth.ts', () => ({ authApi: { me: vi.fn(), resendVerification: vi.fn() } }));
-// The real store, so the host sees a toast on screen; only the resend's own toasts are silenced.
+// The real store, so a toast is really on screen; only the resend's own toasts are silenced.
 vi.mock('@/hooks/useToast.ts', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/hooks/useToast.ts')>();
   return { ...real, toast: { ...real.toast, success: vi.fn(), error: vi.fn() } };
@@ -89,14 +89,11 @@ describe('TrialOfferHost — «Підтвердіть пошту — і змож
     expect(await screen.findByRole('dialog', { name: 'Підтвердіть пошту — і зможете ввімкнути 21 день PRO' })).toBeTruthy();
   });
 
-  it('after «Копіювати», waits for the «Скопійовано» toast to fade', async () => {
+  it('after «Копіювати», does not wait for «Скопійовано» — toasts go to the top while a sheet is open', async () => {
     renderHost(fresh, 21);
-    let id = 0;
-    act(() => { id = toast.info('Посилання скопійовано', 0); });
+    act(() => { toast.info('Посилання скопійовано', 0); });
     send();
-    expect(screen.queryByRole('dialog')).toBeNull();
 
-    act(() => { toast.dismiss(id); });
     expect(await screen.findByRole('dialog', { name: 'Підтвердіть пошту — і зможете ввімкнути 21 день PRO' })).toBeTruthy();
   });
 

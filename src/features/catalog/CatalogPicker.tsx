@@ -10,7 +10,7 @@ import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { useCatalog } from './useCatalog.ts';
+import { useVisibleCatalog } from './useCatalog.ts';
 import { TradeLevel } from './TradeLevel.tsx';
 import { toTradeTree, type BranchRow, type TradeBranch } from './catalogTree.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
@@ -83,7 +83,7 @@ export function CatalogPicker({
 }) {
   const { t } = useTranslation();
   const online = useOnline();
-  const { data, isPending } = useCatalog();
+  const { data, isPending } = useVisibleCatalog();
   const [q, setQ] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [selected, setSelected] = useState<Set<string>>(new Set());

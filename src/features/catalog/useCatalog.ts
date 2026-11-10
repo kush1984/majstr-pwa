@@ -37,6 +37,21 @@ export function useCatalog(type?: ItemType) {
   });
 }
 
+const visibleOnly = (items: CatalogItemResponse[]) => items.filter((i) => !i.hidden);
+
+/**
+ * The catalog the master LOOKS at: without the positions of a trade he took off his profile. Same
+ * query and cache as {@link useCatalog} — prices (offline template apply, the sync card) keep
+ * reading the whole list, so a hidden position still prices what it always did.
+ */
+export function useVisibleCatalog() {
+  return useQuery({
+    queryKey: [...CATALOG_KEY, 'list', 'all'],
+    queryFn: () => catalogApi.list(),
+    select: visibleOnly,
+  });
+}
+
 export function useCatalogCategories() {
   return useQuery({
     queryKey: [...CATALOG_KEY, 'categories'],

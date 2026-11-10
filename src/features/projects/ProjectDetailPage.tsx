@@ -12,7 +12,6 @@ import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
-import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -21,11 +20,13 @@ import { formatMoney, initials } from '@/lib/format.ts';
 import { ESTIMATE_STATUS_VARIANT, OBJECT_STAGE_VARIANT } from '@/lib/labels.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { economyPairHint, shouldShowSupersedeBanner } from './economyNote.ts';
-import { routes } from '@/lib/config.ts';
+import { config, routes } from '@/lib/config.ts';
+import { useMe } from '@/features/auth/useMe.ts';
+import { track } from '@/lib/posthog.ts';
 import { CLIENT_DRIVEN_QUERY, anyAwaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import { ShoppingObjectRow } from '@/features/shopping/ShoppingObjectRow.tsx';
 import type { EstimateSummary } from '@/api/types.ts';
-import { useProject, useObjectStatusAction, isTerminalStage, useUpdateProject } from './useProjects.ts';
+import { useProject, useObjectStatusAction, isTerminalStage, useUpdateProject, useDeleteProject } from './useProjects.ts';
 import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import { ObjectStatusMenuItems, ObjectStatusConfirmDialog } from './ObjectStatusActions.tsx';
 import { useEstimate, useCreateEstimate } from '@/features/estimate/useEstimate.ts';
@@ -79,6 +80,9 @@ export function ProjectDetailPage() {
   const qc = useQueryClient();
   const { guard } = useOnlineGuard(); // for the server-only actions (portal share)
   const project = useProject(id);
+  // The training sample (V197) is deleted from its own banner, at any stage.
+  const deleteProject = useDeleteProject();
+  const [confirmDeleteSample, setConfirmDeleteSample] = useState(false);
   // The active tab lives in the URL (economy-nav-and-discount iteration), not plain state — so
   // opening an act/estimate and coming back (in-app «← назад» OR the browser's own back) restores
   // the tab the master was actually on, instead of always landing back on «Кошторис». `replace`
@@ -96,7 +100,6 @@ export function ProjectDetailPage() {
   // («📝 Створити нотатку» vs «📝 Нотатки · N»). Cheap, cached query; notes are small.
   const notes = useNotes(id);
   const noteCount = notes.data?.length ?? 0;
-  const [emailGateOpen, setEmailGateOpen] = useState(false);
   const ensureSender = useSenderGate();
   const updateProject = useUpdateProject();
   const [editClientOpen, setEditClientOpen] = useState(false);
@@ -116,6 +119,9 @@ export function ProjectDetailPage() {
     refetchInterval: (query) => anyAwaitingClientInterval(query.state.data),
   });
   const limits = usePlanLimits();
+  const { data: me } = useMe();
+  // Import is PRO; on FREE the same button offers to type the paper in for him (a person, not a model).
+  const conciergeImport = (me?.plan ?? 'FREE') === 'FREE';
 
   const invalidateAfterRowAction = () => {
     void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
@@ -167,18 +173,25 @@ export function ProjectDetailPage() {
   // reopen it.
   const location = useLocation();
   const [justCreated, setJustCreated] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   useEffect(() => {
-    if ((location.state as { justCreated?: boolean } | null)?.justCreated) {
+    const state = location.state as { justCreated?: boolean; openTemplates?: boolean } | null;
+    if (state?.justCreated) {
       setJustCreated(true);
       setEstimateChoiceOpen(true);
-      void navigate(location.pathname + location.search, { replace: true, state: null });
+    } else if (state?.openTemplates) {
+      // Back from «Вибрати напрям» in the empty picker: the trade is saved, so its bundles are what
+      // he went for — reopen the picker rather than make him press «Новий кошторис» again.
+      setTemplatePickerOpen(true);
+    } else {
+      return;
     }
+    void navigate(location.pathname + location.search, { replace: true, state: null });
   }, [location.state, location.pathname, location.search, navigate]);
   const closeChoice = () => {
     setEstimateChoiceOpen(false);
     setJustCreated(false);
   };
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [consolidateOpen, setConsolidateOpen] = useState(false);
 
   if (project.isPending) {
@@ -280,12 +293,10 @@ export function ProjectDetailPage() {
 
   return (
     <>
-      <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <SharePortalSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         project={p}
-        onNeedEmailVerify={() => setEmailGateOpen(true)}
         mode={tab === 'economy' ? 'economy' : 'portal'}
       />
       {p.clientId && (
@@ -318,6 +329,23 @@ export function ProjectDetailPage() {
         onClose={() => setObjectAction(null)}
       />
 
+      <ConfirmDialog
+        open={confirmDeleteSample}
+        title={t('sample.deleteTitle')}
+        message={t('sample.deleteConfirm')}
+        confirmLabel={t('sample.delete')}
+        loading={deleteProject.isPending}
+        onConfirm={() => deleteProject.mutate(id, {
+          onSuccess: () => {
+            setConfirmDeleteSample(false);
+            toast.success(t('sample.deleted'));
+            void navigate(routes.projects, { replace: true });
+          },
+          onError: (err) => toast.error(toAppError(err).message),
+        })}
+        onClose={() => setConfirmDeleteSample(false)}
+      />
+
       {/* «Що далі?» — how the estimate starts. A template is the usual answer, so it leads. Right
           after the object was made the title says so; from the tab it is just «Новий кошторис». */}
       <Modal
@@ -339,17 +367,33 @@ export function ProjectDetailPage() {
           <Button fullWidth variant="secondary" onClick={createEmpty} loading={createEstimate.isPending}>
             {t('projects.nextEmpty')}
           </Button>
-          {/* Import a ready estimate onto this object (Excel/photo → LLM, PRO). */}
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={() => {
-              closeChoice();
-              void navigate(routes.importEstimate(id));
-            }}
-          >
-            {t('projects.nextFromFile')}
-          </Button>
+          {/* Import a ready estimate onto this object (Excel/photo → LLM, PRO). On FREE it used to
+              end on «Доступно у плані PRO»; there the paper goes to us and we type it in. */}
+          {conciergeImport ? (
+            <Button
+              fullWidth
+              variant="secondary"
+              className="h-auto whitespace-normal py-3 leading-snug"
+              onClick={() => {
+                track('concierge_import_tapped');
+                window.open(config.conciergeUrl, '_blank', 'noopener');
+                closeChoice();
+              }}
+            >
+              {t('projects.nextConcierge')}
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              variant="secondary"
+              onClick={() => {
+                closeChoice();
+                void navigate(routes.importEstimate(id));
+              }}
+            >
+              {t('projects.nextFromFile')}
+            </Button>
+          )}
           <button type="button" onClick={closeChoice}
             className="w-full py-2 text-center text-sm font-semibold text-muted">
             {t('projects.nextLater')}
@@ -470,6 +514,17 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {p.sample === true && (
+        <section data-testid="sample-banner" className="mb-4 rounded-card border border-brand/30 bg-brand-soft p-4">
+          <h2 className="text-sm font-bold text-primary">{t('sample.bannerTitle')}</h2>
+          <p className="mt-1 text-xs leading-snug text-muted">{t('sample.bannerText')}</p>
+          <Button variant="secondary" fullWidth className="mt-3 min-h-[44px]"
+            onClick={() => setConfirmDeleteSample(true)}>
+            {t('sample.delete')}
+          </Button>
+        </section>
+      )}
 
       <ShoppingObjectRow projectId={id} />
 

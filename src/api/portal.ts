@@ -1,5 +1,7 @@
 import { api } from './client.ts';
-import type { ActShareStateResponse, PortalStateResponse, ShareLinkResponse } from './types.ts';
+import type {
+  ActShareStateResponse, ClientPreviewResponse, PortalPreviewRequest, PortalStateResponse, ShareLinkResponse,
+} from './types.ts';
 
 /**
  * Owner-side control of the object's SIGNATURE portal (Кошторис tab) — any-status estimates,
@@ -32,6 +34,17 @@ export const portalApi = {
   /** The link actually LEFT the app (shared / copied): the visible drafts become SENT. Idempotent. */
   markSent(projectId: string): Promise<void> {
     return api.post(`/api/projects/${projectId}/portal/mark-sent`).then(() => undefined);
+  },
+
+  /**
+   * «Подивитися, як побачить клієнт» for the object's portal with the estimates ticked NOW: a
+   * ten-minute pass (`?vp=`). Publishes nothing, mints no link, changes no status.
+   */
+  preview(projectId: string, estimateIds: string[]): Promise<ClientPreviewResponse> {
+    const body: PortalPreviewRequest = { estimateIds };
+    return api
+      .post<ClientPreviewResponse>(`/api/projects/${projectId}/portal/preview`, body)
+      .then((r) => r.data);
   },
 };
 
@@ -92,6 +105,16 @@ export const estimateShareApi = {
   /** Minting no longer flips the status (review P1-9): this does, once the link left the app. */
   markSent(estimateId: string): Promise<void> {
     return api.post(`/api/estimates/${estimateId}/share/mark-sent`).then(() => undefined);
+  },
+
+  /**
+   * «Подивитися, як побачить клієнт»: a ten-minute pass to the client's page. Mints no link and
+   * changes no status — the funnel's «поділились» must not move because the master LOOKED.
+   */
+  clientPreview(estimateId: string): Promise<ClientPreviewResponse> {
+    return api
+      .post<ClientPreviewResponse>(`/api/estimates/${estimateId}/client-preview`)
+      .then((r) => r.data);
   },
 };
 

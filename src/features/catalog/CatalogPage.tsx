@@ -18,7 +18,7 @@ import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import {
   useAddNewFromTemplate,
-  useCatalog,
+  useVisibleCatalog,
   useCheckTemplateUpdates,
   useResetCatalog,
   useDeleteCatalogItems,
@@ -26,6 +26,7 @@ import {
 } from './useCatalog.ts';
 import { INLINE_ITEM_EDITING } from '@/lib/featureFlags.ts';
 import { toastUndoable } from '@/lib/inlineEdit.ts';
+import { CatalogTabs } from './CatalogTabs.tsx';
 import { track } from '@/lib/posthog.ts';
 import type { CatalogItemRequest } from '@/api/types.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
@@ -67,7 +68,7 @@ export function CatalogPage() {
   // Fetch the WHOLE catalog and filter by type client-side: only then can we tell a genuinely
   // empty catalog (→ onboarding) apart from a filter that simply matched nothing (→ a light hint).
   // Server-side type filtering made «Матеріали» on a works-only catalog look like an empty catalog.
-  const { data, isPending, isError, error, refetch } = useCatalog();
+  const { data, isPending, isError, error, refetch } = useVisibleCatalog();
   const reset = useResetCatalog();
   const checkUpdates = useCheckTemplateUpdates();
   const addNew = useAddNewFromTemplate();
@@ -195,6 +196,7 @@ export function CatalogPage() {
       <h1 className="mb-4 text-2xl font-extrabold tracking-tight text-primary sm:text-[26px]">
         {t('catalog.title')}
       </h1>
+      <CatalogTabs />
 
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
