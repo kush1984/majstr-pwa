@@ -64,3 +64,18 @@ describe('ClientEditModal — type switch reveals requisites', () => {
     expect(screen.queryByText('Посада підписанта')).toBeNull();
   });
 });
+
+describe('ClientEditModal — the phone is optional (V198)', () => {
+  it('saves a client with no phone, and clearing the phone sends none', async () => {
+    clientData.current = { ...clientData.current, phone: null };
+    renderModal();
+
+    expect(screen.getByText('Телефон (необов\'язково)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ req: expect.objectContaining({ fullName: 'Іван Клієнт', phone: undefined }) }),
+    ));
+    clientData.current = { ...clientData.current, phone: '+380671112233' };
+  });
+});

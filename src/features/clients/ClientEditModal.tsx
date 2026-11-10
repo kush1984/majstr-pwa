@@ -51,14 +51,14 @@ export function ClientEditModal({
     fullName: '', phone: '', email: '', address: '',
     clientType: 'PERSON', taxId: '', legalName: '', legalAddress: '', signatoryTitle: '', signatoryName: '',
   });
-  const [errors, setErrors] = useState<{ fullName?: boolean; phone?: boolean; email?: boolean }>({});
+  const [errors, setErrors] = useState<{ fullName?: boolean; email?: boolean }>({});
 
   // Re-fill whenever the modal opens with fresh client data.
   useEffect(() => {
     if (open && client.data) {
       setForm({
         fullName: client.data.fullName,
-        phone: client.data.phone,
+        phone: client.data.phone ?? '',
         email: client.data.email ?? '',
         address: client.data.address ?? '',
         clientType: client.data.clientType,
@@ -79,11 +79,10 @@ export function ClientEditModal({
   const onSave = async () => {
     const next = {
       fullName: !form.fullName.trim(),
-      phone: !form.phone.trim(),
       email: form.email.trim() !== '' && !form.email.includes('@'),
     };
     setErrors(next);
-    if (next.fullName || next.phone || next.email) return;
+    if (next.fullName || next.email) return;
 
     const hasRequisites = form.clientType !== 'PERSON';
     try {
@@ -91,7 +90,7 @@ export function ClientEditModal({
         id: clientId,
         req: {
           fullName: form.fullName.trim(),
-          phone: form.phone.trim(),
+          phone: form.phone.trim() || undefined,
           address: form.address.trim() || undefined,
           email: form.email.trim() || undefined,
           clientType: form.clientType,
@@ -124,9 +123,9 @@ export function ClientEditModal({
             <Input value={form.fullName} onChange={set('fullName')} invalid={errors.fullName}
               placeholder={t('clients.namePlaceholder')} />
           </Field>
-          <Field label={t('common.phone')}>
+          <Field label={t('clients.phoneOptional')}>
             <Input type="tel" inputMode="tel" value={form.phone} onChange={set('phone')}
-              invalid={errors.phone} placeholder={t('clients.phonePlaceholder')} />
+              placeholder={t('clients.phonePlaceholder')} />
           </Field>
           <Field label={t('clients.emailOptional')}>
             <Input type="email" inputMode="email" value={form.email} onChange={set('email')}

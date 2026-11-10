@@ -116,7 +116,7 @@
     "fullName": "string",
     "legalAddress": "string?",
     "legalName": "string?",
-    "phone": "string",
+    "phone": "string?",
     "signatoryName": "string?",
     "signatoryTitle": "string?",
     "taxId": "string?"

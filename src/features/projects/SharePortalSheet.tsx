@@ -442,7 +442,7 @@ export function SharePortalSheet({
         id: clientId,
         req: {
           fullName: c.fullName,
-          phone: c.phone,
+          phone: c.phone ?? undefined,
           address: c.address ?? undefined,
           email: emailInput.trim(),
         },

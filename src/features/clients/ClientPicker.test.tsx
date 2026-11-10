@@ -5,7 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
-import { ClientPicker, emptyClientDraft, type ClientDraft } from './ClientPicker.tsx';
+import { ClientPicker, clientDraftError, emptyClientDraft, resolveClientId, type ClientDraft } from './ClientPicker.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { clientsApi } from '@/api/clients.ts';
 import { profileApi } from '@/api/profile.ts';
@@ -72,5 +72,30 @@ describe('ClientPicker — client-data acknowledgement gate', () => {
     await waitFor(() => expect(container.querySelector('#cp-name')).not.toBeNull());
     expect(screen.queryByText('Дані клієнта')).toBeNull();
     expect(profileApi.acknowledgeClientData).not.toHaveBeenCalled();
+  });
+});
+
+describe('ClientPicker — the phone is optional (V198)', () => {
+  it('a new client needs only a name, and goes without a phone', async () => {
+    const draft: ClientDraft = { ...emptyClientDraft, mode: 'new', newClient: { fullName: 'Олег', phone: '  ', email: '' } };
+    expect(clientDraftError(draft)).toBeNull();
+    expect(clientDraftError({ ...draft, newClient: { ...draft.newClient, fullName: ' ' } })).toBe('estimate.enterClientName');
+
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'c9' });
+    await expect(resolveClientId(draft, { mutateAsync })).resolves.toBe('c9');
+    expect(mutateAsync).toHaveBeenCalledWith({ fullName: 'Олег', phone: undefined, email: undefined });
+  });
+
+  it('lists a client with no phone by name alone', async () => {
+    vi.mocked(clientsApi.list).mockResolvedValue([{
+      id: 'c1', fullName: 'Без Телефону', phone: null, address: null, email: null, clientType: 'PERSON',
+      taxId: null, legalName: null, legalAddress: null, signatoryTitle: null, signatoryName: null, createdAt: '',
+    }]);
+    renderPicker(meWith('2026-01-01'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Наявний' }));
+
+    const name = await screen.findByText('Без Телефону');
+    expect(name.parentElement?.textContent).toBe('Без Телефону');
   });
 });

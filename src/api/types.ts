@@ -317,7 +317,8 @@ export const ACT_UNITS = UNITS.filter((u) => u !== 'PERCENT');
 export interface ClientResponse {
   id: string;
   fullName: string;
-  phone: string;
+  /** Optional since backend V198 — read with `!= null`. */
+  phone?: string | null;
   address: string | null;
   email: string | null;
   // Document requisites (acts iteration).
@@ -332,7 +333,8 @@ export interface ClientResponse {
 
 export interface ClientRequest {
   fullName: string;
-  phone: string;
+  /** Optional (V198): a client met on site may not have given a number yet. */
+  phone?: string;
   address?: string;
   /** Optional — lets the contractor email the estimate to the client. */
   email?: string;

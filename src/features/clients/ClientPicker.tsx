@@ -30,8 +30,8 @@ export const emptyClientDraft: ClientDraft = {
 /** Validation: returns an i18n key to toast, or null when the draft is usable
  *  ('none' is always valid — the client is optional). */
 export function clientDraftError(d: ClientDraft): string | null {
-  if (d.mode === 'new' && (!d.newClient.fullName.trim() || !d.newClient.phone.trim())) {
-    return 'estimate.enterClientNamePhone';
+  if (d.mode === 'new' && !d.newClient.fullName.trim()) {
+    return 'estimate.enterClientName';
   }
   if (d.mode === 'existing' && !d.selectedId) return 'estimate.chooseOrCreateClient';
   return null;
@@ -47,7 +47,7 @@ export async function resolveClientId(
   if (d.mode === 'new') {
     const c = await createClient.mutateAsync({
       fullName: d.newClient.fullName.trim(),
-      phone: d.newClient.phone.trim(),
+      phone: d.newClient.phone.trim() || undefined,
       email: d.newClient.email.trim() || undefined,
     });
     return c.id;
@@ -131,7 +131,7 @@ export function ClientPicker({
               }
             />
           </FormField>
-          <FormField label={t('common.phone')} htmlFor="cp-phone" required>
+          <FormField label={t('clients.phoneOptional')} htmlFor="cp-phone">
             <Input
               id="cp-phone"
               type="tel"
@@ -195,7 +195,7 @@ export function ClientPicker({
                     <span className="block truncate text-sm font-medium text-primary">
                       {c.fullName}
                     </span>
-                    <span className="block text-xs text-muted">{c.phone}</span>
+                    {c.phone != null && <span className="block text-xs text-muted">{c.phone}</span>}
                   </span>
                 </button>
               ))}

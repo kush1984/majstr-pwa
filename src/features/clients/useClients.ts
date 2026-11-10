@@ -48,7 +48,7 @@ export function useCreateClient() {
     mutationFn: (req: ClientRequest): Promise<ClientResponse> => {
       const id = newUuid();
       const optimistic: ClientResponse = {
-        id, fullName: req.fullName, phone: req.phone,
+        id, fullName: req.fullName, phone: req.phone ?? null,
         address: req.address ?? null, email: req.email ?? null,
         clientType: req.clientType ?? 'PERSON',
         taxId: req.taxId ?? null,
@@ -79,7 +79,7 @@ export function useUpdateClient() {
     networkMode: 'always',
     mutationFn: ({ id, req }: { id: string; req: ClientRequest }): Promise<void> => {
       const patch = (c: ClientResponse): ClientResponse => ({
-        ...c, fullName: req.fullName, phone: req.phone, address: req.address ?? null, email: req.email ?? null,
+        ...c, fullName: req.fullName, phone: req.phone ?? null, address: req.address ?? null, email: req.email ?? null,
       });
       return offlineMutate<void>({
         entity: 'client', entityId: id, type: 'update', payload: req, deps: [],
