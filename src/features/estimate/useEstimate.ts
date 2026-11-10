@@ -396,7 +396,35 @@ function patchEstimateWithCatalogLines(
 export function useUpdateItem(estimateId: string) {
   const qc = useQueryClient();
   const invalidate = useInvalidateEstimate(estimateId);
+  const key = [...ESTIMATE_KEY, estimateId];
+  const apply = (itemId: string, req: EstimateItemRequest) => {
+    patchEstimate(qc, estimateId, (items) => items.map((i) => (i.id === itemId ? {
+      ...i, type: req.type, name: req.name, category: req.category ?? null,
+      unit: req.unit, quantity: req.quantity, unitPrice: req.unitPrice,
+      measurementRefs: req.measurementRefs ?? i.measurementRefs,
+      quantityManual: req.quantityManual ?? i.quantityManual,
+    } : i)));
+  };
+  const mutationKey = ['estimate-item-update', estimateId];
+  // A refetch while a NEXT cell's save is still in the air would bring back its old figure for a
+  // moment; the last save in a run refetches for all of them.
+  const settle = () => {
+    if (qc.isMutating({ mutationKey }) <= 1) invalidate();
+  };
   return useMutation({
+    mutationKey,
+    // ONLINE too: the row shows the typed figure at once, not after the PUT and the refetch that
+    // follows it (2-3 s of the old number after a click away from an inline cell).
+    onMutate: async ({ itemId, req }: { itemId: string; req: EstimateItemRequest }) => {
+      await cancelEstimate(qc, estimateId)();
+      const before = qc.getQueryData<EstimateResponse>(key);
+      apply(itemId, req);
+      return { before };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.before) qc.setQueryData(key, ctx.before);
+      invalidate();
+    },
     onSuccess: () => noticeSentChange(qc, estimateId),
     networkMode: 'always',
     mutationFn: ({ itemId, req }: { itemId: string; req: EstimateItemRequest }): Promise<void> => {
@@ -405,15 +433,8 @@ export function useUpdateItem(estimateId: string) {
         payload: { estimateId, req }, deps: [estimateId],
         online: async () => { await estimatesApi.updateItem(estimateId, itemId, req); },
         cancel: cancelEstimate(qc, estimateId),
-        onOnlineSuccess: invalidate,
-        optimistic: () => {
-          patchEstimate(qc, estimateId, (items) => items.map((i) => (i.id === itemId ? {
-            ...i, type: req.type, name: req.name, category: req.category ?? null,
-            unit: req.unit, quantity: req.quantity, unitPrice: req.unitPrice,
-            measurementRefs: req.measurementRefs ?? i.measurementRefs,
-            quantityManual: req.quantityManual ?? i.quantityManual,
-          } : i)));
-        },
+        onOnlineSuccess: settle,
+        optimistic: () => apply(itemId, req),
       });
     },
   });

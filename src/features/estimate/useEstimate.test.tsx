@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import {
   useAddItem, useRemoveItem, useCreateEstimate, useUpdateEstimate, useDeleteEstimate,
-  useAddItemFromCatalog, useAddItemsFromCatalogBatch, useMarkUpItems, ESTIMATE_KEY,
+  useAddItemFromCatalog, useAddItemsFromCatalogBatch, useMarkUpItems, useUpdateItem, ESTIMATE_KEY,
 } from './useEstimate.ts';
 import { clearOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
 import { estimatesApi } from '@/api/estimates.ts';
@@ -12,7 +12,7 @@ import type { EstimateResponse } from '@/api/types.ts';
 
 vi.mock('@/api/estimates.ts', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/api/estimates.ts')>();
-  return { estimatesApi: { ...mod.estimatesApi, update: vi.fn() } };
+  return { estimatesApi: { ...mod.estimatesApi, update: vi.fn(), updateItem: vi.fn() } };
 });
 
 // Drive the OFFLINE branch (optimistic estimate-cache edit + queued item op).
@@ -320,5 +320,40 @@ describe('markup on the picked lines — offline («Націнка на вибр
     expect(est.items[0].unitPrice).toBe(115);
     expect(est.items[1].unitPrice).toBe(500); // untouched: 575 would be the double-apply
     expect(est.items[1].lineTotal).toBe(50);
+  });
+});
+
+describe('updateItem — online, the row shows the typed figure at once', () => {
+  const req = {
+    type: 'WORK' as const, name: 'Робота', unit: 'M2' as const, quantity: 7, unitPrice: 100,
+  };
+
+  it('patches the cached line BEFORE the server answers', async () => {
+    onlineManager.setOnline(true);
+    const { qc, wrapper } = setup();
+    let answer: () => void = () => {};
+    vi.mocked(estimatesApi.updateItem).mockReturnValue(new Promise((r) => { answer = () => r(undefined as never); }));
+    const { result } = renderHook(() => useUpdateItem(EID), { wrapper });
+
+    let done: Promise<void> = Promise.resolve();
+    await act(async () => { done = result.current.mutateAsync({ itemId: 'i1', req }); await Promise.resolve(); });
+
+    const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
+    expect(est.items[0].quantity).toBe(7);
+    expect(est.total).toBe(700);
+    await act(async () => { answer(); await done; });
+  });
+
+  it('a refused save puts the old figure back', async () => {
+    onlineManager.setOnline(true);
+    const { qc, wrapper } = setup();
+    vi.mocked(estimatesApi.updateItem).mockRejectedValue(new Error('ESTIMATE_SIGNED'));
+    const { result } = renderHook(() => useUpdateItem(EID), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ itemId: 'i1', req }).catch(() => {});
+    });
+
+    expect(qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!.items[0].quantity).toBe(2);
   });
 });
