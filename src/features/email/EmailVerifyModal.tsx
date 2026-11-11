@@ -3,6 +3,7 @@ import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
+import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
 import { useResendVerification } from './useEmailVerification.ts';
 
 /**
@@ -12,6 +13,8 @@ import { useResendVerification } from './useEmailVerification.ts';
 export function EmailVerifyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const resend = useResendVerification();
+  // The PRO trial is named only while the server offers one (trialDays 0 = switched off, 2026-11-11).
+  const { data: limits } = usePlanLimits();
 
   const onResend = async () => {
     try {
@@ -29,7 +32,7 @@ export function EmailVerifyModal({ open, onClose }: { open: boolean; onClose: ()
       <div className="mb-5 flex gap-3">
         <span className="text-2xl leading-none">✉️</span>
         <p className="text-sm text-muted">
-          {t('email.modalText')}
+          {t(limits?.trialDays ? 'email.modalText' : 'email.modalTextNoTrial')}
         </p>
       </div>
       <div className="flex gap-2">

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useMe } from '@/features/auth/useMe.ts';
+import { usePlanLimits } from '@/features/plan/usePlanLimits.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useResendVerification } from './useEmailVerification.ts';
@@ -13,6 +14,8 @@ export function EmailVerificationBanner() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const resend = useResendVerification();
+  // The PRO trial is named only while the server offers one (trialDays 0 = switched off, 2026-11-11).
+  const { data: limits } = usePlanLimits();
 
   if (!me || me.emailVerified !== false) return null;
 
@@ -39,7 +42,7 @@ export function EmailVerificationBanner() {
         <div>
           <div className="text-sm font-semibold text-primary">{t('email.bannerTitle')}</div>
           <div className="text-xs text-muted">
-            {t('email.bannerText', { email: me.email })}
+            {t(limits?.trialDays ? 'email.bannerText' : 'email.bannerTextNoTrial', { email: me.email })}
           </div>
         </div>
       </div>

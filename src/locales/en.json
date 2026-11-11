@@ -2102,6 +2102,7 @@
   "email": {
     "bannerTitle": "Confirm your email",
     "bannerText": "We sent a letter to {{email}}. Verify your email to keep access to your account, take the PRO trial and send estimates to clients by email.",
+    "bannerTextNoTrial": "We sent a letter to {{email}}. Verify your email to keep access to your account and send estimates to clients by email.",
     "resend": "Resend the email",
     "sentCheckInbox": "Email sent — check your inbox",
     "waitBeforeResend": "Wait{{seconds}} before resending",
@@ -2109,6 +2110,7 @@
     "waitSeconds": " {{seconds}} s",
     "modalTitle": "Confirm your email",
     "modalText": "A letter to your client sent on your behalf, the PRO trial and payment need a verified email. Sharing a link in Viber or Telegram and downloading a PDF work without it. We will send a letter with a link to your inbox.",
+    "modalTextNoTrial": "A letter to your client sent on your behalf and payment need a verified email. Sharing a link in Viber or Telegram and downloading a PDF work without it. We will send a letter with a link to your inbox.",
     "sendLetter": "Send the email",
     "verifyTitle": "Email confirmation",
     "verifying": "Checking the link…",
