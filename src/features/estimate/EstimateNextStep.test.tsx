@@ -4,6 +4,15 @@ import '@/lib/i18n.ts';
 import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
 import type { EstimateStatus } from '@/api/types.ts';
 
+const push = vi.hoisted(() => ({
+  state: { permission: 'unsupported', isSubscribed: false, isReady: true, isBusy: false },
+  enable: vi.fn(() => Promise.resolve({ ok: true })),
+}));
+vi.mock('@/hooks/usePush.ts', () => ({
+  usePush: () => ({ ...push.state, enable: push.enable, disable: vi.fn() }),
+}));
+vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+
 const onShare = vi.fn();
 const onCreateAct = vi.fn();
 const onMaterials = vi.fn();
@@ -29,7 +38,29 @@ function primary() {
 }
 
 describe('EstimateNextStep', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    push.state = { permission: 'unsupported', isSubscribed: false, isReady: true, isBusy: false };
+  });
+
+  it('SENT offers to notify the master of the signature, and switches it on in one tap', () => {
+    // Master feedback: with several objects he kept opening estimates to see whether one was signed.
+    push.state = { ...push.state, permission: 'default' };
+    setup('SENT');
+    fireEvent.click(screen.getByRole('button', { name: /Сповістити, коли клієнт підпише/ }));
+    expect(push.enable).toHaveBeenCalled();
+  });
+
+  it('the offer is gone once this device is subscribed, and never shows on a draft or a signed one', () => {
+    push.state = { ...push.state, permission: 'granted', isSubscribed: true };
+    setup('SENT');
+    expect(screen.queryByText(/Сповістити, коли клієнт підпише/)).toBeNull();
+
+    push.state = { ...push.state, isSubscribed: false };
+    setup('DRAFT');
+    setup('SIGNED', '2026-11-11');
+    expect(screen.queryByText(/Сповістити, коли клієнт підпише/)).toBeNull();
+  });
 
   it('DRAFT asks whether the estimate is ready and sends it', () => {
     setup('DRAFT');

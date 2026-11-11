@@ -8,6 +8,7 @@ import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { TEMP_FREE_GETS_RECEIPT_IMPORT } from '@/features/plan/tempFreeUnlocks.ts';
 import { useMe } from '@/features/auth/useMe.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
 import { receiptImportApi } from '@/api/receiptImport.ts';
@@ -85,6 +86,9 @@ export function ReceiptImportSheet({
   const [step, setStep] = useState<Step>('source');
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  // Slips a FREE master's batch could not read because only the PAID rung could have: no fiscal QR
+  // (or a QR the tax service had no lines for). Said as that, not as «nothing on the receipt».
+  const [freeMisses, setFreeMisses] = useState<{ count: number; qrFound: boolean }>({ count: 0, qrFound: false });
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [committing, setCommitting] = useState(false);
   const heldFiles = useRef<File[]>([]);
@@ -94,7 +98,8 @@ export function ReceiptImportSheet({
 
   // Reading a receipt PHOTO is the paid capability; everything the QR hands back is free.
   const { data: me } = useMe();
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  // A temporary unlock opens the photo read to FREE as well (tempFreeUnlocks.ts).
+  const readsPhoto = (me?.plan ?? 'FREE') !== 'FREE' || TEMP_FREE_GETS_RECEIPT_IMPORT;
 
   // The object's receipt-photo budget is a SEPARATE per-object cap (5 on FREE) and a pile can
   // exhaust it mid-way. Loaded once the review is on screen, so the offer below can say how many
@@ -111,6 +116,7 @@ export function ReceiptImportSheet({
     setStep('source');
     setProgress({ done: 0, total: 0 });
     setDrafts([]);
+    setFreeMisses({ count: 0, qrFound: false });
     heldFiles.current = [];
     setCommitting(false);
     setSavePhotoOpen(false);
@@ -148,11 +154,13 @@ export function ReceiptImportSheet({
    */
   const readOne = async (
     file: File,
-  ): Promise<{ items: Draft[]; via: 'qr' | 'photo' } | null> => {
+  ): Promise<{ items: Draft[]; via: 'qr' | 'photo' } | { proOnly: true; qrFound: boolean } | null> => {
+    let qrFound = false;
     try {
       // Budgeted: jsqr is synchronous, and ten full 6-second ladders would freeze the phone.
       const payload = await decodeQrFromFile(file, { budgetMs: BATCH_QR_BUDGET_MS });
       if (payload && looksFiscal(payload)) {
+        qrFound = true;
         const res = await receiptImportApi.parseQr(estimateId, payload);
         if (res.items.length > 0) return { items: toDrafts(res.items, 0, 'qr', 0), via: 'qr' };
       }
@@ -160,7 +168,7 @@ export function ReceiptImportSheet({
       // An unreadable code, or one the tax service had no positions for: this endpoint answers 400
       // by design, because on its own it is the whole feature. Here it is only the first rung.
     }
-    if (!isPro) return null;
+    if (!readsPhoto) return { proOnly: true, qrFound };
     const res = await receiptImportApi.parse(estimateId, file);
     return res.items.length > 0 ? { items: toDrafts(res.items, 0, 'photo', 0), via: 'photo' } : null;
   };
@@ -182,6 +190,8 @@ export function ReceiptImportSheet({
     setProgress({ done: 0, total: files.length });
     const all: Draft[] = [];
     let unread = 0;
+    let proOnly = 0;
+    let qrFoundOnFree = false;
     let error: string | null = null;
     for (const [i, file] of files.entries()) {
       try {
@@ -189,7 +199,10 @@ export function ReceiptImportSheet({
         // the QR decode and the model lose it if the photo is shrunk first. Downscaling happens
         // only for the photo that is later KEPT.
         const read = await readOne(file);
-        if (read) {
+        if (read && 'proOnly' in read) {
+          proOnly += 1;
+          qrFoundOnFree ||= read.qrFound;
+        } else if (read) {
           for (const d of read.items) {
             all.push({ ...d, key: all.length, receipt: i + 1, via: read.via });
           }
@@ -203,15 +216,19 @@ export function ReceiptImportSheet({
       setProgress({ done: i + 1, total: files.length });
     }
     setDrafts(all);
+    setFreeMisses({ count: proOnly, qrFound: qrFoundOnFree });
     setStep('review');
     if (error) toast.error(error);
     else if (unread > 0) toast.info(t('receipt.someUnread', { count: unread }));
-    // The photo read is what PRO pays for, so a FREE master whose slips carried no code has just
-    // watched the feature do nothing — name the reason instead of leaving an empty review.
-    if (unread > 0 && !isPro) {
-      void upgradeApi.click('RECEIPT_IMPORT');
-      setUpgradeOpen(true);
-    }
+    // Slips only the paid rung could read: named in the review itself (master feedback). The payment
+    // sheet used to pop up on its own, and closing it left «на чеку не знайдено позицій» — which
+    // blamed the paper for what was the plan. When some slips DID read, a toast says how many did not.
+    else if (proOnly > 0 && all.length > 0) toast.info(t('receipt.someNeedPro', { count: proOnly }));
+  };
+
+  const openUpgrade = () => {
+    void upgradeApi.click('RECEIPT_IMPORT');
+    setUpgradeOpen(true);
   };
 
   const patch = (key: number, next: Partial<Draft>) =>
@@ -315,7 +332,7 @@ export function ReceiptImportSheet({
             {/* The gate is on the paid RUNG, not on the picker: a slip with a fiscal code is read
                 for free, so blocking the pick would hide a free capability behind a PRO wall. */}
             <p className="text-xs text-muted">
-              {t('receipt.ladderHint')} {!isPro && <ProChip />}
+              {t(readsPhoto ? 'receipt.ladderHintFree' : 'receipt.ladderHint')} {!readsPhoto && <ProChip />}
             </p>
             <input
               ref={cameraRef}
@@ -356,7 +373,9 @@ export function ReceiptImportSheet({
         {step === 'review' && (
           <div>
             {drafts.length === 0 ? (
-              <EmptyReview onRetry={reset} />
+              freeMisses.count > 0
+                ? <NeedsPro qrFound={freeMisses.qrFound} onRetry={reset} onUpgrade={openUpgrade} />
+                : <EmptyReview onRetry={reset} />
             ) : (
               <>
                 <p className="mb-3 text-sm text-muted">{t('receipt.reviewHint')}</p>
@@ -500,6 +519,21 @@ function EmptyReview({ onRetry }: { onRetry: () => void }) {
       <Button className="mt-4" variant="secondary" onClick={onRetry}>
         {t('receipt.tryAgain')}
       </Button>
+    </div>
+  );
+}
+
+/** A FREE batch nothing could read without the paid rung: what was missing, and where it is. */
+function NeedsPro({ qrFound, onRetry, onUpgrade }: { qrFound: boolean; onRetry: () => void; onUpgrade: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="py-6 text-center">
+      <p className="text-sm font-semibold text-primary">{t(qrFound ? 'receipt.qrEmpty' : 'receipt.noQr')}</p>
+      <p className="mt-1.5 text-sm text-muted">{t('receipt.photoNeedsPro')}</p>
+      <div className="mt-4 flex flex-col gap-2">
+        <Button onClick={onUpgrade}>{t('receipt.readWithPro')}</Button>
+        <Button variant="secondary" onClick={onRetry}>{t('receipt.tryAnother')}</Button>
+      </div>
     </div>
   );
 }

@@ -18,6 +18,13 @@ vi.mock('@/api/receiptImport.ts', () => ({
 vi.mock('@/api/upgrade.ts', () => ({
   upgradeApi: { click: vi.fn(), interest: vi.fn() },
 }));
+// The temporary FREE unlock is a module constant; the sheet's PAID-rung behaviour (FREE without
+// the unlock) is what most of these tests pin, so it is OFF by default and switched on where needed.
+const unlock = vi.hoisted(() => ({ on: false }));
+vi.mock('@/features/plan/tempFreeUnlocks.ts', () => ({
+  get TEMP_FREE_GETS_RECEIPT_IMPORT() { return unlock.on; },
+  TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY: true,
+}));
 vi.mock('@/api/photos.ts', () => ({ photosApi: { upload: vi.fn(), list: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -97,6 +104,7 @@ function photos(n: number): File[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  unlock.on = false;
   // clearAllMocks wipes calls, NOT implementations — so every default is re-stated here, or a
   // mockResolvedValue left by one test silently decides the next one's outcome.
   vi.mocked(decodeQrFromFile).mockResolvedValue(null);
@@ -292,12 +300,49 @@ describe('ReceiptImportSheet — a pile of receipts in one gesture', () => {
     expect(upgradeApi.click).not.toHaveBeenCalled();
   });
 
-  it('on FREE a slip with no code never reaches the model, and says why', async () => {
+  it('on FREE a slip with no code never reaches the model, and says it is the QR and the plan', async () => {
+    // Master feedback: the payment sheet popped up on its own, and closing it left «на чеку не
+    // знайдено позицій» — blaming the paper for what was the plan.
     renderSheet('FREE');
     pick(photos(1));
 
-    await waitFor(() => expect(upgradeApi.click).toHaveBeenCalledWith('RECEIPT_IMPORT'));
+    expect(await screen.findByText('На чеку немає QR-коду')).toBeTruthy();
+    expect(screen.getByText(/розпізнає ШІ з фото — це в Pro/)).toBeTruthy();
+    expect(screen.queryByText(/не знайдено позицій/)).toBeNull();
     expect(receiptImportApi.parse).not.toHaveBeenCalled();
+    expect(upgradeApi.click).not.toHaveBeenCalled(); // nothing pops up by itself
+
+    fireEvent.click(screen.getByRole('button', { name: 'Розпізнати з Pro' }));
+    expect(upgradeApi.click).toHaveBeenCalledWith('RECEIPT_IMPORT');
+  });
+
+  it('on FREE a QR the tax service had no lines for is named as that', async () => {
+    vi.mocked(decodeQrFromFile).mockResolvedValue(FISCAL);
+    renderSheet('FREE');
+    pick(photos(1));
+
+    expect(await screen.findByText('QR-код прочитали, але податкова не віддала позицій')).toBeTruthy();
+  });
+
+  it('with the temporary FREE unlock, a slip with no code goes to the model like on PRO', async () => {
+    unlock.on = true;
+    vi.mocked(receiptImportApi.parse).mockResolvedValue({
+      items: [item('Набойки поліуретан', 50, 1)], depositAmount: null,
+    });
+    renderSheet('FREE');
+    pick(photos(1));
+
+    await waitFor(() => expect(screen.getByDisplayValue('Набойки поліуретан')).toBeTruthy());
+    expect(receiptImportApi.parse).toHaveBeenCalled();
+    expect(screen.queryByText('На чеку немає QR-коду')).toBeNull();
+    expect(upgradeApi.click).not.toHaveBeenCalled();
+  });
+
+  it('on PRO a photo the model reads nothing from still says so plainly', async () => {
+    renderSheet('PRO');
+    pick(photos(1));
+
+    expect(await screen.findByText('На чеку не знайдено позицій. Спробуйте інше фото.')).toBeTruthy();
   });
 
   it('skips files that are not photos and reads the rest', async () => {

@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
 import { formatDate } from '@/lib/format.ts';
+import { usePush } from '@/hooks/usePush.ts';
+import { isIOS, isStandalone } from '@/lib/push.ts';
+import { toast } from '@/hooks/useToast.ts';
 import type { EstimateStatus } from '@/api/types.ts';
 
 /**
@@ -104,6 +107,7 @@ export function EstimateNextStep({
       {/* Quiet on purpose: these are alternatives, not competitors. Full-width rows so the tap
           target is the whole line rather than the words. */}
       <div className="mt-1.5 flex flex-col">
+        {sent && <SignaturePushOffer />}
         {/* Absent, not disabled: on a trade V127 has no norms for there is nothing to explain. */}
         {onPreview && (
           <SecondaryAction icon="👁" label={t('estimate.nextStep.preview')} onClick={onPreview}
@@ -116,6 +120,33 @@ export function EstimateNextStep({
           onClick={onPdf} disabled={pdfLoading} />
       </div>
     </section>
+  );
+}
+
+/**
+ * «Сповістити, коли клієнт підпише» — offered where the master is WAITING for a signature (master
+ * feedback). The push on a portal signature always existed, but switching it on lived only behind a
+ * toggle in «Я», so a master with several objects kept opening estimates to check. Shown only while
+ * this device is not subscribed and can be; on an iPhone outside the installed app it says how.
+ */
+function SignaturePushOffer() {
+  const { t } = useTranslation();
+  const { permission, isSubscribed, isReady, isBusy, enable } = usePush();
+  if (!isReady || isSubscribed) return null;
+  if (permission === 'unsupported') {
+    return isIOS() && !isStandalone()
+      ? <p className="px-1 py-2 text-xs text-muted">🔔 {t('estimate.nextStep.notifyInstall')}</p>
+      : null;
+  }
+  if (permission === 'denied') return null;
+  const turnOn = async () => {
+    const r = await enable();
+    if (r.ok) toast.success(t('estimate.nextStep.notifyOn'));
+    else if (r.error) toast.error(r.error);
+  };
+  return (
+    <SecondaryAction icon="🔔" label={t('estimate.nextStep.notifySigned')} onClick={() => void turnOn()}
+      disabled={isBusy} />
   );
 }
 

@@ -10,3 +10,11 @@
  * Заміри nor Економіка calls an LLM, so this doesn't reintroduce the AI cost that was just cut.
  */
 export const TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY = true;
+
+/**
+ * TEMPORARY too (master decision, 2026-11-11) — mirrors `Feature.RECEIPT_IMPORT` in the backend's
+ * FREE plan (`PlanConfig`); flip both together. The estimate's «Додати з чеку» reads a receipt with
+ * no QR by AI on FREE, as the object and act receipts already do. When this goes back to false,
+ * `ReceiptImportSheet` says «на чеку немає QR-коду — це в Pro» again instead of reading the photo.
+ */
+export const TEMP_FREE_GETS_RECEIPT_IMPORT = true;
