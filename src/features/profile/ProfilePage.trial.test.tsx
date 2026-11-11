@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { ProfilePage } from './ProfilePage.tsx';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
 import { billingApi } from '@/api/billing.ts';
 import type { UserResponse } from '@/api/types.ts';
 
@@ -59,9 +60,14 @@ const baseMe: UserResponse = {
   vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
 };
 
-function renderPage(me: UserResponse) {
+function renderPage(me: UserResponse, trialDays = 30) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, me);
+  // The trial's length comes from the server, and 0 is its off switch.
+  qc.setQueryData(PLAN_LIMITS_KEY, {
+    plan: me.plan, maxProjects: 2, projectsUsed: 0, maxEstimatesPerProject: 3,
+    maxPhotosPerObject: 5, maxReceiptPhotosPerObject: 5, trialDays,
+  });
   // A Router, because the page navigates now: the «Мої гроші» row is a second door to /finance
   // (V135), and the page is a route element in the app anyway.
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -77,6 +83,11 @@ beforeEach(() => {
 });
 
 describe('ProfilePage — PRO trial', () => {
+  it('trial switched off on the server (0 days): no button at all', () => {
+    renderPage(baseMe, 0);
+    expect(screen.queryByRole('button', { name: /Спробувати PRO/ })).toBeNull();
+  });
+
   it('FREE + never used: shows the trial button and activates PRO on click', async () => {
     renderPage(baseMe);
     const btn = screen.getByRole('button', { name: /Спробувати PRO/ });

@@ -75,7 +75,8 @@ export function ProfilePage() {
   // Trial offer is visible to any FREE master who hasn't used it. Activation still
   // requires a verified email (anti-abuse) — but the button stays visible and an
   // unverified click explains the verify step (with a "pay now instead" option).
-  const canStartTrial = plan === 'FREE' && !me?.trialStartedAt;
+  // A trial length of 0 is the server's off switch (2026-11-11): no button, as the other offers.
+  const canStartTrial = plan === 'FREE' && !me?.trialStartedAt && !!limits?.trialDays;
 
   // Any PRO path (trial OR paid) requires a verified email. Unverified → the
   // verify reminder; verified → the real action.
@@ -228,7 +229,7 @@ export function ProfilePage() {
             onClick={() => void onTrialClick()}
             className="mt-2 w-full rounded-xl border border-brand py-2.5 text-sm font-bold text-brand"
           >
-            {limits?.trialDays ? t('billing.tryTrial', { count: limits.trialDays }) : t('billing.tryTrialPlain')}
+            {t('billing.tryTrial', { count: limits?.trialDays ?? 0 })}
           </button>
         )}
       </div>
