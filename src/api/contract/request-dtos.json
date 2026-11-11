@@ -304,7 +304,8 @@
   },
   "PlanUpdateRequest": {
     "months": "number?",
-    "plan": "string"
+    "plan": "string",
+    "until": "string?"
   },
   "PortalPreviewRequest": {
     "estimateIds": "array"
