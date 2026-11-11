@@ -1,7 +1,7 @@
 {
   "name": "majstr-pwa",
   "private": true,
-  "version": "1.75.6",
+  "version": "1.76.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -2180,6 +2180,11 @@
     "field_h": "height, mm",
     "field_qty": "qty"
   },
+  "planEnding": {
+    "title": "PRO ends on {{date}}",
+    "text": "After that the account is on FREE: some features switch off, your data stays.",
+    "action": "Extend PRO"
+  },
   "plan": {
     "alt": "Room plan — bus and points",
     "entry": "panel"

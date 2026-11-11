@@ -303,6 +303,7 @@
     "visibility": "string"
   },
   "PlanUpdateRequest": {
+    "months": "number?",
     "plan": "string"
   },
   "PortalPreviewRequest": {

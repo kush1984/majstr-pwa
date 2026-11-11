@@ -10,6 +10,7 @@ import { applyAnalyticsIdentity } from '@/lib/posthog.ts';
 import { resyncPushSubscription } from '@/hooks/usePush.ts';
 import { usePushRefresh } from '@/hooks/usePushRefresh.ts';
 import { EmailVerificationBanner } from '@/features/email/EmailVerificationBanner.tsx';
+import { PlanEndingBanner } from '@/features/plan/PlanEndingBanner.tsx';
 import { NotificationBell } from '@/components/NotificationBell.tsx';
 import { PrivacyConsentModal } from '@/features/legal/ConsentModals.tsx';
 import { CatalogUpdateNotice } from '@/features/catalog/CatalogUpdateNotice.tsx';
@@ -124,6 +125,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
             <NotificationBell />
           </div>
           <EmailVerificationBanner />
+          <PlanEndingBanner />
           {/* `/` renders the dashboard as a child (HomeRoute); the other
               authed pages render through the nested router Outlet. */}
           {children ?? <Outlet />}
