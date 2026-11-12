@@ -116,3 +116,14 @@ describe('ProfilePage — PRO trial', () => {
     expect(screen.getByRole('button', { name: 'Підтвердити email' })).toBeTruthy();
   });
 });
+
+describe('ProfilePage — social pages', () => {
+  it('links Instagram, TikTok and Facebook in a new tab', () => {
+    renderPage(baseMe);
+    const href = (name: string) => screen.getByText(name).closest('a');
+    expect(href('Instagram')?.getAttribute('href')).toBe('https://www.instagram.com/majstr.pro/');
+    expect(href('TikTok')?.getAttribute('href')).toBe('https://www.tiktok.com/@majstr.pro');
+    expect(href('Facebook')?.getAttribute('href')).toBe('https://www.facebook.com/profile.php?id=61595872487930');
+    expect(href('TikTok')?.getAttribute('target')).toBe('_blank');
+  });
+});

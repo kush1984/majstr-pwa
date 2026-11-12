@@ -44,6 +44,10 @@ export const config = {
   conciergeUrl: import.meta.env.VITE_CONCIERGE_URL || 'https://t.me/andriykushka',
   // YouTube channel — the landing footer links it beside Telegram. Same `||` rule.
   youtubeUrl: import.meta.env.VITE_YOUTUBE_URL || 'https://www.youtube.com/@majstrpro',
+  // The other social pages, shown on the Profile screen beside Telegram and YouTube.
+  instagramUrl: 'https://www.instagram.com/majstr.pro/',
+  facebookUrl: 'https://www.facebook.com/profile.php?id=61595872487930',
+  tiktokUrl: 'https://www.tiktok.com/@majstr.pro',
 
   // Sentry error reporting. Empty DSN → Sentry stays disabled (the local/dev
   // default), so it never gets in the way until prod sets a real DSN.

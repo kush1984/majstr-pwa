@@ -348,6 +348,27 @@ export function ProfilePage() {
           external
         />
         <ContactRow
+          icon="📸"
+          title={t('profile.instagram')}
+          sub={t('profile.instagramSub')}
+          href={config.instagramUrl}
+          external
+        />
+        <ContactRow
+          icon="🎵"
+          title={t('profile.tiktok')}
+          sub={t('profile.tiktokSub')}
+          href={config.tiktokUrl}
+          external
+        />
+        <ContactRow
+          icon="👍"
+          title={t('profile.facebook')}
+          sub={t('profile.facebookSub')}
+          href={config.facebookUrl}
+          external
+        />
+        <ContactRow
           icon="✉️"
           title={t('profile.supportEmail')}
           sub={config.supportEmail}
