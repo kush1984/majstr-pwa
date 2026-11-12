@@ -512,6 +512,42 @@
     "customTradeId": "string?",
     "trade": "string?"
   },
+  "TransferCommitRequest": {
+    "defaultPolicy": "string",
+    "estimates": "array",
+    "priceLists": "array"
+  },
+  "TransferCommitRequest.EstimateDoc": {
+    "address": "string?",
+    "clientName": "string?",
+    "depositAmount": "number?",
+    "estimateName": "string?",
+    "items": "array",
+    "objectName": "string?",
+    "projectId": "string?",
+    "toCatalog": "boolean?"
+  },
+  "TransferCommitRequest.EstimateDoc.EstimateLine": {
+    "category": "string?",
+    "name": "string",
+    "quantity": "number",
+    "section": "string?",
+    "trade": "string?",
+    "type": "string",
+    "unit": "string",
+    "unitPrice": "number"
+  },
+  "TransferCommitRequest.PriceList": {
+    "items": "array"
+  },
+  "TransferCommitRequest.PriceList.CatalogLine": {
+    "category": "string?",
+    "name": "string",
+    "price": "number",
+    "trade": "string?",
+    "type": "string",
+    "unit": "string"
+  },
   "UpgradeClickRequest": {
     "trigger": "string?"
   },

@@ -257,29 +257,27 @@ export function CatalogPage() {
               <Button variant="secondary" onClick={() => navigate(routes.catalogImport)}>
                 {t('catalog.importPrice')}
               </Button>
+              <Button variant="secondary" onClick={() => navigate(routes.transfer)}>
+                📥 {t('transfer.entryAction')}
+              </Button>
               <Button onClick={() => setEditing(null)}>{t('catalog.addItemShort')}</Button>
             </div>
           }
         />
       ) : (
         <div>
-          <div className="mb-4 flex justify-end gap-4">
-            <button
-              type="button"
-              onClick={() => navigate(routes.catalogImport)}
-              className="text-xs font-semibold text-brand"
-            >
-              ⬆ {t('catalog.importPrice')}
-            </button>
-            <button
-              type="button"
+          {/* Three doors that bring positions in, as buttons (master feedback — the text links read
+              as decoration). One row of equal tiles: icon over a short label fits 375 px. */}
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <CatalogAction icon="⬆" label={t('catalog.importPrice')} onClick={() => navigate(routes.catalogImport)} />
+            <CatalogAction icon="📥" label={t('transfer.entryAction')} onClick={() => navigate(routes.transfer)} />
+            <CatalogAction
+              icon="↻"
+              label={checkUpdates.isPending ? t('catalog.addNewChecking') : t('catalog.addNew')}
               onClick={guard(() => void onCheckUpdates())}
               disabled={checkUpdates.isPending || !online}
               title={offlineTitle}
-              className="text-xs font-semibold text-brand disabled:opacity-50"
-            >
-              {checkUpdates.isPending ? t('catalog.addNewChecking') : `↻ ${t('catalog.addNew')}`}
-            </button>
+            />
           </div>
 
           <div className="space-y-2">
@@ -525,3 +523,23 @@ function CatalogSkeleton() {
   );
 }
 
+function CatalogAction({ icon, label, onClick, disabled = false, title }: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-xl border border-border bg-surface px-2 py-2 text-center text-[11px] font-semibold leading-tight text-brand shadow-card active:bg-surface-sunken disabled:opacity-50 sm:flex-row sm:gap-1.5 sm:text-xs"
+    >
+      <span aria-hidden className="text-base leading-none">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}

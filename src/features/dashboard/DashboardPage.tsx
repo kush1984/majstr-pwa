@@ -18,6 +18,7 @@ import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
 import { HelpOfferCard } from './HelpOfferCard.tsx';
 import { VerifiedTrialCard } from './VerifiedTrialCard.tsx';
+import { TransferCard } from './TransferCard.tsx';
 import { useSampleProject } from '@/features/projects/useSampleProject.ts';
 
 export function DashboardPage() {
@@ -106,6 +107,9 @@ export function DashboardPage() {
       </div>
 
       <VerifiedTrialCard />
+      {projects.isSuccess && (
+        <TransferCard realObjects={projects.data.filter((p) => p.sample !== true).length} />
+      )}
       {projects.isSuccess && <HelpOfferCard hasObjects={projects.data.length > 0} />}
 
       {atProjectLimit && (

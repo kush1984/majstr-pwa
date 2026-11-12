@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { TEMP_FREE_GETS_ESTIMATE_IMPORT } from '@/features/plan/tempFreeUnlocks.ts';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -121,7 +122,8 @@ export function ProjectDetailPage() {
   const limits = usePlanLimits();
   const { data: me } = useMe();
   // Import is PRO; on FREE the same button offers to type the paper in for him (a person, not a model).
-  const conciergeImport = (me?.plan ?? 'FREE') === 'FREE';
+  // FREE gets the file import too while the temporary unlock is on (tempFreeUnlocks.ts).
+  const conciergeImport = (me?.plan ?? 'FREE') === 'FREE' && !TEMP_FREE_GETS_ESTIMATE_IMPORT;
 
   const invalidateAfterRowAction = () => {
     void qc.invalidateQueries({ queryKey: ['project-estimates', id] });

@@ -18,3 +18,11 @@ export const TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY = true;
  * `ReceiptImportSheet` says «на чеку немає QR-коду — це в Pro» again instead of reading the photo.
  */
 export const TEMP_FREE_GETS_RECEIPT_IMPORT = true;
+
+/**
+ * TEMPORARY too (master decision, 2026-11-12) — mirrors `Feature.ESTIMATE_IMPORT` in the backend's
+ * FREE plan; flip both together. Importing an estimate (Excel, PDF, photo), a PDF/photo price list
+ * and «Перенести в Majstr» are open on FREE, so a new master can bring his existing work in himself.
+ * When false, FREE sees the PRO pitch on the import and «Надішліть — перенесемо за вас» on the object.
+ */
+export const TEMP_FREE_GETS_ESTIMATE_IMPORT = true;

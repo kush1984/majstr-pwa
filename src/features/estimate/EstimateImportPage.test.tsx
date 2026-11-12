@@ -9,6 +9,14 @@ import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { estimateImportApi } from '@/api/estimateImport.ts';
 import type { EstimateImportParseResponse, Plan, UserResponse } from '@/api/types.ts';
 
+// The temporary FREE unlock is a module constant; these tests pin the PRO-gated behaviour, so it is
+// OFF here unless a test switches it on.
+const unlock = vi.hoisted(() => ({ on: false }));
+vi.mock('@/features/plan/tempFreeUnlocks.ts', () => ({
+  get TEMP_FREE_GETS_ESTIMATE_IMPORT() { return unlock.on; },
+  TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY: true,
+  TEMP_FREE_GETS_RECEIPT_IMPORT: true,
+}));
 vi.mock('@/api/estimateImport.ts', () => ({
   estimateImportApi: { parseFile: vi.fn(), commit: vi.fn() },
 }));
@@ -51,13 +59,24 @@ function pickFile(container: HTMLElement) {
   fireEvent.change(input, { target: { files: [new File(['x'], 'kosht.csv', { type: 'text/csv' })] } });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  unlock.on = false;
+});
 
 describe('EstimateImportPage', () => {
   it('FREE user sees the PRO upsell, not the uploader', () => {
     const { container } = renderPage('FREE');
     expect(screen.getByText(/у PRO/)).toBeTruthy();
     expect(container.querySelector('input[type="file"]')).toBeNull();
+  });
+
+  it('with the temporary FREE unlock, FREE gets the uploader, and it takes a PDF', () => {
+    unlock.on = true;
+    const { container } = renderPage('FREE');
+    const input = container.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
+    expect(input?.getAttribute('accept')).toContain('.pdf');
   });
 
   it('parses a file, then commits a ready estimate with catalog + deposit', async () => {

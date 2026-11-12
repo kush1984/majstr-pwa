@@ -276,6 +276,13 @@ export function ProfilePage() {
           onClick={() => navigate(routes.cash, { state: { from: routes.profile } })}
         />
         <LogoRow me={me} />
+        {/* «Перенести в Majstr» — existing estimates and price lists, many files at once. */}
+        <MenuRow
+          icon="📥"
+          title={t('transfer.entryAction')}
+          sub={t('transfer.entryText')}
+          onClick={() => navigate(routes.transfer)}
+        />
         <PushRow />
         <OfflinePrefetchRow isPro={(me?.plan ?? 'FREE') !== 'FREE'} />
         <MenuRow

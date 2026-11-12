@@ -199,7 +199,7 @@ export function CatalogImportPage() {
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.xls,.csv,.pdf,application/pdf,image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={onFile}
               />

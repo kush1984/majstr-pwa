@@ -10,6 +10,7 @@ import { NewObjectPage } from '@/features/projects/NewObjectPage.tsx';
 import { TradesOnboardingPage } from '@/features/onboarding/TradesOnboardingPage.tsx';
 import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { CatalogImportPage } from '@/features/catalog/CatalogImportPage.tsx';
+import { TransferPage } from '@/features/transfer/TransferPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
@@ -114,6 +115,7 @@ export const appRoutes: RouteObject[] = [
       // Static '/catalog/import' ranks above nothing dynamic, but keep it here as a
       // full-screen wizard (its own back button), not inside the tab shell.
       { path: routes.catalogImport, element: <CatalogImportPage /> },
+      { path: routes.transfer, element: <TransferPage /> },
       // Static '/estimates/import' ranks above the dynamic '/estimates/:id'.
       { path: routes.estimateImport, element: <EstimateImportPage /> },
       { path: '/estimates/:id', element: <EstimateEditorPage /> },

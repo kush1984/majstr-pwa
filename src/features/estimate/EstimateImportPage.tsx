@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
+import { TEMP_FREE_GETS_ESTIMATE_IMPORT } from '@/features/plan/tempFreeUnlocks.ts';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -86,7 +87,8 @@ export function EstimateImportPage() {
   // position that already exists in the catalog is either price-updated or left as-is.
   const [catalogPolicy, setCatalogPolicy] = useState<DedupPolicy>('SKIP');
 
-  const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  // A temporary unlock opens the import to FREE as well (tempFreeUnlocks.ts).
+  const isPro = (me?.plan ?? 'FREE') !== 'FREE' || TEMP_FREE_GETS_ESTIMATE_IMPORT;
 
   const back = () => {
     if (step === 'review') {
@@ -228,7 +230,7 @@ export function EstimateImportPage() {
             <input
               ref={fileRef}
               type="file"
-              accept=".xlsx,.xls,.csv,image/jpeg,image/png,image/webp"
+              accept=".pdf,application/pdf,.xlsx,.xls,.csv,image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={onFile}
             />

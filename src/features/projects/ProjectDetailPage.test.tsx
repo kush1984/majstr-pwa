@@ -16,6 +16,14 @@ import { track } from '@/lib/posthog.ts';
  * opens with «Що далі?» up — once, never on an ordinary visit; the «＋» is the open tab's action;
  * what the FAB menu used to carry is in the header's ⋮.
  */
+// The temporary FREE unlock is a module constant; these tests pin the PRO-gated behaviour, so it is
+// OFF here unless a test switches it on.
+const unlock = vi.hoisted(() => ({ on: false }));
+vi.mock('@/features/plan/tempFreeUnlocks.ts', () => ({
+  get TEMP_FREE_GETS_ESTIMATE_IMPORT() { return unlock.on; },
+  TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY: true,
+  TEMP_FREE_GETS_RECEIPT_IMPORT: true,
+}));
 vi.mock('@/api/projects.ts', () => ({ projectsApi: { get: vi.fn(), list: vi.fn(), update: vi.fn(), remove: vi.fn() } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { listForProject: vi.fn(), createForProject: vi.fn() } }));
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn().mockResolvedValue([]) } }));
@@ -60,6 +68,7 @@ function renderPage(entry: string | { pathname: string; state?: unknown; search?
 }
 
 beforeEach(() => {
+  unlock.on = false;
   vi.clearAllMocks();
   vi.mocked(projectsApi.get).mockResolvedValue(project);
   vi.mocked(estimatesApi.listForProject).mockResolvedValue([]);
@@ -81,7 +90,7 @@ describe('ProjectDetailPage — «Що далі?» (object-first)', () => {
     expect(screen.queryByText('Обʼєкт створено. Що далі?')).toBeNull();
   });
 
-  it('on FREE, «З файлу або фото» becomes «перенесемо за вас» and opens the owner Telegram chat', async () => {
+  it('on FREE (unlock off), «З файлу або фото» becomes «перенесемо за вас» and opens the owner Telegram chat', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     renderPage({ pathname: '/projects/p1', state: { justCreated: true } }, aUser({ plan: 'FREE' }));
 
@@ -89,14 +98,14 @@ describe('ProjectDetailPage — «Що далі?» (object-first)', () => {
 
     expect(open).toHaveBeenCalledWith('https://t.me/andriykushka', '_blank', 'noopener');
     expect(track).toHaveBeenCalledWith('concierge_import_tapped');
-    expect(screen.queryByRole('button', { name: 'З файлу або фото' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'З файлу, PDF або фото' })).toBeNull();
     open.mockRestore();
   });
 
   it('on PRO the import stays the import', async () => {
     renderPage({ pathname: '/projects/p1', state: { justCreated: true } }, aUser({ plan: 'PRO' }));
 
-    expect(await screen.findByRole('button', { name: 'З файлу або фото' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'З файлу, PDF або фото' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /перенесемо за вас/ })).toBeNull();
   });
 

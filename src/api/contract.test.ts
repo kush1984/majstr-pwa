@@ -118,6 +118,9 @@ const BACKEND_NAME: Record<string, string> = {
   TemplatePickRequest: 'ApplyTemplatesRequest.TemplatePick',
   CatalogSyncPriceUpdateRequest: 'CatalogSyncRequest.PriceUpdate',
   CatalogSyncNewPositionRequest: 'CatalogSyncRequest.NewPosition',
+  TransferEstimateDoc: 'TransferCommitRequest.EstimateDoc',
+  TransferEstimateLine: 'TransferCommitRequest.EstimateDoc.EstimateLine',
+  TransferCatalogLine: 'TransferCommitRequest.PriceList.CatalogLine',
 };
 
 /** The snapshot key for one of our interfaces, or undefined when the backend has no such DTO. */

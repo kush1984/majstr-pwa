@@ -2382,3 +2382,80 @@ export interface CashEntryRequest {
   /** Required on an edit; a create is always PERSONAL. */
   kind?: CashEntryKind | null;
 }
+
+// ---------- «Перенести в Majstr» (backend V201) ----------
+
+export type TransferDocumentKind = 'ESTIMATE' | 'PRICE_LIST';
+
+/** One line of a file read for the transfer. `section` is the room/part the DOCUMENT names;
+ *  `trade` + `category` are where the CATALOG files it (null = not recognised → «Інше»). */
+export interface TransferLine {
+  name: string;
+  unit: Unit | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  type: ItemType;
+  section: string | null;
+  trade: Trade | null;
+  category: string | null;
+  issues: string[];
+}
+
+export interface TransferParseResponse {
+  fileName: string | null;
+  kind: TransferDocumentKind;
+  objectName: string | null;
+  address: string | null;
+  clientName: string | null;
+  title: string | null;
+  depositAmount: number | null;
+  items: TransferLine[];
+}
+
+export interface TransferCatalogLine {
+  name: string;
+  unit: Unit;
+  price: number;
+  type: ItemType;
+  trade: Trade | null;
+  category: string | null;
+}
+
+export interface TransferEstimateLine {
+  name: string;
+  unit: Unit;
+  quantity: number;
+  unitPrice: number;
+  type: ItemType;
+  section: string | null;
+  trade: Trade | null;
+  category: string | null;
+}
+
+export interface TransferEstimateDoc {
+  /** An existing object, or null with `objectName` for a new one (one per distinct name). */
+  projectId: string | null;
+  objectName: string | null;
+  address: string | null;
+  clientName: string | null;
+  estimateName: string | null;
+  depositAmount: number | null;
+  /** null = yes: the estimate's positions also go to the catalog. */
+  toCatalog: boolean | null;
+  items: TransferEstimateLine[];
+}
+
+export interface TransferCommitRequest {
+  priceLists: { items: TransferCatalogLine[] }[];
+  estimates: TransferEstimateDoc[];
+  defaultPolicy: DedupPolicy;
+}
+
+export interface TransferCommitResponse {
+  objectsCreated: number;
+  estimatesCreated: number;
+  catalogCreated: number;
+  catalogUpdated: number;
+  catalogSkipped: number;
+  projectIds: string[];
+}
