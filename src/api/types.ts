@@ -372,6 +372,14 @@ export interface ProjectResponse {
   /** The training sample «Приклад: …» (V197): badged, deletable at any stage, read by no figure.
    *  Optional so a cached object from before reads as a real one. */
   sample?: boolean;
+  /** The client's page shows «Зведення» after the positions, not at the top (V202). Optional: an
+   *  older server or a cached object reads as «at the top». */
+  portalSummaryAtBottom?: boolean;
+}
+
+/** Mirrors PortalSummaryRequest (V202). */
+export interface PortalSummaryRequest {
+  atBottom: boolean;
 }
 
 /** Mirrors SampleProjectRequest: the trade just picked on «Чим займаєтесь?»; absent = the server picks. */

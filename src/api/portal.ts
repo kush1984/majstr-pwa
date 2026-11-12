@@ -1,6 +1,7 @@
 import { api } from './client.ts';
 import type {
-  ActShareStateResponse, ClientPreviewResponse, PortalPreviewRequest, PortalStateResponse, ShareLinkResponse,
+  ActShareStateResponse, ClientPreviewResponse, PortalPreviewRequest, PortalStateResponse, PortalSummaryRequest,
+  ProjectResponse, ShareLinkResponse,
 } from './types.ts';
 
 /**
@@ -15,6 +16,13 @@ export const portalApi = {
   state(projectId: string): Promise<PortalStateResponse> {
     return api
       .get<PortalStateResponse>(`/api/projects/${projectId}/portal`)
+      .then((r) => r.data);
+  },
+
+  /** Where the client's page shows «Зведення» — one choice per object, every link of it (V202). */
+  setSummaryAtBottom(projectId: string, req: PortalSummaryRequest): Promise<ProjectResponse> {
+    return api
+      .put<ProjectResponse>(`/api/projects/${projectId}/portal/summary-placement`, req)
       .then((r) => r.data);
   },
 

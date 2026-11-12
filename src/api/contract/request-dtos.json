@@ -310,6 +310,9 @@
   "PortalPreviewRequest": {
     "estimateIds": "array"
   },
+  "PortalSummaryRequest": {
+    "atBottom": "boolean"
+  },
   "PortalUpdateRequest": {
     "estimateIds": "array"
   },

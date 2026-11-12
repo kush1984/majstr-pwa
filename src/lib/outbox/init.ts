@@ -15,6 +15,7 @@ import { paymentsApi } from '@/api/payments.ts';
 import { cashApi } from '@/api/cash.ts';
 import { actsApi } from '@/api/acts.ts';
 import { estimateShareApi, portalApi } from '@/api/portal.ts';
+import { PORTAL_SUMMARY_ENTITY } from '@/features/projects/usePortalSummaryPlacement.ts';
 import { fromQueuedFile } from './queuedFile.ts';
 import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
 import type {
@@ -27,6 +28,7 @@ import type {
   ProjectRequest,
   ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
   TemplateItemRequest, TemplateItemsOrderRequest, Trade,
+  PortalSummaryRequest,
 } from '@/api/types.ts';
 
 /**
@@ -350,6 +352,12 @@ export function initOutbox(qc: QueryClient): () => void {
   registerOutboxHandler('shareMarkSent', async (op) => {
     const p = op.payload as { scope: 'estimate' | 'object' };
     await (p.scope === 'estimate' ? estimateShareApi.markSent(op.entityId) : portalApi.markSent(op.entityId));
+  });
+
+  // Where the client's page shows «Зведення» (V202) — the object's whole choice, idempotent.
+  registerOutboxHandler(PORTAL_SUMMARY_ENTITY, async (op) => {
+    const p = op.payload as { req: PortalSummaryRequest };
+    await portalApi.setSummaryAtBottom(op.entityId, p.req);
   });
 
   registerOutboxHandler('templateItemOrder', async (op) => {

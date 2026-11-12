@@ -16,6 +16,7 @@ import { aUser } from '@/test/factories.ts';
 vi.mock('@/api/portal.ts', () => ({
   portalApi: {
     state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined), preview: vi.fn(),
+    setSummaryAtBottom: vi.fn().mockResolvedValue({}),
   },
   economyPortalApi: { state: vi.fn(), update: vi.fn(), sendEmail: vi.fn(), revoke: vi.fn() },
   estimateShareApi: { create: vi.fn(), sendEmail: vi.fn(), markSent: vi.fn().mockResolvedValue(undefined) },
@@ -31,6 +32,7 @@ vi.mock('@/features/clients/useClients.ts', () => ({
   useUpdateClient: () => ({ isPending: false }),
 }));
 vi.mock('@/features/projects/useProjects.ts', () => ({
+  PROJECTS_KEY: ['projects'],
   useUpdateProject: () => ({ isPending: false }),
 }));
 vi.mock('@/features/clients/ClientPicker.tsx', () => ({
@@ -83,6 +85,10 @@ function renderSingle(estimateId: string, onClose: () => void = () => {}) {
   );
 }
 
+/** The estimate picker's and the payments toggle's boxes — the summary-placement box is its own (V202). */
+const pickerBoxes = () =>
+  screen.queryAllByRole('checkbox').filter((b) => !/Зведення сум/.test(b.closest('label')?.textContent ?? ''));
+
 const shareLink = {
   id: 'l1', token: 'tok-e2', url: 'https://majstr.pro/portal/index.html?t=tok-e2',
   createdAt: '2026-07-02T00:00:00Z', expiresAt: null, revoked: false,
@@ -94,7 +100,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     renderSheet();
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-    const boxes = screen.getAllByRole('checkbox');
+    const boxes = pickerBoxes();
     // Two estimate checkboxes only — SIGNATURE never has a payments card.
     expect(boxes.map((b) => asInput(b).checked)).toEqual([true, false]);
     expect(screen.queryByText('Показувати платежі клієнту')).toBeNull();
@@ -115,7 +121,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
-    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    fireEvent.click(pickerBoxes()[1]);
 
     fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
 
@@ -134,7 +140,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     await waitFor(() => expect(screen.getByText('Преміум')).toBeTruthy());
 
     // Tick «Преміум» in addition to the already-visible «Економ».
-    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    fireEvent.click(pickerBoxes()[1]);
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
     await waitFor(() => expect(portalApi.update).toHaveBeenCalled());
@@ -151,7 +157,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(await screen.findByDisplayValue(shareLink.url)).toBeTruthy();
     expect(estimateShareApi.create).toHaveBeenCalledWith('e2');
     // No picker — and no set to seed one from, so the object's portal state isn't fetched at all.
-    expect(screen.queryAllByRole('checkbox')).toEqual([]);
+    expect(pickerBoxes()).toEqual([]);
     expect(portalApi.state).not.toHaveBeenCalled();
     expect(economyPortalApi.state).not.toHaveBeenCalled();
     expect(screen.getByText(/клієнт побачить лише його/)).toBeTruthy();
@@ -274,7 +280,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     renderSheet();
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole('checkbox')[0]); // untick the only visible one
+    fireEvent.click(pickerBoxes()[0]); // untick the only visible one
     const hideBtn = await screen.findByRole('button', { name: /Прибрати все/ });
     fireEvent.click(hideBtn);
 
@@ -343,7 +349,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     renderSheet();
 
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
-    expect(asInput(screen.getAllByRole('checkbox')[0]).checked).toBe(true);
+    expect(asInput(pickerBoxes()[0]).checked).toBe(true);
   });
 
   it('auto-selects the most recently created estimate when several are pickable and none published', async () => {
@@ -357,7 +363,7 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     renderSheet();
 
     await waitFor(() => expect(screen.getByText('Новіший')).toBeTruthy());
-    const boxes = screen.getAllByRole('checkbox');
+    const boxes = pickerBoxes();
     // e1 (older) first in list order, e2 (newer) second — only the newer one is pre-ticked.
     expect(boxes.map((b) => asInput(b).checked)).toEqual([false, true]);
   });
@@ -383,7 +389,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     expect(screen.queryByText('Преміум')).toBeNull(); // not signed
     expect(screen.queryByText('Стара версія')).toBeNull(); // signed, but superseded — not the deal
     expect(screen.getByText(/Клієнт бачить усі підписані кошториси/)).toBeTruthy();
-    const boxes = screen.getAllByRole('checkbox');
+    const boxes = pickerBoxes();
     expect(boxes).toHaveLength(1); // the payments toggle, nothing else
     expect(asInput(boxes[0]).checked).toBe(false);
     expect(screen.getByText('Показувати платежі клієнту')).toBeTruthy();
@@ -410,7 +416,7 @@ describe("SharePortalSheet — mode: 'economy' (Економіка tab)", () => 
     renderSheet('economy');
     await waitFor(() => expect(screen.getByText('Економ')).toBeTruthy());
 
-    fireEvent.click(screen.getAllByRole('checkbox')[0]); // the payments toggle
+    fireEvent.click(pickerBoxes()[0]); // the payments toggle
     fireEvent.click(screen.getByRole('button', { name: /Копіювати посилання/ }));
 
     await waitFor(() => expect(economyPortalApi.update).toHaveBeenCalledWith('p1', true));
@@ -534,5 +540,29 @@ describe('SharePortalSheet — «Надіслано» only after the action', ()
 
     expect(await screen.findByDisplayValue(state.url ?? '')).toBeTruthy();
     expect(portalApi.markSent).not.toHaveBeenCalled();
+  });
+});
+
+describe('SharePortalSheet — where the client sees «Зведення» (V202)', () => {
+  it('off by default: the summary stays at the top; ticking it saves «at the bottom» for the object', async () => {
+    vi.mocked(portalApi.state).mockResolvedValue(state);
+    renderSheet();
+    const box = await screen.findByRole('checkbox', { name: /Зведення сум — унизу, після позицій/ });
+    expect((box as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(box);
+    expect((box as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect(portalApi.setSummaryAtBottom).toHaveBeenCalledWith('p1', { atBottom: true }));
+  });
+
+  it('opens ticked when the object already shows it at the bottom, and offers it on a single estimate too', async () => {
+    vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
+    render(
+      <SharePortalSheet open onClose={() => {}} project={{ ...project, portalSummaryAtBottom: true }} singleEstimateId="e2" />,
+      { wrapper: wrapper() },
+    );
+    const box = await screen.findByRole('checkbox', { name: /Зведення сум — унизу/ });
+    expect((box as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(box);
+    await waitFor(() => expect(portalApi.setSummaryAtBottom).toHaveBeenCalledWith('p1', { atBottom: false }));
   });
 });

@@ -22,6 +22,7 @@ import type { ProjectResponse } from '@/api/types.ts';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useClient, useCreateClient, useUpdateClient } from '@/features/clients/useClients.ts';
 import { useUpdateProject } from '@/features/projects/useProjects.ts';
+import { usePortalSummaryPlacement } from '@/features/projects/usePortalSummaryPlacement.ts';
 import {
   ClientPicker,
   clientDraftError,
@@ -101,6 +102,22 @@ export function SharePortalSheet({
   const [selected, setSelected] = useState<Set<string> | null>(null);
   // Off by default — the master opts in explicitly (mirrors the backend default).
   const [paymentsOn, setPaymentsOn] = useState<boolean | null>(null);
+  // «Зведення» at the top (default) or under the positions — saved the moment it is ticked, for every
+  // link of the object (V202). Local state so the box answers the tap before the server does.
+  const [summaryAtBottom, setSummaryAtBottom] = useState(project.portalSummaryAtBottom ?? false);
+  const summaryPlacement = usePortalSummaryPlacement(project.id);
+  useEffect(() => {
+    if (open) setSummaryAtBottom(project.portalSummaryAtBottom ?? false);
+  }, [open, project.portalSummaryAtBottom]);
+  const onSummaryAtBottom = (next: boolean) => {
+    setSummaryAtBottom(next);
+    summaryPlacement.mutate(next, {
+      onError: (err) => {
+        setSummaryAtBottom(!next);
+        toast.error(toAppError(err).message);
+      },
+    });
+  };
   useEffect(() => {
     if (!open) {
       setSelected(null);
@@ -577,6 +594,20 @@ export function SharePortalSheet({
                 {t('estimate.nextStep.preview')}
               </button>
             )}
+
+            {/* Off by default: the summary stays at the top, as the page has always shown it. */}
+            <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2">
+              <input
+                type="checkbox"
+                checked={summaryAtBottom}
+                onChange={(e) => onSummaryAtBottom(e.target.checked)}
+                className="mt-0.5 h-5 w-5 rounded border-border text-brand focus:ring-brand-200"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-primary">{t('portal.summaryAtBottom')}</span>
+                <span className="block text-xs text-muted">{t('portal.summaryAtBottomHint')}</span>
+              </span>
+            </label>
 
             {mode === 'economy' && portal.data?.url && (
               <Button variant="secondary" fullWidth loading={busy === 'revoke'} onClick={onRevoke}>
