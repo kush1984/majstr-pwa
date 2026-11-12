@@ -2273,7 +2273,6 @@
     "economyHint": "The client sees every signed estimate of the object that counts in its economy, line by line. A newly signed one appears here by itself.",
     "closeLink": "Close the link",
     "linkClosed": "Link closed — the client can no longer open this page",
-    "singleHint": "A separate link to this estimate — the client sees only it. The object's portal is left untouched.",
     "noSignedEstimates": "No signed estimates yet — they'll appear here as soon as one is signed.",
     "noUnsignedEstimates": "No estimates awaiting a signature — signed ones are shown in the Economy tab.",
     "loadError": "Could not load the estimates",
@@ -2281,8 +2280,7 @@
     "hiddenAll": "Portal cleared — estimates hidden",
     "showPayments": "Show payments to the client",
     "showPaymentsHint": "The client will see the contracted total and how much is already paid",
-    "summaryAtBottom": "Totals summary — at the bottom, after the positions",
-    "summaryAtBottomHint": "The client sees the works and materials sums and the grand total under the positions, not at the top of the page."
+    "summaryAtBottom": "Totals summary — at the bottom, after the positions"
   },
   "projectImport": {
     "button": "📁 Import project",

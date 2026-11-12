@@ -828,8 +828,6 @@ export function EstimateEditorPage() {
           onClose={() => setShareOpen(false)}
           project={project.data}
           singleEstimateId={id}
-          onPreview={guard(() => void preview.open())}
-          previewOpening={preview.opening}
         />
       )}
       <ZeroQuantitySheet

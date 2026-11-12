@@ -160,7 +160,6 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(pickerBoxes()).toEqual([]);
     expect(portalApi.state).not.toHaveBeenCalled();
     expect(economyPortalApi.state).not.toHaveBeenCalled();
-    expect(screen.getByText(/клієнт побачить лише його/)).toBeTruthy();
     expect(screen.queryByText(/Оберіть кошториси/)).toBeNull();
   });
 
@@ -178,19 +177,15 @@ describe("SharePortalSheet — mode: 'portal' (Кошторис tab)", () => {
     expect(economyPortalApi.update).not.toHaveBeenCalled();
   });
 
-  it('shared from one estimate: «Подивитися, як побачить клієнт» is there, and marks nothing sent', async () => {
+  it('shared from one estimate: no «Подивитися, як побачить клієнт», no hints, and nothing marked sent', async () => {
     vi.mocked(estimateShareApi.create).mockResolvedValue(shareLink);
-    const onPreview = vi.fn();
-    render(
-      <SharePortalSheet open onClose={() => {}} project={project}
-        singleEstimateId="e2" onPreview={onPreview} />,
-      { wrapper: wrapper() },
-    );
+    renderSingle('e2');
     await screen.findByDisplayValue(shareLink.url);
 
-    fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
-
-    expect(onPreview).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: /Подивитися, як побачить клієнт/ })).toBeNull();
+    expect(screen.queryByText(/Окреме посилання на цей кошторис/)).toBeNull();
+    expect(screen.queryByText(/не на початку сторінки/)).toBeNull();
+    expect(screen.getByRole('checkbox', { name: 'Зведення сум — унизу, після позицій' })).toBeTruthy();
     expect(estimateShareApi.markSent).not.toHaveBeenCalled();
   });
 
