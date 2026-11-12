@@ -187,15 +187,7 @@ describe('EstimateNextStep — before it leaves (iteration-first-experience)', (
     expect(screen.queryByTestId('estimate-zero-lines')).toBeNull();
   });
 
-  it('offers the client preview as a quiet row, and only when there is one to open', () => {
-    const onPreview = vi.fn();
-    const { unmount } = render(<EstimateNextStep status="DRAFT" onShare={onShare} onMaterials={onMaterials}
-      showMaterials={false} onPdf={onPdf} onPreview={onPreview} />);
-    fireEvent.click(screen.getByRole('button', { name: /Подивитися, як побачить клієнт/ }));
-    expect(onPreview).toHaveBeenCalled();
-    expect(onShare).not.toHaveBeenCalled();
-    unmount();
-
+  it('carries no client preview — that lives in the share sheet', () => {
     render(<EstimateNextStep status="DRAFT" onShare={onShare} onMaterials={onMaterials}
       showMaterials={false} onPdf={onPdf} />);
     expect(screen.queryByRole('button', { name: /Подивитися, як побачить клієнт/ })).toBeNull();

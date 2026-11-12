@@ -2286,7 +2286,8 @@
     "hiddenAll": "Portal cleared — estimates hidden",
     "showPayments": "Show payments to the client",
     "showPaymentsHint": "The client will see the contracted total and how much is already paid",
-    "summaryAtBottom": "Totals summary — at the bottom, after the positions"
+    "summaryAtBottom": "Totals summary — at the bottom, after the positions",
+    "summaryAtBottomHint": "The client sees the works and materials sums and the grand total under the positions."
   },
   "projectImport": {
     "button": "📁 Import project",

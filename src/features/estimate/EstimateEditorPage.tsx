@@ -787,8 +787,6 @@ export function EstimateEditorPage() {
                 onPdf={guard(() => void onPdf())}
                 pdfLoading={pdfLoading}
                 zeroCount={est.total > 0 ? zeroLines.length : 0}
-                onPreview={est.kind === 'ADDENDUM' ? undefined : guard(() => void preview.open())}
-                previewOpening={preview.opening}
               />
             )}
             {CATALOG_SYNC_CARD && !signed && <CatalogSyncCard estimateId={id} items={est.items} />}
@@ -828,6 +826,8 @@ export function EstimateEditorPage() {
           onClose={() => setShareOpen(false)}
           project={project.data}
           singleEstimateId={id}
+          onPreview={guard(() => void preview.open())}
+          previewOpening={preview.opening}
         />
       )}
       <ZeroQuantitySheet

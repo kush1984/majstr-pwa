@@ -38,8 +38,6 @@ export function EstimateNextStep({
   onPdf,
   pdfLoading = false,
   zeroCount = 0,
-  onPreview,
-  previewOpening = false,
 }: {
   status: EstimateStatus;
   /** When the client signed it; absent on anything but a SIGNED estimate. */
@@ -57,9 +55,6 @@ export function EstimateNextStep({
   /** Works/materials with no quantity — said under the hint, so the master is not surprised by the
    *  question «Прибрати?» when he taps the button. Never on a signed estimate. */
   zeroCount?: number;
-  /** «Подивитися, як побачить клієнт»; absent where the server has no client page (an ADDENDUM). */
-  onPreview?: () => void;
-  previewOpening?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -109,10 +104,6 @@ export function EstimateNextStep({
       <div className="mt-1.5 flex flex-col">
         {sent && <SignaturePushOffer />}
         {/* Absent, not disabled: on a trade V127 has no norms for there is nothing to explain. */}
-        {onPreview && (
-          <SecondaryAction icon="👁" label={t('estimate.nextStep.preview')} onClick={onPreview}
-            disabled={previewOpening} />
-        )}
         {showMaterials && (
           <SecondaryAction icon="🧮" label={t('estimate.nextStep.materials')} onClick={onMaterials} />
         )}

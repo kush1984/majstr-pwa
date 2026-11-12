@@ -58,10 +58,16 @@ export function SharePortalSheet({
   project,
   singleEstimateId,
   mode,
+  onPreview,
+  previewOpening = false,
 }: {
   open: boolean;
   onClose: () => void;
   project: ProjectResponse;
+  /** «Подивитися, як побачить клієнт» for ONE estimate (the page owns it); the object's SIGNATURE
+   *  portal previews its ticked set by itself, the ECONOMY one has nothing to preview (no picker). */
+  onPreview?: () => void;
+  previewOpening?: boolean;
 } & (
   /** Sharing ONE estimate on its own `?t=` link — no picker, no set, the object's portal untouched. */
   | { singleEstimateId: string; mode?: never }
@@ -209,9 +215,10 @@ export function SharePortalSheet({
     () => portalApi.preview(project.id, [...ticked]).then((r) => r.url),
     async () => { await flushOutbox(); return true; },
   );
-  // ONE estimate's sheet has no preview: the estimate page carries its own, beside the sheet's door.
-  const previewAction = mode === 'portal' ? () => void portalPreview.open() : undefined;
-  const previewBusy = portalPreview.opening;
+  const previewAction = singleEstimateId
+    ? onPreview
+    : mode === 'portal' ? () => void portalPreview.open() : undefined;
+  const previewBusy = singleEstimateId ? previewOpening : portalPreview.opening;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -581,7 +588,7 @@ export function SharePortalSheet({
             {/* Quiet, after the ways to send: a look before the link leaves, never instead of it. */}
             {previewAction && (
               <button type="button" onClick={previewAction}
-                disabled={previewBusy || ticked.size === 0} aria-busy={previewBusy}
+                disabled={previewBusy || (!singleEstimateId && ticked.size === 0)} aria-busy={previewBusy}
                 className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold text-brand active:bg-surface-sunken disabled:opacity-60">
                 <span aria-hidden>👁</span>
                 {t('estimate.nextStep.preview')}
@@ -598,6 +605,7 @@ export function SharePortalSheet({
               />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm text-primary">{t('portal.summaryAtBottom')}</span>
+                <span className="block text-xs text-muted">{t('portal.summaryAtBottomHint')}</span>
               </span>
             </label>
 
