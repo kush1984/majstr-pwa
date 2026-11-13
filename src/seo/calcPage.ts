@@ -3,6 +3,7 @@ import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
 import { trackPage } from '@/lib/visit.ts';
+import { layoutSummary, type LayoutSummary } from './layoutBridge.ts';
 
 /**
  * The static calculator pages (kalkulyator-plytky / -gipsokartonu / -shtukaturky / -styazhky .html):
@@ -66,6 +67,8 @@ let ownNorm: number | null = null;
 let ownNormError: string | null = null;
 let focusOwnNorm = false;
 let lastResponse: CalcResponse | null = null;
+/** The layout the last «Порахувати» counted the tile by; null = by area. */
+let lastLayout: LayoutSummary | null = null;
 
 function text(tag: string, content: string, className?: string): HTMLElement {
   const el = document.createElement(tag);
@@ -115,6 +118,11 @@ function syncShownFields(): void {
   });
 }
 
+/** The tile page asks how to count: «За площею + запас» or «По розкладці на стінах». */
+function byLayout(): boolean {
+  return calculator === 'TILE' && checked('mode') === 'LAYOUT';
+}
+
 function showError(message: string): void {
   if (!errorBox) return;
   errorBox.textContent = message;
@@ -123,7 +131,22 @@ function showError(message: string): void {
 
 function inputs(): Record<string, unknown> | null {
   if (!form) return null;
-  const area = figure('area');
+  lastLayout = null;
+  let area = figure('area');
+  if (byLayout()) {
+    // The layout counts the tile; the server counts what goes under it on the m² the layout covers.
+    const layout = layoutSummary();
+    if (layout === 'NO_SIZE') {
+      showError('Мозаїку й кабанчик розкладкою не рахуємо — перемкніть на «За площею + запас».');
+      return null;
+    }
+    if (layout === 'EMPTY') {
+      showError('Впишіть розміри стіни чи підлоги — порахуємо плитку по рядах.');
+      return null;
+    }
+    lastLayout = layout;
+    area = layout.laidArea;
+  }
   if (area == null || Number.isNaN(area)) {
     showError('Вкажіть площу в м² — наприклад, 12,5.');
     return null;
@@ -137,7 +160,8 @@ function inputs(): Record<string, unknown> | null {
       return null;
     }
     if (joint != null) out.jointMm = joint;
-    out.layout = checked('layout') ?? 'STRAIGHT';
+    // A layout is laid straight or offset, row by row — the diagonal is the area count's.
+    out.layout = lastLayout ? 'STRAIGHT' : (checked('layout') ?? 'STRAIGHT');
     const box = figure('boxArea');
     if (box != null && Number.isNaN(box)) {
       showError('М² в коробці — число, наприклад 1,44. Або залиште поле порожнім.');
@@ -300,6 +324,34 @@ function tileBlock(m: MaterialLine): HTMLElement {
   return block;
 }
 
+/**
+ * The tile by the layout: the pieces the rows take, the breakage spare in them, the m² laid, the boxes.
+ * Same block, same «Показати розрахунок», as by area — only the figures come from the layout.
+ */
+function layoutTileBlock(m: MaterialLine, layout: LayoutSummary): HTMLElement {
+  const block = document.createElement('div');
+  block.className = 'seo-tile';
+  block.append(text('h3', m.name));
+  const facts = document.createElement('dl');
+  const fact = (label: string, value: string) => facts.append(text('dt', label), text('dd', value));
+  fact('Розкладено', `${number.format(layout.laidArea)} м²`);
+  fact('Плиток', layout.buyMin === layout.buyMax ? `${layout.buyMax} шт` : `${layout.buyMin}–${layout.buyMax} шт`);
+  const box = figure('boxArea');
+  if (box != null && !Number.isNaN(box)) {
+    fact('Коробок', `${Math.ceil((layout.buyMax * layout.tileArea) / box - 1e-9)} (по ${number.format(box)} м²)`);
+  }
+  block.append(facts);
+  const how = document.createElement('details');
+  how.append(text('summary', 'Показати розрахунок'));
+  how.append(text('p', `По рядах: цілих ${layout.full}, на підрізку ${layout.cut}.`));
+  how.append(text('p', `Менше — якщо обрізки підуть у справу, більше — якщо кожна підрізка з нової плитки. Уже з запасом +${layout.spare} на бій і ремонт.`));
+  how.append(text('p', layout.byArea < layout.buyMin
+    ? `За площею з запасом ${checked('wastePercent') ?? 10} % вийшло б ${layout.byArea} шт — забракло б щонайменше ${layout.buyMin - layout.byArea}.`
+    : `За площею з запасом ${checked('wastePercent') ?? 10} % вийшло б ${layout.byArea} шт.`));
+  block.append(how);
+  return block;
+}
+
 function render(res: CalcResponse, scroll = true): void {
   if (!result) return;
   result.replaceChildren();
@@ -312,13 +364,14 @@ function render(res: CalcResponse, scroll = true): void {
   // The mix is what the visitor came for — first, whatever order the server listed it in.
   const rest = res.materials.filter((m) => !tiles.includes(m))
     .sort((a, b) => Number(perMm && isMainMaterial(b)) - Number(perMm && isMainMaterial(a)));
-  for (const tile of tiles) result.append(tileBlock(tile));
-  if (tiles.length > 0 && document.querySelector('#layout-section')) {
-    // The same page counts row by row below; the area figure is the quick one, and says so.
+  for (const tile of tiles) result.append(lastLayout ? layoutTileBlock(tile, lastLayout) : tileBlock(tile));
+  if (tiles.length > 0 && !lastLayout && document.querySelector('#layout-section')) {
+    // The same form counts row by row too; the area figure is the quick one, and says so.
     const more = text('p', 'Це за площею з запасом. Скільки піде на ваші стіни з підрізкою — ', 'seo-small');
     const link = document.createElement('a');
     link.href = '#layout-section';
-    link.textContent = 'розкладка по стінах';
+    link.textContent = 'перемкніть на розкладку';
+    link.addEventListener('click', () => chooseLayout());
     more.append(link, document.createTextNode('.'));
     result.append(more);
   }
@@ -411,10 +464,27 @@ function prefillFromUrl(search: string): void {
 }
 prefillFromUrl(window.location.search);
 
+/** «По розкладці на стінах» — from a link on the page (`#layout-section`), as if the visitor ticked it. */
+function chooseLayout(): void {
+  const radio = form?.querySelector<HTMLInputElement>('input[name="mode"][value="LAYOUT"]');
+  if (!radio) return;
+  radio.checked = true;
+  syncShownFields();
+  if (result) result.hidden = true;
+  // The anchor was hidden until now, so the browser's own jump to it went nowhere.
+  form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+if (window.location.hash === '#layout-section') chooseLayout();
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#layout-section') chooseLayout();
+});
+
 form?.addEventListener('submit', (e) => void submit(e));
-form?.addEventListener('change', () => {
+form?.addEventListener('change', (e) => {
   syncDrywallFields();
   syncShownFields();
+  // Another way of counting: the answer below was for the other one.
+  if ((e.target as HTMLInputElement | null)?.name === 'mode' && result) result.hidden = true;
 });
 syncDrywallFields();
 syncShownFields();

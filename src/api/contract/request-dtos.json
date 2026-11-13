@@ -321,6 +321,9 @@
   "PortalUpdateRequest": {
     "estimateIds": "array"
   },
+  "PriceListRequest": {
+    "itemIds": "array"
+  },
   "ProfileTradesRequest": {
     "trades": "array"
   },

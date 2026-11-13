@@ -53,10 +53,15 @@
   <main class="seo-main">
     <nav class="seo-crumbs" aria-label="Навігація"><a href="/">Majstr</a> › Калькулятор плитки</nav>
     <h1>Калькулятор плитки онлайн — скільки плитки, клею й затирки купити</h1>
-    <p class="seo-lede">Скільки плитки купити — двома способами: швидко, за площею з запасом, з округленням угору до цілих плиток і коробок, або точно — розкладкою по стінах, де видно кожну підрізку. Приклад: ванна 2×1,7 м, висота 2,5 м, плитка на всіх стінах до стелі, і за ванною теж, мінус двері 0,7×2,0 м — це 7,4 × 2,5 − 1,4 = 17,1 м². Для плитки 300×600, укладання прямо і запасу 10 % треба: <!--SEO_EXAMPLE:bath-->. А по стінах, з дверима посередині стіни 2 м і стартом симетрично, виходить <!--SEO_LAYOUT_EXAMPLE:bath-->. Підставте свої розміри нижче — <a href="#calc">за площею</a> або <a href="#layout-section">по стінах</a>; рахуємо тими ж нормами й тим самим розрахунком, що й застосунок Majstr.</p>
+    <p class="seo-lede">Скільки плитки купити — двома способами: швидко, за площею з запасом, з округленням угору до цілих плиток і коробок, або точно — розкладкою по стінах, де видно кожну підрізку. Приклад: ванна 2×1,7 м, висота 2,5 м, плитка на всіх стінах до стелі, і за ванною теж, мінус двері 0,7×2,0 м — це 7,4 × 2,5 − 1,4 = 17,1 м². Для плитки 300×600, укладання прямо і запасу 10 % треба: <!--SEO_EXAMPLE:bath-->. А по стінах, з дверима посередині стіни 2 м і стартом симетрично, виходить <!--SEO_LAYOUT_EXAMPLE:bath-->. Підставте свої розміри нижче — <a href="#calc">за площею</a> або <a href="#layout-section">по розкладці на стінах</a>; рахуємо тими ж нормами й тим самим розрахунком, що й застосунок Majstr.</p>
 
     <form id="calc" class="seo-calc" novalidate>
-      <label>Площа, м²
+      <fieldset class="seo-mode">
+        <legend>Як рахувати</legend>
+        <label><input type="radio" name="mode" value="AREA" checked /> За площею + запас</label>
+        <label><input type="radio" name="mode" value="LAYOUT" /> По розкладці на стінах</label>
+      </fieldset>
+      <label data-show="mode:AREA">Площа, м²
         <input name="area" inputmode="decimal" autocomplete="off" placeholder="напр. 12,5" required />
       </label>
       <label>Формат плитки
@@ -73,19 +78,23 @@
           <option value="METRO">Кабанчик, «цегла»</option>
         </select>
       </label>
-      <fieldset>
+      <fieldset data-show="mode:AREA">
         <legend>Укладання</legend>
         <label><input type="radio" name="layout" value="STRAIGHT" checked /> Прямо</label>
         <label><input type="radio" name="layout" value="DIAGONAL" /> По діагоналі</label>
         <small>По діагоналі більше підрізки — додаємо 5 % до вашого запасу.</small>
       </fieldset>
-      <label>М² в коробці <span class="seo-optional">(необов'язково)</span>
-        <input name="boxArea" inputmode="decimal" autocomplete="off" placeholder="напр. 1,44" />
-        <small>Є на коробці — тоді порахуємо й коробки.</small>
-      </label>
       <label>Ширина шва, мм
         <input name="jointMm" inputmode="decimal" autocomplete="off" placeholder="2,5" />
         <small>Порожнє — шов, на який розрахована норма.</small>
+      </label>
+      <div id="layout-section" data-show="mode:LAYOUT">
+        <p class="seo-small">Впишіть розміри стіни чи підлоги, двері й вікна — малюнок і кількість перераховуються одразу. Не підходить старт — посуньте розкладку пальцем чи мишкою. Клей, затирку й ґрунт порахуємо на розкладену площу.</p>
+        <div id="layout" class="seo-tl"></div>
+      </div>
+      <label>М² в коробці <span class="seo-optional">(необов'язково)</span>
+        <input name="boxArea" inputmode="decimal" autocomplete="off" placeholder="напр. 1,44" />
+        <small>Є на коробці — тоді порахуємо й коробки.</small>
       </label>
       <fieldset>
         <legend>Запас</legend>
@@ -98,12 +107,6 @@
     </form>
 
     <section id="result" class="seo-result" aria-live="polite" hidden></section>
-
-    <section id="layout-section">
-      <h2>Розкладка плитки по стінах</h2>
-      <p>Скільки плитки піде на конкретну стіну з урахуванням підрізки, де вийде вузька смужка і як її уникнути. Впишіть розміри стіни, двері чи вікно — малюнок і кількість перераховуються одразу, просто в браузері. Не підходить жоден старт — посуньте розкладку пальцем чи мишкою, і двері теж. Формат, шов і запас беремо з калькулятора вище. Розкладка рахує саму плитку прямо або зі зміщенням; діагональ, мозаїку й кабанчик, а також клей, затирку й ґрунт рахуйте за площею вище.</p>
-      <div id="layout" class="seo-calc seo-tl"></div>
-    </section>
 
     <section>
       <h2>Як ми рахуємо</h2>

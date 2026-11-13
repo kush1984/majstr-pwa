@@ -273,6 +273,24 @@ export function TileLayoutPage() {
                 })}
               />
             ))}
+            {/* Less laid than the line holds: say what the layout counted and ASK about the rest
+                (owner, 2026-11-13) — another surface, or the rest by area as before. */}
+            {result.rest > 0 && result.laidArea > 0 && (
+              <div className="rounded-card bg-amber-soft p-3">
+                <p className="text-sm font-semibold text-primary">
+                  {t('tileLayout.restTitle', {
+                    laid: formatNumber(Math.round(result.laidArea * 100) / 100, 2),
+                    n: result.maxTiles + result.spare,
+                  })}
+                </p>
+                <p className="mt-0.5 text-xs text-amber-strong">
+                  {t('tileLayout.restQuestion', {
+                    qty: formatNumber(item.quantity, 2),
+                    rest: formatNumber(Math.round(result.rest * 100) / 100, 2),
+                  })}
+                </p>
+              </div>
+            )}
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1"
                 onClick={() => update((d) => ({ ...d, surfaces: [...d.surfaces, wall(t('tileLayout.wallName', { n: d.surfaces.length + 1 }))] }))}>
@@ -283,6 +301,11 @@ export function TileLayoutPage() {
                 {t('tileLayout.addFloor')}
               </Button>
             </div>
+            {result.rest > 0 && result.laidArea > 0 && canSave(result) && (
+              <Button variant="secondary" fullWidth loading={save.isPending} disabled={save.isPending} onClick={() => void onSave()}>
+                {t('tileLayout.restByAreaButton', { rest: formatNumber(Math.round(result.rest * 100) / 100, 2) })}
+              </Button>
+            )}
             {storedView && (
               <Button variant="ghost" fullWidth onClick={() => setConfirmForget(true)} disabled={remove.isPending}>
                 {t('tileLayout.forget')}
@@ -666,7 +689,6 @@ function Summary({ lineM2, result, saving, onSave }: {
           </span>
         </div>
         <p className="text-[11px] text-muted">{t('tileLayout.rangeHint', { spare: result.spare })}</p>
-        {result.rest > 0 && <p className="text-[11px] text-muted">{t('tileLayout.restByArea', { rest: formatNumber(Math.round(result.rest * 100) / 100, 2) })}</p>}
         {short > 0 && <p className="text-[11px] text-amber-strong">{t('tileLayout.byAreaShort', { byArea: result.byArea, short })}</p>}
         {result.overLine && <p className="text-[11px] text-amber-strong">{t('tileLayout.overLine')}</p>}
         <Button fullWidth loading={saving} disabled={saving || !canSave(result)} onClick={onSave}>

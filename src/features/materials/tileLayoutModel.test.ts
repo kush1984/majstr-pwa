@@ -177,26 +177,29 @@ describe('stage 4: the sizes into the measurements', () => {
     expect(shouldOfferMeasurements(draft({ surfaces: [wall('А')] }), false)).toBe(false);
   });
 
-  it('the walls as one «Стіни» element with every opening, the floor as its own, in mm', () => {
+  it('each laid surface is its own element under its own name, with its own openings, in mm', () => {
     const d = draft({
       surfaces: [
-        { ...wall('А', 2050, 2550), openings: [{ x: 1000, y: 0, w: 700, h: 2000 }] },
+        { ...wall('Фартух', 2050, 2550), openings: [{ x: 1000, y: 0, w: 700, h: 2000 }] },
         wall('Б', 1850, 2550),
         { ...wall('Г', 1850, 2550), enabled: false },
+        { ...wall('  ', 1200, 600) },
         { ...wall('Підлога', 2050, 1850), floor: true },
       ],
     });
     const items = measurementItems(d, { walls: 'Стіни', floor: 'Підлога' });
     expect(items).toEqual([
-      { name: 'Стіни', type: 'SURFACE', sortOrder: 0, payload: {
-        unit: 'MM',
-        segments: [
-          { shape: 'rect', mode: 'd', values: { a: 2050, b: 2550 } },
-          { shape: 'rect', mode: 'd', values: { a: 1850, b: 2550 } },
-        ],
+      { name: 'Фартух', type: 'SURFACE', sortOrder: 0, payload: {
+        unit: 'MM', segments: [{ shape: 'rect', mode: 'd', values: { a: 2050, b: 2550 } }],
         openings: [{ w: 700, h: 2000, n: 1 }],
       } },
-      { name: 'Підлога', type: 'SURFACE', sortOrder: 1, payload: {
+      { name: 'Б', type: 'SURFACE', sortOrder: 1, payload: {
+        unit: 'MM', segments: [{ shape: 'rect', mode: 'd', values: { a: 1850, b: 2550 } }], openings: [],
+      } },
+      { name: 'Стіни', type: 'SURFACE', sortOrder: 2, payload: {
+        unit: 'MM', segments: [{ shape: 'rect', mode: 'd', values: { a: 1200, b: 600 } }], openings: [],
+      } },
+      { name: 'Підлога', type: 'SURFACE', sortOrder: 3, payload: {
         unit: 'MM', segments: [{ shape: 'rect', mode: 'd', values: { a: 2050, b: 1850 } }], openings: [],
       } },
     ]);

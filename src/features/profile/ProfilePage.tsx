@@ -283,6 +283,13 @@ export function ProfilePage() {
           sub={t('transfer.entryText')}
           onClick={() => navigate(routes.transfer)}
         />
+        {/* «Поділитися прайсом» (V205) — the picker is the catalog itself, opened ready to tick. */}
+        <MenuRow
+          icon="📤"
+          title={t('profile.priceList')}
+          sub={t('profile.priceListSub')}
+          onClick={() => navigate(`${routes.catalog}?priceList=1`)}
+        />
         <PushRow />
         <OfflinePrefetchRow isPro={(me?.plan ?? 'FREE') !== 'FREE'} />
         <MenuRow

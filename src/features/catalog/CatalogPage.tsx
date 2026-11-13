@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { routes } from '@/lib/config.ts';
 import { Chip } from '@/components/Chip.tsx';
@@ -14,7 +14,8 @@ import { ErrorState } from '@/components/ErrorState.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { cn } from '@/lib/cn.ts';
-import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
+import type { CatalogItemResponse, ItemType, PriceListResponse } from '@/api/types.ts';
+import { priceListApi } from '@/api/priceList.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import {
   useAddNewFromTemplate,
@@ -31,7 +32,9 @@ import { track } from '@/lib/posthog.ts';
 import type { CatalogItemRequest } from '@/api/types.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 import { CreateFromSearch, shouldOfferCreate } from './CreateFromSearch.tsx';
-import { CatalogBoard, type CatalogInlineCommit } from './CatalogBoard.tsx';
+import { CatalogBoard, tickableIds, type CatalogInlineCommit, type CatalogSelection } from './CatalogBoard.tsx';
+import { PriceListShareSheet } from './PriceListShareSheet.tsx';
+import { useSenderGate } from '@/features/sender/senderGate.ts';
 import { TradeLevel, tradeBranchLabel } from './TradeLevel.tsx';
 import { toTradeTree, tradeKeyOf } from './catalogTree.ts';
 
@@ -109,6 +112,37 @@ export function CatalogPage() {
   const [nothingNew, setNothingNew] = useState(false);
   // Selection mode: `null` = off, which is what keeps an ordinary tap meaning exactly one thing.
   const [picked, setPicked] = useState<Set<string> | null>(null);
+  // «Поділитися прайсом» (V205) is the same tree with the same ticks — set, it means the ticks are the
+  // price list's, not a deletion. Its server state names the library-priced rows and the live link.
+  const [priceList, setPriceList] = useState<PriceListResponse | null>(null);
+  const [priceListLoading, setPriceListLoading] = useState(false);
+  const [priceListSheet, setPriceListSheet] = useState(false);
+  const pickingPriceList = picked !== null && priceList !== null;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const startPriceList = async () => {
+    setPriceListLoading(true);
+    try {
+      const state = await priceListApi.get();
+      setPriceList(state);
+      setPicked(new Set(state.itemIds));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    } finally {
+      setPriceListLoading(false);
+    }
+  };
+  const stopPicking = () => {
+    setPicked(null);
+    setPriceList(null);
+  };
+  // The profile's «Поділитися прайсом» lands here with ?priceList=1.
+  const priceListParam = searchParams.get('priceList') === '1';
+  useEffect(() => {
+    if (!priceListParam) return;
+    setSearchParams({}, { replace: true });
+    void startPriceList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per arrival with the param
+  }, [priceListParam]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const deleteItems = useDeleteCatalogItems();
@@ -123,9 +157,11 @@ export function CatalogPage() {
   // Everything under the TYPE filter (Усі/Роботи/Матеріали). This — not what search leaves on
   // screen — is what «Видалити все» means, and it is also what tells a genuinely empty catalog
   // apart from a search that matched nothing.
+  // A price list is works only — whatever the chips say while it is being picked.
+  const typeFilter: TypeFilter = pickingPriceList ? 'WORK' : filter;
   const underType = useMemo(
-    () => (data ?? []).filter((i) => filter === 'ALL' || i.type === filter),
-    [data, filter],
+    () => (data ?? []).filter((i) => typeFilter === 'ALL' || i.type === typeFilter),
+    [data, typeFilter],
   );
   const searching = q.trim().length > 0;
   const offerCreate = searching && shouldOfferCreate(q, (data ?? []).map((i) => i.name));
@@ -150,6 +186,37 @@ export function CatalogPage() {
   // Prefill a new position's trade when the master's WHOLE catalog holds exactly one — the only
   // case the old chip filter could ever answer unambiguously either. Computed over everything, not
   // over the current view, so a search narrowing the screen to one trade does not decide it.
+  const libraryPriced = useMemo(() => new Set(priceList?.libraryPricedIds ?? []), [priceList]);
+  // What the price list really holds: ticks on works he can SEE with a price. A tick the server kept on a
+  // row of a trade he took off (hidden) or on a work since set to 0 ₴ is neither counted, sent nor shown
+  // ticked — it could not be unticked anyway.
+  const priceListTicks = useMemo(() => {
+    if (!pickingPriceList) return null;
+    const tickable = new Set(underType.filter((i) => i.defaultPrice > 0).map((i) => i.id));
+    return new Set([...picked].filter((id) => tickable.has(id)));
+  }, [pickingPriceList, picked, underType]);
+  const ensureSender = useSenderGate();
+  // The name first, as before an estimate's share sheet: every way out of the sheet needs it (403
+  // SENDER_NAME_REQUIRED otherwise, and a new master has none since V190).
+  const openPriceListSheet = async () => {
+    if ((await ensureSender()) === 'cancelled') return;
+    setPriceListSheet(true);
+  };
+  const selection: CatalogSelection | undefined = picked === null ? undefined : {
+    selected: priceListTicks ?? picked,
+    onToggle: (id) => setPicked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    }),
+    onToggleSection: toggleMany,
+    noteOf: pickingPriceList
+      ? (item) => item.defaultPrice <= 0
+        ? { text: t('priceList.noPrice'), blocked: true }
+        : libraryPriced.has(item.id) ? { text: t('priceList.libraryPrice'), blocked: false } : null
+      : undefined,
+  };
+
   const defaultTradeKey = useMemo(() => {
     const keys = new Set((data ?? []).map(tradeKeyOf));
     return keys.size === 1 ? [...keys][0] : undefined;
@@ -268,7 +335,7 @@ export function CatalogPage() {
         <div>
           {/* Three doors that bring positions in, as buttons (master feedback — the text links read
               as decoration). One row of equal tiles: icon over a short label fits 375 px. */}
-          <div className="mb-4 grid grid-cols-3 gap-2">
+          <div className="mb-4 grid grid-cols-2 gap-2">
             <CatalogAction icon="⬆" label={t('catalog.importPrice')} onClick={() => navigate(routes.catalogImport)} />
             <CatalogAction icon="📥" label={t('transfer.entryAction')} onClick={() => navigate(routes.transfer)} />
             <CatalogAction
@@ -278,14 +345,21 @@ export function CatalogPage() {
               disabled={checkUpdates.isPending || !online}
               title={offlineTitle}
             />
+            <CatalogAction
+              icon="📤"
+              label={t('priceList.entry')}
+              onClick={guard(() => void startPriceList())}
+              disabled={priceListLoading || !online || pickingPriceList}
+              title={offlineTitle}
+            />
           </div>
 
           <div className="space-y-2">
             {branches.map((branch) => {
               // A position two trades both ship appears in both branches under ONE id, so ticking
               // a whole trade with a Set can never double-count it.
-              const ids = branch.sections.flatMap((s) => s.items.map((i) => i.id));
-              const allPicked = picked !== null && ids.every((id) => picked.has(id));
+              const ids = tickableIds(branch.sections.flatMap((s) => s.items), selection);
+              const allPicked = picked !== null && ids.length > 0 && ids.every((id) => picked.has(id));
               const pickedHere = picked === null ? 0 : ids.filter((id) => picked.has(id)).length;
               // Inside ONE trade the old rule still applies: a short trade opens its folders, a
               // long one shows them closed.
@@ -342,15 +416,7 @@ export function CatalogPage() {
                         : (category) =>
                             toggleOpen(`c:${branch.key}|${category}`, autoOpenCategory)
                     }
-                    selection={picked === null ? undefined : {
-                      selected: picked,
-                      onToggle: (id) => setPicked((prev) => {
-                        const next = new Set(prev);
-                        if (!next.delete(id)) next.add(id);
-                        return next;
-                      }),
-                      onToggleSection: toggleMany,
-                    }}
+                    selection={selection}
                   />
                 </TradeLevel>
               );
@@ -366,21 +432,35 @@ export function CatalogPage() {
                of a POSITION card, not the full row — same as the estimate selection bar. The bottom
                offset clears the mobile nav, which is lg:hidden. */
             <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 ml-8 mt-2 flex items-center gap-3 rounded-2xl bg-ink px-4 py-3 shadow-card-lg lg:bottom-4">
-              <span className="flex-shrink-0 text-sm font-semibold text-white">
-                {t('catalog.selectedCount', { count: picked.size })}
+              <span className="min-w-0 text-sm font-semibold text-white">
+                {priceListTicks
+                  ? t('priceList.count', { count: priceListTicks.size })
+                  : t('catalog.selectedCount', { count: picked.size })}
               </span>
               <div className="ml-auto flex flex-shrink-0 items-center gap-1">
+                {pickingPriceList ? (
+                  <button
+                    type="button"
+                    // With nothing ticked the sheet still holds «Закрити посилання» for a live link.
+                    disabled={priceListTicks?.size === 0 && !priceList?.url}
+                    onClick={() => void openPriceListSheet()}
+                    className="min-h-[44px] rounded-xl bg-brand px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
+                  >
+                    {t('priceList.next')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={picked.size === 0}
+                    onClick={() => setBulkDeleteOpen(true)}
+                    className="min-h-[44px] rounded-xl bg-danger px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
+                  >
+                    {t('common.delete')}
+                  </button>
+                )}
                 <button
                   type="button"
-                  disabled={picked.size === 0}
-                  onClick={() => setBulkDeleteOpen(true)}
-                  className="min-h-[44px] rounded-xl bg-danger px-5 text-sm font-semibold text-white disabled:bg-white/15 disabled:text-white/40"
-                >
-                  {t('common.delete')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPicked(null)}
+                  onClick={stopPicking}
                   className="min-h-[44px] rounded-xl px-3 text-sm font-semibold text-white/70"
                 >
                   {t('common.cancel')}
@@ -393,18 +473,32 @@ export function CatalogPage() {
 
       {/* The catalog had no FAB at all — every action lived in small links above the list, which
           is the one place a thumb does not reach on a phone. */}
-      <Fab ariaLabel={t('catalog.actionsMenu')}>
-        {(close) => (
-          <>
-            <FabAction icon="＋" label={t('catalog.addItemShort')}
-              onClick={() => close(() => setEditing(null))} />
-            <FabAction icon="☑" label={t('catalog.selectItems')}
-              onClick={() => close(() => setPicked(new Set()))} />
-            <FabAction icon="🗑" label={t('catalog.deleteAll')}
-              onClick={() => close(() => setDeleteAllOpen(true))} />
-          </>
-        )}
-      </Fab>
+      {/* Not while ticking: the selection bar owns the bottom of the screen, and the FAB sat on its
+          «Скасувати». */}
+      {picked === null && (
+        <Fab ariaLabel={t('catalog.actionsMenu')}>
+          {(close) => (
+            <>
+              <FabAction icon="＋" label={t('catalog.addItemShort')}
+                onClick={() => close(() => setEditing(null))} />
+              <FabAction icon="☑" label={t('catalog.selectItems')}
+                onClick={() => close(() => { setPriceList(null); setPicked(new Set()); })} />
+              <FabAction icon="🗑" label={t('catalog.deleteAll')}
+                onClick={() => close(() => setDeleteAllOpen(true))} />
+            </>
+          )}
+        </Fab>
+      )}
+
+      {pickingPriceList && (
+        <PriceListShareSheet
+          open={priceListSheet}
+          onClose={() => setPriceListSheet(false)}
+          itemIds={[...(priceListTicks ?? [])]}
+          liveUrl={priceList.url}
+          onSaved={setPriceList}
+        />
+      )}
 
       <ConfirmDialog
         open={bulkDeleteOpen}

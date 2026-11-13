@@ -29,6 +29,19 @@ export interface CatalogSelection {
   selected: Set<string>;
   onToggle: (id: string) => void;
   onToggleSection: (ids: string[], select: boolean) => void;
+  /** A word under a row (the price list's «ціна з бібліотеки»); `blocked` = the row cannot be ticked
+   *  and no whole-category or whole-trade tick reaches it («без ціни»). */
+  noteOf?: (item: CatalogItemResponse) => SelectionNote | null;
+}
+
+export interface SelectionNote {
+  text: string;
+  blocked: boolean;
+}
+
+/** The ids a whole-category or whole-trade tick may reach. */
+export function tickableIds(items: CatalogItemResponse[], selection?: CatalogSelection): string[] {
+  return items.filter((i) => !selection?.noteOf?.(i)?.blocked).map((i) => i.id);
 }
 
 export function CatalogBoard({
@@ -97,8 +110,8 @@ function CategoryBlock({
   onToggle?: () => void;
 }) {
   const { t } = useTranslation();
-  const ids = section.items.map((i) => i.id);
-  const allPicked = selection ? ids.every((id) => selection.selected.has(id)) : false;
+  const ids = tickableIds(section.items, selection);
+  const allPicked = selection ? ids.length > 0 && ids.every((id) => selection.selected.has(id)) : false;
   const picked = selection ? ids.filter((id) => selection.selected.has(id)).length : 0;
 
   return (
@@ -170,6 +183,8 @@ function ItemRow({
   const { t } = useTranslation();
   const picked = selection ? selection.selected.has(item.id) : false;
   const description = item.description?.trim();
+  const note = selection?.noteOf?.(item) ?? null;
+  const blocked = note?.blocked ?? false;
 
   if (onInline && !selection) {
     return (
@@ -224,9 +239,10 @@ function ItemRow({
         <button
           type="button"
           onClick={() => selection.onToggle(item.id)}
+          disabled={blocked}
           aria-pressed={picked}
           aria-label={item.name}
-          className="flex w-7 flex-shrink-0 items-center justify-center"
+          className="flex w-7 flex-shrink-0 items-center justify-center disabled:opacity-40"
         >
           <Tick on={picked} />
         </button>
@@ -234,10 +250,12 @@ function ItemRow({
       <button
         type="button"
         onClick={() => (selection ? selection.onToggle(item.id) : onEdit(item))}
+        disabled={blocked}
         aria-pressed={selection ? picked : undefined}
         className={cn(
           'flex min-w-0 flex-1 items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-surface-sunken',
           picked && 'bg-brand-soft/40',
+          blocked && 'opacity-60',
         )}
       >
         <span className="min-w-0 flex-1">
@@ -252,6 +270,11 @@ function ItemRow({
             </span>
           )}
           <span className="block text-xs text-muted">за {t('units.' + item.unit)}</span>
+          {note && (
+            <span className="mt-1 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+              {note.text}
+            </span>
+          )}
         </span>
         <span className="whitespace-nowrap text-sm font-bold text-primary">
           {formatMoney(item.defaultPrice)}

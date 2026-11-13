@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { materialsApi } from '@/api/materials.ts';
 import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
+import { SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
 import type { TileLayoutRequest, TileLayoutView } from '@/api/types.ts';
 
 export const TILE_LAYOUTS_KEY = (estimateId: string) => ['tileLayouts', estimateId] as const;
@@ -39,6 +40,10 @@ export function useTileLayoutActions(estimateId: string) {
   const settle = () => {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['materials', estimateId] });
+    // The server re-sends an estimate already on the object's list (V203 follow-up), so the list and
+    // its row on the object are asked again.
+    void qc.invalidateQueries({ queryKey: ['shopping-list'] });
+    void qc.invalidateQueries({ queryKey: SHOPPING_SUMMARY_KEY });
   };
 
   const save = useMutation({

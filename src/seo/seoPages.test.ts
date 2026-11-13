@@ -122,10 +122,13 @@ describe('kalkulyator-plytky.html', () => {
     expect(lede).toContain('17,1 м²');
   });
 
-  it("lays the tile out wall by wall in the browser — the app's own engine, its own script", () => {
+  it("lays the tile out wall by wall in the browser, inside the one form — the app's own engine, its own script", () => {
     const html = read('kalkulyator-plytky.html');
-    expect(html).toContain('<h2>Розкладка плитки по стінах</h2>');
-    expect(html).toContain('<div id="layout" class="seo-calc seo-tl"></div>');
+    const form = /<form id="calc"[\s\S]*?<\/form>/.exec(html)?.[0] ?? '';
+    expect(form).toContain('<input type="radio" name="mode" value="AREA" checked /> За площею + запас');
+    expect(form).toContain('<input type="radio" name="mode" value="LAYOUT" /> По розкладці на стінах');
+    expect(form).toContain('<div id="layout-section" data-show="mode:LAYOUT">');
+    expect(form).toContain('<div id="layout" class="seo-tl"></div>');
     expect(html).toContain('<script type="module" src="/src/seo/tileLayoutPage.ts"></script>');
     const script = read('src/seo/tileLayoutPage.ts');
     expect(script).toContain("from '@/lib/tileLayout.ts'");

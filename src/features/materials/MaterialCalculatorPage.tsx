@@ -825,6 +825,7 @@ export function MaterialCalculatorPage() {
                   setOpenRow((cur) => (cur === line.materialId ? null : line.materialId))
                 }
                 onNormChange={afterNormChange}
+                waste={waste}
               />
             ))}
           </div>
@@ -1188,6 +1189,7 @@ function MaterialRow({
   open,
   onToggle,
   onNormChange,
+  waste,
 }: {
   line: CalculatedMaterialLine;
   value: string;
@@ -1196,6 +1198,8 @@ function MaterialRow({
   open: boolean;
   onToggle: () => void;
   onNormChange: () => void;
+  /** The master's allowance on this screen — what the by-area part of a laid-out tile grew by. */
+  waste: number;
 }) {
   const { t } = useTranslation();
 
@@ -1248,7 +1252,8 @@ function MaterialRow({
         {open ? t('materials.hideMath') : t('materials.showMath')}
       </button>
 
-      {open && (
+      {open && laidTiles(line) && <TileMath line={line} waste={waste} />}
+      {open && !laidTiles(line) && (
         <div className="mt-1 space-y-1 rounded-xl bg-surface-sunken p-2">
           {line.sources.map((source, i) => (
             <SourceRow
@@ -1267,6 +1272,42 @@ function MaterialRow({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The layout's row on a tile (V203): counted in whole tiles, not derived from a norm. */
+const isLaidSource = (s: MaterialSourceLine) => s.unit === 'PIECE' && s.normId == null;
+const laidTiles = (line: CalculatedMaterialLine) => line.packageSize != null && line.sources.some(isLaidSource);
+
+/**
+ * A laid-out tile, said in TILES (owner, 2026-11-13: «оці цифри взагалі не зрозумілі»): what the layout
+ * counted, what the rest of the line takes by area, and the total — never «772 шт × 0,01 + 17,5 м² × 1,
+ * запас 6,94 %». The by-area part is the total less the laid tiles, so the three figures always add up.
+ */
+function TileMath({ line, waste }: { line: CalculatedMaterialLine; waste: number }) {
+  const { t } = useTranslation();
+  const laid = line.sources.filter(isLaidSource);
+  const byArea = line.sources.filter((s) => !isLaidSource(s));
+  const laidPieces = laid.reduce((n, s) => n + s.quantity, 0);
+  const total = line.packages ?? laidPieces;
+  const areaM2 = byArea.reduce((n, s) => n + s.amount, 0);
+  return (
+    <div className="mt-1 space-y-1 rounded-xl bg-surface-sunken p-2 text-xs">
+      {laid.map((s, i) => (
+        <p key={`l${i}`} className="text-muted">{t('materials.tileLaid', { name: s.name ?? '', n: s.quantity })}</p>
+      ))}
+      {byArea.map((s, i) => (
+        <p key={`a${i}`} className="text-muted">{t('materials.tileByArea', { name: s.name ?? '', m2: formatNumber(s.amount, 2) })}</p>
+      ))}
+      {byArea.length > 0 && (
+        <p className="text-muted">
+          {t('materials.tileAreaPieces', { m2: formatNumber(areaM2, 2), waste, n: Math.max(0, total - laidPieces) })}
+        </p>
+      )}
+      <p className="border-t border-border pt-1 text-primary">
+        {t('materials.tileTotal', { n: total, m2: formatNumber(line.quantity, 2) })}
+      </p>
     </div>
   );
 }

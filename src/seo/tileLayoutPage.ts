@@ -1,4 +1,5 @@
 import { parseDecimal } from '@/lib/parseDecimal.ts';
+import { provideLayout } from './layoutBridge.ts';
 import { isNarrow, type LayoutPattern, type LayoutStart, type SurfaceLayout } from '@/lib/tileLayout.ts';
 import {
   clampOpening,
@@ -9,7 +10,6 @@ import {
   readAsMm,
   roomSurfaces,
   sizeToMm,
-  STANDARD_FORMATS,
   wall,
   type DraftResult,
   type LayoutDraft,
@@ -55,6 +55,9 @@ function wastePercent(): number {
   return Number.isFinite(v) && v > 0 ? v : 10;
 }
 
+/** The form's tile has no one size (mosaic, «кабанчик»): nothing to lay out. */
+let noSize = false;
+
 let draft: LayoutDraft = {
   version: 1,
   format: { short: 300, long: 600 },
@@ -64,18 +67,11 @@ let draft: LayoutDraft = {
   unplaced: [],
 };
 
-const number = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
-
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function mm(raw: string): number {
-  const v = parseDecimal(raw.trim());
-  return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
 function field(label: string, value: string, onInput: (v: string) => void, attrs: Record<string, string> = {}): HTMLLabelElement {
@@ -248,43 +244,10 @@ function moveControls(s: SurfaceDraft, origin: { x: number; y: number }, isMovin
 
 function header(): HTMLElement {
   const box = el('div', { class: 'seo-tl-grid' });
-  const formats: [string, string][] = STANDARD_FORMATS.map(([a, b]) => [`${a}x${b}`, `${a}×${b} мм`]);
-  formats.push(['custom', 'Свій розмір']);
-  const current = `${draft.format.short}x${draft.format.long}`;
-  const isStandard = formats.some(([v]) => v === current);
-  const formatSel = select('Формат плитки', formats, isStandard ? current : 'custom', (v) => {
-    if (v === 'custom') {
-      custom.hidden = false;
-      return;
-    }
-    const [a, b] = v.split('x').map(Number);
-    draft = { ...draft, format: { short: a, long: b } };
-    render();
-  });
-  formatSel.classList.add('seo-tl-wide');
-  const custom = el('div', { class: 'seo-tl-grid seo-tl-wide' });
-  custom.hidden = isStandard;
-  const setCustom = () => {
-    const a = mm(cw.querySelector('input')?.value ?? '');
-    const b = mm(ch.querySelector('input')?.value ?? '');
-    if (a >= 20 && b >= 20 && a <= 3600 && b <= 3600) {
-      draft = { ...draft, format: { short: Math.min(a, b), long: Math.max(a, b) } };
-      renderResult();
-    }
-  };
-  const cw = field('Сторона 1, мм', isStandard ? '' : String(draft.format.short), setCustom);
-  const ch = field('Сторона 2, мм', isStandard ? '' : String(draft.format.long), setCustom);
-  custom.append(cw, ch);
+  // The format and the joint are the form's own, above; here only how the tile lies.
   const orient = select('Як лежить плитка', [['LANDSCAPE', 'Лежача'], ['PORTRAIT', 'Стояча']] as ['LANDSCAPE' | 'PORTRAIT', string][],
     draft.orientation, (v) => { draft = { ...draft, orientation: v }; renderResult(); });
-  const joint = field('Шов, мм', String(draft.joint), (v) => {
-    const j = parseDecimal(v.trim());
-    if (Number.isFinite(j) && j >= 0 && j <= 20) {
-      draft = { ...draft, joint: j };
-      renderResult();
-    }
-  });
-  box.append(formatSel, custom, orient, joint);
+  box.append(orient);
   return box;
 }
 
@@ -347,6 +310,10 @@ function surfaceCard(s: SurfaceDraft): HTMLElement {
 function render(): void {
   if (!root) return;
   root.replaceChildren();
+  if (noSize) {
+    root.append(el('p', { class: 'seo-tl-hint' }, 'Мозаїку й кабанчик розкладкою не рахуємо — у них немає одного розміру. Рахуйте за площею.'));
+    return;
+  }
   root.append(header());
 
   const room = el('details', { class: 'seo-tl-room' });
@@ -385,7 +352,6 @@ function render(): void {
   });
   adds.append(addWall, addFloor);
   root.append(adds);
-  root.append(el('div', { id: 'layout-total', class: 'seo-result', 'aria-live': 'polite' }));
   renderResult();
 }
 
@@ -433,27 +399,30 @@ function renderResult(): void {
       out.append(el('p', { class: 'seo-tl-hint' }, h === 'MOSTLY_CUT' && r.cornerCutsLess ? HINTS.MOSTLY_CUT_START : HINTS[h]));
     }
   }
-
-  const total = root.querySelector<HTMLElement>('#layout-total');
-  if (!total) return;
-  total.replaceChildren();
-  if (result.laidArea <= 0) {
-    total.append(el('p', { class: 'seo-small' }, 'Впишіть розміри поверхні — порахуємо плитку по рядах.'));
-    return;
-  }
-  const buyMin = result.minTiles + result.spare;
-  const buyMax = result.maxTiles + result.spare;
-  total.append(el('h3', {}, buyMin === buyMax ? `Купити: ${buyMax} шт` : `Купити: ${buyMin}–${buyMax} шт`));
-  total.append(el('p', {}, `Розкладено ${number.format(result.laidArea)} м². Менше — якщо підуть обрізки, більше — якщо кожна підрізка з нової плитки. Уже з запасом +${result.spare} на бій і ремонт.`));
-  const waste = wastePercent();
-  if (result.byArea < buyMin) {
-    total.append(el('p', {}, `За площею з запасом ${waste} % вийшло б ${result.byArea} шт — забракло б щонайменше ${buyMin - result.byArea}.`));
-  } else {
-    total.append(el('p', {}, `За площею з запасом ${waste} % вийшло б ${result.byArea} шт.`));
-  }
 }
 
 render();
+
+provideLayout(() => {
+  if (noSize) return 'NO_SIZE';
+  const result = evaluate(draft, 0, wastePercent());
+  if (result.laidArea <= 0) return 'EMPTY';
+  const tile = laidTile(draft);
+  const pieces = result.surfaces.reduce((n, x) => ({
+    full: n.full + (x.layout?.full ?? 0),
+    cut: n.cut + (x.layout ? x.layout.cut + x.layout.shaped : 0),
+  }), { full: 0, cut: 0 });
+  return {
+    laidArea: Math.round(result.laidArea * 100) / 100,
+    buyMin: result.minTiles + result.spare,
+    buyMax: result.maxTiles + result.spare,
+    spare: result.spare,
+    full: pieces.full,
+    cut: pieces.cut,
+    byArea: result.byArea,
+    tileArea: (tile.w * tile.h) / 1e6,
+  };
+});
 
 // The area calculator above sets the format, the joint and the allowance; the layout follows it, so the
 // two halves of the page never answer about different tiles. Mosaic and «кабанчик» have no one size.
@@ -465,6 +434,7 @@ function followTop(): void {
   const calc = document.querySelector<HTMLFormElement>('#calc');
   if (!calc) return;
   const fmt = TOP_FORMAT[calc.querySelector<HTMLSelectElement>('select[name="format"]')?.value ?? ''];
+  noSize = fmt === undefined;
   const jointRaw = calc.querySelector<HTMLInputElement>('input[name="jointMm"]')?.value.trim() ?? '';
   const joint = jointRaw === '' ? DEFAULT_JOINT : parseDecimal(jointRaw);
   const next = { ...draft };

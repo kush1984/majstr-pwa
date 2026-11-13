@@ -318,28 +318,22 @@ export function shouldOfferMeasurements(d: LayoutDraft, declined: boolean): bool
 }
 
 /**
- * The laid surfaces as measurement elements, in millimetres: the walls as ONE «Стіни» surface (a plane
- * per wall, every opening taken out) and the floor as «Підлога» — the shape the object import writes,
- * so the estimate's other lines (grout, waterproofing) pick them the same way.
+ * The laid surfaces as measurement elements, in millimetres — ONE element per surface, under the name the
+ * master gave it («Фартух», «Стіна А»), its own openings with it. A blank name takes the kind's default.
  */
 export function measurementItems(d: LayoutDraft, names: { walls: string; floor: string }): MeasurementItemRequest[] {
-  const laid = d.surfaces.filter((s) => s.enabled && s.width > 0 && s.height > 0);
-  const item = (name: string, list: SurfaceDraft[], order: number): MeasurementItemRequest => ({
-    name,
-    type: 'SURFACE',
-    sortOrder: order,
-    payload: {
-      unit: 'MM',
-      segments: list.map((s) => ({ shape: 'rect', mode: 'd', values: { a: s.width, b: s.height } })),
-      openings: list.flatMap((s) => s.openings.filter((o) => o.w > 0 && o.h > 0).map((o) => ({ w: o.w, h: o.h, n: 1 }))),
-    },
-  });
-  const walls = laid.filter((s) => !s.floor);
-  const floors = laid.filter((s) => s.floor);
-  return [
-    ...(walls.length > 0 ? [item(names.walls, walls, 0)] : []),
-    ...(floors.length > 0 ? [item(names.floor, floors, 1)] : []),
-  ];
+  return d.surfaces
+    .filter((s) => s.enabled && s.width > 0 && s.height > 0)
+    .map((s, order) => ({
+      name: s.name.trim() || (s.floor ? names.floor : names.walls),
+      type: 'SURFACE',
+      sortOrder: order,
+      payload: {
+        unit: 'MM',
+        segments: [{ shape: 'rect', mode: 'd', values: { a: s.width, b: s.height } }],
+        openings: s.openings.filter((o) => o.w > 0 && o.h > 0).map((o) => ({ w: o.w, h: o.h, n: 1 })),
+      },
+    }));
 }
 
 /** Moving a dragged opening keeps it on the surface and on a 5 mm step. */

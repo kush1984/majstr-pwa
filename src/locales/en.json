@@ -1301,6 +1301,10 @@
     "showMath": "Show the arithmetic",
     "hideMath": "Hide the arithmetic",
     "mathTotal": "{{base}} + {{percent}} % waste → {{total}} {{unit}}",
+    "tileLaid": "{{name}}: laid out — {{n}} pcs, the breakage spare included",
+    "tileByArea": "{{name}}: {{m2}} m² by area",
+    "tileAreaPieces": "{{m2}} m² + {{waste}} % allowance = {{n}} pcs",
+    "tileTotal": "Total: {{n}} pcs (≈ {{m2}} m²)",
     "unsignedEstimate": "The estimate is not signed yet — the quantities can still move.",
     "normEdit": "Change the rate",
     "normLabel": "Rate per 1 {{unit}}",
@@ -1980,7 +1984,9 @@
     "phoneHint": "Optional — so the client can call you",
     "companyNameHint": "Optional — if empty, documents show your name",
     "tradeSetAddedAuto": "Added templates and catalog positions for: {{trades}}",
-    "nameLocked": "Your name is already on your documents — it can be changed, not erased"
+    "nameLocked": "Your name is already on your documents — it can be changed, not erased",
+    "priceList": "Share price list",
+    "priceListSub": "Your prices for the work — as a link or a PDF"
   },
   "clientPicker": {
     "none": "No client",
@@ -2594,8 +2600,10 @@
     "unplacedText": "The measurements hold openings with no place on a wall ({{n}}). Put each on its wall — until then the walls are counted without them, so there is tile to spare.",
     "placeHere": "Put {{w}}×{{h}} here",
     "laid": "Laid out {{laid}} of {{qty}} m²",
+    "restTitle": "The layout counted {{laid}} m² — {{n}} pcs.",
+    "restQuestion": "The estimate has {{qty}} m². What about the other {{rest}} m²? Add a wall or a floor the tile goes on, or count the rest by area with your allowance.",
+    "restByAreaButton": "The other {{rest}} m² — by area",
     "rangeHint": "Fewer if offcuts are reused, more if every cut takes a new tile. Includes +{{spare}} for breakage and repairs.",
-    "restByArea": "The other {{rest}} m² — by area with your allowance.",
     "byAreaShort": "By area it would be {{byArea}} — at least {{short}} short.",
     "overLine": "The surfaces add up to more than the line. Check the work quantity — the line itself is not changed here.",
     "done": "Done · {{n}} pcs",
@@ -2622,5 +2630,19 @@
     "change": "Change",
     "saved": "Remembered for every estimate",
     "addByHand": "Add a material by hand"
+  },
+  "priceList": {
+    "entry": "Share price list",
+    "title": "Share price list",
+    "count_one": "{{count}} position in the price list",
+    "count_other": "{{count}} positions in the price list",
+    "next": "Next",
+    "noPrice": "no price — won't go into the price list",
+    "libraryPrice": "library price — check it",
+    "sheetHint": "The client sees the ticked works with prices from your catalog — {{count}} in total.",
+    "liveHint": "The link is live: change a price in the catalog and the client sees the new one on the same link.",
+    "shareText": "My prices for the work",
+    "fileName": "Price list",
+    "pdf": "📄 Save PDF"
   }
 }

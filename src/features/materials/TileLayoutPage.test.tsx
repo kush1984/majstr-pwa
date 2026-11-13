@@ -132,6 +132,26 @@ describe('TileLayoutPage', () => {
     expect(screen.queryByText(/Розміри поверхні/)).toBeNull();
   });
 
+  it('less laid than the line: says what the layout counted and asks about the rest', async () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Окремі поверхні'));
+    type(/^Ширина, м/, '1,85');
+    type(/^Висота, м/, '2,55');
+    screen.getByText(/^Розкладкою пораховано 4,72 м² — \d+ шт\.$/);
+    screen.getByText(/У кошторисі 20 м²\. Що робити з рештою 15,28 м²\?/);
+    // «Решту — за площею» is the answer that saves, as «Готово» would.
+    fireEvent.click(screen.getByRole('button', { name: 'Решту 15,28 м² — за площею' }));
+    await waitFor(() => expect(saveTileLayout).toHaveBeenCalledTimes(1));
+  });
+
+  it('the whole line laid out: nothing to ask', () => {
+    renderPage(line({ quantity: 4 }));
+    fireEvent.click(screen.getByText('Окремі поверхні'));
+    type(/^Ширина, м/, '1,85');
+    type(/^Висота, м/, '2,55');
+    expect(screen.queryByText(/Розкладкою пораховано/)).toBeNull();
+  });
+
   it('no red error before the sizes are typed', () => {
     renderPage();
     fireEvent.click(screen.getByText('Окремі поверхні'));
@@ -172,7 +192,7 @@ describe('TileLayoutPage', () => {
     screen.getByText('Тут розкладки немає');
   });
 
-  it('typed sizes: «Зберегти в заміри» makes a room with the walls, and the line is never asked again', async () => {
+  it('typed sizes: «Зберегти в заміри» makes a room with each surface under its name, and the line is never asked again', async () => {
     await layOutOneWall();
     fireEvent.change(screen.getByLabelText('Приміщення'), { target: { value: 'Ванна' } });
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти в заміри' }));
@@ -180,7 +200,8 @@ describe('TileLayoutPage', () => {
     expect(addRoom).toHaveBeenCalledWith('p1', { name: 'Ванна' }, expect.any(String));
     const [, roomId, item] = addItem.mock.calls[0] as [string, string, { name: string; payload: { unit: string } }];
     expect(roomId).toBe(addRoom.mock.calls[0][2]);
-    expect(item).toMatchObject({ name: 'Стіни', type: 'SURFACE', payload: { unit: 'MM' } });
+    // Under the surface's own name — «Стіна 1» here, «Фартух» when he named it so (owner, 2026-11-13).
+    expect(item).toMatchObject({ name: 'Стіна 1', type: 'SURFACE', payload: { unit: 'MM' } });
     const last = saveTileLayout.mock.calls.at(-1)?.[2] as TileLayoutRequest;
     expect(JSON.parse(last.params)).toMatchObject({ savedToMeasurements: true });
   });

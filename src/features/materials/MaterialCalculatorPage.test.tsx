@@ -1119,7 +1119,7 @@ describe('MaterialCalculatorPage — tile wall by wall (iteration-tile-layout)',
     calculate.mockResolvedValue(answer({ materials: [laid], tileLayouts: [] }));
     renderPage();
     fireEvent.click(await screen.findByText('Показати розрахунок'));
-    screen.getByText(/72 шт × 0,18/);
+    screen.getByText('Укладання плитки 300х600: розкладка — 72 шт, уже з запасом на бій');
     expect(screen.queryByRole('button', { name: 'Змінити норму' })).toBeNull();
   });
 
@@ -1141,6 +1141,30 @@ describe('MaterialCalculatorPage — tile wall by wall (iteration-tile-layout)',
     first.unmount();
     renderPage(qc);
     await waitFor(() => expect(calculate).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('MaterialCalculatorPage — a laid-out tile is explained in tiles', () => {
+  it('says what the layout counted, what the rest takes by area, and the total — in pieces', async () => {
+    calculate.mockResolvedValue(answer({ materials: [line({
+      materialId: 't1', name: 'Плитка 100×100 мм', unit: 'M2', baseQuantity: 25.22, quantity: 26.97, wastePercent: 6.94,
+      packageSize: 0.01, packageName: 'плитка', packages: 2697,
+      sources: [
+        { estimateItemId: 'e1', name: 'Укладання плитки 100x100', unit: 'PIECE', quantity: 772, qtyPerUnit: 0.01,
+          normId: null, ownNorm: false, basis: 'QUANTITY', amount: 7.72 },
+        { estimateItemId: 'e1', name: 'Укладання плитки 100x100', unit: 'M2', quantity: 17.5, qtyPerUnit: 1,
+          normId: 'n1', ownNorm: false, basis: 'QUANTITY', amount: 17.5 },
+      ],
+    })] }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+    screen.getByText('Укладання плитки 100x100: розкладка — 772 шт, уже з запасом на бій');
+    screen.getByText('Укладання плитки 100x100: 17,5 м² за площею');
+    screen.getByText('17,5 м² + запас 10 % = 1925 шт');
+    screen.getByText('Разом: 2697 шт (≈ 26,97 м²)');
+    // No blended «запас 6,94 %», no coefficient to edit on a tile.
+    expect(screen.queryByText(/6[.,]94/)).toBeNull();
+    expect(screen.queryByText('Змінити норму')).toBeNull();
   });
 });
 

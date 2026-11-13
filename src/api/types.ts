@@ -722,6 +722,21 @@ export interface EstimateItemFromCatalogRequest {
 // Catalog (mirror CatalogItemResponse / CatalogItemRequest)
 // ---------------------------------------------------------------------------
 
+/** The works the master ticked for his price list — the whole set (V205). */
+export interface PriceListRequest {
+  itemIds: string[];
+}
+
+/** The price-list picker's state (V205). `configured` false = `itemIds` is our suggestion. */
+export interface PriceListResponse {
+  /** The live client link; null before the first share or after «Закрити посилання». */
+  url: string | null;
+  configured: boolean;
+  itemIds: string[];
+  /** Positions still at the library's price — marked «перевірте» and not suggested. */
+  libraryPricedIds: string[];
+}
+
 export interface CatalogItemResponse {
   id: string;
   name: string;

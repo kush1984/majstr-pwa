@@ -202,3 +202,104 @@ describe('a hand-on from the wall-area page', () => {
     window.history.replaceState(null, '', '/');
   });
 });
+
+describe('kalkulyator-plytky — one form, two ways to count', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    window.history.replaceState(null, '', '/kalkulyator-plytky');
+  });
+
+  /** Both page scripts, as the page loads them: they share the layout bridge. */
+  async function loadTile(): Promise<HTMLFormElement> {
+    const form = await load('kalkulyator-plytky.html');
+    await import('./tileLayoutPage.ts');
+    return form;
+  }
+
+  const shown = (form: HTMLFormElement, selector: string) =>
+    !(form.querySelector<HTMLElement>(selector)?.hidden ?? true);
+
+  function answer(): Response {
+    const line = (name: string, unit: string, quantity: number, packages: number | null, packageName: string | null) => ({
+      name, unit, baseQuantity: quantity, quantity, wastePercent: 10, packageSize: null, packageName, packages,
+      boxSize: null, boxes: null, sources: [],
+    });
+    return new Response(JSON.stringify({
+      materials: [line('Плитка 300×600 мм', 'M2', 5.2, 29, 'плитка'), line('Клей для плитки цементний C1', 'KG', 22, 1, 'мішок'),
+        line('Затирка для швів цементна', 'KG', 1, 1, 'пачка')],
+      wastePercent: 10, missing: [],
+    }), { status: 200 });
+  }
+
+  it('asks the area by area, and the walls by layout — never both', async () => {
+    const form = await loadTile();
+    expect(shown(form, 'label[data-show="mode:AREA"]')).toBe(true);
+    expect(shown(form, '#layout-section')).toBe(false);
+
+    choose(form, 'mode', 'LAYOUT');
+    expect(shown(form, 'label[data-show="mode:AREA"]')).toBe(false);
+    expect(shown(form, '#layout-section')).toBe(true);
+    // The diagonal is the area count's; a layout is laid straight or offset, wall by wall.
+    expect(shown(form, 'fieldset[data-show="mode:AREA"]')).toBe(false);
+    expect(form.querySelector('#layout .seo-tl-surface')).not.toBeNull();
+  });
+
+  it('by layout: the tile from the rows, and the adhesive and grout in the same answer, on the laid m²', async () => {
+    const form = await loadTile();
+    choose(form, 'mode', 'LAYOUT');
+    const fetchMock = vi.fn().mockResolvedValue(answer());
+    vi.stubGlobal('fetch', fetchMock);
+    form.requestSubmit();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string) as {
+      inputs: { area: number; layout: string; format: string };
+    };
+    // The page's sample wall, 1,85 × 2,55 m, is what is laid.
+    expect(body.inputs.area).toBeGreaterThan(4.6);
+    expect(body.inputs.area).toBeLessThan(4.8);
+    expect(body.inputs.layout).toBe('STRAIGHT');
+
+    const result = document.querySelector<HTMLElement>('#result');
+    await vi.waitFor(() => expect(result?.hidden).toBe(false));
+    const text = result?.textContent ?? '';
+    expect(text).toContain('Розкладено');
+    expect(text).toMatch(/Плиток\d+(–\d+)? шт/);
+    expect(text).not.toContain('Площа з запасом');
+    expect(text).toContain('Клей для плитки цементний C1');
+    expect(text).toContain('Затирка для швів цементна');
+  });
+
+  it('by area: as before — the area with the allowance', async () => {
+    const form = await loadTile();
+    type(form, 'area', '5');
+    const fetchMock = vi.fn().mockResolvedValue(answer());
+    vi.stubGlobal('fetch', fetchMock);
+    form.requestSubmit();
+    const result = document.querySelector<HTMLElement>('#result');
+    await vi.waitFor(() => expect(result?.hidden).toBe(false));
+    expect(result?.textContent).toContain('Площа з запасом');
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).inputs.area).toBe(5);
+  });
+
+  it('a mosaic has no one size: the layout says so, and nothing is sent', async () => {
+    const form = await loadTile();
+    choose(form, 'mode', 'LAYOUT');
+    const format = form.querySelector<HTMLSelectElement>('select[name="format"]');
+    if (!format) throw new Error('no format');
+    format.value = 'MOSAIC';
+    format.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(form.querySelector('#layout')?.textContent).toContain('Мозаїку й кабанчик розкладкою не рахуємо');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    form.requestSubmit();
+    expect(form.querySelector('.seo-error')?.textContent).toContain('перемкніть на «За площею + запас»');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('a link to #layout-section opens the form on the layout', async () => {
+    window.history.replaceState(null, '', '/kalkulyator-plytky#layout-section');
+    const form = await loadTile();
+    expect(form.querySelector<HTMLInputElement>('input[name="mode"][value="LAYOUT"]')?.checked).toBe(true);
+    expect(shown(form, '#layout-section')).toBe(true);
+  });
+});
