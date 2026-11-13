@@ -13,6 +13,9 @@ import { formatNumber } from '@/lib/format.ts';
 import { parseDecimal } from '@/lib/decimal.ts';
 import { packageCount } from '@/lib/packages.ts';
 import { routes } from '@/lib/config.ts';
+import { isTilingLine, tileLayoutRoute } from './tileLayoutModel.ts';
+import { PositionMatchCard } from './PositionMatchCard.tsx';
+import { useEstimate } from '@/features/estimate/useEstimate.ts';
 import { materialsApi } from '@/api/materials.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
 import type {
@@ -22,6 +25,7 @@ import type {
   MaterialParamsRequest,
   MaterialSourceLine,
   MissingParameter,
+  TileLayoutView,
 } from '@/api/types.ts';
 
 /** One position waiting for a figure only the master knows, and the number we would suggest. */
@@ -300,6 +304,7 @@ export function MaterialCalculatorPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const objectId = useEstimate(id).data?.projectId;
 
   // What he answered last time on THIS estimate comes from the SERVER (V142) and arrives with the
   // first calculation, which is already computed against it — the query string carries only what
@@ -344,6 +349,10 @@ export function MaterialCalculatorPage() {
     ],
     queryFn: () => materialsApi.calculate(id, { wastePercent: waste, perimeter, ...applied }),
     enabled: Boolean(id),
+    // A view of the estimate, recomputed by the server: an answer cached from an earlier visit is about
+    // an estimate that may have gained lines since — the master came here to see THOSE (review 2026-11-13).
+    staleTime: 0,
+    refetchOnMount: 'always',
     // Every parameter change is a NEW key, so the whole screen used to collapse into a full-page
     // spinner — controls, figures and all — on each tap of the waste steps. Keeping the last answer
     // on screen turns that into a quiet recalculation of numbers he can watch move.
@@ -789,6 +798,17 @@ export function MaterialCalculatorPage() {
 
         {stale && materials.length > 0 && (
           <p className="mb-2 text-xs text-muted">{t('materials.staleParams')}</p>
+        )}
+
+        {!calc.isError && data && (
+          <PositionMatchCard matches={data.matches ?? []} onChanged={afterNormChange}
+            onAddByHand={objectId
+              ? () => void navigate(routes.shopping(objectId), { state: { from: routes.materials(id), add: true } })
+              : undefined} />
+        )}
+
+        {!calc.isError && data && (
+          <TileLayoutCard estimateId={id} materials={materials} layouts={data.tileLayouts ?? []} />
         )}
 
         {materials.length > 0 && (
@@ -1264,8 +1284,9 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
   const [editing, setEditing] = useState(false);
   const [rate, setRate] = useState(String(source.qtyPerUnit));
 
+  const normId = source.normId;
   const save = useMutation({
-    mutationFn: (qtyPerUnit: number) => materialsApi.saveNorm(source.normId, { qtyPerUnit }),
+    mutationFn: (qtyPerUnit: number) => (normId ? materialsApi.saveNorm(normId, { qtyPerUnit }) : Promise.reject(new Error('no norm'))),
     onSuccess: () => {
       setEditing(false);
       toast.success(t('materials.normSaved'));
@@ -1275,7 +1296,7 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
   });
 
   const restore = useMutation({
-    mutationFn: () => materialsApi.restoreNorm(source.normId),
+    mutationFn: () => (normId ? materialsApi.restoreNorm(normId) : Promise.resolve()),
     onSuccess: () => {
       setEditing(false);
       toast.success(t('materials.normRestored'));
@@ -1340,7 +1361,8 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
         )}
       </p>
 
-      {editing ? (
+      {/* A tile layout's row (V203) was counted, not derived from a norm: nothing to correct. */}
+      {!normId ? null : editing ? (
         <div className="mt-1 rounded-xl bg-surface p-2">
           <label className="mb-1 block text-xs font-medium text-muted">
             {t('materials.normLabel', { unit: t('units.' + source.unit) })}
@@ -1383,6 +1405,71 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
           {t('materials.normEdit')}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * «Розкладка плитки» (iteration-tile-layout): every tiling line the tile on this list comes from, and
+ * how it is counted. A line bought by area says so and offers the layout — the door for a master who
+ * does not know it exists or forgot; a laid-out line shows its tiles; a paused one asks to re-lay.
+ */
+function TileLayoutCard({ estimateId, materials, layouts }: {
+  estimateId: string;
+  materials: CalculatedMaterialLine[];
+  layouts: TileLayoutView[];
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const estimate = useEstimate(estimateId);
+  // Every tiling line of the estimate — not only those a norm already buys tile for. A line named in the
+  // master's own words («Укладання плитки на підлогу 60×60», imported) matches no norm, so nothing on
+  // this screen would mention it; the layout is exactly how such a line still gets its tile counted.
+  const counted = new Set<string>();
+  for (const m of materials) {
+    if (!m.name.startsWith('Плитка')) continue;
+    for (const src of m.sources) if (src.estimateItemId) counted.add(src.estimateItemId);
+  }
+  const lines = new Map<string, { name: string; counted: boolean }>();
+  for (const item of estimate.data?.items ?? []) {
+    if (isTilingLine(item) && item.quantity > 0) lines.set(item.id, { name: item.name, counted: counted.has(item.id) });
+  }
+  if (lines.size === 0) return null;
+  const open = (itemId: string) =>
+    void navigate(tileLayoutRoute(estimateId, itemId), { state: { from: routes.materials(estimateId) } });
+
+  return (
+    <div className="mb-4 rounded-card border border-border bg-surface p-3">
+      <p className="text-sm font-semibold text-primary">{t('tileLayout.cardTitle')}</p>
+      <div className="mt-2 space-y-2">
+        {[...lines].map(([itemId, { name, counted: byNorm }]) => {
+          const view = layouts.find((v) => v.estimateItemId === itemId);
+          return (
+            <div key={itemId} className="rounded-xl bg-surface-sunken p-2">
+              <p className="text-xs font-semibold text-primary">{name}</p>
+              {!view && (
+                <p className="mt-0.5 text-xs text-amber-strong">
+                  {byNorm ? t('tileLayout.cardNone') : t('tileLayout.cardNoNorm')}
+                </p>
+              )}
+              {view?.paused && (
+                <p className="mt-0.5 text-xs text-amber-strong">
+                  {t('tileLayout.cardPaused', { format: `${view.tileShortMm}×${view.tileLongMm}` })}
+                </p>
+              )}
+              {view && !view.paused && (
+                <p className="mt-0.5 text-xs text-muted">
+                  {t('tileLayout.cardLaid', { tiles: view.tilesToBuy, laid: formatNumber(view.laidArea, 3) })}
+                </p>
+              )}
+              <Button variant={view && !view.paused ? 'secondary' : 'primary'} fullWidth className="mt-2"
+                onClick={() => open(itemId)}>
+                {!view ? t('tileLayout.cardLayOut') : view.paused ? t('tileLayout.cardRelay') : t('tileLayout.cardChange')}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

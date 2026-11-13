@@ -183,3 +183,47 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
 .seo-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; font-size: 14px; }
 .seo-signatures p { margin: 0; }
 .seo-signatures span { display: block; margin-top: 28px; border-top: 1px solid var(--ink); padding-top: 4px; color: var(--muted); font-size: 13px; }
+
+/* «Розкладка по стінах» (tileLayoutPage.ts) — two fields a row on a phone, a card per surface. */
+.seo-tl { margin-top: 8px; }
+.seo-tl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.seo-tl-grid > .seo-tl-wide { grid-column: 1 / -1; }
+.seo-tl-grid button { grid-column: 1 / -1; }
+.seo-tl-adds button { grid-column: auto; }
+.seo-calc .seo-tl-grid label { font-size: 14px; }
+.seo-tl-echo { display: block; font-size: 12px; color: var(--muted); }
+.seo-tl-room summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; color: var(--amber-deep); }
+.seo-tl-room[open] summary { margin-bottom: 8px; }
+.seo-tl-surface { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; }
+.seo-tl-row { display: flex; align-items: center; gap: 10px; }
+.seo-calc input.seo-tl-name { flex: 1; min-width: 0; font-weight: 700; }
+.seo-tl-count { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.seo-tl-out { display: grid; gap: 8px; }
+.seo-tl-out .seo-small { margin: 0; color: var(--muted); font-size: 13px; }
+.seo-tl-svg { display: block; width: 100%; max-width: 340px; height: auto; margin: 0 auto; background: var(--paper); border-radius: 12px; }
+.seo-tl-bg { fill: var(--paper); }
+.seo-tl-full { fill: #fff; stroke: var(--line); stroke-width: 0.6; }
+.seo-tl-cut { fill: #fde8d4; stroke: var(--amber); stroke-width: 0.6; }
+.seo-tl-narrow { fill: #fde4e1; stroke: #b42318; stroke-width: 0.6; }
+.seo-tl-opening { fill: #fff; stroke: var(--muted); stroke-width: 0.8; stroke-dasharray: 3 2; }
+.seo-tl-label { fill: var(--muted); font: 600 10px Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.seo-tl-label-narrow { fill: #b42318; font-weight: 800; }
+.seo-tl-warn { padding: 8px 10px; border-radius: 10px; background: #fde4e1; color: #b42318; font-size: 14px; }
+.seo-tl-warn p { margin: 0; }
+.seo-calc button.seo-tl-fix { margin-top: 6px; min-height: 44px; width: 100%; background: #b42318; }
+.seo-tl-hint { margin: 0; padding: 8px 10px; border-radius: 10px; background: #fff4e5; color: #8a4b0f; font-size: 14px; }
+.seo-tl-openings { display: grid; gap: 8px; }
+.seo-tl-opening-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; border-radius: 10px; background: var(--paper); }
+.seo-tl-opening-row button { grid-column: 1 / -1; }
+.seo-calc .seo-tl-opening-row label { font-size: 13px; font-weight: 500; color: var(--muted); }
+#layout-total h3 { margin: 0 0 6px; font-variant-numeric: tabular-nums; }
+#layout-total p { margin: 4px 0; }
+.seo-tl-drag { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.seo-tl-drag .seo-tl-opening { cursor: move; }
+.seo-tl-move { display: grid; gap: 8px; }
+.seo-tl-move .seo-small { margin: 0; color: var(--muted); font-size: 13px; }
+.seo-tl-nudge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.seo-calc .seo-tl-nudge button:last-child { grid-column: 1 / -1; }
+.seo-calc .seo-tl-nudge button { min-height: 44px; padding: 0; font-size: 16px; }
+.seo-calc .seo-tl-nudge button:not(:last-child) { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+

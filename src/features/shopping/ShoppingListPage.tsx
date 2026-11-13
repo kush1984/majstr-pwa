@@ -56,7 +56,8 @@ export function ShoppingListPage() {
   // Bought rows start EXPANDED: folded away they read as gone, and the master checking what he
   // has already put in the trolley is the second thing this screen is for.
   const [boughtOpen, setBoughtOpen] = useState(true);
-  const [adding, setAdding] = useState(false);
+  // «Додати матеріал вручну» from the calculator (V204) opens straight on the add form.
+  const [adding, setAdding] = useState(() => (location.state as { add?: boolean } | null)?.add === true);
   const [editing, setEditing] = useState<ShoppingListItemResponse | null>(null);
   const [sharing, setSharing] = useState(false);
   const { online, guard, offlineTitle } = useOnlineGuard();

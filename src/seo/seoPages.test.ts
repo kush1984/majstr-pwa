@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { seoCalcTables, materialText, exampleText, areaFigures } from '../../scripts/seo-pages-plugin.ts';
+import { seoCalcTables, materialText, exampleText, areaFigures, escapeHtml } from '../../scripts/seo-pages-plugin.ts';
+import { LAYOUT_CASES, layoutCase, layoutCaseById, layoutCaseText, layoutTableHtml } from './tileLayoutCases.ts';
 import { PLAN_SHAPES, WALL_AREA_CASES, wallArea } from './wallArea.ts';
 import { SHAPES } from '@/lib/shapes.ts';
 import type { CalcSnapshot } from '../../scripts/seo-calc-cases.ts';
@@ -105,6 +106,30 @@ describe('kalkulyator-plytky.html', () => {
     expect(bath.materials[0]?.name).toMatch(/^Плитка 300×600/);
     expect(lede).toContain('2×1,7 м');
     expect(lede).toContain(exampleText(bath));
+  });
+
+  it('prints the layout examples the engine itself counts — in the first paragraph and the table', () => {
+    const html = built('kalkulyator-plytky.html');
+    const lede = /<p class="seo-lede">([\s\S]*?)<\/p>/.exec(html)?.[1] ?? '';
+    expect(lede).toContain(escapeHtml(layoutCaseText(layoutCaseById('bath'))));
+    expect(html).toContain(layoutTableHtml(LAYOUT_CASES, escapeHtml));
+    expect(html).not.toContain('<!--SEO_LAYOUT_');
+    // The bath by area here is the very figure the snapshot table prints for it.
+    const bath = snapshot.rows.find((r) => r.id === 'bath');
+    expect(layoutCase(layoutCaseById('bath')).byArea).toBe(bath?.materials[0].packages);
+    // …because both count the same walls: the area the paragraph names is the layout case's own.
+    expect(layoutCase(layoutCaseById('bath')).area).toBe(bath?.inputs.area);
+    expect(lede).toContain('17,1 м²');
+  });
+
+  it("lays the tile out wall by wall in the browser — the app's own engine, its own script", () => {
+    const html = read('kalkulyator-plytky.html');
+    expect(html).toContain('<h2>Розкладка плитки по стінах</h2>');
+    expect(html).toContain('<div id="layout" class="seo-calc seo-tl"></div>');
+    expect(html).toContain('<script type="module" src="/src/seo/tileLayoutPage.ts"></script>');
+    const script = read('src/seo/tileLayoutPage.ts');
+    expect(script).toContain("from '@/lib/tileLayout.ts'");
+    expect(script).toContain("from '@/features/materials/tileLayoutModel.ts'");
   });
 
   it('asks straight or diagonal, says what diagonal adds, and takes an optional box size', () => {

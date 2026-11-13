@@ -313,6 +313,15 @@ function render(res: CalcResponse, scroll = true): void {
   const rest = res.materials.filter((m) => !tiles.includes(m))
     .sort((a, b) => Number(perMm && isMainMaterial(b)) - Number(perMm && isMainMaterial(a)));
   for (const tile of tiles) result.append(tileBlock(tile));
+  if (tiles.length > 0 && document.querySelector('#layout-section')) {
+    // The same page counts row by row below; the area figure is the quick one, and says so.
+    const more = text('p', 'Це за площею з запасом. Скільки піде на ваші стіни з підрізкою — ', 'seo-small');
+    const link = document.createElement('a');
+    link.href = '#layout-section';
+    link.textContent = 'розкладка по стінах';
+    more.append(link, document.createTextNode('.'));
+    result.append(more);
+  }
   if (tiles.length > 0 && rest.length > 0) result.append(text('h3', 'Клей, затирка, ґрунт'));
   if (rest.length > 0) result.append(materialList(rest));
   if (res.materials.some((m) => m.name.startsWith('Профіль'))) {

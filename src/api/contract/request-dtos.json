@@ -237,6 +237,11 @@
     "email": "string",
     "password": "string"
   },
+  "MaterialAliasRequest": {
+    "asNameKey": "string?",
+    "name": "string",
+    "unit": "string"
+  },
   "MaterialApplyRequest": {
     "materials": "array"
   },
@@ -514,6 +519,16 @@
   "TemplateTradeRequest": {
     "customTradeId": "string?",
     "trade": "string?"
+  },
+  "TileLayoutRequest": {
+    "laidArea": "number",
+    "maxTiles": "number",
+    "measurementsDeclined": "boolean?",
+    "minTiles": "number",
+    "params": "string",
+    "spare": "number",
+    "tileHeightMm": "number",
+    "tileWidthMm": "number"
   },
   "TransferCommitRequest": {
     "defaultPolicy": "string",

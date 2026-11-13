@@ -33,6 +33,7 @@ import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
 import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
 import { EstimateReceipts } from './EstimateReceipts.tsx';
 import { AddItemSheet } from './AddItemSheet.tsx';
+import { isTilingLine, tileLayoutRoute } from '@/features/materials/tileLayoutModel.ts';
 import { SharePortalSheet } from '@/features/projects/SharePortalSheet.tsx';
 import { ReceiptImportSheet } from './ReceiptImportSheet.tsx';
 import { DictationSheet } from './DictationSheet.tsx';
@@ -863,6 +864,21 @@ export function EstimateEditorPage() {
       )}
 
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={t('estimate.editItem')}>
+        {/* «Розкласти плитку» (iteration-tile-layout): the line's tiles counted wall by wall. The line
+            itself is not changed there — only what is bought for it. */}
+        {editing && isTilingLine(editing) && (
+          <button
+            type="button"
+            onClick={() => {
+              const itemId = editing.id;
+              setEditing(null);
+              void navigate(tileLayoutRoute(id, itemId), { state: { from: routes.estimate(id) } });
+            }}
+            className="mb-3 flex min-h-11 w-full items-center gap-2 rounded-xl bg-brand-soft px-3 text-left text-sm font-semibold text-brand-700"
+          >
+            🧱 {t('tileLayout.openFromLine')}
+          </button>
+        )}
         {editing && (
           <ItemForm
             key={editing.id}

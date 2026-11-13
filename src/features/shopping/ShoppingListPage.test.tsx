@@ -75,14 +75,14 @@ function seed(
   };
 }
 
-function renderPage(from?: string) {
+function renderPage(from?: string, add = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
       { path: '/shopping/:projectId', element: <ShoppingListPage /> },
       { path: '*', element: <div>інший екран</div> },
     ],
-    { initialEntries: [{ pathname: '/shopping/p1', state: from ? { from } : null }] },
+    { initialEntries: [{ pathname: '/shopping/p1', state: from ? { from, ...(add ? { add: true } : {}) } : null }] },
   );
   const view = render(
     <QueryClientProvider client={qc}>
@@ -128,6 +128,18 @@ describe('ShoppingListPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Назад' }));
     expect(router.state.location.pathname).toBe('/estimates/e1/materials');
+  });
+
+  it('«Додати матеріал вручну» from the calculator opens straight on the add form', () => {
+    seed([item({ id: 'a' })]);
+    renderPage('/estimates/e1/materials', true);
+    expect(screen.getByRole('dialog', { name: 'Додати позицію' })).toBeTruthy();
+  });
+
+  it('opened from the calculator for its figures, the list shows no form', () => {
+    seed([item({ id: 'a' })]);
+    renderPage('/estimates/e1/materials');
+    expect(screen.queryByRole('dialog', { name: 'Додати позицію' })).toBeNull();
   });
 
   it('falls back to the object when it was opened cold, without a referrer', () => {

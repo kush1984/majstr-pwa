@@ -4,7 +4,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@/lib/i18n.ts';
 import { MaterialCalculatorPage } from './MaterialCalculatorPage.tsx';
-import type { CalculatedMaterialLine, MaterialCalculationResponse } from '@/api/types.ts';
+import type { CalculatedMaterialLine, EstimateItemResponse, MaterialCalculationResponse } from '@/api/types.ts';
+import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
+import { anEstimate } from '@/test/factories.ts';
 
 const calculate = vi.hoisted(() => vi.fn());
 const toShoppingList = vi.hoisted(() => vi.fn());
@@ -13,8 +15,12 @@ const restoreNorm = vi.hoisted(() => vi.fn());
 const prefs = vi.hoisted(() => vi.fn());
 const savePrefs = vi.hoisted(() => vi.fn());
 const saveParams = vi.hoisted(() => vi.fn());
+const saveAlias = vi.hoisted(() => vi.fn());
+const deleteAlias = vi.hoisted(() => vi.fn());
 vi.mock('@/api/materials.ts', () => ({
-  materialsApi: { calculate, toShoppingList, saveNorm, restoreNorm, prefs, savePrefs, saveParams },
+  materialsApi: {
+    calculate, toShoppingList, saveNorm, restoreNorm, prefs, savePrefs, saveParams, saveAlias, deleteAlias,
+  },
 }));
 
 function line(over: Partial<CalculatedMaterialLine> = {}): CalculatedMaterialLine {
@@ -1064,5 +1070,139 @@ describe('MaterialCalculatorPage — a changed, unapplied parameter', () => {
     await screen.findByLabelText('Периметр, м.п.');
 
     expect(screen.queryByText(STALE)).toBeNull();
+  });
+});
+
+describe('MaterialCalculatorPage — tile wall by wall (iteration-tile-layout)', () => {
+  const tiling = (id: string, name: string): EstimateItemResponse => ({
+    id, type: 'WORK', name, category: null, trade: 'TILING', unit: 'M2', quantity: 20, unitPrice: 500, lineTotal: 10000,
+    sortOrder: 0, measurementRefs: [], quantityManual: false, percentBaseKind: null, percentBaseItemId: null, baseDetached: false,
+    baseOriginLabel: null, closedByActs: null,
+  });
+  /** The page reads the estimate's lines from the cache the editor already filled. */
+  const withLines = (...items: EstimateItemResponse[]) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData([...ESTIMATE_KEY, 'est-1'], anEstimate({ id: 'est-1', items }));
+    return qc;
+  };
+
+  const tile = line({
+    materialId: 't1', name: 'Плитка 300×600 мм', unit: 'M2', packageSize: 0.18, packageName: 'плитка',
+    sources: [{ estimateItemId: 'tl', name: 'Укладання плитки 300х600', unit: 'M2', quantity: 20, qtyPerUnit: 1,
+      normId: 'n9', ownNorm: false, basis: 'QUANTITY', amount: 20 }],
+  });
+
+  it('a tiling line counted by area says so and offers the layout', async () => {
+    calculate.mockResolvedValue(answer({ materials: [tile], tileLayouts: [] }));
+    renderPage(withLines(tiling('tl', 'Укладання плитки 300х600')));
+    await screen.findByText('Розкладка плитки');
+    screen.getByText(/Розкладки немає — плитку пораховано лише за площею/);
+    fireEvent.click(screen.getByRole('button', { name: 'Розкласти плитку' }));
+    await screen.findByText('інший екран');
+  });
+
+  it('a laid-out line shows its tiles; a paused one asks to lay out again', async () => {
+    const view = { estimateItemId: 'tl', tileShortMm: 300, tileLongMm: 600, laidArea: 9.1, minTiles: 54,
+      maxTiles: 68, spare: 4, tilesToBuy: 72, paused: false, measurementsDeclined: false, params: '{}' };
+    calculate.mockResolvedValue(answer({ materials: [tile], tileLayouts: [view] }));
+    renderPage(withLines(tiling('tl', 'Укладання плитки 300х600')));
+    await screen.findByText(/Розкладено 9,1 м² · 72 шт/);
+    screen.getByRole('button', { name: 'Змінити розкладку' });
+  });
+
+  it('a counted tile row (no norm) offers no coefficient to correct', async () => {
+    const laid = line({
+      materialId: 't1', name: 'Плитка 300×600 мм',
+      sources: [{ estimateItemId: 'tl', name: 'Укладання плитки 300х600', unit: 'PIECE', quantity: 72, qtyPerUnit: 0.18,
+        normId: null, ownNorm: false, basis: 'QUANTITY', amount: 12.96 }],
+    });
+    calculate.mockResolvedValue(answer({ materials: [laid], tileLayouts: [] }));
+    renderPage();
+    fireEvent.click(await screen.findByText('Показати розрахунок'));
+    screen.getByText(/72 шт × 0,18/);
+    expect(screen.queryByRole('button', { name: 'Змінити норму' })).toBeNull();
+  });
+
+  it("a tiling line in the master's own words, which no norm buys tile for, is still offered the layout", async () => {
+    calculate.mockResolvedValue(answer({ materials: [line()], tileLayouts: [] }));
+    renderPage(withLines(tiling('own', 'Укладання плитки на підлогу 60×60')));
+    await screen.findByText('Укладання плитки на підлогу 60×60');
+    screen.getByText(/Назва позиції не з каталогу/);
+    screen.getByRole('button', { name: 'Розкласти плитку' });
+  });
+
+  it('re-asks the server on every visit, cached answer or not — a line added in the editor shows up', async () => {
+    calculate.mockResolvedValue(answer());
+    // The app's own default (main.tsx): 30 s fresh — which is what kept the old answer on screen.
+    const qc = withLines(tiling('tl', 'Укладання плитки 300х600'));
+    qc.setDefaultOptions({ queries: { retry: false, staleTime: 30_000 } });
+    const first = renderPage(qc);
+    await waitFor(() => expect(calculate).toHaveBeenCalledTimes(1));
+    first.unmount();
+    renderPage(qc);
+    await waitFor(() => expect(calculate).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('MaterialCalculatorPage — the lines we do not count (V204)', () => {
+  const close = {
+    estimateItemId: 'own', name: 'Фарбування стін за 2 рази', unit: 'M2' as const, kind: 'UNMATCHED' as const,
+    suggestions: [{ key: 'фарбування стін', name: 'Фарбування стін', unit: 'M2' as const, trade: 'PAINTER' as const }],
+  };
+
+  it('the same job in other words is asked once; «так» counts it for that wording', async () => {
+    saveAlias.mockResolvedValue(undefined);
+    calculate.mockResolvedValue(answer({ matches: [close] }));
+    renderPage();
+    await screen.findByText('Ці позиції ми не рахуємо');
+    screen.getByText('Це те саме, що «Фарбування стін»? Тоді порахуємо матеріали.');
+    fireEvent.click(screen.getByRole('button', { name: 'Так, рахувати' }));
+    await waitFor(() => expect(saveAlias).toHaveBeenCalledWith(
+      { name: 'Фарбування стін за 2 рази', unit: 'M2', asNameKey: 'фарбування стін' }));
+    // …and the figures are asked for again.
+    await waitFor(() => expect(calculate.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('«ні, це інше» is remembered as his own work', async () => {
+    saveAlias.mockResolvedValue(undefined);
+    calculate.mockResolvedValue(answer({ matches: [close] }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ні, це інше' }));
+    await waitFor(() => expect(saveAlias).toHaveBeenCalledWith(
+      { name: 'Фарбування стін за 2 рази', unit: 'M2', asNameKey: null }));
+  });
+
+  it('his own work is said plainly, with the door to add its materials by hand', async () => {
+    calculate.mockResolvedValue(answer({ matches: [{ ...close, name: 'Реставрація ліпнини', suggestions: [] }] }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData([...ESTIMATE_KEY, 'est-1'], anEstimate({ id: 'est-1', projectId: 'obj-1' }));
+    renderPage(qc);
+    await screen.findByText('Немає в наших нормах — матеріали допишіть самі.');
+    expect(screen.queryByRole('button', { name: 'Так, рахувати' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Додати матеріал вручну' }));
+    await screen.findByText('інший екран');
+  });
+
+  it('a line read by its spelling or its tile format is counted silently; his own answer can be changed', async () => {
+    deleteAlias.mockResolvedValue(undefined);
+    calculate.mockResolvedValue(answer({ matches: [
+      { ...close, estimateItemId: 'r', name: 'Укладання плитки на підлогу 60×60', kind: 'RULE',
+        asKey: 'укладання плитки 600х600', asName: 'Укладання плитки 600х600', suggestions: [] },
+      { ...close, kind: 'MASTER', asKey: 'фарбування стін', asName: 'Фарбування стін', suggestions: [] },
+    ] }));
+    renderPage();
+    await screen.findByText('Рахуємо як «Фарбування стін».');
+    expect(screen.queryByText('Укладання плитки на підлогу 60×60')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Змінити' }));
+    await waitFor(() => expect(deleteAlias).toHaveBeenCalledWith('Фарбування стін за 2 рази', 'M2'));
+  });
+
+  it('nothing to say, no card', async () => {
+    calculate.mockResolvedValue(answer({ matches: [
+      { ...close, kind: 'RULE', asKey: 'укладання плитки 600х600', asName: 'Укладання плитки 600х600', suggestions: [] },
+    ] }));
+    renderPage();
+    await waitFor(() => expect(calculate).toHaveBeenCalled());
+    expect(screen.queryByText('Ці позиції ми не рахуємо')).toBeNull();
   });
 });

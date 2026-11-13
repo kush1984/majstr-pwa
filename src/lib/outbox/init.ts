@@ -18,6 +18,8 @@ import { estimateShareApi, portalApi } from '@/api/portal.ts';
 import { PORTAL_SUMMARY_ENTITY } from '@/features/projects/usePortalSummaryPlacement.ts';
 import { fromQueuedFile } from './queuedFile.ts';
 import { ACT_RECEIPT_ENTITY, type ActReceiptOpPayload } from '@/features/acts/offlineReceipts.ts';
+import { TILE_LAYOUT_ENTITY, type TileLayoutOpPayload } from '@/features/materials/useTileLayouts.ts';
+import { materialsApi } from '@/api/materials.ts';
 import type {
   EstimateItemsOrderRequest,
   BatchCatalogItemEntry, CashEntryKind, CashEntryRequest, CatalogItemRequest, CatalogSyncRequest, ClientRequest,
@@ -363,6 +365,17 @@ export function initOutbox(qc: QueryClient): () => void {
   registerOutboxHandler('templateItemOrder', async (op) => {
     const p = op.payload as { req: TemplateItemsOrderRequest };
     await estimateTemplatesApi.reorderItems(op.entityId, p.req);
+  });
+
+  // A tiling line's layout (V203): its WHOLE state, so a PUT is idempotent on replay; a null `req`
+  // is the delete, which is idempotent on the server too.
+  registerOutboxHandler(TILE_LAYOUT_ENTITY, async (op) => {
+    const p = op.payload as TileLayoutOpPayload;
+    if (op.type === 'delete' || p.req === null) {
+      await materialsApi.deleteTileLayout(p.estimateId, op.entityId);
+    } else {
+      await materialsApi.saveTileLayout(p.estimateId, op.entityId, p.req);
+    }
   });
 
   // An act receipt photographed offline (offline-act-receipts). CREATE only, and deliberately so:

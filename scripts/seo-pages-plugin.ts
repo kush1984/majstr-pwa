@@ -4,7 +4,8 @@
 // PLASTER, SCREED), and quotes one case in its prose with <!--SEO_EXAMPLE:<id>-->. The wall-area page
 // asks no server, so its table comes straight from src/seo/wallArea.ts: <!--SEO_AREA_TABLE--> and
 // <!--SEO_AREA_EXAMPLE:<id>-->. The sample-document pages print theirs from src/seo/sampleEstimate.ts and
-// src/seo/sampleAct.ts: <!--SEO_SAMPLE_ESTIMATE|TOTAL|COUNT--> and <!--SEO_ACT_DOCUMENT|PAYABLE|COUNT-->.
+// src/seo/sampleAct.ts: <!--SEO_SAMPLE_ESTIMATE|TOTAL|COUNT--> and <!--SEO_ACT_DOCUMENT|PAYABLE|COUNT-->. The tile
+// page's layout examples come from src/seo/tileLayoutCases.ts: <!--SEO_LAYOUT_TABLE--> and <!--SEO_LAYOUT_EXAMPLE:<id>-->.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,7 @@ import {
   SAMPLE_ACT_ADDITIONAL, SAMPLE_ADVANCE_PERCENT, actAdvanceKop, actGrandKop, actPayableKop,
 } from '../src/seo/sampleAct.ts';
 import { hryvniaInWords } from '../src/seo/hryvniaInWords.ts';
+import { LAYOUT_CASES, layoutCaseById, layoutCaseText, layoutTableHtml } from '../src/seo/tileLayoutCases.ts';
 
 const UNIT: Record<string, string> = {
   KG: 'кг', M2: 'м²', LINEAR_METER: 'м.п.', PIECE: 'шт', LITRE: 'л', M3: 'м³',
@@ -157,6 +159,12 @@ export function seoCalcTables(root: string): Plugin {
           html = html
             .replace(/<!--SEO_AREA_TABLE-->/g, () => areaTableHtml(WALL_AREA_CASES))
             .replace(/<!--SEO_AREA_EXAMPLE:([a-z0-9-]+)-->/g, (_, id: string) => areaExampleText(wallAreaCase(id)));
+        }
+        // The tile page's layout figures: counted here by the engine itself, never typed (tileLayoutCases.ts).
+        if (html.includes('<!--SEO_LAYOUT_')) {
+          html = html
+            .replace(/<!--SEO_LAYOUT_TABLE-->/g, () => layoutTableHtml(LAYOUT_CASES, escapeHtml))
+            .replace(/<!--SEO_LAYOUT_EXAMPLE:([a-z0-9-]+)-->/g, (_, id: string) => escapeHtml(layoutCaseText(layoutCaseById(id))));
         }
         if (!html.includes('<!--SEO_TABLE:') && !html.includes('<!--SEO_EXAMPLE:')) return html;
         const snapshot = JSON.parse(

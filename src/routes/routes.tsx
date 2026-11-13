@@ -20,6 +20,7 @@ import { ShoppingListPage } from '@/features/shopping/ShoppingListPage.tsx';
 import { ProjectReceiptsPage } from '@/features/receipts/ProjectReceiptsPage.tsx';
 import { CashFlowPage } from '@/features/cash/CashFlowPage.tsx';
 import { MaterialCalculatorPage } from '@/features/materials/MaterialCalculatorPage.tsx';
+import { TileLayoutPage } from '@/features/materials/TileLayoutPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage.tsx';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage.tsx';
@@ -121,6 +122,7 @@ export const appRoutes: RouteObject[] = [
       { path: '/estimates/:id', element: <EstimateEditorPage /> },
       // The material calculator reads ONE estimate's works, so it hangs off that estimate.
       { path: '/estimates/:id/materials', element: <MaterialCalculatorPage /> },
+      { path: '/estimates/:id/items/:itemId/tile-layout', element: <TileLayoutPage /> },
       // Static '/acts/new' ranks above the dynamic '/acts/:id' — the editor on an act that has no
       // server row yet and gets one only on «Зберегти».
       { path: '/acts/new', element: <ActEditorPage /> },

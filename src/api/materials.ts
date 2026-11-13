@@ -10,6 +10,10 @@ import type {
   MaterialPrefsResponse,
   ShoppingListResponse,
   StoredMaterialParams,
+  MaterialAliasRequest,
+  TileLayoutRequest,
+  TileLayoutView,
+  Unit,
 } from './types.ts';
 
 /**
@@ -71,6 +75,24 @@ export const materialsApi = {
   },
   restoreNorm(normId: string): Promise<void> {
     return api.delete(`/api/material-norms/${normId}`).then(() => undefined);
+  },
+  /** Count this wording as a library position in every estimate of his — or, with no key, as consuming nothing. */
+  saveAlias(req: MaterialAliasRequest): Promise<void> {
+    return api.put('/api/me/material-aliases', req).then(() => undefined);
+  },
+  deleteAlias(name: string, unit: Unit): Promise<void> {
+    return api.delete('/api/me/material-aliases', { params: { name, unit } }).then(() => undefined);
+  },
+  /** The estimate's stored tile layouts (V203), paused ones flagged. */
+  tileLayouts(estimateId: string): Promise<TileLayoutView[]> {
+    return api.get<TileLayoutView[]>(`${base(estimateId)}/tile-layouts`).then((r) => r.data);
+  },
+  /** Insert or replace one line's layout — idempotent, so an outbox replay lands on the same row. */
+  saveTileLayout(estimateId: string, itemId: string, req: TileLayoutRequest): Promise<TileLayoutView> {
+    return api.put<TileLayoutView>(`${base(estimateId)}/tile-layouts/${itemId}`, req).then((r) => r.data);
+  },
+  deleteTileLayout(estimateId: string, itemId: string): Promise<void> {
+    return api.delete(`${base(estimateId)}/tile-layouts/${itemId}`).then(() => undefined);
   },
   /** The master's habits — how many coats he paints, how wide he leaves a joint (V137). */
   prefs(): Promise<MaterialPrefsResponse> {

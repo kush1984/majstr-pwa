@@ -2038,8 +2038,9 @@ export interface MaterialSourceLine {
   unit: Unit;
   quantity: number;
   qtyPerUnit: number;
-  /** The norm `qtyPerUnit` came from — the address a correction is written to. */
-  normId: string;
+  /** The norm `qtyPerUnit` came from — the address a correction is written to. Absent on a tile
+   *  layout's row (V203): those tiles were counted, not derived from a norm, so nothing to correct. */
+  normId?: string | null;
   /** The coefficient is the master's own, not the shipped one. */
   ownNorm: boolean;
   basis: NormBasis;
@@ -2148,6 +2149,71 @@ export interface MaterialCalculationResponse {
    *  that has never seen it. Beside `perimeter` and not folded into it: that one is the figure this
    *  calculation USED, which may be one the screen is holding and has not saved yet. */
   answers?: StoredMaterialParams;
+  /** The estimate's stored tile layouts, paused ones included (V203). Absent on an older backend. */
+  tileLayouts?: TileLayoutView[];
+  /** Lines not read by their own name, and how they were read instead — «рахувати як» (V204). */
+  matches?: PositionMatch[];
+}
+
+/** A library position that buys materials — what a master's wording can be counted as (V204). */
+export interface NormPosition {
+  key: string;
+  name: string;
+  unit: Unit;
+  trade?: Trade | null;
+}
+
+/**
+ * RULE — read by a rule (a tile format in the name); MASTER — his own «рахувати як»; NO_MATERIALS — he said it
+ * consumes nothing; UNMATCHED — nothing known yet, `suggestions` are the closest positions of its unit.
+ */
+export interface PositionMatch {
+  estimateItemId: string;
+  name: string;
+  unit: Unit;
+  kind: 'RULE' | 'MASTER' | 'NO_MATERIALS' | 'UNMATCHED';
+  asKey?: string | null;
+  asName?: string | null;
+  suggestions: NormPosition[];
+}
+
+/** Mirrors MaterialAliasRequest (V204): `asNameKey` absent/null = «не потребує матеріалів». */
+export interface MaterialAliasRequest {
+  name: string;
+  unit: Unit;
+  asNameKey?: string | null;
+}
+
+/**
+ * A tiling line's layout as the master accepted it (V203, iteration-tile-layout). The counts are the
+ * engine's (`lib/tileLayout.ts`); the server bounds and stores them. `params` is the layout's inputs as
+ * JSON, kept only so «Перерахувати» reopens them.
+ */
+export interface TileLayoutRequest {
+  tileWidthMm: number;
+  tileHeightMm: number;
+  laidArea: number;
+  minTiles: number;
+  maxTiles: number;
+  spare: number;
+  params: string;
+  measurementsDeclined?: boolean;
+}
+
+/** A stored layout; `paused` = the line's name now states another format, so it is bought by area. */
+export interface TileLayoutView {
+  estimateItemId: string;
+  tileShortMm: number;
+  tileLongMm: number;
+  laidArea: number;
+  minTiles: number;
+  maxTiles: number;
+  spare: number;
+  /** maxTiles + spare — what the laid part puts on the buying list. */
+  tilesToBuy: number;
+  paused: boolean;
+  measurementsDeclined: boolean;
+  params: string;
 }
 
 /**
