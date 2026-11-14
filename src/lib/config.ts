@@ -79,6 +79,7 @@ export const routes = {
   catalogImport: '/catalog/import',
   // «Перенести в Majstr» — existing estimates and price lists, many files at once (V201).
   transfer: '/transfer',
+  priceList: '/price-list',
   templates: '/templates',
   profile: '/profile',
   newEstimate: '/new',

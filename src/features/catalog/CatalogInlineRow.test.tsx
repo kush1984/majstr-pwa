@@ -11,11 +11,11 @@ const position = (over: Partial<CatalogItemResponse> = {}): CatalogItemResponse 
   ...over,
 } as CatalogItemResponse);
 
-function board(onInline = vi.fn()) {
+function board(onInline = vi.fn(), item: CatalogItemResponse = position()) {
   const onEdit = vi.fn();
   render(
     <CatalogBoard
-      sections={[{ category: 'Стяжка', items: [position()] }]}
+      sections={[{ category: 'Стяжка', items: [item] }]}
       onEdit={onEdit}
       onInline={onInline}
       isCategoryOpen={() => true}
@@ -49,6 +49,13 @@ describe('catalog row — inline editing', () => {
     const { onInline } = board();
     type('Назва, Стяжка', 'Стяжка цементна');
     expect(onInline).toHaveBeenCalledWith(expect.anything(), { name: 'Стяжка цементна' }, 'name');
+  });
+
+  it("one quiet line under the name: the master's comment when he wrote one, else the library's", () => {
+    board(vi.fn(), position({ description: 'Рівень Q3', note: 'по маяках' }));
+    expect(screen.getByText('по маяках')).toBeTruthy();
+    // The library's explanation is not stacked under it: it stays behind the (i).
+    expect(screen.queryByText('Рівень Q3')).toBeNull();
   });
 
   it('«⋯» opens the dialog for trade, category, unit and description', () => {

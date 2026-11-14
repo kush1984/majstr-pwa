@@ -244,6 +244,36 @@ describe('kalkulyator-plytky — one form, two ways to count', () => {
     expect(form.querySelector('#layout .seo-tl-surface')).not.toBeNull();
   });
 
+  it('by layout: no allowance to pick, and «Як ми рахуємо» explains the way it counts now', async () => {
+    const form = await loadTile();
+    const allowance = () => [...form.querySelectorAll<HTMLElement>('fieldset')].find((f) => f.querySelector('input[name="wastePercent"]'));
+    const method = () => [...document.querySelectorAll<HTMLElement>('p[data-show]')].filter((p) => !p.hidden).map((p) => p.textContent ?? '');
+    expect(allowance()?.hidden).toBe(false);
+    expect(method().join(' ')).toContain('Плитка за площею');
+    expect(method().join(' ')).not.toContain('Плитка по розкладці');
+
+    choose(form, 'mode', 'LAYOUT');
+    // The cuts are in the rows and the breakage spare in the count — a visible 5/10/15 % would change nothing.
+    expect(allowance()?.hidden).toBe(true);
+    expect(method().join(' ')).toContain('Плитка по розкладці');
+    expect(method().join(' ')).toContain('з запасом 10 %');
+    expect(method().join(' ')).not.toContain('Плитка за площею');
+  });
+
+  it('by layout: an allowance picked by area does not leak into the answer', async () => {
+    const form = await loadTile();
+    choose(form, 'wastePercent', '15');
+    choose(form, 'mode', 'LAYOUT');
+    const fetchMock = vi.fn().mockResolvedValue(answer());
+    vi.stubGlobal('fetch', fetchMock);
+    form.requestSubmit();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).inputs.wastePercent).toBe(10);
+    const result = document.querySelector<HTMLElement>('#result');
+    await vi.waitFor(() => expect(result?.hidden).toBe(false));
+    expect(result?.textContent).toContain('За площею з запасом 10 %');
+  });
+
   it('by layout: the tile from the rows, and the adhesive and grout in the same answer, on the laid m²', async () => {
     const form = await loadTile();
     choose(form, 'mode', 'LAYOUT');

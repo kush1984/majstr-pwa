@@ -91,6 +91,32 @@ describe('ItemForm — what is submitted is what was validated', () => {
   });
 });
 
+describe('ItemForm — the master’s own comment (V206)', () => {
+  it('sends the comment, visible to the client unless he unticks it', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ description: null }), onSubmit);
+
+    fireEvent.change(screen.getByLabelText('Коментар'), { target: { value: '  матеріал замовника ' } });
+    fireEvent.click(screen.getByLabelText('Показувати клієнту'));
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ note: 'матеріал замовника', noteVisible: false });
+  });
+
+  it('an emptied field clears the comment, and no visibility box is offered for nothing', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ description: null, note: 'у 2 шари', noteVisible: true }), onSubmit);
+
+    fireEvent.change(screen.getByLabelText('Коментар'), { target: { value: '' } });
+    expect(screen.queryByLabelText('Показувати клієнту')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ note: '' });
+  });
+});
+
 /** The line's amount while he types, by the rounding the server stores it with. */
 describe('ItemForm — the live line sum', () => {
   const sum = () => screen.getByTestId('line-sum').textContent ?? '';

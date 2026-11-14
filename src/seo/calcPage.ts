@@ -3,7 +3,7 @@ import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
 import { trackPage } from '@/lib/visit.ts';
-import { layoutSummary, type LayoutSummary } from './layoutBridge.ts';
+import { LAYOUT_ALLOWANCE, layoutSummary, type LayoutSummary } from './layoutBridge.ts';
 
 /**
  * The static calculator pages (kalkulyator-plytky / -gipsokartonu / -shtukaturky / -styazhky .html):
@@ -109,9 +109,10 @@ function syncDrywallFields(): void {
  * `data-show="plaster:GYPSUM"` — shown only while that radio holds one of the listed values (the
  * machine method is gypsum-only, mesh and film are cement-screed-only, the thickness hint follows
  * the screed kind). The server refuses those combinations anyway; this keeps them off screen.
+ * The whole page, not just the form: the tile's «Як ми рахуємо» explains the way it counts now.
  */
 function syncShownFields(): void {
-  form?.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => {
+  document.querySelectorAll<HTMLElement>('[data-show]').forEach((el) => {
     const [name, values = ''] = (el.dataset.show ?? '').split(':');
     const value = checked(name);
     el.hidden = value == null || !values.split(' ').includes(value);
@@ -121,6 +122,14 @@ function syncShownFields(): void {
 /** The tile page asks how to count: «За площею + запас» or «По розкладці на стінах». */
 function byLayout(): boolean {
   return calculator === 'TILE' && checked('mode') === 'LAYOUT';
+}
+
+/**
+ * The allowance the answer is counted with. By layout the tile's cuts are in the rows, so the visitor
+ * picks nothing: the adhesive, grout and primer take ours, the same one the layout's by-area comparison uses.
+ */
+function allowance(): number {
+  return byLayout() ? LAYOUT_ALLOWANCE : Number(checked('wastePercent') ?? 10);
 }
 
 function showError(message: string): void {
@@ -151,7 +160,7 @@ function inputs(): Record<string, unknown> | null {
     showError('Вкажіть площу в м² — наприклад, 12,5.');
     return null;
   }
-  const out: Record<string, unknown> = { area, wastePercent: Number(checked('wastePercent') ?? 10) };
+  const out: Record<string, unknown> = { area, wastePercent: allowance() };
   if (calculator === 'TILE') {
     out.format = (form.elements.namedItem('format') as HTMLSelectElement).value;
     const joint = figure('jointMm');
@@ -346,8 +355,8 @@ function layoutTileBlock(m: MaterialLine, layout: LayoutSummary): HTMLElement {
   how.append(text('p', `По рядах: цілих ${layout.full}, на підрізку ${layout.cut}.`));
   how.append(text('p', `Менше — якщо обрізки підуть у справу, більше — якщо кожна підрізка з нової плитки. Уже з запасом +${layout.spare} на бій і ремонт.`));
   how.append(text('p', layout.byArea < layout.buyMin
-    ? `За площею з запасом ${checked('wastePercent') ?? 10} % вийшло б ${layout.byArea} шт — забракло б щонайменше ${layout.buyMin - layout.byArea}.`
-    : `За площею з запасом ${checked('wastePercent') ?? 10} % вийшло б ${layout.byArea} шт.`));
+    ? `За площею з запасом ${LAYOUT_ALLOWANCE} % вийшло б ${layout.byArea} шт — забракло б щонайменше ${layout.buyMin - layout.byArea}.`
+    : `За площею з запасом ${LAYOUT_ALLOWANCE} % вийшло б ${layout.byArea} шт.`));
   block.append(how);
   return block;
 }

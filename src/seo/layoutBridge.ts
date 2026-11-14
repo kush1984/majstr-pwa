@@ -12,11 +12,17 @@ export interface LayoutSummary {
   spare: number;
   full: number;
   cut: number;
-  /** What «за площею» would have bought for the same m², at the visitor's allowance. */
+  /** What «за площею» would have bought for the same m², at `LAYOUT_ALLOWANCE`. */
   byArea: number;
   /** One tile's face, m² — boxes are counted from it. */
   tileArea: number;
 }
+
+/**
+ * By layout the visitor picks no allowance — the cuts are in the rows, the breakage spare in the count.
+ * The adhesive, grout and primer still take one, and the by-area comparison is counted at it.
+ */
+export const LAYOUT_ALLOWANCE = 10;
 
 /** Why there is no layout to count: nothing laid out yet, or a tile with no one size. */
 export type LayoutRefusal = 'EMPTY' | 'NO_SIZE';

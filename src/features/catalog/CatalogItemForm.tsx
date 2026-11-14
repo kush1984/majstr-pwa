@@ -64,6 +64,8 @@ export function CatalogItemForm({
   const catalog = useVisibleCatalog();
   const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // The master's own comment (V207) — goes into the lines added from this position.
+  const [note, setNote] = useState<string>(initial?.note ?? '');
   // Always offer the item's CURRENT trade as an option, even if the master no longer works in
   // it (removed from profile, or its custom trade was since deleted) — otherwise editing the
   // item would silently fall back to the first option and wipe its trade on save.
@@ -146,6 +148,8 @@ export function CatalogItemForm({
       trade: customTradeId ? undefined : (v.tradeChoice as Trade),
       customTradeId: customTradeId ?? undefined,
       defaultPrice: parsePrice(v.defaultPrice),
+      // The whole form is in hand: an emptied field clears the comment.
+      note: note.trim(),
     };
     try {
       if (isEdit && initial) {
@@ -253,6 +257,18 @@ export function CatalogItemForm({
             placeholder="0"
             invalid={Boolean(errors.defaultPrice)}
             {...register('defaultPrice')}
+          />
+        </FormField>
+
+        <FormField label={t('estimate.noteLabel')} htmlFor="ci-note" hint={t('catalog.noteHint')}>
+          <textarea
+            id="ci-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder={t('estimate.notePlaceholder')}
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
         </FormField>
 

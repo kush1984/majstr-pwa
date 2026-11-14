@@ -6,9 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import '@/lib/i18n.ts';
 import { CatalogPage } from './CatalogPage.tsx';
 import { catalogApi } from '@/api/catalog.ts';
-import { priceListApi } from '@/api/priceList.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
-import { senderSheetStore } from '@/features/sender/senderGate.ts';
 import { aUser } from '@/test/factories.ts';
 import type { UserResponse } from '@/api/types.ts';
 import type { CatalogItemResponse } from '@/api/types.ts';
@@ -19,8 +17,10 @@ vi.mock('@/api/catalog.ts', () => ({
     deleteItems: vi.fn(), reorder: vi.fn(),
   },
 }));
-vi.mock('@/api/priceList.ts', () => ({
-  priceListApi: { get: vi.fn(), save: vi.fn(), revoke: vi.fn(), preview: vi.fn(), fetchPdfBlob: vi.fn() },
+const navigate = vi.fn();
+vi.mock('react-router-dom', async (orig) => ({
+  ...(await orig<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
 }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -319,99 +319,14 @@ describe('CatalogPage — a trade taken off the profile', () => {
   });
 });
 
-describe('CatalogPage — «Поділитися прайсом»', () => {
-  const works: CatalogItemResponse[] = [
-    { id: 'w1', name: 'Укладання плитки', category: 'Підлога', trade: 'TILING', customTradeId: null,
-      customTradeName: null, type: 'WORK', unit: 'M2', defaultPrice: 650, sortOrder: 0, createdAt: '' },
-    { id: 'w2', name: 'Гідроізоляція підлоги', category: 'Підлога', trade: 'TILING', customTradeId: null,
-      customTradeName: null, type: 'WORK', unit: 'M2', defaultPrice: 180, sortOrder: 1, createdAt: '' },
-    { id: 'w3', name: 'Продзвонка', category: 'Підлога', trade: 'TILING', customTradeId: null,
-      customTradeName: null, type: 'WORK', unit: 'M2', defaultPrice: 0, sortOrder: 2, createdAt: '' },
-    { id: 'm1', name: 'Клей для плитки', category: 'Підлога', trade: 'TILING', customTradeId: null,
-      customTradeName: null, type: 'MATERIAL', unit: 'KG', defaultPrice: 30, sortOrder: 3, createdAt: '' },
-  ];
-
-  it('ticks the suggestion, marks library prices, blocks unpriced works and saves what is ticked', async () => {
-    vi.mocked(catalogApi.list).mockResolvedValue(works);
-    vi.mocked(priceListApi.get).mockResolvedValue({
-      url: null, configured: false, itemIds: ['w1'], libraryPricedIds: ['w2'],
-    });
-    vi.mocked(priceListApi.save).mockResolvedValue({
-      url: 'https://api.majstr.pro/portal/index.html?l=tok', configured: true, itemIds: ['w1', 'w2'],
-      libraryPricedIds: ['w2'],
-    });
-    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+describe('CatalogPage — «Поділитися прайсом» is a screen of its own', () => {
+  it('the tile opens «Прайс для клієнта» instead of ticking the catalog', async () => {
+    vi.mocked(catalogApi.list).mockResolvedValue([item]);
     renderPage();
-    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
+    await screen.findByText(LONG);
 
     fireEvent.click(screen.getByRole('button', { name: /Поділитися прайсом/ }));
 
-    expect(await screen.findByText('У прайсі 1 позиція')).toBeTruthy();
-    // Works only: the material is not even on screen.
-    expect(screen.queryByText('Клей для плитки')).toBeNull();
-    expect(screen.getByText('ціна з бібліотеки — перевірте')).toBeTruthy();
-    expect(screen.getByText('без ціни — не піде в прайс')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Продзвонка' }).hasAttribute('disabled')).toBe(true);
-
-    // A whole-category tick reaches the library-priced work but never the unpriced one.
-    fireEvent.click(screen.getByRole('button', { name: /Вибрати категорію/ }));
-    expect(screen.getByText('У прайсі 2 позиції')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Копіювати посилання/ }));
-
-    await waitFor(() => expect(priceListApi.save).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(priceListApi.save).mock.calls[0][0].itemIds.sort()).toEqual(['w1', 'w2']);
-  });
-
-  it('«Подивитися, як побачить клієнт» opens a ten-minute pass and mints no link', async () => {
-    vi.mocked(catalogApi.list).mockResolvedValue(works);
-    vi.mocked(priceListApi.get).mockResolvedValue({ url: null, configured: false, itemIds: ['w1'], libraryPricedIds: [] });
-    vi.mocked(priceListApi.preview).mockResolvedValue({
-      url: 'https://api.majstr.test/portal/index.html?vl=pass', expiresAt: '2026-11-14T10:00:00Z',
-    });
-    const tab = { opener: 'app', closed: false, location: { href: '' }, close: vi.fn() };
-    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
-    renderPage();
-    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /Поділитися прайсом/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Далі' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Подивитися, як побачить клієнт/ }));
-
-    await waitFor(() => expect(tab.location.href).toBe('https://api.majstr.test/portal/index.html?vl=pass'));
-    expect(priceListApi.preview).toHaveBeenCalledWith({ itemIds: ['w1'] });
-    expect(priceListApi.save).not.toHaveBeenCalled();
-  });
-
-  it('a master with no name is asked for it first — the sheet never opens on a 403', async () => {
-    vi.mocked(catalogApi.list).mockResolvedValue(works);
-    vi.mocked(priceListApi.get).mockResolvedValue({ url: null, configured: false, itemIds: ['w1'], libraryPricedIds: [] });
-    renderPage(aUser({ fullName: '' }));
-    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /Поділитися прайсом/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Далі' }));
-
-    await waitFor(() => expect(senderSheetStore.isOpen()).toBe(true));
-    expect(screen.queryByRole('button', { name: /Копіювати посилання/ })).toBeNull();
-    expect(priceListApi.save).not.toHaveBeenCalled();
-  });
-
-  it('counts and sends only works he can see with a price; a live link keeps «Далі» open with no ticks', async () => {
-    vi.mocked(catalogApi.list).mockResolvedValue(works);
-    // w3 went to 0 ₴ after it was ticked; «hidden-1» is a row of a trade he took off (not in the list).
-    vi.mocked(priceListApi.get).mockResolvedValue({
-      url: 'https://api.majstr.pro/portal/index.html?l=tok', configured: true, itemIds: ['w1', 'w3', 'hidden-1'],
-      libraryPricedIds: [],
-    });
-    renderPage();
-    await waitFor(() => expect(screen.getByText('Укладання плитки')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /Поділитися прайсом/ }));
-
-    expect(await screen.findByText('У прайсі 1 позиція')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Продзвонка' }).getAttribute('aria-pressed')).not.toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Укладання плитки' }));
-    expect(screen.getByText('У прайсі 0 позицій')).toBeTruthy();
-    // Nothing ticked, but the link is live: the sheet still holds «Закрити посилання».
-    expect(screen.getByRole('button', { name: 'Далі' }).hasAttribute('disabled')).toBe(false);
+    expect(navigate).toHaveBeenCalledWith('/price-list');
   });
 });

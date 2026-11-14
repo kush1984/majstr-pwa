@@ -275,6 +275,8 @@ export function useAddItem(estimateId: string) {
             baseDetached: false,
             baseOriginLabel: null,
             closedByActs: null,
+            note: req.note?.trim() || null,
+            noteVisible: req.noteVisible ?? true,
           };
           patchEstimate(qc, estimateId, (items) => [...items, item]);
           return item;
@@ -381,6 +383,9 @@ function patchEstimateWithCatalogLines(
         unit: src.unit,
         quantity: e.quantity,
         unitPrice: src.defaultPrice,
+        // The position's comment rides along, as the server copies it (V207).
+        note: src.note ?? null,
+        noteVisible: true,
         lineTotal: 0, // patchEstimate re-derives every lineTotal and the subtotals
         sortOrder: e.sortOrder ?? 0,
         measurementRefs: [],
@@ -403,6 +408,9 @@ export function useUpdateItem(estimateId: string) {
       unit: req.unit, quantity: req.quantity, unitPrice: req.unitPrice,
       measurementRefs: req.measurementRefs ?? i.measurementRefs,
       quantityManual: req.quantityManual ?? i.quantityManual,
+      // Absent = untouched, exactly as the server reads it (V206).
+      note: req.note === undefined ? i.note : (req.note.trim() || null),
+      noteVisible: req.noteVisible ?? i.noteVisible,
     } : i)));
   };
   const mutationKey = ['estimate-item-update', estimateId];

@@ -479,6 +479,8 @@ async function applyTemplateOffline(
         quantity: 0, // empty — filled per object
         unitPrice: match?.defaultPrice ?? 0,
         sortOrder: index,
+        // The catalog position's comment, as the online apply copies it (V207); it IS a request field.
+        ...(match?.note ? { note: match.note } : {}),
       };
       // The line's own explanation rides the same catalog match as its price (V119) — it is not
       // part of the request (there is no field for it), so it is carried separately onto the
@@ -503,6 +505,7 @@ async function applyTemplateOffline(
   const items: EstimateItemResponse[] = lines.map(({ id, request, description }) => ({
     id, type: request.type, name: request.name, category: request.category ?? null,
     description,
+    note: request.note ?? null, noteVisible: true,
     unit: request.unit, quantity: 0, unitPrice: request.unitPrice,
     lineTotal: 0, sortOrder: request.sortOrder ?? 0, measurementRefs: [], quantityManual: false,
         // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.

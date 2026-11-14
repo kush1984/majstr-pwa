@@ -12,6 +12,7 @@ describe('NAV_ITEMS', () => {
     if (!catalog) return;
     expect(navItemActive(catalog, '/templates', false)).toBe(true);
     expect(navItemActive(catalog, '/templates/x', false)).toBe(true);
+    expect(navItemActive(catalog, '/price-list', false)).toBe(true);
     expect(navItemActive(catalog, '/templatesque', false)).toBe(false);
     expect(navItemActive(catalog, '/projects', false)).toBe(false);
   });

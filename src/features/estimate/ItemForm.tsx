@@ -6,6 +6,7 @@ import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
+import { Checkbox } from '@/components/Checkbox.tsx';
 import { CatalogAutocomplete } from './CatalogAutocomplete.tsx';
 import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import {
@@ -70,6 +71,9 @@ export function ItemForm({
   // Measurement substitution (Stage 2): selection memory + manual-edit priority.
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
   const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
+  // The master's own comment (V206) — the client reads it unless he unticks «Показувати клієнту».
+  const [note, setNote] = useState<string>(initial?.note ?? '');
+  const [noteVisible, setNoteVisible] = useState<boolean>(initial?.noteVisible ?? true);
   const [pickerOpen, setPickerOpen] = useState(false);
   // A line copied into a consolidated rollup — its amount is FROZEN (baseDetached, kind forced to
   // MANUAL server-side) and carries a provenance snapshot instead of a live base. The live
@@ -239,6 +243,9 @@ export function ItemForm({
       // Only a percentage line records a base; anything else sends none, whatever is in state.
       percentBaseKind: v.unit === 'PERCENT' ? baseKind : undefined,
       percentBaseItemId: v.unit === 'PERCENT' && baseKind === 'POSITION' ? baseItemId : undefined,
+      // The whole form is in hand, so both are sent: an emptied field clears the comment.
+      note: note.trim(),
+      noteVisible,
     };
     onSubmit(req, v.saveToCatalog);
   });
@@ -527,6 +534,25 @@ export function ItemForm({
           />
         )}
       </div>
+      )}
+
+      <FormField label={t('estimate.noteLabel')} htmlFor="it-note">
+        <textarea
+          id="it-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder={t('estimate.notePlaceholder')}
+          className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
+        />
+      </FormField>
+      {note.trim() !== '' && (
+        <Checkbox
+          label={t('estimate.noteVisible')}
+          checked={noteVisible}
+          onChange={(e) => setNoteVisible(e.target.checked)}
+        />
       )}
 
       <div className="flex gap-2 pt-1">

@@ -39,6 +39,7 @@
 /estimates/*           /               200
 /acts/*                /               200
 /transfer              /               200
+/price-list            /               200
 /shopping/*            /               200
 /receipts/*            /               200
 /billing/*             /               200

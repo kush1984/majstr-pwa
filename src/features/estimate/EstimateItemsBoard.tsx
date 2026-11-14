@@ -12,6 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { LineNote } from './LineNote.tsx';
 import { TradeBadge } from '@/components/TradeBadge.tsx';
 import { useCollapsedCategories } from './useCollapsedCategories.ts';
 import { formatMoney, formatNumber } from '@/lib/format.ts';
@@ -590,6 +591,7 @@ function ItemRow({
                 </span>
               )}
             </span>
+            <LineNote item={item} className="mt-0.5" />
             {/* No manual indent any more: the gutter above already holds the column open, so this
                 line simply starts where the name starts. */}
             <span className="mt-1 flex items-center gap-2 text-xs text-muted">

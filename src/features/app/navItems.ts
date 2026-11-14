@@ -5,14 +5,14 @@ export interface NavItem {
   labelKey: string;
   icon: string;
   end: boolean;
-  /** Other paths that belong to this place — the Catalog's «Шаблони» tab lives at `/templates`. */
+  /** Other paths that belong to this place — the Catalog's «Шаблони» tab lives at `/templates`, its price list at `/price-list`. */
   also?: readonly string[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { to: '/', labelKey: 'nav.home', icon: '🏠', end: true },
   { to: '/projects', labelKey: 'nav.projects', icon: '📁', end: false },
-  { to: '/catalog', labelKey: 'nav.catalog', icon: '📖', end: false, also: ['/templates'] },
+  { to: '/catalog', labelKey: 'nav.catalog', icon: '📖', end: false, also: ['/templates', '/price-list'] },
   { to: '/profile', labelKey: 'nav.profile', icon: '👤', end: false },
 ];
 

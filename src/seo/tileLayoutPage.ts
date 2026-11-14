@@ -1,5 +1,5 @@
 import { parseDecimal } from '@/lib/parseDecimal.ts';
-import { provideLayout } from './layoutBridge.ts';
+import { LAYOUT_ALLOWANCE, provideLayout } from './layoutBridge.ts';
 import { isNarrow, type LayoutPattern, type LayoutStart, type SurfaceLayout } from '@/lib/tileLayout.ts';
 import {
   clampOpening,
@@ -49,11 +49,6 @@ const ERRORS: Record<string, string> = {
   GAP: 'Поверхня замала для такого шва.',
   OPENING: 'Проріз виходить за поверхню або накладається на інший.',
 };
-/** The area calculator's allowance above — the by-area comparison uses the visitor's own figure. */
-function wastePercent(): number {
-  const v = Number(document.querySelector<HTMLInputElement>('#calc input[name="wastePercent"]:checked')?.value);
-  return Number.isFinite(v) && v > 0 ? v : 10;
-}
 
 /** The form's tile has no one size (mosaic, «кабанчик»): nothing to lay out. */
 let noSize = false;
@@ -358,7 +353,7 @@ function render(): void {
 /** Only the figures and pictures — never the inputs, so typing keeps its focus. */
 function renderResult(): void {
   if (!root) return;
-  const result: DraftResult = evaluate(draft, 0, wastePercent());
+  const result: DraftResult = evaluate(draft, 0, LAYOUT_ALLOWANCE);
   for (const s of draft.surfaces) {
     const card = root.querySelector<HTMLElement>(`[data-key="${s.key}"]`);
     if (!card) continue;
@@ -405,7 +400,7 @@ render();
 
 provideLayout(() => {
   if (noSize) return 'NO_SIZE';
-  const result = evaluate(draft, 0, wastePercent());
+  const result = evaluate(draft, 0, LAYOUT_ALLOWANCE);
   if (result.laidArea <= 0) return 'EMPTY';
   const tile = laidTile(draft);
   const pieces = result.surfaces.reduce((n, x) => ({
@@ -424,7 +419,7 @@ provideLayout(() => {
   };
 });
 
-// The area calculator above sets the format, the joint and the allowance; the layout follows it, so the
+// The area calculator above sets the format and the joint; the layout follows it, so the
 // two halves of the page never answer about different tiles. Mosaic and «кабанчик» have no one size.
 const TOP_FORMAT: Record<string, [number, number]> = {
   T100X100: [100, 100], T200X200: [200, 200], T300X300: [300, 300], T300X600: [300, 600], T600X600: [600, 600],
@@ -445,5 +440,4 @@ function followTop(): void {
 }
 document.querySelector('#calc select[name="format"]')?.addEventListener('change', followTop);
 document.querySelector('#calc input[name="jointMm"]')?.addEventListener('input', followTop);
-document.querySelectorAll('#calc input[name="wastePercent"]').forEach((i) => i.addEventListener('change', () => renderResult()));
 followTop();

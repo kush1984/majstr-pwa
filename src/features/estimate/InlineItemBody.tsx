@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { InlineNumberCell } from '@/components/InlineNumberCell.tsx';
 import { InlineTextCell } from '@/components/InlineTextCell.tsx';
+import { LineNote } from './LineNote.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { formatInlineNumber } from '@/lib/inlineEdit.ts';
 import { cn } from '@/lib/cn.ts';
@@ -94,6 +95,7 @@ export function InlineItemBody({
           ⋯
         </button>
       </div>
+      <LineNote item={item} className="-mt-2 mb-1.5 pl-[1.7rem] pr-10" />
 
       <div className="-mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[1.7rem] text-xs text-muted">
         {isPercent ? (

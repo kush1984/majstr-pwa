@@ -129,6 +129,38 @@ describe('CatalogItemForm — category', () => {
   });
 });
 
+describe("CatalogItemForm — the master's comment (V207)", () => {
+  const noted: CatalogItemResponse = {
+    id: '9', name: 'Фарбування стін', category: null, trade: 'ELECTRICAL', customTradeId: null, customTradeName: null,
+    type: 'WORK', unit: 'M2', defaultPrice: 200, sortOrder: 0, createdAt: '', note: 'у 2 шари',
+  };
+
+  it('shows the comment, and saves what he changed it to', async () => {
+    vi.mocked(catalogApi.update).mockResolvedValue(noted);
+    renderForm(noted);
+    await waitFor(() => expect(sel('#ci-category')).not.toBeNull());
+    expect((document.querySelector('#ci-note') as HTMLTextAreaElement).value).toBe('у 2 шари');
+
+    set('#ci-note', '  у 3 шари ');
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(catalogApi.update).toHaveBeenCalled());
+    expect(vi.mocked(catalogApi.update).mock.calls[0][1].note).toBe('у 3 шари');
+  });
+
+  it('an emptied field clears it — sent as blank, not left out', async () => {
+    vi.mocked(catalogApi.update).mockResolvedValue(noted);
+    renderForm(noted);
+    await waitFor(() => expect(sel('#ci-category')).not.toBeNull());
+
+    set('#ci-note', '');
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(catalogApi.update).toHaveBeenCalled());
+    expect(vi.mocked(catalogApi.update).mock.calls[0][1].note).toBe('');
+  });
+});
+
 describe('CatalogItemForm — custom trades', () => {
   it('offers a custom trade in the picker and saves customTradeId (trade omitted, forced OTHER server-side)', async () => {
     vi.mocked(catalogApi.create).mockResolvedValue(catalog[0]);

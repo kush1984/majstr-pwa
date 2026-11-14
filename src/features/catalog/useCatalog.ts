@@ -157,7 +157,11 @@ export function useUpdateCatalogItem() {
         entity: 'catalogItem', entityId: id, type: 'update', payload: req, deps: [],
         online: async () => { await catalogApi.update(id, req); },
         cancel: cancelCatalog(qc),
-        onOnlineSuccess: invalidate,
+        onOnlineSuccess: () => {
+          invalidate();
+          // A changed comment reached the lines of his unsigned estimates server-side (V207).
+          if (req.note !== undefined) void qc.invalidateQueries({ queryKey: ['estimate'] });
+        },
         optimistic: () => {
           const customTradeId = req.customTradeId ?? null;
           patchCatalog(qc, (items) => items.map((i) => (i.id === id ? {
@@ -166,6 +170,7 @@ export function useUpdateCatalogItem() {
             customTradeId,
             customTradeName: resolveCustomTradeName(qc, customTradeId),
             type: req.type, unit: req.unit, defaultPrice: req.defaultPrice,
+            note: req.note === undefined ? i.note : (req.note.trim() || null),
           } : i)));
         },
       }),

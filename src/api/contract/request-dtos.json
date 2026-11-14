@@ -77,6 +77,7 @@
     "customTradeId": "string?",
     "defaultPrice": "number",
     "name": "string",
+    "note": "string?",
     "trade": "string?",
     "type": "string",
     "unit": "string"
@@ -188,6 +189,8 @@
     "category": "string?",
     "measurementRefs": "array?",
     "name": "string",
+    "note": "string?",
+    "noteVisible": "boolean?",
     "percentBaseItemId": "string?",
     "percentBaseKind": "string?",
     "quantity": "number",

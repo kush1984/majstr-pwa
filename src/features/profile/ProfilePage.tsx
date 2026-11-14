@@ -288,7 +288,7 @@ export function ProfilePage() {
           icon="📤"
           title={t('profile.priceList')}
           sub={t('profile.priceListSub')}
-          onClick={() => navigate(`${routes.catalog}?priceList=1`)}
+          onClick={() => navigate(routes.priceList)}
         />
         <PushRow />
         <OfflinePrefetchRow isPro={(me?.plan ?? 'FREE') !== 'FREE'} />

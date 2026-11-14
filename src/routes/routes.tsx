@@ -11,6 +11,7 @@ import { TradesOnboardingPage } from '@/features/onboarding/TradesOnboardingPage
 import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { CatalogImportPage } from '@/features/catalog/CatalogImportPage.tsx';
 import { TransferPage } from '@/features/transfer/TransferPage.tsx';
+import { PriceListPage } from '@/features/catalog/PriceListPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
@@ -100,6 +101,8 @@ export const appRoutes: RouteObject[] = [
       { path: routes.projects, element: <ProjectsPage /> },
       { path: '/projects/:id', element: <ProjectDetailPage /> },
       { path: routes.catalog, element: <CatalogPage /> },
+      // Inside the tab shell: its share panel sits above the bottom menu, and «Каталог» stays lit.
+      { path: routes.priceList, element: <PriceListPage /> },
       { path: routes.templates, element: <TemplatesPage /> },
       { path: routes.profile, element: <ProfilePage /> },
     ],

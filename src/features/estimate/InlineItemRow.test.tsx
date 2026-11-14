@@ -124,3 +124,19 @@ describe('estimate row — inline editing', () => {
     expect(onEdit).toHaveBeenCalled();
   });
 });
+
+describe('estimate row — the master\'s own comment (V206)', () => {
+  it('shows the comment under the name, with a lock when the client does not see it', () => {
+    board([line({ id: 'a', note: 'у 2 шари' }), line({ id: 'b', name: 'Інше', note: 'собі', noteVisible: false })]);
+
+    expect(screen.getByText('у 2 шари')).toBeTruthy();
+    expect(screen.getByText('собі')).toBeTruthy();
+    expect(screen.getAllByRole('img', { name: 'Клієнт цей коментар не бачить' })).toHaveLength(1);
+  });
+
+  it('shows it on a signed estimate too, where the row is not editable', () => {
+    board([line({ note: 'матеріал замовника' })], { signed: true });
+
+    expect(screen.getByText('матеріал замовника')).toBeTruthy();
+  });
+});

@@ -156,7 +156,7 @@ describe('add from catalog — offline (how estimates are actually built)', () =
     const { qc, wrapper } = setup();
     qc.setQueryData(CATALOG_LIST_KEY, [
       { id: 'c1', name: 'Розетка', category: 'Електрика', trade: 'ELECTRICAL',
-        type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '' },
+        type: 'WORK', unit: 'PIECE', defaultPrice: 180, createdAt: '', note: 'з підрозетником' },
     ]);
     qc.setQueryData([...ESTIMATE_KEY, EID], {
       id: EID, status: 'DRAFT', items: [], worksSubtotal: 0, materialsSubtotal: 0, total: 0, balance: 0,
@@ -172,6 +172,8 @@ describe('add from catalog — offline (how estimates are actually built)', () =
     const est = qc.getQueryData<EstimateResponse>([...ESTIMATE_KEY, EID])!;
     expect(est.items).toHaveLength(1);
     expect(est.items[0]).toMatchObject({ name: 'Розетка', unit: 'PIECE', unitPrice: 180, quantity: 3 });
+    // The position's own comment rides along, as the server copies it (V207).
+    expect(est.items[0]).toMatchObject({ note: 'з підрозетником', noteVisible: true });
     expect(est.total).toBe(540);
 
     const ops = await listOutbox();

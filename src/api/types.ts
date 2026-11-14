@@ -524,6 +524,9 @@ export interface EstimateItemResponse {
    * wording in the portal and in the PDF. Null for a line the master wrote himself.
    */
   description?: string | null;
+  /** The master's own comment on the line (V206); the client reads it when `noteVisible`. */
+  note?: string | null;
+  noteVisible?: boolean;
   unit: Unit;
   quantity: number;
   unitPrice: number;
@@ -706,6 +709,10 @@ export interface EstimateItemRequest {
   percentBaseKind?: PercentBaseKind | null;
   /** Only with `percentBaseKind: 'POSITION'`, and only an ORDINARY line of the same estimate. */
   percentBaseItemId?: string | null;
+  /** The master's own comment (V206). Absent = leave it as is; '' = clear it. */
+  note?: string;
+  /** Whether the client sees `note`. Absent = leave it as is (a new line: visible). */
+  noteVisible?: boolean;
 }
 
 export interface EstimateItemFromCatalogRequest {
@@ -756,6 +763,8 @@ export interface CatalogItemResponse {
    * field, since a PATCH omitting it would null the text.
    */
   description?: string | null;
+  /** The master's own comment (V207); copied into a line added from this position. */
+  note?: string | null;
   /**
    * The master's own arrangement (backend V87). Satisfies `Arrangeable`, so the catalog shares the
    * estimate board's drag arithmetic instead of owning a second copy of it.
@@ -795,6 +804,9 @@ export interface SharedTrade {
 }
 
 export interface CatalogItemRequest {
+  /** The master's own comment (V207). Absent = leave it as is; '' = clear it. It reaches the lines of
+   *  unsigned estimates, except one whose comment he changed in that estimate. */
+  note?: string;
   name: string;
   category?: string;
   /** Optional — which trade this position belongs to. Ignored (forced to OTHER) when

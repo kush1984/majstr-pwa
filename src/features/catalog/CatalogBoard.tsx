@@ -183,6 +183,9 @@ function ItemRow({
   const { t } = useTranslation();
   const picked = selection ? selection.selected.has(item.id) : false;
   const description = item.description?.trim();
+  // ONE quiet line under the name: the master's own comment when he wrote one (V207), else the library's
+  // explanation — which keeps its (i) beside the row either way.
+  const subline = item.note?.trim() || description;
   const note = selection?.noteOf?.(item) ?? null;
   const blocked = note?.blocked ?? false;
 
@@ -197,8 +200,8 @@ function ItemRow({
               className="text-sm font-medium text-primary"
               onCommit={(name) => onInline(item, { name }, 'name')}
             />
-            {description != null && description !== '' && (
-              <span className="-mt-2 block truncate px-1 pb-1.5 text-[11px] leading-tight text-muted">{description}</span>
+            {subline != null && subline !== '' && (
+              <span className="-mt-2 block truncate px-1 pb-1.5 text-[11px] leading-tight text-muted">{subline}</span>
             )}
           </span>
           <span className="flex flex-shrink-0 items-center whitespace-nowrap text-xs text-faint">
@@ -264,9 +267,9 @@ function ItemRow({
           <span className="block break-words text-sm font-medium text-primary">{item.name}</span>
           {/* One clamped line, same as the picker: enough to tell Q3 from Q3+ at a glance, with
               the (i) beside the row holding the rest. «не всі вкурсі таких рівнів». */}
-          {description != null && description !== '' && (
+          {subline != null && subline !== '' && (
             <span className="block truncate text-[11px] leading-tight text-muted">
-              {description}
+              {subline}
             </span>
           )}
           <span className="block text-xs text-muted">за {t('units.' + item.unit)}</span>

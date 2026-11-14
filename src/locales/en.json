@@ -744,7 +744,11 @@
       "applied_other": "Catalog updated: {{count}} positions"
     },
     "enterObjectName": "Enter the object name",
-    "addressOptionalHint": "Optional — you can add it later"
+    "addressOptionalHint": "Optional — you can add it later",
+    "noteLabel": "Comment",
+    "notePlaceholder": "E.g. two coats, the client's material",
+    "noteVisible": "Show to the client",
+    "noteHidden": "The client does not see this comment"
   },
   "economy": {
     "addendumBadge": "from an act",
@@ -1504,6 +1508,7 @@
     "proHint": "Available on the PRO plan"
   },
   "catalog": {
+    "noteHint": "Goes into the estimates the client has not signed yet",
     "title": "Catalog",
     "addItem": "+ Add item",
     "filterWorks": "Works",
@@ -2633,16 +2638,17 @@
   },
   "priceList": {
     "entry": "Share price list",
-    "title": "Share price list",
+    "title": "Price list for the client",
     "count_one": "{{count}} position in the price list",
     "count_other": "{{count}} positions in the price list",
-    "next": "Next",
     "noPrice": "no price — won't go into the price list",
-    "libraryPrice": "library price — check it",
-    "sheetHint": "The client sees the ticked works with prices from your catalog — {{count}} in total.",
-    "liveHint": "The link is live: change a price in the catalog and the client sees the new one on the same link.",
     "shareText": "My prices for the work",
     "fileName": "Price list",
-    "pdf": "📄 Save PDF"
+    "pdf": "📄 Save PDF",
+    "pageHint": "Tick the works the client will see. Prices come from your catalog: change a price there and the client sees the new one on the same link.",
+    "linkLive": "Your price-list link is out and opens",
+    "noWorks": "Your catalog has no works yet.",
+    "pickSome": "Tick the works for the price list",
+    "preview": "Preview"
   }
 }
