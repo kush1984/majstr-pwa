@@ -53,11 +53,11 @@ describe('EstimateItemsBoard — works/materials split', () => {
 });
 
 describe('EstimateItemsBoard — session edit marker', () => {
-  // A dot by the line number, never a painted row (calm cells).
-  const marker = (id: string) =>
-    document.querySelector(`[data-item-id="${id}"] [data-row-marker]`)?.getAttribute('data-row-marker') ?? null;
+  // The session's edits are PAINTED on the row again (owner, 2026-11-14): a dot was too little.
+  const row = (id: string) => document.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
+  const marker = (id: string) => row(id)?.getAttribute('data-row-marker') ?? null;
 
-  it('an untouched line carries no dot', () => {
+  it('an untouched line is not painted', () => {
     render(
       <EstimateItemsBoard
         estimateId="test-est"
@@ -87,8 +87,8 @@ describe('EstimateItemsBoard — session edit marker', () => {
     );
     expect(marker('a')).toBe('touched');
     expect(marker('b')).toBe('last');
-    // The row itself is not painted any more.
-    expect(screen.getByText('Позиція B').closest('button')!.className).not.toContain('success');
+    expect(row('b')?.className).toContain('bg-success-soft');
+    expect(row('a')?.className).toContain('bg-brand-soft/30');
   });
 });
 

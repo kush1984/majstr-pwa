@@ -47,32 +47,6 @@ beforeEach(() => {
  * snapshot of the catalog position the line came from (V119), and the hint says out loud that the
  * client will read it, which is the master's own question («звідки клієнт має знати що це таке?»).
  */
-describe('ItemForm — the position explanation', () => {
-  const MEANS = 'Найвищий рівень: суцільне шпаклювання, під глянцеву фарбу та бокове світло.';
-
-  it('shows the full explanation, and says where the client will see it', () => {
-    renderForm(line({ description: MEANS }));
-
-    expect(screen.getByText('Що це означає')).toBeTruthy();
-    expect(screen.getByText(MEANS)).toBeTruthy();
-    expect(screen.getByText(/в порталі та в PDF/)).toBeTruthy();
-  });
-
-  it('offers no panel, and no editable field, for a line that carries no explanation', () => {
-    renderForm(line({ description: null }));
-
-    expect(screen.queryByText('Що це означає')).toBeNull();
-  });
-
-  it('never turns the explanation into an input — it belongs to the catalog position', () => {
-    renderForm(line({ description: MEANS }));
-
-    // A textbox here would let a rename-style edit rewrite what a client already read; the field
-    // is not on EstimateItemRequest at all, so anything typed would be silently dropped.
-    expect(screen.queryByDisplayValue(MEANS)).toBeNull();
-  });
-});
-
 /**
  * Review P-58: validation read the price with `parseMoney` (which takes the apostrophe as grouping)
  * while the submit read it with `parseDecimal` — «1'200» passed validation and was sent as NaN,
@@ -110,6 +84,33 @@ describe('ItemForm — the master’s own comment (V206)', () => {
 
     fireEvent.change(screen.getByLabelText('Коментар'), { target: { value: '' } });
     expect(screen.queryByLabelText('Показувати клієнту')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ note: '' });
+  });
+});
+
+describe('ItemForm — the library hint is his comment to edit (2026-11-14)', () => {
+  it('shows the hint in «Коментар»; left alone it is not sent and no visibility box is offered', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ description: 'Рівень Q3', note: null }), onSubmit);
+
+    expect((document.querySelector('#it-note') as HTMLTextAreaElement).value).toBe('Рівень Q3');
+    expect(screen.queryByLabelText('Показувати клієнту')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(Object.hasOwn(onSubmit.mock.calls[0][0] as object, 'note')).toBe(false);
+  });
+
+  it('changed, it becomes his comment; emptied, it is cleared', async () => {
+    const onSubmit = vi.fn();
+    renderForm(line({ description: 'Рівень Q3', note: null }), onSubmit);
+
+    fireEvent.change((document.querySelector('#it-note') as HTMLTextAreaElement), { target: { value: 'Рівень Q3, без шліфування' } });
+    expect(screen.getByLabelText('Показувати клієнту')).toBeTruthy();
+    fireEvent.change((document.querySelector('#it-note') as HTMLTextAreaElement), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());

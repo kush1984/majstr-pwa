@@ -410,6 +410,8 @@ export function useUpdateItem(estimateId: string) {
       quantityManual: req.quantityManual ?? i.quantityManual,
       // Absent = untouched, exactly as the server reads it (V206).
       note: req.note === undefined ? i.note : (req.note.trim() || null),
+      // A comment he wrote replaces the library's hint for good (V208).
+      description: req.note === undefined ? i.description : null,
       noteVisible: req.noteVisible ?? i.noteVisible,
     } : i)));
   };

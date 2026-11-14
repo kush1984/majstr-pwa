@@ -37,7 +37,7 @@ export function PriceListPage() {
   const qc = useQueryClient();
   const { online } = useOnlineGuard();
   const catalog = useVisibleCatalog();
-  const state = useQuery({ queryKey: PRICE_LIST_KEY, queryFn: () => priceListApi.get() });
+  const state = useQuery({ queryKey: PRICE_LIST_KEY, queryFn: () => priceListApi.get(), refetchOnMount: 'always' });
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -45,9 +45,12 @@ export function PriceListPage() {
   const [shownUrl, setShownUrl] = useState<string | null>(null);
   const nativeShare = canShareNatively();
 
+  // The ticks come from the server's answer AFTER the screen opened — never from the offline snapshot, which
+  // may hold 1.79.0's pre-ticked suggestion (owner, 2026-11-14: the list is empty until he ticks it).
+  const fresh = state.isFetchedAfterMount && !state.isFetching && !state.isError;
   useEffect(() => {
-    if (picked === null && state.data) setPicked(new Set(state.data.itemIds));
-  }, [picked, state.data]);
+    if (picked === null && fresh && state.data) setPicked(new Set(state.data.itemIds));
+  }, [picked, fresh, state.data]);
 
   const works = useMemo(() => (catalog.data ?? []).filter((i) => i.type === 'WORK'), [catalog.data]);
   const searching = q.trim().length > 0;

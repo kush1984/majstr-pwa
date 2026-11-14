@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
-import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { LineNote, commentOf } from '@/features/estimate/LineNote.tsx';
 import { InlineNumberCell } from '@/components/InlineNumberCell.tsx';
 import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import type { CatalogItemResponse } from '@/api/types.ts';
@@ -182,10 +182,9 @@ function ItemRow({
 }) {
   const { t } = useTranslation();
   const picked = selection ? selection.selected.has(item.id) : false;
-  const description = item.description?.trim();
-  // ONE quiet line under the name: the master's own comment when he wrote one (V207), else the library's
-  // explanation — which keeps its (i) beside the row either way.
-  const subline = item.note?.trim() || description;
+  // ONE comment, the master's own (V207) or the library's hint — a clamped line under the name and in full
+  // behind the (i) beside the row; he edits or clears either in «Коментар».
+  const subline = commentOf(item);
   const note = selection?.noteOf?.(item) ?? null;
   const blocked = note?.blocked ?? false;
 
@@ -200,7 +199,7 @@ function ItemRow({
               className="text-sm font-medium text-primary"
               onCommit={(name) => onInline(item, { name }, 'name')}
             />
-            {subline != null && subline !== '' && (
+            {subline !== '' && (
               <span className="-mt-2 block truncate px-1 pb-1.5 text-[11px] leading-tight text-muted">{subline}</span>
             )}
           </span>
@@ -227,11 +226,7 @@ function ItemRow({
             ⋯
           </button>
         </div>
-        {description != null && description !== '' && (
-          <span className="flex flex-shrink-0 items-center pl-0.5">
-            <InfoPopover text={description} label={item.name} />
-          </span>
-        )}
+        <LineNote item={item} />
       </div>
     );
   }
@@ -267,7 +262,7 @@ function ItemRow({
           <span className="block break-words text-sm font-medium text-primary">{item.name}</span>
           {/* One clamped line, same as the picker: enough to tell Q3 from Q3+ at a glance, with
               the (i) beside the row holding the rest. «не всі вкурсі таких рівнів». */}
-          {subline != null && subline !== '' && (
+          {subline !== '' && (
             <span className="block truncate text-[11px] leading-tight text-muted">
               {subline}
             </span>
@@ -283,11 +278,7 @@ function ItemRow({
           {formatMoney(item.defaultPrice)}
         </span>
       </button>
-      {description != null && description !== '' && (
-        <span className="flex flex-shrink-0 items-center pl-0.5">
-          <InfoPopover text={description} label={item.name} />
-        </span>
-      )}
+      <LineNote item={item} />
     </div>
   );
 }

@@ -171,6 +171,7 @@ export function useUpdateCatalogItem() {
             customTradeName: resolveCustomTradeName(qc, customTradeId),
             type: req.type, unit: req.unit, defaultPrice: req.defaultPrice,
             note: req.note === undefined ? i.note : (req.note.trim() || null),
+            description: req.note === undefined ? i.description : null,
           } : i)));
         },
       }),

@@ -34,9 +34,10 @@ const items: CatalogItemResponse[] = [
 ];
 const live = 'https://api.majstr.pro/portal/index.html?l=tok';
 
-function renderPage(me: UserResponse = aUser()) {
+function renderPage(me: UserResponse = aUser(), seed?: (qc: QueryClient) => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(ME_QUERY_KEY, me);
+  seed?.(qc);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <MemoryRouter><QueryClientProvider client={qc}>{children}</QueryClientProvider></MemoryRouter>
   );
@@ -51,6 +52,15 @@ beforeEach(() => {
 });
 
 describe('PriceListPage — «Прайс для клієнта»', () => {
+  it("never ticks from the offline snapshot: 1.79.0's pre-ticked answer is replaced by the server's", async () => {
+    vi.mocked(priceListApi.get).mockResolvedValue({ url: null, configured: false, itemIds: [], libraryPricedIds: [] });
+    renderPage(aUser(), (qc) => qc.setQueryData(['price-list'],
+      { url: null, configured: false, itemIds: ['w1', 'w2'], libraryPricedIds: [] }));
+
+    expect(await screen.findByText('Відмітьте роботи для прайсу')).toBeTruthy();
+    expect(priceListApi.get).toHaveBeenCalled();
+  });
+
   it('ticks nothing for the master, shows works only, and blocks a work with no price', async () => {
     vi.mocked(priceListApi.get).mockResolvedValue({ url: null, configured: false, itemIds: [], libraryPricedIds: [] });
     renderPage();

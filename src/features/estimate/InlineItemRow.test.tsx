@@ -125,18 +125,36 @@ describe('estimate row — inline editing', () => {
   });
 });
 
-describe('estimate row — the master\'s own comment (V206)', () => {
-  it('shows the comment under the name, with a lock when the client does not see it', () => {
-    board([line({ id: 'a', note: 'у 2 шари' }), line({ id: 'b', name: 'Інше', note: 'собі', noteVisible: false })]);
+describe('estimate row — the comment behind the (i) (V206)', () => {
+  const open = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
+  it('is not a line under the name: it opens from the (i), with a lock when the client does not see it', () => {
+    board([line({ id: 'a', note: 'у 2 шари' }), line({ id: 'b', name: 'Інше', note: 'собі', noteVisible: false })]);
+    expect(screen.queryByText('у 2 шари')).toBeNull();
+
+    open('Стяжка');
     expect(screen.getByText('у 2 шари')).toBeTruthy();
+    expect(screen.queryByText(/Клієнт цей коментар не бачить/)).toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    open('Інше');
     expect(screen.getByText('собі')).toBeTruthy();
-    expect(screen.getAllByRole('img', { name: 'Клієнт цей коментар не бачить' })).toHaveLength(1);
+    expect(screen.getByText(/Клієнт цей коментар не бачить/)).toBeTruthy();
   });
 
-  it('shows it on a signed estimate too, where the row is not editable', () => {
-    board([line({ note: 'матеріал замовника' })], { signed: true });
+  it("his comment wins over the library's hint; with none, the hint is the comment", () => {
+    board([line({ id: 'a', note: 'у 2 шари', description: 'Рівень Q3' }), line({ id: 'b', name: 'Інше', description: 'Рівень Q4' })]);
+    open('Стяжка');
+    expect(screen.getByText('у 2 шари')).toBeTruthy();
+    expect(screen.queryByText('Рівень Q3')).toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    open('Інше');
+    expect(screen.getByText('Рівень Q4')).toBeTruthy();
+  });
 
+  it('opens on a signed estimate too, where the row is not editable', () => {
+    board([line({ note: 'матеріал замовника' })], { signed: true });
+    open('Стяжка');
     expect(screen.getByText('матеріал замовника')).toBeTruthy();
   });
 });

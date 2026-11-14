@@ -8,6 +8,7 @@ import { FormField } from '@/components/FormField.tsx';
 import { Button } from '@/components/Button.tsx';
 import { Checkbox } from '@/components/Checkbox.tsx';
 import { CatalogAutocomplete } from './CatalogAutocomplete.tsx';
+import { commentOf } from './LineNote.tsx';
 import { parseMoney, parseQuantity, roundMoney, sumMoney } from '@/lib/decimal.ts';
 import {
   ITEM_TYPE_OPTIONS,
@@ -72,7 +73,12 @@ export function ItemForm({
   const [measurementRefs, setMeasurementRefs] = useState<string[]>(initial?.measurementRefs ?? []);
   const [quantityManual, setQuantityManual] = useState<boolean>(initial?.quantityManual ?? false);
   // The master's own comment (V206) — the client reads it unless he unticks «Показувати клієнту».
-  const [note, setNote] = useState<string>(initial?.note ?? '');
+  // One comment to him: his own, else the library's hint it came with — editable and clearable alike.
+  // Sent only when he changed it, so an untouched hint stays a hint (the client never reads one).
+  const initialComment = commentOf(initial ?? {});
+  const [note, setNote] = useState<string>(initialComment);
+  const noteChanged = note.trim() !== initialComment;
+  const isLibraryHint = !noteChanged && !initial?.note?.trim() && initialComment !== '';
   const [noteVisible, setNoteVisible] = useState<boolean>(initial?.noteVisible ?? true);
   const [pickerOpen, setPickerOpen] = useState(false);
   // A line copied into a consolidated rollup — its amount is FROZEN (baseDetached, kind forced to
@@ -80,7 +86,6 @@ export function ItemForm({
   // POSITION/TOTAL picker would be actively misleading here (there is no real base to point at,
   // and re-picking one would not do anything), so this renders a completely different, honest block.
   const isFrozen = Boolean(initial?.baseOriginLabel);
-  const explanation = initial?.description?.trim() ?? '';
   // «%» is a share OF something: «Від позиції» (a markup on one line) or «Від кошторису» (a share of
   // the works- or materials-subtotal). Default POSITION — a legacy MANUAL/null line opens as POSITION
   // too (MANUAL is gone from the product for a LIVE line); a detached one keeps its frozen amount and
@@ -243,8 +248,8 @@ export function ItemForm({
       // Only a percentage line records a base; anything else sends none, whatever is in state.
       percentBaseKind: v.unit === 'PERCENT' ? baseKind : undefined,
       percentBaseItemId: v.unit === 'PERCENT' && baseKind === 'POSITION' ? baseItemId : undefined,
-      // The whole form is in hand, so both are sent: an emptied field clears the comment.
-      note: note.trim(),
+      // Absent = untouched; an emptied field clears the comment (and the hint it replaced).
+      ...(noteChanged ? { note: note.trim() } : {}),
       noteVisible,
     };
     onSubmit(req, v.saveToCatalog);
@@ -281,18 +286,6 @@ export function ItemForm({
           <Input id="it-name" invalid={Boolean(errors.name)} {...register('name')} />
         )}
       </FormField>
-
-      {/* Read-only, and the full text — the board clamps it to one line, so this is where the
-          master actually reads what «Q4 (еліт)» means. It came from the catalog with the position
-          and is frozen onto the line (V119), which is why there is no field to edit it here: the
-          wording belongs to the catalog position, and the client signed this copy of it. */}
-      {explanation !== '' && (
-        <div className="rounded-xl border border-border bg-surface-sunken p-3">
-          <p className="text-xs font-semibold text-muted">{t('estimate.itemExplanation')}</p>
-          <p className="mt-1 whitespace-pre-line text-sm text-primary">{explanation}</p>
-          <p className="mt-1.5 text-[11px] text-faint">{t('estimate.itemExplanationHint')}</p>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-3">
         <FormField label={t('estimate.type')} htmlFor="it-type" required error={errors.type?.message}>
@@ -536,7 +529,7 @@ export function ItemForm({
       </div>
       )}
 
-      <FormField label={t('estimate.noteLabel')} htmlFor="it-note">
+      <FormField label={t('estimate.noteLabel')} htmlFor="it-note" hint={isLibraryHint ? t('estimate.noteFromLibrary') : undefined}>
         <textarea
           id="it-note"
           value={note}
@@ -547,7 +540,7 @@ export function ItemForm({
           className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
         />
       </FormField>
-      {note.trim() !== '' && (
+      {note.trim() !== '' && !isLibraryHint && (
         <Checkbox
           label={t('estimate.noteVisible')}
           checked={noteVisible}

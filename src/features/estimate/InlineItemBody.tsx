@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { InlineNumberCell } from '@/components/InlineNumberCell.tsx';
 import { InlineTextCell } from '@/components/InlineTextCell.tsx';
-import { LineNote } from './LineNote.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { formatInlineNumber } from '@/lib/inlineEdit.ts';
 import { cn } from '@/lib/cn.ts';
@@ -17,9 +16,6 @@ export type InlineField = 'quantity' | 'price' | 'sum' | 'name' | 'percent';
  *  offer the undo. */
 export type InlineCommit = (item: EstimateItemResponse, patch: Partial<EstimateItemRequest>, field: InlineField) => void;
 
-/** A dot by the line number: this line was just changed (`last`) or changed earlier this session. */
-export type RowMarker = 'last' | 'touched' | null;
-
 /**
  * The inside of an estimate row when it edits in place: name · quantity · unit · price · sum, and
  * «⋯» for everything else (unit, category, measurements, description…), which is the old dialog.
@@ -30,13 +26,12 @@ export type RowMarker = 'last' | 'touched' | null;
  * number goes; the section header counts them.
  */
 export function InlineItemBody({
-  item, number, percentText, marker = null, className, onCommit, onMore,
+  item, number, percentText, className, onCommit, onMore,
 }: {
   item: EstimateItemResponse;
   number: number;
   /** «від Укладання плитки» — what a «%» line is a percentage OF (the board's own label). */
   percentText: string | null;
-  marker?: RowMarker;
   className?: string;
   onCommit: InlineCommit;
   onMore: () => void;
@@ -68,16 +63,6 @@ export function InlineItemBody({
     <div className={cn('min-w-0 flex-1 py-1 pr-1', className)}>
       <div className="flex items-start gap-1">
         <span className="relative min-w-[1.35rem] flex-shrink-0 pt-3 text-right text-[13px] tabular-nums text-faint">
-          {marker && (
-            <span
-              aria-hidden
-              data-row-marker={marker}
-              className={cn(
-                'absolute -left-1.5 top-[1.15rem] h-1.5 w-1.5 rounded-full',
-                marker === 'last' ? 'bg-success' : 'bg-brand/50',
-              )}
-            />
-          )}
           {number}.
         </span>
         <InlineTextCell
@@ -95,7 +80,6 @@ export function InlineItemBody({
           ⋯
         </button>
       </div>
-      <LineNote item={item} className="-mt-2 mb-1.5 pl-[1.7rem] pr-10" />
 
       <div className="-mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-[1.7rem] text-xs text-muted">
         {isPercent ? (

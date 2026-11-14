@@ -528,8 +528,6 @@
     "estimateDeleted": "Estimate deleted",
     "signedViewOnly": "✓ Signed by client — view only",
     "signedViewOnlyInfo": "The client signed — the estimate is locked in (an act) and can't be edited. Changes go through a new estimate.",
-    "itemExplanation": "What this means",
-    "itemExplanationHint": "Comes from the catalog position — the client reads it in the portal and in the PDF.",
     "signedNoEdit": "Estimate is signed — editing is unavailable",
     "reopen": "Reopen for changes",
     "reopenConfirm": "Reopen this estimate? The client will need to sign it again.",
@@ -748,6 +746,7 @@
     "noteLabel": "Comment",
     "notePlaceholder": "E.g. two coats, the client's material",
     "noteVisible": "Show to the client",
+    "noteFromLibrary": "A hint from the catalog — the client does not see it. Change the text and it becomes your comment.",
     "noteHidden": "The client does not see this comment"
   },
   "economy": {

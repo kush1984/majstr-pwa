@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { commentOf } from '@/features/estimate/LineNote.tsx';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
@@ -65,7 +66,9 @@ export function CatalogItemForm({
   const { data: me } = useMe();
   const [confirmOpen, setConfirmOpen] = useState(false);
   // The master's own comment (V207) — goes into the lines added from this position.
-  const [note, setNote] = useState<string>(initial?.note ?? '');
+  // His comment, else the library's hint — one field; sent only when changed, so a hint left alone stays.
+  const initialComment = commentOf(initial ?? {});
+  const [note, setNote] = useState<string>(initialComment);
   // Always offer the item's CURRENT trade as an option, even if the master no longer works in
   // it (removed from profile, or its custom trade was since deleted) — otherwise editing the
   // item would silently fall back to the first option and wipe its trade on save.
@@ -148,8 +151,8 @@ export function CatalogItemForm({
       trade: customTradeId ? undefined : (v.tradeChoice as Trade),
       customTradeId: customTradeId ?? undefined,
       defaultPrice: parsePrice(v.defaultPrice),
-      // The whole form is in hand: an emptied field clears the comment.
-      note: note.trim(),
+      // Absent = untouched; an emptied field clears the comment (and the hint it replaced).
+      ...(note.trim() !== initialComment ? { note: note.trim() } : {}),
     };
     try {
       if (isEdit && initial) {

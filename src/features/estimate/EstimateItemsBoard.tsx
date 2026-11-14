@@ -11,7 +11,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { DragGrip } from '@/components/DragGrip.tsx';
-import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { LineNote } from './LineNote.tsx';
 import { TradeBadge } from '@/components/TradeBadge.tsx';
 import { useCollapsedCategories } from './useCollapsedCategories.ts';
@@ -481,11 +480,13 @@ function ItemRow({
   const fullyClosed = closed > 0 && closed >= item.quantity;
   const unquantified = isUnquantified(item, signed);
   const partlyClosed = closed > 0 && !fullyClosed;
-  const description = item.description?.trim() ?? '';
 
-  // No frames: a picked row is tinted, everything else is said by a dot (just changed) or a chip
-  // (closed by acts, no quantity) — never by painting the whole row.
-  const stateClass = picked ? 'bg-brand-soft/40' : '';
+  // No frames, but the session's edits ARE painted (owner, 2026-11-14 — a dot was too little to find
+  // them): the line just changed a soft green, the ones changed earlier this session faintly brand.
+  const stateClass = picked ? 'bg-brand-soft/40'
+    : isLastTouched ? 'bg-success-soft'
+      : isTouched ? 'bg-brand-soft/30'
+        : 'bg-surface';
   const marker = isLastTouched ? 'last' : isTouched ? 'touched' : null;
   // A cell is editable exactly where the server allows the edit: never on a signed estimate (an
   // addendum is always signed), and never while the row is a checkbox in selection mode.
@@ -497,9 +498,11 @@ function ItemRow({
     <div
       ref={setNodeRef}
       data-item-id={item.id}
+      data-row-marker={marker ?? undefined}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
-        'flex items-stretch gap-1 bg-surface first:rounded-t-xl last:rounded-b-xl has-[[data-inline-editing]]:bg-row-editing',
+        'flex items-stretch gap-1 first:rounded-t-xl last:rounded-b-xl has-[[data-inline-editing]]:bg-row-editing',
+        stateClass,
         isDragging && 'relative z-10 opacity-90 shadow-card-md',
       )}
     >
@@ -532,8 +535,6 @@ function ItemRow({
           item={item}
           number={number}
           percentText={item.unit === 'PERCENT' ? percentLabel(item, byId) : null}
-          marker={marker}
-          className={stateClass}
           onCommit={onInline}
           onMore={() => onEdit(item)}
         />
@@ -548,7 +549,6 @@ function ItemRow({
           title={signed && !selection ? t('estimate.signedNoEdit') : undefined}
           className={cn(
             'flex min-w-0 flex-1 gap-1.5 px-2 py-3 text-left transition disabled:cursor-default active:bg-surface-sunken disabled:active:bg-transparent',
-            stateClass,
           )}
         >
           {/* The number is a GUTTER for the whole card, not a word inside the name.
@@ -568,16 +568,6 @@ function ItemRow({
               number pinned to the first line reads as if it belongs to that line rather than to the
               row. Centred on the row's height it belongs to the whole card. */}
           <span className="relative min-w-[1.35rem] flex-shrink-0 pt-[3px] text-right text-[13px] tabular-nums text-faint">
-            {marker && (
-              <span
-                aria-hidden
-                data-row-marker={marker}
-                className={cn(
-                  'absolute -left-1.5 top-[0.55rem] h-1.5 w-1.5 rounded-full',
-                  marker === 'last' ? 'bg-success' : 'bg-brand/50',
-                )}
-              />
-            )}
             {number}.
           </span>
           <span className="min-w-0 flex-1">
@@ -591,7 +581,6 @@ function ItemRow({
                 </span>
               )}
             </span>
-            <LineNote item={item} className="mt-0.5" />
             {/* No manual indent any more: the gutter above already holds the column open, so this
                 line simply starts where the name starts. */}
             <span className="mt-1 flex items-center gap-2 text-xs text-muted">
@@ -624,16 +613,10 @@ function ItemRow({
           </span>
         </button>
       )}
-      {/* The explanation the line carries from the catalog (V119) lives BESIDE the row, never
-          inside it (V121): rendered inline it ran the width of the board and pushed the whole
-          estimate sideways — «все пливе». Same shape as the catalog board, minus the clamped
-          preview line: an estimate row already carries quantity, unit price and act progress
-          under the name, and a fourth line of grey text there is what made it flow. */}
-      {description !== '' && (
-        <span className="flex flex-shrink-0 items-center pl-0.5">
-          <InfoPopover text={description} label={item.name} />
-        </span>
-      )}
+      {/* The comment lives BESIDE the row, behind an (i) — the master's own, else the library's hint
+          (V119/V206). Inline it ran the width of the board and pushed the estimate sideways
+          («все пливе»); an estimate row already carries quantity, price and act progress. */}
+      <LineNote item={item} />
     </div>
   );
 }
