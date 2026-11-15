@@ -11,7 +11,6 @@ async function register(page: Page, label: string): Promise<void> {
   await page.goto('/register');
   await page.fill('#email', `e2e-phone+${label}${Date.now()}@majstr.test`);
   await page.fill('#password', 'Test1234!');
-  await page.locator('input[name="consent"]').check();
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
   await passTradesScreen(page, ['Електрика'], 20_000);
 }

@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
 /**
- * Registration asks for email, password and consent only (V190); the trades are the first screen
+ * Registration asks for email and password only (V190; consent is the button press since 1.80.2); the trades are the first screen
  * inside. Every journey that registers passes through it here, picking the trades by their Ukrainian
  * label, then lands home.
  */
@@ -19,5 +19,4 @@ export async function fillRegister(page: Page, email: string, password: string):
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', password);
-  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
 }

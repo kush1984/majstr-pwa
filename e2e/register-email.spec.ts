@@ -12,7 +12,6 @@ test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true
 
 async function fillAllButEmail(page: Page): Promise<void> {
   await page.fill('#password', 'Test1234!');
-  await page.locator('input[name="consent"]').check();
 }
 
 test('тимчасову пошту відхилено, людина її бачить і виправляє — і реєструється', async ({ page }) => {

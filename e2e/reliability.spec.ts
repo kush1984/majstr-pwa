@@ -29,7 +29,6 @@ test('backend недоступний → дружній екран помилк�
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', 'Test1234!');
-  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
   await passTradesScreen(page, ['Електрика']);

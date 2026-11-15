@@ -14,11 +14,10 @@ test('повний сценарій підрядника: реєстрація �
 }) => {
   const email = `e2e+${Date.now()}@majstr.test`;
 
-  // 1 — Register: email, password, consent (V190), then «Чим займаєтесь?» with two trades
+  // 1 — Register: email and password (V190; consent is the button press), then «Чим займаєтесь?» with two trades
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', 'Test1234!');
-  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
   await passTradesScreen(page, ['Електрика', 'Плитка']);
 

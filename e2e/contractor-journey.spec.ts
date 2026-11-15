@@ -30,7 +30,6 @@ async function registerMaster(page: Page, label: string): Promise<string> {
   await page.goto('/register');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  await page.locator('input[name="consent"]').check(); // the privacy consent gate (no id on it)
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
   // Generous timeout: the first spec alphabetically pays the cold-Vite compile. The trades are the
   // first screen inside now (V190), and they fill the starter catalog the journey goes on to use.

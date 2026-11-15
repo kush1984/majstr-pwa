@@ -8,7 +8,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
  * is offered its fix before anything is sent. Needs no backend: /api/auth/register is answered here, so CI
  * runs it on every push.
  *
- * Since V190 the door asks for email, password and consent only, and what used to follow on the form —
+ * Since V190 the door asks for email and password only (consent is the button press), and what used to follow on the form —
  * the trades — is the first screen inside («Чим займаєтесь?»). Both halves are pinned below.
  */
 
@@ -34,7 +34,6 @@ async function answerRegistration(page: Page, reply: (n: number) => { status: nu
 
 async function fillAllButEmail(page: Page): Promise<void> {
   await page.fill('#password', 'Test1234!');
-  await page.locator('input[name="consent"]').check();
 }
 
 const TAKEN = { status: 409, code: 'EMAIL_ALREADY_REGISTERED', message: 'Цей email вже зареєстрований' };
@@ -119,7 +118,7 @@ const NEW_MASTER = {
   vatPayer: false, vatId: null, taxGroup: null, taxRate: null, docCity: null, actNumberFormat: 'PLAIN',
 };
 
-test('двері просять три речі: чого бракує — сказано біля кнопки', async ({ page }) => {
+test('двері просять дві речі: чого бракує — сказано біля кнопки', async ({ page }) => {
   const sent = await answerRegistration(page, () => TAKEN);
   await page.goto('/register');
 
@@ -128,7 +127,7 @@ test('двері просять три речі: чого бракує — ск�
   }
   await page.getByRole('button', { name: 'Створити акаунт' }).click();
 
-  const missing = page.getByText('Заповніть: Email, Пароль, згоду з політикою конфіденційності');
+  const missing = page.getByText('Заповніть: Email, Пароль');
   await expect(missing).toBeVisible();
   await expect(missing).toBeInViewport();
   expect(sent).toEqual([]);
