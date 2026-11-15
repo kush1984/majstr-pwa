@@ -18,12 +18,12 @@ import { sendVisit } from '@/lib/visit.ts';
 import { suggestEmail } from '@/lib/emailSuggestion.ts';
 
 const REGISTER_DRAFT = 'register';
-type RegisterDraft = Partial<Omit<RegisterFormValues, 'password' | 'consent'>>;
+type RegisterDraft = Partial<Omit<RegisterFormValues, 'password'>>;
 /** The form's fields in screen order, as the visit report names them. */
-const FORM_FIELDS = ['email', 'password', 'promoCode', 'consent'] as const;
+const FORM_FIELDS = ['email', 'password', 'promoCode'] as const;
 
 /**
- * The door (V190): email, password, consent — nothing about the person, so nothing to trust us with
+ * The door (V190): email and password — nothing about the person, so nothing to trust us with
  * yet. Trades are asked on the first screen inside (`TradesOnboardingPage`), the name before the first
  * document leaves (`SenderGate`).
  */
@@ -34,7 +34,7 @@ export function RegisterPage() {
   const [emailTaken, setEmailTaken] = useState(false);
   // «Може, ivan@gmail.com?» — offered when the field is left, cleared as soon as it is edited.
   const [emailHint, setEmailHint] = useState<string | null>(null);
-  // The half-filled form survives a reload (review P1-2) — everything but the password and consent.
+  // The half-filled form survives a reload (review P1-2) — everything but the password.
   const [draft] = useState(() => readSessionDraft<RegisterDraft>(REGISTER_DRAFT));
   const {
     register,
@@ -49,7 +49,6 @@ export function RegisterPage() {
     defaultValues: {
       email: draft?.email ?? '',
       password: '',
-      consent: false,
       promoCode: draft?.promoCode ?? '',
     },
   });
@@ -85,7 +84,9 @@ export function RegisterPage() {
       await register$.mutateAsync({
         email: values.email,
         password: values.password,
-        consent: values.consent,
+        // A checkbox here cost registrations: pressing the button under the line naming the policy
+        // is the consent, and the API still requires it (`@AssertTrue`).
+        consent: true,
         // First-touch attribution: the stored ?ref= wins, the typed promo code is
         // a fallback. Absent → the backend attributes DIRECT.
         ref: getStoredRef(),
@@ -157,7 +158,6 @@ export function RegisterPage() {
     email: t('common.email'),
     password: t('auth.password'),
     promoCode: t('auth.promoCode'),
-    consent: t('auth.missingConsent'),
   };
   const missing = FORM_FIELDS.filter((field) => errors[field]).map((field) => fieldLabels[field]);
 
@@ -220,31 +220,6 @@ export function RegisterPage() {
         </details>
 
         <div>
-          <label className="flex items-start gap-2.5 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-border text-brand focus:ring-brand"
-              {...register('consent')}
-            />
-            <span>
-              {t('consent.registerPre')}
-              <Link
-                to={routes.privacy}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-brand-700 underline"
-              >
-                {t('consent.privacyLink')}
-              </Link>
-              {t('consent.registerPost')}
-            </span>
-          </label>
-          {errors.consent && (
-            <span className="mt-1 block text-xs text-red-600">{errors.consent.message}</span>
-          )}
-        </div>
-
-        <div>
           <Button type="submit" fullWidth loading={isSubmitting || register$.isPending}>
             {t('auth.signUp')}
           </Button>
@@ -252,6 +227,18 @@ export function RegisterPage() {
               screen above, and a press that «did nothing» was being repeated into the rate limit. */}
           <p role="status" aria-live="polite" className="mt-2 min-h-[1.25rem] text-center text-sm text-red-600">
             {submitCount > 0 && missing.length > 0 ? t('auth.missingFields', { fields: missing.join(', ') }) : ''}
+          </p>
+          <p className="text-center text-xs leading-snug text-gray-500">
+            {t('consent.registerPre')}
+            <Link
+              to={routes.privacy}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-700 underline"
+            >
+              {t('consent.privacyLink')}
+            </Link>
+            {t('consent.registerPost')}
           </p>
         </div>
 

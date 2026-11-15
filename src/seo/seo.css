@@ -114,6 +114,9 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
   background: #fff; color: var(--amber-deep); font-weight: 700; text-decoration: none;
 }
 .seo-result .seo-cta-button { background: var(--amber); color: #fff; }
+.seo-master-cta { margin-top: 20px; padding: 16px; border: 2px solid var(--amber); border-radius: 16px; }
+.seo-master-cta p { margin: 0 0 12px; }
+.seo-master-cta .seo-small { margin: 10px 0 0; }
 .seo-note { font-size: 13px; color: var(--muted); margin-top: 20px; }
 
 .seo-footer { flex-wrap: wrap; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }

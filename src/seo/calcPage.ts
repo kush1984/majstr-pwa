@@ -132,6 +132,23 @@ function allowance(): number {
   return byLayout() ? LAYOUT_ALLOWANCE : Number(checked('wastePercent') ?? 10);
 }
 
+/**
+ * Under every answer, to the master among the visitors: the figure he just got is one line of an estimate
+ * his client signs from a phone. The plan and its price are said here, not behind the door.
+ */
+function masterCta(): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'seo-master-cta';
+  const lead = text('p', ' Додайте цей розрахунок у кошторис — клієнт отримає посилання й підпише з телефона.');
+  lead.prepend(text('b', 'Ви майстер?'));
+  const cta = document.createElement('a');
+  cta.href = '/register';
+  cta.className = 'seo-cta-button';
+  cta.textContent = 'Зробити кошторис для клієнта →';
+  box.append(lead, cta, text('p', "Безкоштовно: 2 об'єкти, без картки.", 'seo-small'));
+  return box;
+}
+
 function showError(message: string): void {
   if (!errorBox) return;
   errorBox.textContent = message;
@@ -389,11 +406,7 @@ function render(res: CalcResponse, scroll = true): void {
   if (res.materials.some((m) => m.name.startsWith('Профіль'))) {
     result.append(text('p', 'Профіль продають по 3–4 м. Скільки штук купити, залежить від висоти стелі й розмірів кімнати — у застосунку це видно в списку покупок.', 'seo-small'));
   }
-  const cta = document.createElement('a');
-  cta.href = '/register';
-  cta.className = 'seo-cta-button';
-  cta.textContent = 'Порахувати весь ремонт із кошторисом для клієнта — безкоштовно';
-  result.append(cta);
+  result.append(masterCta());
   result.hidden = false;
   if (focusOwnNorm) {
     focusOwnNorm = false;

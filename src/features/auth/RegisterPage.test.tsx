@@ -89,7 +89,6 @@ describe('RegisterPage — the visit funnel', () => {
     });
     const { container } = renderPage();
     fillValid(container);
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
@@ -134,7 +133,6 @@ describe('RegisterPage — a refused email is seen, not pressed into the rate li
     const { container } = renderPage();
     fillValid(container);
     fireEvent.change(container.querySelector('#email')!, { target: { value: 'ivan@gmal.com' } });
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
@@ -147,23 +145,20 @@ describe('RegisterPage — a refused email is seen, not pressed into the rate li
   });
 });
 
-describe('RegisterPage — privacy consent', () => {
-  it('blocks submit until the consent box is ticked', async () => {
+describe('RegisterPage — privacy consent is the button press', () => {
+  it('has no checkbox: the line under the button names the policy and links to it', () => {
     const { container } = renderPage();
-    fillValid(container);
 
-    // Submit without consent → validation blocks, register is not called.
-    fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
-    expect(await screen.findByText(/погодитися з Політикою/i)).toBeTruthy();
-    expect(authApi.register).not.toHaveBeenCalled();
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(screen.getByText(/Натискаючи «Створити акаунт», ви погоджуєтеся з/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Політикою конфіденційності' }).getAttribute('href')).toBe(routes.privacy);
   });
 
-  it('registers with consent:true once ticked', async () => {
+  it('registers with consent:true — the API still requires it', async () => {
     vi.mocked(authApi.register).mockResolvedValue(REGISTERED);
 
     const { container } = renderPage();
     fillValid(container);
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
     await waitFor(() => expect(authApi.register).toHaveBeenCalled());
@@ -171,7 +166,7 @@ describe('RegisterPage — privacy consent', () => {
   });
 });
 
-describe('RegisterPage — the door asks three things (V190)', () => {
+describe('RegisterPage — the door asks two things (V190)', () => {
   it('has no name, phone, company or trade field — those are asked inside the app', () => {
     const { container } = renderPage();
 
@@ -186,7 +181,6 @@ describe('RegisterPage — the door asks three things (V190)', () => {
     vi.mocked(authApi.register).mockResolvedValue(REGISTERED);
     const { container } = renderPage();
     fillValid(container);
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
@@ -204,17 +198,17 @@ describe('RegisterPage — the door asks three things (V190)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
-    expect(await screen.findByText('Заповніть: Email, Пароль, згоду з політикою конфіденційності')).toBeTruthy();
+    expect(await screen.findByText('Заповніть: Email, Пароль')).toBeTruthy();
     expect(authApi.register).not.toHaveBeenCalled();
   });
 
   it('names only what is left once the rest is filled', async () => {
     const { container } = renderPage();
-    fillValid(container);
+    fireEvent.change(container.querySelector('#email')!, { target: { value: 'a@b.com' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
-    expect(await screen.findByText('Заповніть: згоду з політикою конфіденційності')).toBeTruthy();
+    expect(await screen.findByText('Заповніть: Пароль')).toBeTruthy();
   });
 });
 
@@ -227,7 +221,6 @@ describe('RegisterPage — duplicate email', () => {
 
     const { container } = renderPage();
     fillValid(container);
-    fireEvent.click(container.querySelector('input[name="consent"]')!);
     fireEvent.click(screen.getByRole('button', { name: 'Створити акаунт' }));
 
     // The shortcut appears; clicking it goes to login with the email prefilled.

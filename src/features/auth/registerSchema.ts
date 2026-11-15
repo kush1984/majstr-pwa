@@ -16,7 +16,8 @@ export const TRADE_VALUES = [
 ] as const satisfies readonly string[];
 
 /**
- * The door asks for three things (V190, registration friction round 2): email, password, consent.
+ * The door asks for two things (V190, registration friction round 2): email and password. Consent is
+ * the button press itself, with the line under it naming the policy (no checkbox since 2026-11-15).
  * Trades are the first screen inside (`TradesOnboardingPage`), the name is asked before the first
  * document leaves (`SenderGate`), phone and company are optional for good.
  */
@@ -30,8 +31,6 @@ export const registerSchema = z.object({
     .string()
     .min(8, i18n.t('validation.passwordTooShort'))
     .max(100, i18n.t('validation.passwordTooLong')),
-  // Explicit privacy-policy consent — submit is blocked until ticked.
-  consent: z.boolean().refine((v) => v, { message: i18n.t('validation.consentRequired') }),
   // Optional community promo code (e.g. LIGA) — sets the referral source. Never
   // required; a plain registration leaves it empty and is attributed DIRECT.
   promoCode: z.string().max(40).optional(),
