@@ -125,8 +125,8 @@ describe('kalkulyator-plytky.html', () => {
   it("lays the tile out wall by wall in the browser, inside the one form — the app's own engine, its own script", () => {
     const html = read('kalkulyator-plytky.html');
     const form = /<form id="calc"[\s\S]*?<\/form>/.exec(html)?.[0] ?? '';
-    expect(form).toContain('<input type="radio" name="mode" value="AREA" checked /> За площею + запас');
-    expect(form).toContain('<input type="radio" name="mode" value="LAYOUT" /> По розкладці на стінах');
+    expect(form).toContain('<input type="radio" name="mode" value="AREA" /> За площею + запас');
+    expect(form).toContain('<input type="radio" name="mode" value="LAYOUT" checked /> По розкладці на стінах');
     expect(form).toContain('<div id="layout-section" data-show="mode:LAYOUT">');
     expect(form).toContain('<div id="layout" class="seo-tl"></div>');
     expect(html).toContain('<script type="module" src="/src/seo/tileLayoutPage.ts"></script>');

@@ -231,8 +231,12 @@ describe('kalkulyator-plytky — one form, two ways to count', () => {
     }), { status: 200 });
   }
 
-  it('asks the area by area, and the walls by layout — never both', async () => {
+  it('opens on the layout, asks the area by area — never both', async () => {
     const form = await loadTile();
+    expect(shown(form, 'label[data-show="mode:AREA"]')).toBe(false);
+    expect(shown(form, '#layout-section')).toBe(true);
+
+    choose(form, 'mode', 'AREA');
     expect(shown(form, 'label[data-show="mode:AREA"]')).toBe(true);
     expect(shown(form, '#layout-section')).toBe(false);
 
@@ -248,6 +252,7 @@ describe('kalkulyator-plytky — one form, two ways to count', () => {
     const form = await loadTile();
     const allowance = () => [...form.querySelectorAll<HTMLElement>('fieldset')].find((f) => f.querySelector('input[name="wastePercent"]'));
     const method = () => [...document.querySelectorAll<HTMLElement>('p[data-show]')].filter((p) => !p.hidden).map((p) => p.textContent ?? '');
+    choose(form, 'mode', 'AREA');
     expect(allowance()?.hidden).toBe(false);
     expect(method().join(' ')).toContain('Плитка за площею');
     expect(method().join(' ')).not.toContain('Плитка по розкладці');
@@ -262,6 +267,7 @@ describe('kalkulyator-plytky — one form, two ways to count', () => {
 
   it('by layout: an allowance picked by area does not leak into the answer', async () => {
     const form = await loadTile();
+    choose(form, 'mode', 'AREA');
     choose(form, 'wastePercent', '15');
     choose(form, 'mode', 'LAYOUT');
     const fetchMock = vi.fn().mockResolvedValue(answer());
@@ -301,6 +307,7 @@ describe('kalkulyator-plytky — one form, two ways to count', () => {
 
   it('by area: as before — the area with the allowance', async () => {
     const form = await loadTile();
+    choose(form, 'mode', 'AREA');
     type(form, 'area', '5');
     const fetchMock = vi.fn().mockResolvedValue(answer());
     vi.stubGlobal('fetch', fetchMock);
