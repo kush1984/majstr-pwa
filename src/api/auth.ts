@@ -1,6 +1,7 @@
 import { api, rawApi, REGISTER_TIMEOUT_MS } from './client.ts';
 import type {
   AuthResponse,
+  GoogleSignInRequest,
   LoginRequest,
   RegisterRequest,
   UserResponse,
@@ -26,6 +27,16 @@ export const authApi = {
       method: 'POST',
       url: '/api/auth/login',
       data: req,
+    }).then((r) => r.data as AuthResponse);
+  },
+
+  /** «Увійти через Google»: signs in, links a same-email account, or registers. */
+  google(req: GoogleSignInRequest): Promise<AuthResponse> {
+    return rawApi({
+      method: 'POST',
+      url: '/api/auth/google',
+      data: req,
+      timeout: REGISTER_TIMEOUT_MS,
     }).then((r) => r.data as AuthResponse);
   },
 

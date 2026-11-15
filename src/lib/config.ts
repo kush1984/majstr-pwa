@@ -44,6 +44,8 @@ export const config = {
   conciergeUrl: import.meta.env.VITE_CONCIERGE_URL || 'https://t.me/andriykushka',
   // YouTube channel — the landing footer links it beside Telegram. Same `||` rule.
   youtubeUrl: import.meta.env.VITE_YOUTUBE_URL || 'https://www.youtube.com/@majstrpro',
+  // «Увійти через Google»: the OAuth Web client ID (the backend's GOOGLE_CLIENT_ID). Empty = no button.
+  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '',
   // The other social pages, shown on the Profile screen beside Telegram and YouTube.
   instagramUrl: 'https://www.instagram.com/majstr.pro/',
   facebookUrl: 'https://www.facebook.com/profile.php?id=61595872487930',

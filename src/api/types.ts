@@ -122,6 +122,18 @@ export interface AuthResponse {
   user: UserResponse;
 }
 
+/** «Увійти через Google»: Google's ID token plus the first-touch attribution a registration carries. */
+export interface GoogleSignInRequest {
+  credential: string;
+  ref?: string;
+  promoCode?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  referrerHost?: string;
+  entryPath?: string;
+}
+
 export interface RegisterRequest {
   email: string;
   password: string;

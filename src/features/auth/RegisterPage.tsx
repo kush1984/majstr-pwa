@@ -16,6 +16,7 @@ import { routes } from '@/lib/config.ts';
 import { getStoredFirstTouch, getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 import { sendVisit } from '@/lib/visit.ts';
 import { suggestEmail } from '@/lib/emailSuggestion.ts';
+import { GoogleSignIn } from './GoogleSignIn.tsx';
 
 const REGISTER_DRAFT = 'register';
 type RegisterDraft = Partial<Omit<RegisterFormValues, 'password'>>;
@@ -163,6 +164,7 @@ export function RegisterPage() {
 
   return (
     <AuthShell title={t('auth.registerTitle')}>
+      <GoogleSignIn />
       <form noValidate onSubmit={onSubmit} onInput={onFirstInput} onFocus={onFieldFocus} className="space-y-4">
         <FormField label={t('common.email')} htmlFor="email" required error={errors.email?.message}>
           <Input

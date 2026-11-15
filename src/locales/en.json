@@ -340,7 +340,9 @@
     "emailAlreadyRegistered": "This email is already registered",
     "emailTakenLogin": "This email is already registered — Log in",
     "emailSuggestion": "Did you mean {{email}}?",
-    "missingFields": "Still missing: {{fields}}"
+    "missingFields": "Still missing: {{fields}}",
+    "orWithEmail": "or with email",
+    "googleConsentPre": "By continuing with Google you agree to the"
   },
   "reset": {
     "forgotTitle": "Reset password",

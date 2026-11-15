@@ -340,7 +340,9 @@
     "emailAlreadyRegistered": "Цей email вже зареєстрований",
     "emailTakenLogin": "Ця пошта вже зареєстрована — Увійти",
     "emailSuggestion": "Може, {{email}}?",
-    "missingFields": "Заповніть: {{fields}}"
+    "missingFields": "Заповніть: {{fields}}",
+    "orWithEmail": "або поштою",
+    "googleConsentPre": "Продовжуючи з Google, ви погоджуєтесь з"
   },
   "reset": {
     "forgotTitle": "Скидання пароля",

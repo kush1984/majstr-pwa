@@ -233,6 +233,16 @@
   "ForgotPasswordRequest": {
     "email": "string"
   },
+  "GoogleSignInRequest": {
+    "credential": "string",
+    "entryPath": "string?",
+    "promoCode": "string?",
+    "ref": "string?",
+    "referrerHost": "string?",
+    "utmCampaign": "string?",
+    "utmMedium": "string?",
+    "utmSource": "string?"
+  },
   "HelpRequest": {
     "phone": "string"
   },

@@ -11,6 +11,7 @@ import { loginSchema, type LoginFormValues } from './loginSchema.ts';
 import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
+import { GoogleSignIn } from './GoogleSignIn.tsx';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -55,6 +56,7 @@ export function LoginPage() {
 
   return (
     <AuthShell title={t('auth.loginTitle')}>
+      <GoogleSignIn />
       <form noValidate onSubmit={onSubmit} className="space-y-4">
         <FormField label={t('common.email')} htmlFor="email" error={errors.email?.message}>
           <Input
