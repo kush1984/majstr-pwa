@@ -8,6 +8,8 @@ import { clientsApi } from '@/api/clients.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
+import { tasksApi } from '@/api/tasks.ts';
+import { TASKS_KEY } from '@/features/tasks/useTasks.ts';
 import { planApi } from '@/api/plan.ts';
 import { dashboardApi } from '@/api/dashboard.ts';
 import { messagesApi } from '@/api/messages.ts';
@@ -29,6 +31,7 @@ vi.mock('@/api/estimateTemplates.ts', () => ({
   estimateTemplatesApi: { list: vi.fn(), get: vi.fn() },
 }));
 vi.mock('@/api/notes.ts', () => ({ notesApi: { list: vi.fn() } }));
+vi.mock('@/api/tasks.ts', () => ({ tasksApi: { list: vi.fn() } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
 vi.mock('@/api/dashboard.ts', () => ({ dashboardApi: { metrics: vi.fn() } }));
 vi.mock('@/api/messages.ts', () => ({ messagesApi: { listForProject: vi.fn() } }));
@@ -56,6 +59,7 @@ beforeEach(() => {
   vi.mocked(estimatesApi.get).mockResolvedValue({ id: 'e1', items: [] } as never);
   vi.mocked(measurementsApi.tree).mockResolvedValue({ rooms: [] } as never);
   vi.mocked(notesApi.list).mockResolvedValue([] as never);
+  vi.mocked(tasksApi.list).mockResolvedValue([] as never);
 });
 
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -76,6 +80,8 @@ describe('prefetchForOffline', () => {
     expect(qc.getQueryData([...CLIENTS_KEY, 'list'])).toBeTruthy();
     expect(qc.getQueryData([...CATALOG_KEY, 'list', 'all'])).toBeTruthy();
     expect(qc.getQueryData([...CATALOG_KEY, 'categories'])).toBeTruthy();
+    // «Що треба зробити» on a site with no signal (majster-bot review S-14).
+    expect(qc.getQueryData(TASKS_KEY('p1'))).toBeTruthy();
   });
 
   it('caches each TEMPLATE composition (else offline it looked like "no positions")', async () => {

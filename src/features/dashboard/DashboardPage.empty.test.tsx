@@ -17,6 +17,7 @@ vi.mock('./useDashboardMetrics.ts', () => ({
 vi.mock('@/features/plan/usePlanLimits.ts', () => ({ usePlanLimits: () => ({ data: undefined }), isAtLimit: () => false }));
 vi.mock('@/features/shopping/ShoppingHomeCard.tsx', () => ({ ShoppingHomeCard: () => null }));
 vi.mock('@/features/cash/CashHomeStrip.tsx', () => ({ CashHomeStrip: () => null }));
+vi.mock('@/features/inbox/InboxHomeStrip.tsx', () => ({ InboxHomeStrip: () => null }));
 vi.mock('./HelpOfferCard.tsx', () => ({ HelpOfferCard: () => null }));
 vi.mock('./VerifiedTrialCard.tsx', () => ({ VerifiedTrialCard: () => null }));
 vi.mock('@/components/ProjectCard.tsx', () => ({ ProjectCard: () => null }));

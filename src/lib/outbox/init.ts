@@ -9,6 +9,8 @@ import { measurementsApi } from '@/api/measurements.ts';
 import { catalogApi } from '@/api/catalog.ts';
 import { estimateTemplatesApi } from '@/api/estimateTemplates.ts';
 import { notesApi } from '@/api/notes.ts';
+import { tasksApi } from '@/api/tasks.ts';
+import { inboxApi } from '@/api/inbox.ts';
 import { shoppingApi } from '@/api/shopping.ts';
 import { economyApi } from '@/api/economy.ts';
 import { paymentsApi } from '@/api/payments.ts';
@@ -26,7 +28,7 @@ import type {
   EstimateCreateRequest,
   EstimateItemFromCatalogRequest, EstimateItemRequest, EstimateItemsMarkupRequest,
   EstimateUpdateRequest, ExpenseRequest, MeasurementItemRequest, MeasurementRoomRequest,
-  NoteRequest, PaymentReceiptEditRequest, PaymentReceiptRequest,
+  NoteRequest, TaskRequest, TaskUpdateRequest, InboxCreateRequest, PaymentReceiptEditRequest, PaymentReceiptRequest,
   ProjectRequest,
   ProjectStatus, ShoppingListItemRequest, ShoppingListItemUpdateRequest,
   TemplateItemRequest, TemplateItemsOrderRequest, Trade,
@@ -194,6 +196,25 @@ export function initOutbox(qc: QueryClient): () => void {
       await notesApi.update(p.objectId, op.entityId, p.req!);
     } else {
       await notesApi.remove(p.objectId, op.entityId);
+    }
+  });
+
+  // An inbox quick add (majster-bot) written with no signal — entityId is the ENTRY id, so the
+  // replay is the same entry and the server parses and files it once.
+  registerOutboxHandler('inboxEntry', async (op) => {
+    const p = op.payload as { req: InboxCreateRequest };
+    await inboxApi.create(p.req, op.entityId);
+  });
+
+  // Object tasks (majster-bot) — entityId is the TASK id; the object id rides the payload.
+  registerOutboxHandler('task', async (op) => {
+    const p = op.payload as { objectId: string; req?: TaskRequest & TaskUpdateRequest };
+    if (op.type === 'create') {
+      await tasksApi.add(p.objectId, { body: p.req!.body }, op.entityId);
+    } else if (op.type === 'update') {
+      await tasksApi.update(p.objectId, op.entityId, p.req!);
+    } else {
+      await tasksApi.remove(p.objectId, op.entityId);
     }
   });
 

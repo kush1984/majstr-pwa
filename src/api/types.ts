@@ -2032,6 +2032,8 @@ export interface ShoppingListItemRequest {
 export interface ShoppingListItemUpdateRequest {
   quantity?: number;
   note?: string;
+  /** A new name — the server applies it to a MANUAL row only. */
+  name?: string;
   bought?: boolean;
   /** The master's answer to a parked recalculation figure. Both answers clear it. */
   suggestion?: 'ACCEPT' | 'KEEP_MINE';
@@ -2571,4 +2573,96 @@ export interface TransferCommitResponse {
   catalogUpdated: number;
   catalogSkipped: number;
   projectIds: string[];
+}
+
+// ---------------------------------------------------------------------------
+// majster-bot (backend V209): object tasks, the inbox, the Telegram link
+// ---------------------------------------------------------------------------
+
+/** «Що треба зробити» on an object — owner-only, never on a portal/PDF/share. */
+export interface TaskResponse {
+  id: string;
+  body: string;
+  done: boolean;
+  doneAt?: string;
+  createdAt: string;
+}
+export interface TaskRequest {
+  body: string;
+}
+/** A PATCH: an absent field keeps its value. */
+export interface TaskUpdateRequest {
+  body?: string;
+  done?: boolean;
+}
+
+export type InboxItemKind = 'SHOPPING' | 'TASK' | 'NOTE' | 'ESTIMATE_LINE' | 'EXPENSE' | 'INCOME';
+export type InboxItemStatus = 'PENDING' | 'APPLIED' | 'DISCARDED';
+/**
+ * Why an item waits instead of being filed. CONFIRM = money, which always waits. ESTIMATE = the object
+ * has several open estimates (pick one); NO_DRAFT = none open — every one is signed, or there is none.
+ */
+export type InboxIssue =
+  | 'OBJECT' | 'ESTIMATE' | 'NO_DRAFT' | 'PRICE' | 'UNIT' | 'QUANTITY' | 'AMOUNT' | 'CONFIRM';
+export type InboxEntryStatus = 'PARSING' | 'NEW' | 'DONE' | 'FAILED';
+
+export interface InboxItemView {
+  id: string;
+  kind: InboxItemKind;
+  status: InboxItemStatus;
+  projectId?: string;
+  projectName?: string;
+  estimateId?: string;
+  text: string;
+  quantity?: number;
+  unit?: Unit;
+  unitPrice?: number;
+  itemType?: ItemType;
+  amount?: number;
+  category?: CashCategory;
+  issue?: InboxIssue;
+}
+export interface InboxEntryView {
+  id: string;
+  source: 'TELEGRAM' | 'PWA';
+  status: InboxEntryStatus;
+  rawText: string;
+  createdAt: string;
+  items: InboxItemView[];
+  /** A voice note sent to the bot (V213): `rawText` is what was heard. Optional for an older server. */
+  voice?: boolean;
+}
+/** What one round of processing did. `failures` are the texts a service refused. */
+export interface InboxOutcome {
+  entry: InboxEntryView;
+  fresh: boolean;
+  overBudget: boolean;
+  failures: string[];
+  /** ESTIMATE_LIMIT: «Додаткові роботи» was not created — the FREE per-object estimate cap. */
+  notice?: 'ESTIMATE_LIMIT' | 'VERIFY_EMAIL';
+}
+export interface InboxCreateRequest {
+  text: string;
+}
+/** A PATCH. `clearProject` is how «без обʼєкта» is said — a null projectId means «unchanged». */
+export interface InboxItemUpdateRequest {
+  kind?: InboxItemKind;
+  projectId?: string;
+  clearProject?: boolean;
+  /** Which open estimate an estimate line goes into, when the object has several. */
+  estimateId?: string;
+  text?: string;
+  quantity?: number;
+  unit?: Unit;
+  unitPrice?: number;
+  amount?: number;
+  category?: CashCategory;
+}
+
+export interface TelegramStatus {
+  /** False when this server has no bot configured — the Profile card hides itself. */
+  available: boolean;
+  linked: boolean;
+  username?: string;
+  botUsername?: string;
 }

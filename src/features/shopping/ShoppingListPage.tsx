@@ -239,8 +239,8 @@ export function ShoppingListPage() {
       <EditItemModal
         item={editing}
         onClose={() => setEditing(null)}
-        onSave={(quantity, note) => {
-          if (editing) actions.update.mutate({ itemId: editing.id, req: { quantity, note } });
+        onSave={(quantity, note, name) => {
+          if (editing) actions.update.mutate({ itemId: editing.id, req: { quantity, note, name } });
           setEditing(null);
         }}
         onDelete={() => {
@@ -454,12 +454,15 @@ function EditItemModal({
 }: {
   item: ShoppingListItemResponse | null;
   onClose: () => void;
-  onSave: (quantity: number, note: string) => void;
+  onSave: (quantity: number, note: string, name?: string) => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
+  const [name, setName] = useState('');
+  // Only a row he added himself (by hand or from the bot) is renamed; a calculated row names its material.
+  const renamable = item?.source === 'MANUAL';
   const [loaded, setLoaded] = useState<string | null>(null);
 
   // Seed the form from the row the master tapped, once per row — re-seeding a controlled input on
@@ -472,6 +475,7 @@ function EditItemModal({
     setLoaded(key);
     setQuantity(item ? String(item.quantity) : '');
     setNote(item?.note ?? '');
+    setName(item?.name ?? '');
   }
 
   const save = () => {
@@ -480,12 +484,18 @@ function EditItemModal({
       toast.error(t('shopping.enterQuantity'));
       return;
     }
-    onSave(qty, note.trim());
+    const newName = name.trim();
+    onSave(qty, note.trim(), renamable && newName !== '' && newName !== item?.name ? newName : undefined);
   };
 
   return (
     <Modal open={Boolean(item)} onClose={onClose} title={item?.name ?? ''}>
       <div className="space-y-3">
+        {renamable && (
+          <FormField label={t('shopping.name')} htmlFor="sl-edit-name">
+            <Input id="sl-edit-name" value={name} maxLength={255} onChange={(e) => setName(e.target.value)} />
+          </FormField>
+        )}
         <FormField
           label={t('shopping.quantity')}
           htmlFor="sl-edit-qty"

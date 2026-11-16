@@ -20,6 +20,7 @@ import { ActEditorPage } from '@/features/acts/ActEditorPage.tsx';
 import { ShoppingListPage } from '@/features/shopping/ShoppingListPage.tsx';
 import { ProjectReceiptsPage } from '@/features/receipts/ProjectReceiptsPage.tsx';
 import { CashFlowPage } from '@/features/cash/CashFlowPage.tsx';
+import { InboxPage } from '@/features/inbox/InboxPage.tsx';
 import { MaterialCalculatorPage } from '@/features/materials/MaterialCalculatorPage.tsx';
 import { TileLayoutPage } from '@/features/materials/TileLayoutPage.tsx';
 import { VerifyEmailPage } from '@/features/email/VerifyEmailPage.tsx';
@@ -139,6 +140,8 @@ export const appRoutes: RouteObject[] = [
       // «Мої гроші» (V135) — the master's own cash movement. Full-screen, and reached from a
       // one-line strip on the home screen rather than a sixth bottom-nav icon.
       { path: routes.cash, element: <CashFlowPage /> },
+      // «Вхідні» (majster-bot) — full-screen like «Мої гроші», reached from a home strip.
+      { path: routes.inbox, element: <InboxPage /> },
       // Post-payment landing — polls /me until the webhook grants PRO.
       { path: routes.billingReturn, element: <BillingReturnPage /> },
       // «Чим займаєтесь?» (V190) — full screen, no nav: it comes before the app is set up.

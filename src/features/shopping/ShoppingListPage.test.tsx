@@ -267,6 +267,22 @@ describe('ShoppingListPage', () => {
     expect(updateMutate).not.toHaveBeenCalled();
   });
 
+  it('renames a row he added himself, and offers no name field on a calculated one', () => {
+    seed([item({ id: 'm', name: 'клей Резіт 111', source: 'MANUAL', quantity: 3 }), item({ id: 'c' })]);
+    renderPage();
+
+    fireEvent.click(screen.getByText('клей Резіт 111'));
+    const name = document.querySelector('#sl-edit-name') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Клей Церезіт CM 11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }));
+    expect(updateMutate).toHaveBeenCalledWith({
+      itemId: 'm', req: { quantity: 3, note: '', name: 'Клей Церезіт CM 11' },
+    });
+
+    fireEvent.click(screen.getByText('Профіль CD'));
+    expect(document.querySelector('#sl-edit-name')).toBeNull();
+  });
+
   it('warns that an unsigned estimate can still move the quantities, without blocking anything', () => {
     seed([item({ id: 'a' })], null, true);
     renderPage();

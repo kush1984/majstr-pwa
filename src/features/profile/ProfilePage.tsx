@@ -31,6 +31,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { initials } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { config, routes } from '@/lib/config.ts';
+import { TelegramRow } from '@/features/inbox/TelegramRow.tsx';
 import type { Plan, UserResponse } from '@/api/types.ts';
 
 /** Mirrors the backend cap (spring.servlet.multipart.max-file-size: 2MB) so we
@@ -291,6 +292,7 @@ export function ProfilePage() {
           onClick={() => navigate(routes.priceList)}
         />
         <PushRow />
+        <TelegramRow />
         <OfflinePrefetchRow isPro={(me?.plan ?? 'FREE') !== 'FREE'} />
         <MenuRow
           icon="⚙️"

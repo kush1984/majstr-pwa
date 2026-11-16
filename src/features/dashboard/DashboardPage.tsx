@@ -20,6 +20,7 @@ import { HelpOfferCard } from './HelpOfferCard.tsx';
 import { VerifiedTrialCard } from './VerifiedTrialCard.tsx';
 import { TransferCard } from './TransferCard.tsx';
 import { useSampleProject } from '@/features/projects/useSampleProject.ts';
+import { InboxHomeStrip } from '@/features/inbox/InboxHomeStrip.tsx';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -180,6 +181,7 @@ export function DashboardPage() {
         {t('common.newObject')}
       </Button>
 
+      <InboxHomeStrip />
       {/* One LINE, not a card: this screen is already long. The MONTH, not the week — a week here
           was too small a window to be worth a glance (master's call), and the tap carries that
           window into «Мої гроші» so the two surfaces cannot disagree about one figure. */}

@@ -46,6 +46,8 @@ import { MeasurementsSection } from '@/features/measurements/MeasurementsSection
 import { ActsSection } from '@/features/acts/ActsSection.tsx';
 import { NotesSheet } from '@/features/notes/NotesSheet.tsx';
 import { useNotes } from '@/features/notes/useNotes.ts';
+import { TasksSheet } from '@/features/tasks/TasksSheet.tsx';
+import { useTasks } from '@/features/tasks/useTasks.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 // Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
@@ -103,6 +105,10 @@ export function ProjectDetailPage() {
   const noteCount = notes.data?.length ?? 0;
   const ensureSender = useSenderGate();
   const updateProject = useUpdateProject();
+  const [tasksOpen, setTasksOpen] = useState(false);
+  // Open tasks only — a done one asks nothing more of the master.
+  const tasks = useTasks(id);
+  const openTaskCount = tasks.data?.filter((task) => !task.done).length ?? 0;
   const [editClientOpen, setEditClientOpen] = useState(false);
   // The action a row asked for, waiting on its confirm dialog.
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reopen'; est: EstimateSummary } | null>(null);
@@ -454,6 +460,13 @@ export function ProjectDetailPage() {
                     </>
                   )}
                   <ActionMenuItem
+                    icon="☑️"
+                    label={openTaskCount > 0
+                      ? t('projects.tasksWithCount', { count: openTaskCount })
+                      : t('projects.tasksCreate')}
+                    onClick={() => { close(); setTasksOpen(true); }}
+                  />
+                  <ActionMenuItem
                     icon="📝"
                     label={noteCount > 0
                       ? t('projects.notesWithCount', { count: noteCount })
@@ -676,6 +689,12 @@ export function ProjectDetailPage() {
           golden rule is «limit creating new, NEVER take away access to what already exists», so the
           master can still open and read notes on a closed object — the sheet hides «+ Нова нотатка»
           and the ⋮ actions via `readOnly`. */}
+      <TasksSheet
+        open={tasksOpen}
+        onClose={() => setTasksOpen(false)}
+        objectId={id}
+        readOnly={isTerminalStage(p.stage)}
+      />
       <NotesSheet
         open={notesOpen}
         onClose={() => setNotesOpen(false)}

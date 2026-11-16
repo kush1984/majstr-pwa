@@ -95,6 +95,9 @@ export const routes = {
   // one-line strip on the home screen, deliberately NOT a sixth item in the bottom nav: five
   // icons already share a 375px phone.
   cash: '/finance',
+  // «Вхідні» (majster-bot) — quick notes and what the Telegram bot could not file by itself.
+  // The bot links here, so the path is part of its replies.
+  inbox: '/inbox',
   project: (id: string) => `/projects/${id}`,
   estimate: (id: string) => `/estimates/${id}`,
   act: (id: string) => `/acts/${id}`,

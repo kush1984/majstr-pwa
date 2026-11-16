@@ -205,6 +205,7 @@ export function useShoppingActions(projectId: string) {
               ? null
               : i.suggestedQuantity,
             note: req.note ?? i.note,
+            name: req.name != null && i.source === 'MANUAL' ? req.name : i.name,
             bought: req.bought ?? i.bought,
             boughtAt: req.bought === true ? new Date().toISOString()
               : req.bought === false ? null : i.boughtAt,

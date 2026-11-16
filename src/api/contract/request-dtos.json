@@ -246,6 +246,21 @@
   "HelpRequest": {
     "phone": "string"
   },
+  "InboxCreateRequest": {
+    "text": "string"
+  },
+  "InboxItemUpdateRequest": {
+    "amount": "number?",
+    "category": "string?",
+    "clearProject": "boolean?",
+    "estimateId": "string?",
+    "kind": "string?",
+    "projectId": "string?",
+    "quantity": "number?",
+    "text": "string?",
+    "unit": "string?",
+    "unitPrice": "number?"
+  },
   "LoginRequest": {
     "email": "string",
     "password": "string"
@@ -494,6 +509,7 @@
   },
   "ShoppingListItemUpdateRequest": {
     "bought": "boolean?",
+    "name": "string?",
     "note": "string?",
     "quantity": "number?",
     "suggestion": "string?"
@@ -515,6 +531,13 @@
     "payload": "object",
     "sortOrder": "number?",
     "type": "string"
+  },
+  "TaskRequest": {
+    "body": "string"
+  },
+  "TaskUpdateRequest": {
+    "body": "string?",
+    "done": "boolean?"
   },
   "TemplateItemRequest": {
     "name": "string",

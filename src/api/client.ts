@@ -289,8 +289,13 @@ api.interceptors.request.use(async (req) => {
   // `/qr` is the third: no model runs, but the request waits on the tax service's public lookup
   // (the server allows 10s for it), which is already past the 12s write default once the round trip
   // is counted.
+  //
+  // The inbox quick add and its retry are the fourth: each parses the note with a model
+  // (majster-bot), and the create's path ends in nothing a suffix rule would catch.
+  const inboxParse = req.method?.toLowerCase() === 'post'
+      && (req.url === '/api/inbox' || (req.url?.startsWith('/api/inbox/') === true && req.url.endsWith('/retry')));
   if (req.url?.endsWith('/parse') || req.url?.endsWith('/recognize')
-      || req.url?.endsWith('/qr') || req.url?.includes('/qr?')) {
+      || req.url?.endsWith('/qr') || req.url?.includes('/qr?') || inboxParse) {
     req.timeout = LLM_TIMEOUT_MS;
   }
 

@@ -382,6 +382,24 @@ describe('api 401-retry interceptor', () => {
     expect(adapter.mock.calls[0][0].timeout).toBe(LLM_TIMEOUT_MS);
   });
 
+  // The inbox quick add parses the note with a model (majster-bot), and `/api/inbox` ends in no
+  // suffix the rule above knows — so it is named, with its retry. Reading the list stays fast.
+  it('gives the inbox parse and its retry the LLM timeout, and the inbox list the default', async () => {
+    tokens.set('opaque-token', 'refresh-1');
+    const adapter = vi.fn().mockImplementation((config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }),
+    );
+    api.defaults.adapter = adapter;
+
+    await api.post('/api/inbox', { text: 'на бандери клей' });
+    await api.post('/api/inbox/e1/retry');
+    await api.get('/api/inbox');
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(LLM_TIMEOUT_MS);
+    expect(adapter.mock.calls[1][0].timeout).toBe(LLM_TIMEOUT_MS);
+    expect(adapter.mock.calls[2][0].timeout).not.toBe(LLM_TIMEOUT_MS);
+  });
+
   it('keeps the short fail-fast timeout on an ordinary write', async () => {
     // The 12s default earns its keep on writes: a phone on one bar reports "online", and a write
     // that hangs on a dead socket never reaches the outbox. Raising it globally would lose that.

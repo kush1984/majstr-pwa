@@ -22,6 +22,8 @@ import { PROJECTS_KEY } from '@/features/projects/useProjects.ts';
 import { ESTIMATE_KEY } from '@/features/estimate/useEstimate.ts';
 import { MEASUREMENTS_KEY } from '@/features/measurements/useMeasurements.ts';
 import { NOTES_KEY } from '@/features/notes/useNotes.ts';
+import { TASKS_KEY } from '@/features/tasks/useTasks.ts';
+import { tasksApi } from '@/api/tasks.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
 import { CASH_KEY, CASH_SUMMARY_KEY, cashPeriod } from '@/features/cash/useCash.ts';
 import { messagesKey } from '@/features/messages/useMessages.ts';
@@ -138,6 +140,9 @@ export async function prefetchForOffline(
       qc.prefetchQuery({ queryKey: ['project-estimates', p.id], queryFn: () => estimatesApi.listForProject(p.id) }));
     perProject.push(() =>
       qc.prefetchQuery({ queryKey: NOTES_KEY(p.id), queryFn: () => notesApi.list(p.id) }));
+    // «Що треба зробити» beside the notes: on a site with no signal the sheet must not say «not saved».
+    perProject.push(() =>
+      qc.prefetchQuery({ queryKey: TASKS_KEY(p.id), queryFn: () => tasksApi.list(p.id) }));
     // Acts (review P0-6): the editor waits for ONE act and for the object's progress, so both are
     // what must be on the device — an act never opened online used to be a screen with no way out.
     perProject.push(async () => {
