@@ -65,7 +65,12 @@ export function GoogleSignIn() {
           })
             .then((data) => startSession(qc, data))
             .then(() => navigate(routes.home, { replace: true }))
-            .catch((err: unknown) => toast.error(toAppError(err).message));
+            .catch((err: unknown) => {
+              // A refused token answers 401 «wrong email or password», which names nothing he typed. A gmail
+              // alias of a password account (409) says it in the server's own words.
+              const e = toAppError(err);
+              toast.error(e.status === 409 ? e.message : t('auth.googleFailed'));
+            });
         },
       });
       id.renderButton(slot.current, {
@@ -75,11 +80,11 @@ export function GoogleSignIn() {
       setReady(true);
     }).catch(() => { /* no Google, no button — the email form is there */ });
     return () => { cancelled = true; };
-  }, [available, qc, navigate]);
+  }, [available, qc, navigate, t]);
 
   if (!available) return null;
   return (
-    <div className="space-y-3">
+    <div className="mb-4 space-y-3">
       <div ref={slot} className="flex min-h-[44px] w-full justify-center" data-testid="google-sign-in" />
       {ready && (
         <p className="text-center text-xs text-muted">

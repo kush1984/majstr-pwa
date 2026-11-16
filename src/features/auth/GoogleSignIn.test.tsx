@@ -17,6 +17,7 @@ vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn()
 import { GoogleSignIn } from './GoogleSignIn.tsx';
 import { authApi } from '@/api/auth.ts';
 import { startSession } from './startSession.ts';
+import { toast } from '@/hooks/useToast.ts';
 
 type Callback = (r: { credential: string }) => void;
 let callback: Callback | null = null;
@@ -57,6 +58,20 @@ describe('GoogleSignIn', () => {
 
     await waitFor(() => expect(startSession).toHaveBeenCalled());
     expect(vi.mocked(authApi.google).mock.calls[0][0]).toMatchObject({ credential: 'google-id-token' });
+  });
+
+  it('a refused Google token says Google, not «wrong email or password»', async () => {
+    vi.mocked(authApi.google).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 401, data: { status: 401, message: 'Невірний email або пароль' } },
+    });
+    renderIt();
+    await waitFor(() => expect(callback).not.toBeNull());
+
+    callback?.({ credential: 'google-id-token' });
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      'Не вдалося увійти через Google. Спробуйте ще раз або увійдіть поштою.'));
   });
 
   it('draws nothing without a client id, so the email form stands alone', () => {

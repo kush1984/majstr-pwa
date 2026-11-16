@@ -342,7 +342,8 @@
     "emailSuggestion": "Did you mean {{email}}?",
     "missingFields": "Still missing: {{fields}}",
     "orWithEmail": "or with email",
-    "googleConsentPre": "By continuing with Google you agree to the"
+    "googleConsentPre": "By continuing with Google you agree to the",
+    "googleFailed": "Could not sign in with Google. Try again or sign in with email."
   },
   "reset": {
     "forgotTitle": "Reset password",

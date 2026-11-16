@@ -342,7 +342,8 @@
     "emailSuggestion": "Може, {{email}}?",
     "missingFields": "Заповніть: {{fields}}",
     "orWithEmail": "або поштою",
-    "googleConsentPre": "Продовжуючи з Google, ви погоджуєтесь з"
+    "googleConsentPre": "Продовжуючи з Google, ви погоджуєтесь з",
+    "googleFailed": "Не вдалося увійти через Google. Спробуйте ще раз або увійдіть поштою."
   },
   "reset": {
     "forgotTitle": "Скидання пароля",
