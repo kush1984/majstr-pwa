@@ -112,6 +112,19 @@ export interface PlanLimits {
   /** Length of the one-time PRO trial, from the server's tariff config (`BILLING_TRIAL_DAYS`) — an
    *  offer names it from here, never from a number typed in the app. */
   trialDays: number;
+  /** One-off objects bought and not created yet (V214): the next object at the cap spends one.
+   *  Optional — an older server sends none. */
+  objectCredits?: number;
+  /** Price of one object without a subscription (UAH), from the server's tariff config. */
+  objectPrice?: number;
+  /** One-off objects paid for in the last 30 days — the «PRO is cheaper» hint. */
+  objectsBoughtLastMonth?: number;
+  /** Per-object caps on a one-off paid object (PRO's); null = unlimited. */
+  paidObject?: {
+    maxEstimatesPerProject: number | null;
+    maxPhotosPerObject: number | null;
+    maxReceiptPhotosPerObject: number | null;
+  };
 }
 
 export interface AuthResponse {
@@ -387,6 +400,9 @@ export interface ProjectResponse {
   /** The client's page shows «Зведення» after the positions, not at the top (V202). Optional: an
    *  older server or a cached object reads as «at the top». */
   portalSummaryAtBottom?: boolean;
+  /** A one-off paid object (V214): PRO's per-object caps and the logo on its PDFs, no AI features.
+   *  Optional: a cached object from before reads as an ordinary one. */
+  paid?: boolean;
 }
 
 /** Mirrors PortalSummaryRequest (V202). */

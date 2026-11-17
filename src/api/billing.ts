@@ -21,6 +21,14 @@ export const billingApi = {
   },
 
   /**
+   * Buy ONE object without a subscription (V214). The server owns the price; the webhook adds an
+   * object credit, and the payer comes back to the return page with `?for=object`.
+   */
+  checkoutObject(): Promise<CheckoutResponse> {
+    return api.post<CheckoutResponse>('/api/billing/checkout-object').then((r) => r.data);
+  },
+
+  /**
    * Activate the one-time self-serve PRO trial (FREE only, no card); its length is the server's
    * `trialDays` (`/api/plan/limits`).
    * Returns the updated profile; the caller refreshes `me`. 409 TRIAL_UNAVAILABLE

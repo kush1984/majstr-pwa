@@ -10,10 +10,12 @@ import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { Button } from '@/components/Button.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
+import { useObjectPurchase } from '@/features/upgrade/useObjectPurchase.tsx';
+import { ObjectCreditNote } from '@/features/upgrade/ObjectCreditNote.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { TRADE_EMOJI } from '@/lib/labels.ts';
 import { routes } from '@/lib/config.ts';
-import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { usePlanLimits, isAtObjectLimit } from '@/features/plan/usePlanLimits.ts';
 import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
 import { HelpOfferCard } from './HelpOfferCard.tsx';
@@ -40,7 +42,7 @@ export function DashboardPage() {
   // The global CTA creates a NEW object, so the FREE object cap gates it — same
   // as the Об'єкти list. Without this the button led to /new and a dead-end
   // (form fills, "Створити" disabled).
-  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
+  const atProjectLimit = isAtObjectLimit(limits.data);
 
   const firstName = me?.fullName?.trim().split(/\s+/)[0] ?? '';
   const trades = me?.trades ?? [];
@@ -50,8 +52,13 @@ export function DashboardPage() {
   const m = metrics.data;
 
   // ONE creation action (object-first): the object, and the estimate inside it.
+  // At the cap the button stays live and opens the purchase sheet on «Один обʼєкт» (V214).
+  const { openPurchase, purchaseModal } = useObjectPurchase();
   const newObject = () => {
-    if (atProjectLimit) return; // prevention; disabled buttons shouldn't fire anyway
+    if (atProjectLimit) {
+      openPurchase();
+      return;
+    }
     void navigate(routes.newObject);
   };
 
@@ -100,7 +107,6 @@ export function DashboardPage() {
         </div>
         <Button
           onClick={newObject}
-          disabled={atProjectLimit}
           className="hidden lg:inline-flex"
         >
           {t('common.newObject')}
@@ -118,6 +124,7 @@ export function DashboardPage() {
           <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
         </div>
       )}
+      <ObjectCreditNote limits={limits.data} />
 
       {/* Metrics: 2 on mobile, 3 on desktop. An error shows an honest compact
           strip — silently rendering "0 активних" during an outage would lie. None at all before the
@@ -174,7 +181,6 @@ export function DashboardPage() {
       {/* Mobile CTA */}
       <Button
         onClick={newObject}
-        disabled={atProjectLimit}
         fullWidth
         className="mb-6 py-4 text-base shadow-cta lg:hidden"
       >
@@ -251,7 +257,6 @@ export function DashboardPage() {
                 title={t('dashboard.quickNewObject')}
                 sub={t('dashboard.quickNewObjectSub')}
                 onClick={newObject}
-                disabled={atProjectLimit}
               />
               <QuickAction
                 icon="📖"
@@ -269,6 +274,7 @@ export function DashboardPage() {
           </aside>
         </div>
       )}
+      {purchaseModal}
     </>
   );
 }

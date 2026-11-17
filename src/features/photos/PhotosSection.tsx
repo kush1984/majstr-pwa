@@ -8,7 +8,7 @@ import { Modal } from '@/components/Modal.tsx';
 import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
-import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { usePlanLimits, isAtLimit, objectCaps } from '@/features/plan/usePlanLimits.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -49,7 +49,7 @@ type FolderKey = string | null;
  * about. Either source can be shown to the client (SHARED → appears on the portal). Files come
  * from an authenticated stream, so each tile fetches its blob with the bearer token (`AuthPhoto`).
  */
-export function PhotosSection({ projectId }: { projectId: string }) {
+export function PhotosSection({ projectId, paid }: { projectId: string; paid?: boolean }) {
   const { t } = useTranslation();
   const { online } = useOnlineGuard(); // photo uploads have no offline queue yet
   const photos = usePhotos(projectId);
@@ -76,8 +76,10 @@ export function PhotosSection({ projectId }: { projectId: string }) {
   // whole object, because that is what the server counts.
   const manualCount = all.filter((p) => p.source === 'MANUAL').length;
   const receiptCount = all.filter((p) => p.source === 'RECEIPT').length;
-  const atPhotoLimit = isAtLimit(manualCount, limits.data?.maxPhotosPerObject);
-  const atReceiptLimit = isAtLimit(receiptCount, limits.data?.maxReceiptPhotosPerObject);
+  // A one-off paid object (V214) takes PRO's caps.
+  const caps = objectCaps(limits.data, paid);
+  const atPhotoLimit = isAtLimit(manualCount, caps.maxPhotosPerObject);
+  const atReceiptLimit = isAtLimit(receiptCount, caps.maxReceiptPhotosPerObject);
 
   const inFolder = (key: FolderKey) => all.filter((p) => (p.folder ?? null) === key);
   // Every folder wears the same plain folder icon — «Чеки» is a folder, not a special widget.
@@ -288,8 +290,8 @@ export function PhotosSection({ projectId }: { projectId: string }) {
               <UpgradeBanner
                 text={t('photos.limitHint', {
                   max: uploadsAreReceipts
-                    ? limits.data?.maxReceiptPhotosPerObject
-                    : limits.data?.maxPhotosPerObject,
+                    ? caps.maxReceiptPhotosPerObject
+                    : caps.maxPhotosPerObject,
                 })}
                 trigger="PHOTO_LIMIT"
               />

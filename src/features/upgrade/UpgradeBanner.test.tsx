@@ -13,7 +13,10 @@ vi.mock('@/api/upgrade.ts', () => ({
   upgradeApi: { click: vi.fn(() => Promise.resolve()), interest: vi.fn(() => Promise.resolve()) },
 }));
 vi.mock('@/api/billing.ts', () => ({
-  billingApi: { checkout: vi.fn(() => Promise.resolve({ pageUrl: 'https://pay.monobank.ua/abc' })) },
+  billingApi: {
+    checkout: vi.fn(() => Promise.resolve({ pageUrl: 'https://pay.monobank.ua/abc' })),
+    checkoutObject: vi.fn(() => Promise.resolve({ pageUrl: 'https://pay.monobank.ua/obj' })),
+  },
 }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -46,7 +49,7 @@ describe('UpgradeBanner — PRO checkout', () => {
     renderBanner();
 
     // Click the CTA → analytics click recorded with the trigger + PRO modal opens.
-    fireEvent.click(screen.getByRole('button', { name: /PRO/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Ще обʼєкт/ }));
     expect(upgradeApi.click).toHaveBeenCalledWith('OBJECT_LIMIT');
     expect(await screen.findByText('Оновити до PRO')).toBeTruthy();
 

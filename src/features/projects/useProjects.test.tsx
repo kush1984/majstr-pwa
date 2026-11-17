@@ -4,7 +4,9 @@ import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { useCreateProject, useDeleteProject, useSetProjectStatus, PROJECTS_KEY } from './useProjects.ts';
 import { clearOutbox, listOutbox } from '@/lib/outbox/outbox.ts';
-import type { ProjectResponse } from '@/api/types.ts';
+import { PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
+import { aPlanLimits } from '@/test/factories.ts';
+import type { PlanLimits, ProjectResponse } from '@/api/types.ts';
 
 // Drive the OFFLINE branch (optimistic + queued).
 beforeEach(async () => { await clearOutbox(); onlineManager.setOnline(false); });
@@ -35,6 +37,33 @@ describe('useCreateProject — offline-first', () => {
     const ops = await listOutbox();
     expect(ops).toHaveLength(1);
     expect(ops[0]).toMatchObject({ entityId: created!.id, entity: 'project', type: 'create', deps: [] });
+  });
+
+  it('counts the new object in the cached limits and, at the cap, spends a bought object (V214)', async () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(PLAN_LIMITS_KEY, aPlanLimits({ maxProjects: 2, projectsUsed: 2, objectCredits: 1 }));
+    const { result } = renderHook(() => useCreateProject(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Оплачений' });
+    });
+
+    // The cache must not go on offering «create» on a credit the server has now spent.
+    const limits = qc.getQueryData<PlanLimits>(PLAN_LIMITS_KEY);
+    expect(limits?.projectsUsed).toBe(3);
+    expect(limits?.objectCredits).toBe(0);
+  });
+
+  it('below the cap a bought object is kept', async () => {
+    const { qc, wrapper } = setup();
+    qc.setQueryData(PLAN_LIMITS_KEY, aPlanLimits({ maxProjects: 2, projectsUsed: 1, objectCredits: 1 }));
+    const { result } = renderHook(() => useCreateProject(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Безкоштовний' });
+    });
+
+    expect(qc.getQueryData<PlanLimits>(PLAN_LIMITS_KEY)?.objectCredits).toBe(1);
   });
 
   it('depends on the client op when the object references an offline-created client', async () => {

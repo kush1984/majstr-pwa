@@ -14,7 +14,11 @@ vi.mock('./useDashboardMetrics.ts', () => ({
     data: { activeProjects: 0, pendingObjects: 0, completedThisMonth: { count: 0, totalAmount: 0 } },
   }),
 }));
-vi.mock('@/features/plan/usePlanLimits.ts', () => ({ usePlanLimits: () => ({ data: undefined }), isAtLimit: () => false }));
+vi.mock('@/features/plan/usePlanLimits.ts', () => ({
+  usePlanLimits: () => ({ data: undefined }),
+  isAtLimit: () => false,
+  isAtObjectLimit: () => false,
+}));
 vi.mock('@/features/shopping/ShoppingHomeCard.tsx', () => ({ ShoppingHomeCard: () => null }));
 vi.mock('@/features/cash/CashHomeStrip.tsx', () => ({ CashHomeStrip: () => null }));
 vi.mock('@/features/inbox/InboxHomeStrip.tsx', () => ({ InboxHomeStrip: () => null }));

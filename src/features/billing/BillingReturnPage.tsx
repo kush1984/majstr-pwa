@@ -1,36 +1,55 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
+import { usePlanLimits, PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
 import { Spinner } from '@/components/Spinner.tsx';
 import { routes } from '@/lib/config.ts';
 
 /**
- * Landing after the monobank redirect. The PRO grant happens server-side via the
- * webhook, which may arrive a moment after the payer returns — so we poll /me
- * until the plan flips to PRO (or a timeout), then show the result.
+ * Landing after the monobank redirect. The grant happens server-side via the
+ * webhook, which may arrive a moment after the payer returns — so we poll until
+ * it shows (or a timeout), then show the result. A PRO purchase waits for the plan
+ * to flip; a one-off object (`?for=object`, V214) waits for the object credit and
+ * then sends the master to create that object.
  */
 export function BillingReturnPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const [params] = useSearchParams();
+  const forObject = params.get('for') === 'object';
   const { data: me } = useMe();
+  const limits = usePlanLimits();
   const [timedOut, setTimedOut] = useState(false);
   const isPro = (me?.plan ?? 'FREE') !== 'FREE';
+  const hasObject = (limits.data?.objectCredits ?? 0) > 0;
+  const done = forObject ? hasObject : isPro;
 
   useEffect(() => {
-    if (isPro) return;
+    if (done) return;
     let tries = 0;
     const id = setInterval(() => {
       tries += 1;
+      // Both, whatever was bought: PRO lifts the limits too, and stale limits kept a new PRO
+      // master behind the FREE object cap for minutes.
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: PLAN_LIMITS_KEY });
       if (tries >= 15) {
         clearInterval(id);
         setTimedOut(true);
       }
     }, 2000);
     return () => clearInterval(id);
-  }, [isPro, qc]);
+  }, [done, qc]);
+
+  // Once it has landed (or already had, before this page opened), read both afresh one more time:
+  // the cached limits otherwise go on showing the old plan and the old object count for minutes.
+  useEffect(() => {
+    if (!done) return;
+    void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+    void qc.invalidateQueries({ queryKey: PLAN_LIMITS_KEY });
+  }, [done, qc]);
 
   const cta = (
     <Link
@@ -43,7 +62,19 @@ export function BillingReturnPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      {isPro ? (
+      {done && forObject ? (
+        <>
+          <p className="text-4xl">🎉</p>
+          <p className="text-lg font-bold text-primary">{t('oneOffObject.successTitle')}</p>
+          <p className="text-sm text-secondary">{t('oneOffObject.successBody')}</p>
+          <Link
+            to={routes.newObject}
+            className="rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white"
+          >
+            {t('oneOffObject.createNow')}
+          </Link>
+        </>
+      ) : done ? (
         <>
           <p className="text-4xl">🎉</p>
           <p className="text-lg font-bold text-primary">{t('billing.successTitle')}</p>

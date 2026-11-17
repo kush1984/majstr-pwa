@@ -19,6 +19,7 @@ vi.mock('react-router-dom', async (orig) => ({
 vi.mock('@/api/projects.ts', () => ({ projectsApi: { list: vi.fn(), create: vi.fn() } }));
 vi.mock('@/api/clients.ts', () => ({ clientsApi: { list: vi.fn(), create: vi.fn() } }));
 vi.mock('@/api/plan.ts', () => ({ planApi: { limits: vi.fn() } }));
+vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
 vi.mock('@/hooks/useToast.ts', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
@@ -139,6 +140,18 @@ describe('NewObjectPage — the FREE object cap', () => {
 
     expect(await screen.findByText(/ви створили 2/)).toBeTruthy();
     expect(screen.queryByText(/\{\{/)).toBeNull();
+  });
+
+  it('at the cap «Створити» stays live and opens the purchase on the one-object tab (V214)', async () => {
+    vi.mocked(planApi.limits).mockResolvedValue({ ...free(2), objectPrice: 149 });
+
+    renderPage();
+    await screen.findByText(/ви створили 2/);
+    fireEvent.click(screen.getByRole('button', { name: 'Створити обʼєкт' }));
+
+    const tab = await screen.findByRole('tab', { name: 'Один обʼєкт · 149 ₴' });
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    expect(projectsApi.create).not.toHaveBeenCalled();
   });
 
   it('reads the lifetime count, not the list: the sample in the list does not block', async () => {

@@ -35,6 +35,7 @@ vi.mock('./usePhotos.ts', () => ({
 vi.mock('@/features/plan/usePlanLimits.ts', () => ({
   usePlanLimits: () => ({ data: { maxPhotosPerObject: 10, maxReceiptPhotosPerObject: 10 } }),
   isAtLimit: () => false,
+  objectCaps: () => ({ maxEstimatesPerProject: null, maxPhotosPerObject: 10, maxReceiptPhotosPerObject: 10 }),
 }));
 vi.mock('@/lib/image.ts', () => ({ downscaleImage: vi.fn() }));
 

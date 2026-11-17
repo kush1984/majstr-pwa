@@ -36,8 +36,24 @@
   "app": {
     "planShort": "Plan {{plan}}"
   },
+  "oneOffObject": {
+    "proIsCheaper": "You already bought an object this month — PRO at 299 ₴ is cheaper: no limits, with AI.",
+    "pay": "Pay {{price}} ₴",
+    "bannerCta": "One more object",
+    "willBePaid": "This object is paid for, no subscription: unlimited estimates, up to 50 photos, your logo on PDFs.",
+    "successTitle": "Object paid!",
+    "successBody": "Create it now — it stays with you for good, no subscription.",
+    "createNow": "Create the object",
+    "lead": "A one-off payment for one object — no subscription.",
+    "pointEstimates": "Unlimited estimates",
+    "pointPhotos": "Up to 50 photos and 50 receipts",
+    "pointLogo": "Your logo on PDFs",
+    "pointForever": "The object stays with you for good",
+    "noAi": "AI features (bot voice notes, sketch recognition) are PRO only.",
+    "creditReady": "You are on the free plan. One object is paid for — create it with «New object»."
+  },
   "limits": {
-    "objectsHint": "Free plan — {{max}} objects total ever (you've created {{used}}). Deleting doesn't free a slot — unlimited on PRO.",
+    "objectsHint": "Free plan — {{max}} objects total ever (you've created {{used}}). One more — one-off, no subscription, or unlimited on PRO.",
     "estimatesHint": "FREE — up to {{max}} estimates per project. Unlimited on PRO.",
     "atLimitTooltip": "You've reached the free-plan limit. Upgrade to PRO to create more.",
     "upgradeCta": "Learn about PRO"
@@ -58,7 +74,7 @@
     "heroCheck2": "Ready templates and work catalogues",
     "heroCheck3": "An online link for the client",
     "heroCheck4": "Acts and payment tracking",
-    "heroNote": "Free: 2 projects, no card. No limit — PRO for 299 ₴/month.",
+    "heroNote": "Free: 2 projects, no card. One more — 149 ₴ one-off. No limit — PRO for 299 ₴/month.",
     "heroAccent": "An estimate in 5 minutes",
     "heroPhotoAlt": "A tradesman building an estimate on his phone on site",
     "forMasterPhotoAlt": "A tradesman builds an estimate on a phone at the site",
@@ -121,7 +137,7 @@
     "control3": "Nobody can change a signed estimate",
     "faqTitle": "Questions and answers",
     "faqQ1": "How much does Majstr cost?",
-    "faqA1": "The base plan is free: two projects with the client portal, online signing, PDF and photos. PRO is a paid subscription (monthly or yearly) that removes the project limit and adds photo recognition and estimate import.",
+    "faqA1": "The base plan is free: two projects with the client portal, online signing, PDF and photos. Need one more project — pay for it once, 149 ₴, no subscription. PRO is a paid subscription (monthly or yearly) that removes the project limit and adds photo recognition and estimate import.",
     "faqQ2": "Does the client need to register to sign an estimate?",
     "faqA2": "No. The client opens a link on their phone, reviews the estimate line by line and signs online — no registration and no app.",
     "faqQ3": "Does Majstr work offline?",
@@ -2083,7 +2099,8 @@
     "tradeSetAddedAuto": "Added templates and catalog positions for: {{trades}}",
     "nameLocked": "Your name is already on your documents — it can be changed, not erased",
     "priceList": "Share price list",
-    "priceListSub": "Your prices for the work — as a link or a PDF"
+    "priceListSub": "Your prices for the work — as a link or a PDF",
+    "buyObject": "Buy one object — {{price}} ₴"
   },
   "clientPicker": {
     "none": "No client",
@@ -2096,7 +2113,6 @@
     "proBody": "Unlimited objects and estimates, your logo on estimate PDFs, voice notes in the Telegram bot.",
     "price": "299 ₴ / month",
     "pay": "Pay",
-    "securedBy": "Payment via monobank",
     "processing": "Processing payment…",
     "successTitle": "PRO activated!",
     "successBody": "Thank you! Your PRO subscription is active.",
@@ -2741,5 +2757,11 @@
     "noWorks": "Your catalog has no works yet.",
     "pickSome": "Tick the works for the price list",
     "preview": "Preview"
+  },
+  "purchase": {
+    "title": "Choose a plan",
+    "tabPro": "PRO · subscription",
+    "tabObject": "One object · {{price}} ₴",
+    "objectTitle": "Buy one object"
   }
 }

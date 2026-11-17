@@ -7,7 +7,8 @@ import { offlineMutate } from '@/lib/outbox/offlineMutation.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { CLIENTS_KEY } from '@/features/clients/useClients.ts';
-import type { ClientResponse, ObjectStage, ProjectRequest, ProjectResponse, ProjectStatus } from '@/api/types.ts';
+import { PLAN_LIMITS_KEY, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import type { ClientResponse, ObjectStage, PlanLimits, ProjectRequest, ProjectResponse, ProjectStatus } from '@/api/types.ts';
 
 export const PROJECTS_KEY = ['projects'] as const;
 
@@ -87,8 +88,13 @@ export function useCreateProject() {
         deps: req.clientId ? [req.clientId] : [],
         online: () => projectsApi.create(req, id),
         cancel: cancelProjects(qc, id),
-        onOnlineSuccess: invalidate,
+        onOnlineSuccess: () => {
+          invalidate();
+          // The object counter and a spent one-off object (V214) live in the limits, not the list.
+          void qc.invalidateQueries({ queryKey: PLAN_LIMITS_KEY });
+        },
         optimistic: () => {
+          countCreatedObject(qc);
           // Fired here, not in `online`: the object exists for the master the moment the
           // optimistic row lands, and an object authored in a basement must count the same as
           // one authored on wifi (the capture itself is queued by the SDK, never a request now).
@@ -99,6 +105,24 @@ export function useCreateProject() {
         },
       });
     },
+  });
+}
+
+/**
+ * Counts a new object in the cached limits the moment it exists, online or queued: one more used and,
+ * at the cap, one bought object (V214) spent — as the server will. Without it the cache kept offering
+ * «create» on a credit already spent, and the server refused with a message about PRO.
+ */
+function countCreatedObject(qc: QueryClient) {
+  qc.setQueryData<PlanLimits>(PLAN_LIMITS_KEY, (old) => {
+    if (!old) return old;
+    const atCap = isAtLimit(old.projectsUsed, old.maxProjects);
+    const credits = old.objectCredits ?? 0;
+    return {
+      ...old,
+      projectsUsed: old.projectsUsed + 1,
+      objectCredits: atCap && credits > 0 ? credits - 1 : old.objectCredits,
+    };
   });
 }
 

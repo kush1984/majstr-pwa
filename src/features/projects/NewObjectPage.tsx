@@ -6,6 +6,7 @@ import { Input } from '@/components/Input.tsx';
 import { Button } from '@/components/Button.tsx';
 import { FormField } from '@/components/FormField.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
+import { useObjectPurchase } from '@/features/upgrade/useObjectPurchase.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
@@ -18,7 +19,8 @@ import {
   type ClientDraft,
 } from '@/features/clients/ClientPicker.tsx';
 import { useCreateProject } from '@/features/projects/useProjects.ts';
-import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { usePlanLimits, isAtLimit, isAtObjectLimit, PLAN_LIMITS_KEY } from '@/features/plan/usePlanLimits.ts';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * THE way to start (object-first): an object is the container — name, address, client — and the
@@ -33,8 +35,11 @@ export function NewObjectPage() {
   const createClient = useCreateClient();
   const createProject = useCreateProject();
   const limits = usePlanLimits();
+  const qc = useQueryClient();
   // The cap counts objects EVER made (V107), not the list: a deleted one still counts, the sample never does.
-  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
+  const atProjectLimit = isAtObjectLimit(limits.data);
+  // At the cap «Створити» stays live and opens the purchase sheet on «Один обʼєкт» (V214).
+  const { openPurchase, purchaseModal } = useObjectPurchase();
 
   // Kept in the tab's session until the object is created (review P1-2).
   const [clientDraft, setClientDraft] = useSessionDraft<ClientDraft>('newObject.client', emptyClientDraft);
@@ -48,7 +53,7 @@ export function NewObjectPage() {
   const submit = async () => {
     if (busy) return;
     if (atProjectLimit) {
-      toast.error(t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed }));
+      openPurchase();
       return;
     }
     const clientErr = clientDraftError(clientDraft);
@@ -74,8 +79,15 @@ export function NewObjectPage() {
       clearSessionDrafts('newObject.');
       void navigate(routes.project(proj.id), { replace: true, state: { justCreated: true } });
     } catch (err) {
-      toast.error(toAppError(err).message);
       setBusy(false);
+      // The cap the cache did not know about (a bought object already spent): offer the purchase,
+      // never a message about PRO alone.
+      if (toAppError(err).code === 'PROJECT_LIMIT_REACHED') {
+        void qc.invalidateQueries({ queryKey: PLAN_LIMITS_KEY });
+        openPurchase();
+        return;
+      }
+      toast.error(toAppError(err).message);
     }
   };
 
@@ -141,18 +153,24 @@ export function NewObjectPage() {
           )}
         </section>
 
+        {!atProjectLimit && (limits.data?.objectCredits ?? 0) > 0
+          && isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects) && (
+          <p className="mb-3 rounded-card border border-border bg-brand-soft px-3.5 py-2.5 text-xs text-primary">
+            {t('oneOffObject.willBePaid')}
+          </p>
+        )}
         {atProjectLimit && (
           <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
         )}
         <Button
           fullWidth
           loading={busy}
-          disabled={atProjectLimit}
           onClick={submit}
           className="py-4 text-base shadow-cta"
         >
           {t('projects.createObject')}
         </Button>
+        {purchaseModal}
       </div>
     </div>
   );

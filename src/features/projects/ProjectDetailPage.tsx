@@ -12,7 +12,7 @@ import { IconTile } from '@/components/IconTile.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
-import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { usePlanLimits, isAtLimit, objectCaps } from '@/features/plan/usePlanLimits.ts';
 import { useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -241,11 +241,13 @@ export function ProjectDetailPage() {
   // FREE caps estimates per project (closes the unlimited-drafts hole). Block
   // "new estimate" preemptively once this project hits the cap; deleting one
   // frees a slot (count is live). Backend still enforces it.
-  const atEstimateLimit = isAtLimit(list.length, limits.data?.maxEstimatesPerProject);
+  // A one-off paid object (V214) takes PRO's caps.
+  const caps = objectCaps(limits.data, p.paid);
+  const atEstimateLimit = isAtLimit(list.length, caps.maxEstimatesPerProject);
   const addEstimate = () => {
     if (createEstimate.isPending || applyTemplate.isPending) return;
     if (atEstimateLimit) {
-      toast.info(t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject }));
+      toast.info(t('limits.estimatesHint', { max: caps.maxEstimatesPerProject }));
       return;
     }
     setEstimateChoiceOpen(true);
@@ -565,7 +567,7 @@ export function ProjectDetailPage() {
       {tab === 'measurements' ? (
         <MeasurementsSection objectId={id} />
       ) : tab === 'photos' ? (
-        <PhotosSection projectId={id} />
+        <PhotosSection projectId={id} paid={p.paid} />
       ) : tab === 'economy' ? (
         <ObjectEconomySection objectId={id} objectCreatedAt={p.createdAt} />
       ) : tab === 'acts' ? (
@@ -602,7 +604,7 @@ export function ProjectDetailPage() {
 
           {atEstimateLimit && (
             <UpgradeBanner
-              text={t('limits.estimatesHint', { max: limits.data?.maxEstimatesPerProject })}
+              text={t('limits.estimatesHint', { max: caps.maxEstimatesPerProject })}
               trigger="ESTIMATE_LIMIT"
             />
           )}

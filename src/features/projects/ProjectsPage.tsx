@@ -9,11 +9,12 @@ import { Skeleton } from '@/components/Skeleton.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ProjectCard } from '@/components/ProjectCard.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
-import { toast } from '@/hooks/useToast.ts';
+import { useObjectPurchase } from '@/features/upgrade/useObjectPurchase.tsx';
+import { ObjectCreditNote } from '@/features/upgrade/ObjectCreditNote.tsx';
 import { routes } from '@/lib/config.ts';
 import type { ObjectStage, ProjectResponse } from '@/api/types.ts';
 import { useProjects, isTerminalStage } from './useProjects.ts';
-import { usePlanLimits, isAtLimit } from '@/features/plan/usePlanLimits.ts';
+import { usePlanLimits, isAtObjectLimit } from '@/features/plan/usePlanLimits.ts';
 
 /**
  * Filter is URL-driven (`?stage=`) so the dashboard metric cards can deep-link straight into a
@@ -93,7 +94,7 @@ export function ProjectsPage() {
   // FREE caps the number of objects EVER created (lifetime `projectsUsed`, not the live count) so a
   // delete can't slip past it — the backend enforces the same. Block "new object" preemptively.
   const limits = usePlanLimits();
-  const atProjectLimit = isAtLimit(limits.data?.projectsUsed ?? 0, limits.data?.maxProjects);
+  const atProjectLimit = isAtObjectLimit(limits.data);
 
   const counts = useMemo<Record<Filter, number>>(
     () => ({
@@ -125,19 +126,19 @@ export function ProjectsPage() {
   const setFilter = (f: Filter) =>
     setParams(f === 'ALL' ? {} : { stage: f }, { replace: true });
   // ONE creation action (object-first): the estimate is made inside the object.
+  // At the cap the button stays live and opens the purchase sheet on «Один обʼєкт» (V214).
+  const { openPurchase, purchaseModal } = useObjectPurchase();
   const newObject = () => {
-    if (atProjectLimit) return;
+    if (atProjectLimit) {
+      openPurchase();
+      return;
+    }
     void navigate(routes.newObject);
   };
-  const limitTooltip = atProjectLimit ? t('limits.atLimitTooltip') : undefined;
   const archivedCount = counts.COMPLETED + counts.CANCELLED;
-  // A FAB has no disabled look of its own, so at the cap it says why instead of doing nothing.
-  const onFab = () => {
-    if (atProjectLimit) toast.info(t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed }));
-    else newObject();
-  };
+  const onFab = newObject;
   const createActions = (
-    <Button onClick={newObject} disabled={atProjectLimit} title={limitTooltip}>{t('common.newObject')}</Button>
+    <Button onClick={newObject}>{t('common.newObject')}</Button>
   );
 
   return (
@@ -147,7 +148,7 @@ export function ProjectsPage() {
           {t('projects.title')}
         </h1>
         <div className="hidden gap-2 sm:flex">
-          <Button onClick={newObject} disabled={atProjectLimit} title={limitTooltip}>
+          <Button onClick={newObject}>
             {t('common.newObject')}
           </Button>
         </div>
@@ -156,6 +157,7 @@ export function ProjectsPage() {
       {atProjectLimit && (
         <UpgradeBanner text={t('limits.objectsHint', { max: limits.data?.maxProjects, used: limits.data?.projectsUsed })} trigger="OBJECT_LIMIT" />
       )}
+      <ObjectCreditNote limits={limits.data} />
 
       <div className="mb-4 flex items-center gap-2">
         <div className="scrollbar-none flex flex-1 gap-2 overflow-x-auto pb-1">
@@ -227,8 +229,6 @@ export function ProjectsPage() {
           <div className="mt-5 sm:hidden">
             <Button
               onClick={newObject}
-              disabled={atProjectLimit}
-              title={limitTooltip}
               fullWidth
               className="py-3.5 shadow-cta"
             >
@@ -240,6 +240,7 @@ export function ProjectsPage() {
 
       {/* «＋» creates (objects-list, object-first) — a direct action, no menu. */}
       <Fab ariaLabel={t('common.newObject')} onClick={onFab} />
+      {purchaseModal}
     </>
   );
 }

@@ -28,9 +28,9 @@ export function UpgradeBanner({ text, trigger }: { text: string; trigger: string
         onClick={onClick}
         className="whitespace-nowrap text-xs font-bold text-brand"
       >
-        {t('limits.upgradeCta')} →
+        {t(trigger === 'OBJECT_LIMIT' ? 'oneOffObject.bannerCta' : 'limits.upgradeCta')} →
       </button>
-      <UpgradeIntentModal open={open} onClose={() => setOpen(false)} />
+      <UpgradeIntentModal open={open} onClose={() => setOpen(false)} mode={trigger === 'OBJECT_LIMIT' ? 'choice' : 'pro'} />
     </div>
   );
 }

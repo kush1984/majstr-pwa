@@ -15,7 +15,7 @@ import {
   lastPrefetchAt, prefetchForOffline, type PrefetchProgress,
 } from '@/lib/offlinePrefetch.ts';
 import { upgradeApi } from '@/api/upgrade.ts';
-import { UpgradeIntentModal } from '@/features/upgrade/UpgradeIntentModal.tsx';
+import { UpgradeIntentModal, type PurchaseTab } from '@/features/upgrade/UpgradeIntentModal.tsx';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
@@ -57,6 +57,7 @@ export function ProfilePage() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [purchaseTab, setPurchaseTab] = useState<PurchaseTab>('pro');
   const [emailGateOpen, setEmailGateOpen] = useState(false);
   const [proVerifyOpen, setProVerifyOpen] = useState(false);
   const ensureEmailVerified = useEmailGate();
@@ -88,8 +89,9 @@ export function ProfilePage() {
     else setProVerifyOpen(true);
   };
 
-  const onUpgradeClick = async () => {
-    void upgradeApi.click('PROFILE');
+  const onUpgradeClick = async (tab: PurchaseTab = 'pro') => {
+    void upgradeApi.click(tab === 'object' ? 'PROFILE_OBJECT' : 'PROFILE');
+    setPurchaseTab(tab);
     if (await ensureEmailVerified()) setUpgradeOpen(true);
     else setProVerifyOpen(true);
   };
@@ -203,7 +205,7 @@ export function ProfilePage() {
               <>
                 <button
                   type="button"
-                  onClick={() => setUpgradeOpen(true)}
+                  onClick={() => { setPurchaseTab('pro'); setUpgradeOpen(true); }}
                   className="mt-2 font-semibold text-brand"
                 >
                   {t('billing.enableAutoRenew')}
@@ -224,6 +226,16 @@ export function ProfilePage() {
           </button>
         )}
 
+        {!isPro && limits?.objectPrice != null && (
+          <button
+            type="button"
+            onClick={() => void onUpgradeClick('object')}
+            className="mt-2 w-full rounded-xl bg-brand py-3 text-sm font-bold text-white"
+          >
+            {t('profile.buyObject', { price: limits.objectPrice })}
+          </button>
+        )}
+
         {canStartTrial && (
           <button
             type="button"
@@ -237,7 +249,7 @@ export function ProfilePage() {
 
       {me && <ReferralCard code={me.referralCode} />}
 
-      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+      <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} mode={purchaseTab} />
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
 
