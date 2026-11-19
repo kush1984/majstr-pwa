@@ -31,7 +31,7 @@ import { BillingReturnPage } from '@/features/billing/BillingReturnPage.tsx';
 import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute.tsx';
 import { tokens } from '@/lib/tokens.ts';
 import { routes } from '@/lib/config.ts';
-import { storeRef } from '@/lib/referral.ts';
+import { captureUtmFromUrl, storeRef } from '@/lib/referral.ts';
 
 /**
  * Partner alias: /liga stores the referral first-touch (ref=liga) then drops the
@@ -40,6 +40,8 @@ import { storeRef } from '@/lib/referral.ts';
  */
 function LigaRoute() {
   storeRef('liga');
+  // The same tag public/_redirects adds: the visit counter reads UTM, never the ref.
+  captureUtmFromUrl('?utm_source=liga');
   return <Navigate to={routes.home} replace />;
 }
 

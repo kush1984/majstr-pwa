@@ -387,6 +387,18 @@ one-line summary — keep the item in the file as a record.
   to `connect-src` in `public/_headers`. Either way, resolve JAVASCRIPT-REACT-B afterwards.
 - **2026-11-05 (1.70.0):** the admin now has its own anonymous visit counts («👀 Відвідування», backend
   V187), which makes option (a), turning the Cloudflare injection off, the simpler answer. Still the owner's call.
+- **2026-11-19:** owner chose (a) and will switch the injection off in the Cloudflare dashboard before the
+  2026-11-30 deadline (still 234 events / 158 visitors in Sentry). Status unchanged until it is done.
+
+### Partner visits: the visit counter never sends the `ref`
+- **Status:** OPEN
+- **Since:** 2026-11-19 (1.84.1)
+- **Context:** `src/lib/visit.ts` sends referrer host, entry path and UTM — never the stored `ref`. A partner
+  link (`/liga` → `/?ref=liga`) therefore read in the admin «Відвідування» as a typed-in «/». Patched for
+  the one partner there is: `/liga` now also carries `utm_source=liga` (`public/_redirects` and
+  `LigaRoute`), so Liga visits show under UTM. Registrations were never affected (`referral_source`).
+- **Notes / options:** when a second partner (or `?ref=` links like liga-meetup, YouTube) needs visit
+  counts, send `ref` with the visit — a backend field + `site_visit.ref` column + a «Партнер» table.
 
 ### Landing SEO — no prerender/SSR for the public home
 - **Status:** OPEN

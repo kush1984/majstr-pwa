@@ -38,8 +38,9 @@ describe('public/_redirects — the app routes are served, nothing else is', () 
     expect(missing, `add to public/_redirects: ${missing.join(', ')}`).toEqual([]);
   });
 
-  it('sends the partner alias to the landing with its ref, permanently', () => {
-    expect(redirects).toMatch(/^\/liga\s+\/\?ref=liga\s+301$/m);
+  it('sends the partner alias to the landing with its ref and a UTM the visit counter reads, permanently', () => {
+    expect(redirects).toMatch(/^\/liga\s+\/\?ref=liga&utm_source=liga\s+301$/m);
+    expect(redirects).toMatch(/^\/liga\/\s+\/\?ref=liga&utm_source=liga\s+301$/m);
   });
 
   it('ships a real not-found page that is never indexed', () => {
