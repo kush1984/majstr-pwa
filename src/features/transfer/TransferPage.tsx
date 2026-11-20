@@ -19,13 +19,16 @@ import { useMe, ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { useProjects } from '@/features/projects/useProjects.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { TEMP_FREE_GETS_ESTIMATE_IMPORT } from '@/features/plan/tempFreeUnlocks.ts';
+import { UNITS } from '@/api/types.ts';
 import type {
   Trade,
   TransferCommitRequest,
   TransferCommitResponse,
   TransferDocumentKind,
   TransferLine,
+  TransferMapping,
   TransferParseResponse,
+  TransferTable,
   Unit,
 } from '@/api/types.ts';
 
@@ -38,6 +41,8 @@ type Choice = TransferDocumentKind | 'SKIP';
 export interface TransferCard {
   key: number;
   fileName: string;
+  /** Kept for a table, which is read again when the master re-picks its columns. */
+  file?: File;
   parsed: TransferParseResponse | null;
   error: string | null;
   choice: Choice;
@@ -46,6 +51,51 @@ export interface TransferCard {
   objectName: string;
   estimateName: string;
   toCatalog: boolean;
+  /**
+   * The trade every position of this file goes under; '' = file each by its own name (the server's
+   * filing). A price list is one master's trade, so it defaults to the trade the filing recognised
+   * most; an estimate often spans several and defaults to ''.
+   */
+  trade: Trade | '';
+  /**
+   * Units the master set on lines the file gave none, by the line's index — such a line used to be
+   * dropped, and a position he charges for could be lost with it.
+   */
+  units?: Record<number, Unit>;
+}
+
+/** The file's lines with the units he filled in where the paper had none. */
+export function withUnits(lines: TransferLine[], units: Record<number, Unit> | undefined): TransferLine[] {
+  if (!units) return lines;
+  return lines.map((l, i) => (l.unit == null && units[i] ? { ...l, unit: units[i] } : l));
+}
+
+/** The trade the filing recognised most often in these lines, or '' when it recognised none. */
+export function dominantTrade(lines: TransferLine[]): Trade | '' {
+  const counts = new Map<Trade, number>();
+  for (const l of lines) if (l.trade) counts.set(l.trade, (counts.get(l.trade) ?? 0) + 1);
+  let best: Trade | '' = '';
+  let max = 0;
+  for (const [trade, n] of counts) if (n > max) { best = trade; max = n; }
+  return best;
+}
+
+/**
+ * Where a line lands in the catalog. The trade: the one the master chose for the file, else the
+ * filing's. The folder: on a PRICE LIST his own document's section («Підготовка», «Підлога») — his
+ * grouping beats ours; otherwise the filing's folder, if it filed the line under that same trade.
+ * An estimate's section is a room («Кухня»), never a catalog folder.
+ */
+export function placed<T extends { trade: Trade | null; category: string | null; section: string | null }>(
+  line: T, trade: Trade | '', priceList: boolean,
+): T {
+  const target = trade || line.trade;
+  const ownFolder = priceList && line.section ? line.section : null;
+  return {
+    ...line,
+    trade: target,
+    category: ownFolder ?? (line.trade === target ? line.category : null),
+  };
 }
 
 /** The lines a card can actually send: a line with no unit cannot be saved, so it stays behind. */
@@ -64,7 +114,8 @@ export function toCommitRequest(cards: TransferCard[], updatePrices: boolean): T
   const estimates: TransferCommitRequest['estimates'] = [];
   for (const c of cards) {
     if (!c.parsed || c.choice === 'SKIP') continue;
-    const lines = usableLines(c.parsed.items);
+    const lines = usableLines(withUnits(c.parsed.items, c.units))
+      .map((l) => placed(l, c.trade, c.choice === 'PRICE_LIST'));
     if (lines.length === 0) continue;
     if (c.choice === 'PRICE_LIST') {
       priceLists.push({
@@ -117,7 +168,9 @@ export function TransferPage() {
   const [committing, setCommitting] = useState(false);
   const [result, setResult] = useState<TransferCommitResponse | null>(null);
 
-  const allowed = (me?.plan ?? 'FREE') !== 'FREE' || TEMP_FREE_GETS_ESTIMATE_IMPORT;
+  // The AI reads PDFs, photos and estimates — a PRO feature. A price list in Excel/CSV is read
+  // without it, on every plan (it replaced «Імпортувати прайс», which every plan had).
+  const aiAllowed = (me?.plan ?? 'FREE') !== 'FREE' || TEMP_FREE_GETS_ESTIMATE_IMPORT;
 
   const onFiles = async (e: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
@@ -134,15 +187,16 @@ export function TransferPage() {
       try {
         const parsed = await transferApi.parseFile(file);
         read.push({
-          key: keySeq++, fileName: file.name, parsed, error: null,
+          key: keySeq++, fileName: file.name, file, parsed, error: null,
           choice: parsed.items.length === 0 ? 'SKIP' : parsed.kind,
           projectId: '', objectName: defaultObjectName(parsed, file.name),
           estimateName: parsed.title ?? '', toCatalog: true,
+          trade: parsed.kind === 'PRICE_LIST' ? dominantTrade(parsed.items) : '',
         });
       } catch (err) {
         read.push({
           key: keySeq++, fileName: file.name, parsed: null, error: toAppError(err).message,
-          choice: 'SKIP', projectId: '', objectName: '', estimateName: '', toCatalog: true,
+          choice: 'SKIP', projectId: '', objectName: '', estimateName: '', toCatalog: true, trade: '',
         });
       }
       setProgress({ done: i + 1, total: files.length });
@@ -153,6 +207,18 @@ export function TransferPage() {
 
   const patch = (key: number, next: Partial<TransferCard>) =>
     setCards((prev) => prev.map((c) => (c.key === key ? { ...c, ...next } : c)));
+
+  /** A table read again with the columns he picked; the card keeps its place and choices. */
+  const remap = async (card: TransferCard, mapping: TransferMapping) => {
+    if (!card.file) return;
+    try {
+      const parsed = await transferApi.parseFile(card.file, mapping);
+      // Units were set by line, and a re-read can change which lines there are.
+      patch(card.key, { parsed, units: {} });
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
 
   const request = toCommitRequest(cards, updatePrices);
   const nothing = request.priceLists.length === 0 && request.estimates.length === 0;
@@ -179,7 +245,7 @@ export function TransferPage() {
   const fileInputs = (
     <>
       <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => void onFiles(e)}
-        accept=".pdf,application/pdf,.xlsx,.xls,.csv,image/jpeg,image/png,image/webp" />
+        accept={aiAllowed ? '.pdf,application/pdf,.xlsx,.xls,.csv,image/jpeg,image/png,image/webp' : '.xlsx,.xls,.csv'} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
         onChange={(e) => void onFiles(e)} />
     </>
@@ -201,9 +267,7 @@ export function TransferPage() {
         </div>
         {fileInputs}
 
-        {!allowed ? (
-          <UpgradeBanner text={t('estimateImport.proHint')} trigger="ESTIMATE_IMPORT" />
-        ) : step === 'source' ? (
+        {step === 'source' ? (
           <div className="space-y-4">
             <p className="text-sm text-secondary">{t('transfer.intro')}</p>
             <ul className="space-y-2 rounded-card border border-border bg-surface p-4 text-sm text-secondary">
@@ -212,12 +276,15 @@ export function TransferPage() {
               <li>🏷️ {t('transfer.whatTrades')}</li>
             </ul>
             <p className="text-xs text-muted">{t('transfer.formats', { max: MAX_TRANSFER_FILES })}</p>
+            {!aiAllowed && <UpgradeBanner text={t('transfer.freeHint')} trigger="ESTIMATE_IMPORT" />}
             <Button fullWidth className="min-h-[48px]" onClick={() => fileRef.current?.click()}>
               {t('transfer.chooseFiles')}
             </Button>
-            <Button fullWidth variant="secondary" onClick={() => cameraRef.current?.click()}>
-              {t('transfer.takePhoto')}
-            </Button>
+            {aiAllowed && (
+              <Button fullWidth variant="secondary" onClick={() => cameraRef.current?.click()}>
+                {t('transfer.takePhoto')}
+              </Button>
+            )}
           </div>
         ) : step === 'reading' ? (
           <div className="py-16 text-center">
@@ -231,7 +298,9 @@ export function TransferPage() {
           <div className="space-y-3">
             <p className="text-sm text-secondary">{t('transfer.reviewHint')}</p>
             {cards.map((c) => (
-              <TransferCardView key={c.key} card={c} projects={projects ?? []} onChange={(n) => patch(c.key, n)} />
+              <TransferCardView key={c.key} card={c} projects={projects ?? []} myTrades={me?.trades ?? []}
+                onChange={(n) => patch(c.key, n)}
+                onRemap={(m) => void remap(c, m)} />
             ))}
             <button type="button" onClick={() => fileRef.current?.click()}
               className="min-h-[44px] w-full rounded-card border border-dashed border-brand/50 text-sm font-semibold text-brand">
@@ -276,12 +345,22 @@ export function TransferPage() {
   );
 }
 
-function TransferCardView({ card, projects, onChange }: {
+function TransferCardView({ card, projects, myTrades, onChange, onRemap }: {
   card: TransferCard;
   projects: { id: string; name: string }[];
+  /** The master's own trades — offered first in «Куди заносити». */
+  myTrades: Trade[];
   onChange: (next: Partial<TransferCard>) => void;
+  onRemap: (mapping: TransferMapping) => void;
 }) {
   const { t } = useTranslation();
+  // His trades, then any the filing recognised in this file, then «Інше».
+  const tradeOptions = [...new Set<Trade>([
+    ...myTrades,
+    ...card.parsed?.items.flatMap((l) => (l.trade ? [l.trade] : [])) ?? [],
+    ...(card.trade ? [card.trade] : []),
+    'OTHER',
+  ])];
   const [open, setOpen] = useState(false);
 
   if (!card.parsed) {
@@ -293,7 +372,12 @@ function TransferCardView({ card, projects, onChange }: {
     );
   }
 
-  const lines = card.parsed.items;
+  const lines = withUnits(card.parsed.items, card.units)
+    .map((l) => placed(l, card.trade, card.choice === 'PRICE_LIST'));
+  // By index in the FILE, which is what `units` is keyed by.
+  const noUnit = card.parsed.items
+    .map((l, i) => ({ line: l, i }))
+    .filter(({ line }) => line.unit == null && line.name.trim() !== '');
   const usable = usableLines(lines);
   const sum = usable.reduce((s, l) => s + (l.quantity ?? 0) * (l.unitPrice ?? 0), 0);
   const unfiled = lines.length - usable.length;
@@ -339,6 +423,21 @@ function TransferCardView({ card, projects, onChange }: {
       )}
 
       {card.choice !== 'SKIP' && (
+        <label className="mt-3 block text-xs font-semibold text-muted">
+          {t('transfer.tradeLabel')}
+          <Select className="mt-1" value={card.trade}
+            onChange={(e) => onChange({ trade: e.target.value as Trade | '' })}>
+            <option value="">{t('transfer.tradeAuto')}</option>
+            {tradeOptions.map((tr) => <option key={tr} value={tr}>{TRADE_EMOJI[tr]} {t(`trades.${tr}`)}</option>)}
+          </Select>
+        </label>
+      )}
+
+      {card.choice === 'PRICE_LIST' && card.parsed.table && (
+        <ColumnPicker table={card.parsed.table} onRemap={onRemap} />
+      )}
+
+      {card.choice !== 'SKIP' && (
         <>
           <p className="mt-3 text-sm text-secondary">
             {card.choice === 'ESTIMATE'
@@ -352,7 +451,39 @@ function TransferCardView({ card, projects, onChange }: {
               </span>
             ))}
           </div>
-          {unfiled > 0 && <p className="mt-1.5 text-xs text-amber-strong">{t('transfer.noUnit', { count: unfiled })}</p>}
+          {noUnit.length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber/40 bg-amber-soft p-2.5">
+              <p className="text-xs font-semibold text-amber-strong">
+                {unfiled > 0 ? t('transfer.noUnit', { count: unfiled }) : t('transfer.unitsSet')}
+              </p>
+              <ul className="mt-2.5 space-y-3">
+                {noUnit.map(({ line, i }) => (
+                  // The name, then a small picker under it sized to its text — not the full-width form
+                  // <Select>: one short answer per line, and a field-sized control dwarfed the list.
+                  <li key={i}>
+                    <span className="block text-sm leading-snug text-primary">{line.name}</span>
+                    <select
+                      aria-label={t('transfer.unitFor', { name: line.name })}
+                      // 16 px text even here: smaller and iOS Safari zooms the page on focus.
+                      className="mt-1.5 h-9 w-auto min-w-[7rem] rounded-lg border border-amber/40 bg-white pl-2.5 pr-1.5 text-[16px] leading-none text-secondary focus:border-brand-500 focus:outline-none"
+                      value={card.units?.[i] ?? ''}
+                      onChange={(e) => {
+                        const next = { ...card.units };
+                        if (e.target.value) next[i] = e.target.value as Unit;
+                        else delete next[i];
+                        onChange({ units: next });
+                      }}
+                    >
+                      <option value="">{t('transfer.unitPick')}</option>
+                      {UNITS.filter((u) => u !== 'PERCENT').map((u) => (
+                        <option key={u} value={u}>{t(`units.${u}`)}</option>
+                      ))}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <button type="button" onClick={() => setOpen((v) => !v)}
             className="mt-1 min-h-[40px] text-xs font-semibold text-brand">
             {open ? t('transfer.hideLines') : t('transfer.showLines')}
@@ -373,6 +504,38 @@ function TransferCardView({ card, projects, onChange }: {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Which column is the name, the price, the unit — on a table read without AI (an Excel/CSV price
+ * list). The guess is usually right; when it is not, he re-picks and the file is read again.
+ */
+function ColumnPicker({ table, onRemap }: { table: TransferTable; onRemap: (mapping: TransferMapping) => void }) {
+  const { t } = useTranslation();
+  const current: TransferMapping = { nameCol: table.nameCol, priceCol: table.priceCol, unitCol: table.unitCol };
+  const fields = [
+    ['nameCol', 'transfer.colName'],
+    ['priceCol', 'transfer.colPrice'],
+    ['unitCol', 'transfer.colUnit'],
+  ] as const;
+  return (
+    <div className="mt-3 space-y-2 rounded-lg bg-surface-sunken p-2.5">
+      <p className="text-xs text-muted">{t('transfer.columnsHint')}</p>
+      {fields.map(([field, label]) => (
+        <label key={field} className="block text-xs font-semibold text-muted">
+          {t(label)}
+          <Select
+            className="mt-1"
+            value={current[field] ?? ''}
+            onChange={(e) => onRemap({ ...current, [field]: e.target.value === '' ? null : Number(e.target.value) })}
+          >
+            <option value="">{t('transfer.colNone')}</option>
+            {table.columns.map((c, i) => <option key={i} value={i}>{c}</option>)}
+          </Select>
+        </label>
+      ))}
     </div>
   );
 }

@@ -2564,7 +2564,23 @@ export interface TransferParseResponse {
   title: string | null;
   depositAmount: number | null;
   items: TransferLine[];
+  /**
+   * A table read WITHOUT AI (an Excel/CSV price list): its columns and which were taken as name /
+   * price / unit, so the master can re-pick them. Null or absent for anything the AI read.
+   */
+  table?: TransferTable | null;
 }
+
+export interface TransferTable {
+  /** Labels for the pickers — «Колонка N · header». */
+  columns: string[];
+  nameCol: number | null;
+  priceCol: number | null;
+  unitCol: number | null;
+}
+
+/** The columns a master re-picked on a table; null = none. */
+export type TransferMapping = Pick<TransferTable, 'nameCol' | 'priceCol' | 'unitCol'>;
 
 export interface TransferCatalogLine {
   name: string;

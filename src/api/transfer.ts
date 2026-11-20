@@ -1,6 +1,8 @@
 import { api, LLM_TIMEOUT_MS } from './client.ts';
 import { sendOnce } from './submission.ts';
-import type { TransferCommitRequest, TransferCommitResponse, TransferParseResponse } from './types.ts';
+import type {
+  TransferCommitRequest, TransferCommitResponse, TransferMapping, TransferParseResponse,
+} from './types.ts';
 
 /**
  * «Перенести в Majstr». `parseFile` reads ONE file (PDF, Excel, CSV or a photo) — the page sends
@@ -8,9 +10,15 @@ import type { TransferCommitRequest, TransferCommitResponse, TransferParseRespon
  * `commit` writes the confirmed review in one transaction.
  */
 export const transferApi = {
-  parseFile(file: File): Promise<TransferParseResponse> {
+  /** `mapping` = the columns the master re-picked on a table the server read without AI. */
+  parseFile(file: File, mapping?: TransferMapping): Promise<TransferParseResponse> {
     const form = new FormData();
     form.append('file', file);
+    if (mapping) {
+      for (const [key, col] of Object.entries(mapping)) {
+        if (col != null) form.append(key, String(col));
+      }
+    }
     return api
       .post<TransferParseResponse>('/api/transfer/parse', form, {
         headers: { 'Content-Type': undefined } as unknown as Record<string, string>,

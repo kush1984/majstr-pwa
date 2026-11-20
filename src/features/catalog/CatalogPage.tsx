@@ -264,9 +264,6 @@ export function CatalogPage() {
               >
                 {t('catalog.starterSet')}
               </Button>
-              <Button variant="secondary" onClick={() => navigate(routes.catalogImport)}>
-                {t('catalog.importPrice')}
-              </Button>
               <Button variant="secondary" onClick={() => navigate(routes.transfer)}>
                 📥 {t('transfer.entryAction')}
               </Button>
@@ -276,10 +273,10 @@ export function CatalogPage() {
         />
       ) : (
         <div>
-          {/* Three doors that bring positions in, as buttons (master feedback — the text links read
-              as decoration). One row of equal tiles: icon over a short label fits 375 px. */}
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <CatalogAction icon="⬆" label={t('catalog.importPrice')} onClick={() => navigate(routes.catalogImport)} />
+          {/* The doors that bring positions in, and the one that hands the price list out, as buttons
+              (master feedback — the text links read as decoration). «Імпортувати прайс» was folded
+              into «Перенести в Majstr» (2026-11-20): two doors for one job. */}
+          <div className="mb-4 grid grid-cols-3 gap-2">
             <CatalogAction icon="📥" label={t('transfer.entryAction')} onClick={() => navigate(routes.transfer)} />
             <CatalogAction
               icon="↻"
