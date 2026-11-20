@@ -68,6 +68,9 @@ beforeEach(() => {
   vi.mocked(catalogApi.categories).mockResolvedValue([]);
 });
 
+/** The catalog in the editor opens on «+ Додати позицію» — the editor starts on the bundle alone. */
+const openAdd = async () => fireEvent.click(await screen.findByRole('button', { name: '+ Додати позицію' }));
+
 describe('TemplatesPage — edit own template', () => {
   it('pencil opens the editor; catalog picker skips present items and adds a fresh one', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
@@ -81,6 +84,11 @@ describe('TemplatesPage — edit own template', () => {
     expect(await screen.findByText('Моя ванна')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Редагувати' }));
     expect(await screen.findByText('Редагувати шаблон')).toBeTruthy();
+
+    // The editor opens on the bundle alone; the catalog waits behind «+ Додати позицію» (2026-11-20).
+    expect(await screen.findByText('Розетка')).toBeTruthy();
+    expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0);
+    await openAdd();
 
     // Catalog tab is default: both rows render; the one already in the template is disabled.
     const rows = (await screen.findAllByTestId('catalog-row'));
@@ -107,6 +115,31 @@ describe('TemplatesPage — edit own template', () => {
     );
   });
 
+  it('the catalog opens as its own sheet on «+ Додати позицію» and closes itself on «Додати»; an empty bundle opens on it', async () => {
+    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
+    vi.mocked(catalogApi.list).mockResolvedValue(catalog);
+
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await openAdd();
+    const rows = await screen.findAllByTestId('catalog-row');
+    fireEvent.click(rows.find((r) => r.textContent?.includes('Кабель ВВГ'))!);
+    fireEvent.click(screen.getByRole('button', { name: 'Додати 1 позицію' }));
+    // No «Готово» to find: adding IS done — straight back to the bundle, the new row in it.
+    await waitFor(() => expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0));
+    expect(screen.getByText('Кабель ВВГ')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '+ Додати позицію' })).toBeTruthy();
+    view.unmount();
+
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...ownDetail, items: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    // An empty bundle opens straight on the catalog sheet.
+    expect(await screen.findAllByTestId('catalog-row')).toHaveLength(2);
+    expect(screen.getByRole('dialog', { name: 'Додати позицію' })).toBeTruthy();
+  });
+
   it('manual add → offers to save the new position to the catalog', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
@@ -119,6 +152,7 @@ describe('TemplatesPage — edit own template', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await openAdd();
     fireEvent.click(await screen.findByRole('button', { name: 'Вручну' }));
     fireEvent.change(screen.getByPlaceholderText('Назва позиції'), {
       target: { value: 'Нова робота' },
@@ -294,6 +328,7 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
+    await openAdd();
     fireEvent.click(await screen.findByRole('button', { name: 'Вручну' }));
     fireEvent.change(screen.getByPlaceholderText('Назва позиції'), {
       target: { value: 'Шліфування стін' },
@@ -349,6 +384,7 @@ describe('TemplatesPage — ready-made templates are editable too', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
     expect(await screen.findByText(/Грунтування стін/)).toBeTruthy();
 
+    await openAdd();
     fireEvent.click(screen.getByRole('button', { name: 'Вручну' }));
     fireEvent.change(screen.getByPlaceholderText('Назва позиції'), {
       target: { value: 'Шліфування стін' },
@@ -521,37 +557,32 @@ describe('TemplatesPage — create a template from scratch', () => {
     customTradeName: null, isDefault: false, itemCount: 0,
   };
 
-  it('the FAB asks for a name and hands straight over to the editor for the positions', async () => {
+  it('«＋» goes straight to the catalog; the name is asked in the editor, and «Зберегти» waits for it', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([]);
-    vi.mocked(estimateTemplatesApi.create).mockResolvedValue(made);
-    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...made, description: null, items: [] });
-    vi.mocked(catalogApi.list).mockResolvedValue([]);
+    vi.mocked(estimateTemplatesApi.create).mockResolvedValue({ ...made, name: 'Новий шаблон' });
+    vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...made, name: 'Новий шаблон', description: null, items: [] });
+    vi.mocked(catalogApi.list).mockResolvedValue(catalog);
+    vi.mocked(estimateTemplatesApi.addItem).mockResolvedValue({ ...made, description: null, items: [] });
+    vi.mocked(estimateTemplatesApi.rename).mockResolvedValue(made);
 
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Новий шаблон' }));
 
-    const name = await screen.findByPlaceholderText('Напр. Санвузол під ключ');
+    // No naming sheet: the row is written, and the catalog opens over the editor.
+    await waitFor(() => expect(estimateTemplatesApi.create).toHaveBeenCalledWith({ name: 'Новий шаблон' }));
+    const rows = await screen.findAllByTestId('catalog-row');
+    fireEvent.click(rows.find((r) => r.textContent?.includes('Кабель ВВГ'))!);
+    fireEvent.click(screen.getByRole('button', { name: 'Додати 1 позицію' }));
+
+    // Back in the editor: the name field is EMPTY (the placeholder name is not his), so no save yet.
+    const name = await screen.findByRole('textbox', { name: 'Назва шаблону' });
+    expect((name as HTMLInputElement).value).toBe('');
+    expect(screen.getByText('Дайте шаблону назву — і «Зберегти»')).toBeTruthy();
+    expect(asButton(screen.getByTestId('template-save')).disabled).toBe(true);
+
     fireEvent.change(name, { target: { value: '  Санвузол під ключ  ' } });
-    fireEvent.click(screen.getByTestId('template-create-submit'));
-
-    await waitFor(() => expect(estimateTemplatesApi.create)
-      .toHaveBeenCalledWith({ name: 'Санвузол під ключ' }));
-    // A named empty row is not yet a template — the editor opens on it so positions can go in.
-    expect(await screen.findByTestId('template-save')).toBeTruthy();
-    expect(screen.getByDisplayValue('Санвузол під ключ')).toBeTruthy();
-  });
-
-  it('refuses a blank name instead of creating «  »', async () => {
-    vi.mocked(estimateTemplatesApi.list).mockResolvedValue([]);
-
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Новий шаблон' }));
-    const name = await screen.findByPlaceholderText('Напр. Санвузол під ключ');
-    fireEvent.change(name, { target: { value: '   ' } });
-
-    expect(asButton(screen.getByTestId('template-create-submit')).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('template-create-submit'));
-    expect(estimateTemplatesApi.create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('template-save'));
+    await waitFor(() => expect(estimateTemplatesApi.rename).toHaveBeenCalledWith('new1', { name: 'Санвузол під ключ' }));
   });
 });
 
@@ -570,6 +601,7 @@ describe('TemplatesPage — the catalog answers before the composition (CI race)
     expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0);
 
     release(ownDetail);
+    await openAdd();
 
     const rows = await screen.findAllByTestId('catalog-row');
     expect(asButton(rows.find((r) => r.textContent?.includes('Розетка'))!).disabled).toBe(true);

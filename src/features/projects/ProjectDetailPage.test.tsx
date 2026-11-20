@@ -167,8 +167,10 @@ describe('ProjectDetailPage — every estimate signed', () => {
 
     expect(await screen.findByText('Кошторис підписано')).toBeTruthy();
     expect(screen.queryByText('Ще немає кошторисів')).toBeNull();
-    // A further estimate is the «＋»'s, not a second button here.
-    expect(screen.getAllByRole('button', { name: 'Новий кошторис' })).toHaveLength(1);
+    // The next estimate is the big button here too (owner, 2026-11-20), beside the «＋».
+    expect(screen.getByRole('button', { name: '＋ Новий кошторис' })).toBeTruthy();
+    // A rollup of signed estimates repeats «Економіка» — not offered.
+    expect(screen.queryByRole('button', { name: '+ Зведений' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Відкрити «Економіку»' }));
     await waitFor(() => expect(screen.queryByText('Кошторис підписано')).toBeNull());

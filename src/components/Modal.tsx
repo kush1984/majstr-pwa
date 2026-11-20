@@ -36,6 +36,7 @@ export function Modal({
   size = 'md',
   dismissable = true,
   mask = true,
+  fill = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -55,6 +56,12 @@ export function Modal({
    * unless someone decides otherwise, which is the right direction for the default to fail in.
    */
   mask?: boolean;
+  /**
+   * The whole screen on a phone (90 % of it on a desktop) whatever the content — for a sheet that is
+   * a place to work in, like picking from the catalog, not a short question. Content is then laid out
+   * as a column, so a list inside can take the height that is left.
+   */
+  fill?: boolean;
 }) {
   const { t } = useTranslation();
   const panel = useRef<HTMLDivElement>(null);
@@ -150,7 +157,8 @@ export function Modal({
       <div
         ref={panel}
         className={cn(
-          'relative z-10 max-h-[90%] w-full overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-card-lg sm:rounded-2xl',
+          'relative z-10 w-full overflow-y-auto bg-surface p-5 shadow-card-lg sm:rounded-2xl',
+          fill ? 'flex h-full max-h-full flex-col sm:h-[90%]' : 'max-h-[90%] rounded-t-2xl',
           size === 'lg' ? 'max-w-xl' : 'max-w-md',
           mask && 'ph-mask',
         )}

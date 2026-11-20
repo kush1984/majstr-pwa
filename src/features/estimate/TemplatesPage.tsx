@@ -19,7 +19,6 @@ import { Input } from '@/components/Input.tsx';
 import { Select } from '@/components/Select.tsx';
 import { Spinner } from '@/components/Spinner.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
-import { EmptyState } from '@/components/EmptyState.tsx';
 import { OfflineNotCached } from '@/components/OfflineNotCached.tsx';
 import { useOnline } from '@/lib/useOnline.ts';
 import { ErrorState } from '@/components/ErrorState.tsx';
@@ -90,7 +89,7 @@ export function TemplatesPage() {
   const justCreated = useRef<string | null>(null);
   const restoreDefaults = useRestoreDefaults();
 
-  const [creating, setCreating] = useState(false);
+  const create = useCreateTemplate();
   const [preview, setPreview] = useState<EstimateTemplateSummary | null>(null);
   const [editing, setEditing] = useState<EstimateTemplateSummary | null>(null);
   const [deleting, setDeleting] = useState<EstimateTemplateSummary | null>(null);
@@ -173,7 +172,11 @@ export function TemplatesPage() {
               {t('templates.myTemplates')}
             </h2>
             {!hasOwnTemplates ? (
-              <EmptyState icon="📋" title={t('templates.myTemplates')} text={t('templates.emptyMyPage')} />
+              // One quiet line, not a full empty state: with no own templates yet the ready-made ones
+              // below ARE the content, and a big icon-and-paragraph block pushed them off the screen.
+              <p className="rounded-xl border border-dashed border-border px-3.5 py-3 text-sm text-muted">
+                {t('templates.emptyMyPage')}
+              </p>
             ) : (
               <TemplateBranches
                 scope="own"
@@ -233,17 +236,21 @@ export function TemplatesPage() {
 
       {/* Direct-action, not a speed-dial: there is one thing to create here, and a «＋» that
           opens a menu is read as «add» anyway (see Fab). */}
-      <Fab ariaLabel={t('templates.createTitle')} onClick={() => setCreating(true)} />
-
-      <CreateModal
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreated={(made) => {
-          setCreating(false);
-          // Straight into the editor: a template with no positions is not yet a template, and the
-          // master came here to write a sequence, not to name an empty row.
-          justCreated.current = made.id;
-          setEditing(made);
+      {/* No naming sheet first (owner, 2026-11-20): «＋» goes straight to the positions — the
+          editor opens on the catalog, and the name is asked for in the editor, where «Зберегти»
+          waits for it. The row is written now only so the editor has an id to address; walking
+          back out with nothing in it undoes it (below). */}
+      <Fab
+        ariaLabel={t('templates.createTitle')}
+        onClick={() => {
+          if (create.isPending) return;
+          create.mutate({ name: t('templates.createTitle') }, {
+            onSuccess: (made) => {
+              justCreated.current = made.id;
+              setEditing(made);
+            },
+            onError: (err) => toast.error(toAppError(err).message),
+          });
         }}
       />
 
@@ -258,6 +265,8 @@ export function TemplatesPage() {
       {editing && (
         <EditModal
           template={editing}
+          // Brand new from «＋»: its name is still a placeholder, so the field starts empty.
+          fresh={justCreated.current === editing.id}
           onClose={(empty) => {
             const abandoned = empty && justCreated.current === editing.id;
             justCreated.current = null;
@@ -418,63 +427,6 @@ function TradeTag({ template }: { template: EstimateTemplateSummary }) {
   );
 }
 
-/**
- * «Новий шаблон» — the name, and nothing else.
- *
- * <p>Until this round the only way to own a bundle was «Зберегти як шаблон» from an estimate, so a
- * master who knows his sequence had to invent an object to write it on first. The sheet asks for
- * the name alone (a trade is re-filed from the row's ⋮) and hands straight over to the
- * editor, where the positions go in.</p>
- */
-function CreateModal({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (created: EstimateTemplateSummary) => void;
-}) {
-  const { t } = useTranslation();
-  const create = useCreateTemplate();
-  const [name, setName] = useState('');
-
-  // Every opening starts blank — a half-typed name from a sheet that was dismissed is not a draft.
-  useEffect(() => { if (open) setName(''); }, [open]);
-
-  const trimmed = name.trim();
-  const submit = async () => {
-    if (trimmed === '' || create.isPending) return;
-    try {
-      onCreated(await create.mutateAsync({ name: trimmed }));
-    } catch (err) {
-      toast.error(toAppError(err).message);
-    }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title={t('templates.createTitle')}>
-      <Input
-        autoFocus
-        value={name}
-        maxLength={255}
-        placeholder={t('templates.namePlaceholder')}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
-      />
-      <Button
-        className="mt-3 w-full"
-        data-testid="template-create-submit"
-        loading={create.isPending}
-        disabled={trimmed === ''}
-        onClick={() => void submit()}
-      >
-        {t('templates.createSubmit')}
-      </Button>
-    </Modal>
-  );
-}
-
 /** What a bundle IS, above its composition — read-only, and the only thing that tells Q2 from Q4
  *  when the name alone will not. Master-facing: no client surface has rendered it since V122. */
 function TemplateDescription({ text }: { text: string | null | undefined }) {
@@ -581,9 +533,13 @@ const sameItems = (a: DraftItem[], b: DraftItem[]) =>
  */
 function EditModal({
   template,
+  fresh = false,
   onClose,
 }: {
   template: EstimateTemplateSummary;
+  /** Just created by «＋»: the server row carries a placeholder name, so the field starts EMPTY and
+   *  «Зберегти» waits for a real one. */
+  fresh?: boolean;
   /** `empty` = the bundle has no positions on the server. See the FAB's own note in the page. */
   onClose: (empty: boolean) => void;
 }) {
@@ -609,11 +565,15 @@ function EditModal({
   // The draft IS the editor. Seeded from the composition once it arrives; the name is editable from
   // the first frame because the summary always carries it, even offline with no cached detail.
   const seed: Draft = { name: template.name, items: [] };
-  const [draft, setDraft] = useState<Draft>(seed);
+  const [draft, setDraft] = useState<Draft>(fresh ? { ...seed, name: '' } : seed);
   const [baseline, setBaseline] = useState<Draft>(seed);
   const [seeded, setSeeded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<AddPositionTab>('catalog');
+  // The catalog opens on «+ Додати позицію», as a sheet of its own over the whole screen: a picker
+  // sharing the editor halved both, so neither the bundle nor the catalog could be read (master,
+  // 2026-11-20). An empty bundle has nothing else to show, so it opens straight on the picker.
+  const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [editingItem, setEditingItem] = useState<DraftItem | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -634,6 +594,7 @@ function EditModal({
     }));
     setBaseline(loaded);
     setSeeded(true);
+    if (loaded.items.length === 0) setAdding(true);
   }, [data, seeded, baseline.name]);
 
   const items = draft.items;
@@ -782,13 +743,15 @@ function EditModal({
   const saveAndClose = async () => { if (await save()) onClose(false); };
 
   return (
-    <Modal open onClose={requestClose} title={t('templates.editTitle')} size="lg">
+    <Modal open onClose={requestClose} title={t(fresh ? 'templates.createTitle' : 'templates.editTitle')} size="lg">
       {/* Name + Save */}
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <Input
             value={draft.name}
             maxLength={255}
+            aria-label={t('templates.nameLabel')}
+            placeholder={t('templates.namePlaceholder')}
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
           />
         </div>
@@ -802,6 +765,10 @@ function EditModal({
           {t('common.save')}
         </Button>
       </div>
+      {fresh && trimmed === '' && items.length > 0 && (
+        // A nudge, not an error: nothing is wrong yet, the name is simply the next step.
+        <p className="mt-1.5 text-xs text-muted">{t('templates.nameToSave')}</p>
+      )}
 
       {!template.isDefault && (
         <div className="mt-3">
@@ -824,7 +791,7 @@ function EditModal({
          Bringing the field back is a render change; the column and both snapshots stay. */}
 
       {/* Composition — the order IS the sequence of works, so it is draggable. */}
-      <div className="mb-3">
+      <div className="mb-3 mt-3">
         {isPending ? (
           <div className="flex justify-center py-4 text-brand">
             <Spinner />
@@ -857,8 +824,18 @@ function EditModal({
         )}
       </div>
 
-      {/* Add position — catalog (browse) or manual */}
-      <div className="rounded-xl border border-border p-3">
+      {seeded && (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="min-h-[48px] w-full rounded-xl border border-dashed border-brand/50 text-sm font-semibold text-brand active:bg-brand-soft"
+        >
+          {t('templates.addItemPlus')}
+        </button>
+      )}
+
+      {/* Add position — catalog (browse) or manual — on a sheet of its own, the whole screen. */}
+      <Modal open={adding} onClose={() => setAdding(false)} title={t('templates.addItem')} size="lg" fill>
         <AddPositionTabs tab={tab} onChange={setTab} />
         {/* The picker blocks what the bundle already holds, so it waits for the composition: rows
             drawn before it arrived let a duplicate be picked (the catalog usually answers first).
@@ -868,19 +845,24 @@ function EditModal({
         ) : tab === 'catalog' ? (
           <CatalogPicker
             disabledNames={items.map((i) => i.name)}
-            listHeightClass="max-h-[30dvh]"
+            // The sheet is the whole screen: the list takes what the tabs, filters and search leave.
+            listHeightClass="max-h-[calc(100dvh-20rem)]"
             onPick={async (picks) => {
               // No batch endpoint for template items — append one by one (the server assigns the
               // next sort order each time). Sequential so the order is stable.
               for (const item of picks) {
                 await onAdd({ name: item.name, type: item.type, unit: item.unit });
               }
+              // Back to the bundle, where the added positions are seen landing at the end.
+              setAdding(false);
             }}
           />
         ) : (
-          <ManualForm offerCatalogSave submitLabel={t('templates.addItem')} onSubmit={onAdd} />
+          // Back to the bundle once the «зберегти в каталог» question is answered — no extra button.
+          <ManualForm offerCatalogSave submitLabel={t('templates.addItem')} onSubmit={onAdd}
+            onDone={() => setAdding(false)} />
         )}
-      </div>
+      </Modal>
 
       {/* Edit ONE position — the same choice as everywhere: pick from the catalog or type it. */}
       {editingItem && (
@@ -971,7 +953,9 @@ function Composition({
   };
 
   return (
-    <div className="max-h-[32dvh] divide-y divide-divider overflow-y-auto rounded-xl border border-border bg-surface">
+    // The whole bundle (the editor scrolls), clipped to the rounded frame — unclipped, the rows
+    // painted over its corners.
+    <div className="divide-y divide-divider overflow-hidden rounded-xl border border-border bg-surface">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1142,11 +1126,14 @@ function ManualForm({
   submitLabel,
   offerCatalogSave,
   onSubmit,
+  onDone,
 }: {
   initial?: TemplateItemRequest;
   submitLabel: string;
   offerCatalogSave?: boolean;
   onSubmit: (req: TemplateItemRequest) => Promise<void>;
+  /** Called when the add is finished — after the catalog question, when one is asked. */
+  onDone?: () => void;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? '');
@@ -1174,7 +1161,7 @@ function ManualForm({
   };
 
   if (savePrompt) {
-    return <SaveToCatalogPrompt item={savePrompt} onClose={() => setSavePrompt(null)} />;
+    return <SaveToCatalogPrompt item={savePrompt} onClose={() => { setSavePrompt(null); onDone?.(); }} />;
   }
 
   return (

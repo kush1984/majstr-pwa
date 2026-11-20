@@ -236,7 +236,7 @@ export function ProjectDetailPage() {
   const list = estimates.data ?? [];
   // A SIGNED estimate lives only in «Економіка» now (economy-rework iteration) — this tab shows
   // the working set (DRAFT/SENT/REJECTED) only. `list` itself stays the full set: the estimate
-  // limit, the consolidate-source picker, and "share with client" all still need every estimate.
+  // limit and "share with client" still need every estimate.
   const activeList = list.filter((s) => s.status !== 'SIGNED');
   // FREE caps estimates per project (closes the unlimited-drafts hole). Block
   // "new estimate" preemptively once this project hits the cap; deleting one
@@ -423,7 +423,7 @@ export function ProjectDetailPage() {
         open={consolidateOpen}
         onClose={() => setConsolidateOpen(false)}
         projectId={id}
-        estimates={list}
+        estimates={activeList}
         onDone={(newId) => {
           setConsolidateOpen(false);
           void qc.invalidateQueries({ queryKey: ['project-estimates', id] });
@@ -581,7 +581,10 @@ export function ProjectDetailPage() {
               {t('projects.estimatesCount', { count: activeList.length })}
             </h2>
             <div className="flex items-center gap-3">
-              {list.length >= 2 && (
+              {/* Only what is still being worked on is combined (owner, 2026-11-20): a rollup of what
+                  the client already SIGNED repeats «Економіка» — which already totals the contract —
+                  and the rollup itself is excluded from the money, so it only confused. */}
+              {activeList.length >= 2 && (
                 <button
                   type="button"
                   onClick={() => setConsolidateOpen(true)}
@@ -616,10 +619,28 @@ export function ProjectDetailPage() {
             // with a signed one read as if it had been lost.
             <EmptyState
               icon="✅"
-              title={t('projects.allSignedTitle')}
+              title={t(list.length > 1 ? 'projects.allSignedTitleMany' : 'projects.allSignedTitle')}
               text={t('projects.allSignedText')}
-              // «Новий кошторис» stays the «＋»'s — one action, one place.
-              action={<Button onClick={() => setTab('economy')}>{t('projects.allSignedToEconomy')}</Button>}
+              // The next estimate is the likely next step (more work, an extra), so it is the one
+              // button; the signed ones are a quiet link away (owner, 2026-11-20).
+              action={
+                <div className="flex flex-col items-center gap-1">
+                  <Button
+                    onClick={addEstimate}
+                    disabled={atEstimateLimit}
+                    loading={createEstimate.isPending || applyTemplate.isPending}
+                  >
+                    ＋ {t('common.newEstimate')}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setTab('economy')}
+                    className="min-h-[44px] px-2 text-sm font-semibold text-brand"
+                  >
+                    {t('projects.allSignedToEconomy')}
+                  </button>
+                </div>
+              }
             />
           ) : activeList.length === 0 ? (
             <EmptyState

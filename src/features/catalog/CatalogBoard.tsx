@@ -161,11 +161,15 @@ function CategoryBlock({
       </div>
 
       {open && (
-        // One white block per sub-category with hairlines between rows, like the estimate.
-        <div className="mt-1.5 divide-y divide-divider rounded-xl border border-border bg-surface">
-          {section.items.map((item) => (
-            <ItemRow key={item.id} item={item} onEdit={onEdit} onInline={onInline} selection={selection} />
-          ))}
+        // Set in under its folder with a thin guide line, like a tree: flush with the header the
+        // positions read as one more heading (owner, 2026-11-20). Inside, one white block per
+        // sub-category with hairlines between rows, like the estimate; a gap below closes the group.
+        <div className="mb-3 ml-[1.1rem] mt-2 border-l-2 border-brand/25 pl-3">
+          <div className="divide-y divide-divider overflow-hidden rounded-xl border border-border bg-surface">
+            {section.items.map((item) => (
+              <ItemRow key={item.id} item={item} onEdit={onEdit} onInline={onInline} selection={selection} />
+            ))}
+          </div>
         </div>
       )}
     </section>
