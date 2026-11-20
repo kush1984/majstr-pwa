@@ -115,7 +115,7 @@ describe('TemplatesPage — edit own template', () => {
     );
   });
 
-  it('the catalog opens as its own sheet on «+ Додати позицію» and closes itself on «Додати»; an empty bundle opens on it', async () => {
+  it('the catalog opens as its own sheet on «+ Додати позицію» and closes itself on «Додати» — never by itself', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([own]);
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue(ownDetail);
     vi.mocked(catalogApi.list).mockResolvedValue(catalog);
@@ -135,9 +135,9 @@ describe('TemplatesPage — edit own template', () => {
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...ownDetail, items: [] });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Редагувати' }));
-    // An empty bundle opens straight on the catalog sheet.
-    expect(await screen.findAllByTestId('catalog-row')).toHaveLength(2);
-    expect(screen.getByRole('dialog', { name: 'Додати позицію' })).toBeTruthy();
+    // Even an empty bundle opens on the editor — the catalog only on «+ Додати позицію».
+    expect(await screen.findByRole('button', { name: '+ Додати позицію' })).toBeTruthy();
+    expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0);
   });
 
   it('manual add → offers to save the new position to the catalog', async () => {
@@ -557,7 +557,7 @@ describe('TemplatesPage — create a template from scratch', () => {
     customTradeName: null, isDefault: false, itemCount: 0,
   };
 
-  it('«＋» goes straight to the catalog; the name is asked in the editor, and «Зберегти» waits for it', async () => {
+  it('«＋» opens the new template form first — name, then «+ Додати позицію»; «Зберегти» waits for the name', async () => {
     vi.mocked(estimateTemplatesApi.list).mockResolvedValue([]);
     vi.mocked(estimateTemplatesApi.create).mockResolvedValue({ ...made, name: 'Новий шаблон' });
     vi.mocked(estimateTemplatesApi.get).mockResolvedValue({ ...made, name: 'Новий шаблон', description: null, items: [] });
@@ -568,8 +568,11 @@ describe('TemplatesPage — create a template from scratch', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Новий шаблон' }));
 
-    // No naming sheet: the row is written, and the catalog opens over the editor.
+    // The form, not the catalog: an empty name to type, «+ Додати позицію» below.
     await waitFor(() => expect(estimateTemplatesApi.create).toHaveBeenCalledWith({ name: 'Новий шаблон' }));
+    expect(await screen.findByRole('textbox', { name: 'Назва шаблону' })).toBeTruthy();
+    expect(screen.queryAllByTestId('catalog-row')).toHaveLength(0);
+    await openAdd();
     const rows = await screen.findAllByTestId('catalog-row');
     fireEvent.click(rows.find((r) => r.textContent?.includes('Кабель ВВГ'))!);
     fireEvent.click(screen.getByRole('button', { name: 'Додати 1 позицію' }));

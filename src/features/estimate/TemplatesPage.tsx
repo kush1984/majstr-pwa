@@ -236,10 +236,9 @@ export function TemplatesPage() {
 
       {/* Direct-action, not a speed-dial: there is one thing to create here, and a «＋» that
           opens a menu is read as «add» anyway (see Fab). */}
-      {/* No naming sheet first (owner, 2026-11-20): «＋» goes straight to the positions — the
-          editor opens on the catalog, and the name is asked for in the editor, where «Зберегти»
-          waits for it. The row is written now only so the editor has an id to address; walking
-          back out with nothing in it undoes it (below). */}
+      {/* No separate naming sheet: «＋» opens the editor itself — the name first, then
+          «+ Додати позицію». The row is written now only so the editor has an id to address;
+          walking back out with nothing in it undoes it (below). */}
       <Fab
         ariaLabel={t('templates.createTitle')}
         onClick={() => {
@@ -572,7 +571,8 @@ function EditModal({
   const [tab, setTab] = useState<AddPositionTab>('catalog');
   // The catalog opens on «+ Додати позицію», as a sheet of its own over the whole screen: a picker
   // sharing the editor halved both, so neither the bundle nor the catalog could be read (master,
-  // 2026-11-20). An empty bundle has nothing else to show, so it opens straight on the picker.
+  // 2026-11-20). Never by itself — not even for a new, empty bundle: the catalog popping up over a
+  // form he had not seen yet read as a bug, and he closed it to find the form underneath.
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const [editingItem, setEditingItem] = useState<DraftItem | null>(null);
@@ -594,7 +594,6 @@ function EditModal({
     }));
     setBaseline(loaded);
     setSeeded(true);
-    if (loaded.items.length === 0) setAdding(true);
   }, [data, seeded, baseline.name]);
 
   const items = draft.items;
@@ -748,6 +747,8 @@ function EditModal({
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <Input
+            // A new template starts here: its name is the first thing to type.
+            autoFocus={fresh}
             value={draft.name}
             maxLength={255}
             aria-label={t('templates.nameLabel')}
@@ -765,7 +766,7 @@ function EditModal({
           {t('common.save')}
         </Button>
       </div>
-      {fresh && trimmed === '' && items.length > 0 && (
+      {fresh && trimmed === '' && (
         // A nudge, not an error: nothing is wrong yet, the name is simply the next step.
         <p className="mt-1.5 text-xs text-muted">{t('templates.nameToSave')}</p>
       )}
