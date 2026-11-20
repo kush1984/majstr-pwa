@@ -3,7 +3,7 @@ import { profileApi } from '@/api/profile.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { ESTIMATE_TEMPLATE_KEY } from '@/features/estimate/useEstimateTemplates.ts';
-import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, SenderProfileRequest, UserResponse } from '@/api/types.ts';
+import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, RequisitesRequest, SenderProfileRequest, UserResponse } from '@/api/types.ts';
 
 /** A trade that was not there before brings its starter catalog server-side, and its bundles join
  *  the picker — both caches are stale the moment the trade set grows. */
@@ -28,6 +28,18 @@ export function useUpdateProfile() {
       qc.setQueryData(ME_QUERY_KEY, user);
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
       if (req.trades.some((t) => !before.includes(t))) refreshAfterTrades();
+    },
+  });
+}
+
+/** «Налаштування» (V217): requisites + payout, saved on their own. */
+export function useUpdateRequisites() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: RequisitesRequest) => profileApi.updateRequisites(req),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
+      void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
     },
   });
 }

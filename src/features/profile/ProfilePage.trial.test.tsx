@@ -46,6 +46,7 @@ vi.mock('./useProfile.ts', () => ({
   useUploadLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateProfile: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateRequisites: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAddCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRenameCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),

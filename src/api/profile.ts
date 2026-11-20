@@ -1,5 +1,5 @@
 import { api } from './client.ts';
-import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, SenderProfileRequest, UserResponse } from './types.ts';
+import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, RequisitesRequest, SenderProfileRequest, UserResponse } from './types.ts';
 
 interface CustomTradeRequest {
   name: string;
@@ -10,6 +10,11 @@ interface CustomTradeRequest {
 export const profileApi = {
   update(req: ProfileUpdateRequest): Promise<UserResponse> {
     return api.put<UserResponse>('/api/profile', req).then((r) => r.data);
+  },
+
+  /** «Налаштування» (V217): document requisites + where a client pays. */
+  updateRequisites(req: RequisitesRequest): Promise<UserResponse> {
+    return api.put<UserResponse>('/api/profile/requisites', req).then((r) => r.data);
   },
 
   /** «Чим займаєтесь?» — the system trades alone; a new trade brings its starter catalog. */

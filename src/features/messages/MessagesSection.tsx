@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatDateTime } from '@/lib/format.ts';
+import { formatDateTime, formatMoney } from '@/lib/format.ts';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
@@ -107,6 +107,14 @@ export function MessagesSection({
                       {formatDateTime(item.createdAt)}
                     </span>
                   </div>
+                  {item.kind === 'PAYMENT' && item.paymentAmount != null && (
+                    <p className="mt-1.5 text-sm font-semibold text-primary">
+                      <span className="mr-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-bold text-success">
+                        {t('messages.paymentBadge')}
+                      </span>
+                      {t('messages.paymentAmount', { amount: formatMoney(item.paymentAmount) })}
+                    </p>
+                  )}
                   <p className="mt-1.5 whitespace-pre-wrap text-sm text-secondary">{item.message}</p>
                 </Read>
                 <MessageAttachments
@@ -114,6 +122,7 @@ export function MessagesSection({
                   messageId={item.id}
                   files={item.files ?? []}
                 />
+                {item.kind === 'PAYMENT' && <PaymentState item={item} />}
                 <div className="mt-2 flex items-center gap-3">
                   {item.authorPhone && (
                     <a
@@ -156,6 +165,27 @@ export function MessagesSection({
       />
     </section>
   );
+}
+
+/**
+ * Where a client's «Я оплатив» stands (V217). Only a line: the money is recorded by the receipt check
+ * or answered in the object's money, never from here or from the push — a master with notifications
+ * off must still meet the question where the money is.
+ */
+function PaymentState({ item }: { item: MessageView }) {
+  const { t } = useTranslation();
+  const [text, tone] =
+    item.paymentStatus === 'RECORDED'
+      ? item.paymentRecorded
+        ? [t('messages.paymentStateRecorded'), 'text-success']
+        : [t('messages.paymentStateRemoved'), 'text-muted']
+      : item.paymentStatus === 'DISMISSED'
+        ? [t('messages.paymentStateDismissed'), 'text-muted']
+        : item.paymentStatus === 'PENDING'
+          ? [t('messages.paymentStatePending'), 'text-amber-strong']
+          : [null, ''];
+  if (!text) return null;
+  return <p className={'mt-2 text-xs font-semibold ' + tone}>{text}</p>;
 }
 
 /**

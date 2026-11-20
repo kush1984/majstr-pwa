@@ -20,6 +20,7 @@ import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { ProfileEditModal } from './ProfileEditModal.tsx';
+import { SettingsModal } from './SettingsModal.tsx';
 import { useDeleteLogo, useUploadLogo } from './useProfile.ts';
 import { usePush } from '@/hooks/usePush.ts';
 import { isIOS, isStandalone } from '@/lib/push.ts';
@@ -56,6 +57,7 @@ export function ProfilePage() {
   const online = useOnline();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [purchaseTab, setPurchaseTab] = useState<PurchaseTab>('pro');
   const [emailGateOpen, setEmailGateOpen] = useState(false);
@@ -252,6 +254,7 @@ export function ProfilePage() {
       <UpgradeIntentModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} mode={purchaseTab} />
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Unverified master tapped a PRO CTA (trial or upgrade): no PRO without a
           verified email, so route them to verification — no pay-now bypass. */}
@@ -310,7 +313,7 @@ export function ProfilePage() {
           icon="⚙️"
           title={t('profile.settings')}
           sub={t('profile.settingsSub')}
-          onClick={() => toast.info(t('profile.settingsSoon'))}
+          onClick={() => setSettingsOpen(true)}
         />
         {/* Logging out with no signal is a trap: it clears the tokens and the local copy, but
             signing back in needs the server — so the master is locked out of their own app until

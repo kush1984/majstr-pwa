@@ -8,6 +8,7 @@ import type { MessageView } from './types.ts';
  * link to. Owner-only; 403 on someone else's object.
  *   GET    /api/projects/{projectId}/messages              -> MessageView[]
  *   PATCH  /api/projects/{projectId}/messages/{id}/read    -> the updated message
+ *   POST   /api/projects/{projectId}/messages/{id}/payment/confirm|dismiss -> the updated message
  *   DELETE /api/projects/{projectId}/messages/{id}         -> 204
  *   GET    /api/projects/{projectId}/messages/{id}/files/{fileId} -> the bytes
  *
@@ -26,6 +27,20 @@ export const messagesApi = {
     return api
       .patch(`/api/projects/${projectId}/messages/${messageId}/read`)
       .then(() => undefined);
+  },
+
+  /** «Кошти прийшли» on a client's waiting «Я оплатив» (V217): records it as the object's money. */
+  confirmPayment(projectId: string, messageId: string): Promise<MessageView> {
+    return api
+      .post<MessageView>(`/api/projects/${projectId}/messages/${messageId}/payment/confirm`)
+      .then((r) => r.data);
+  },
+
+  /** «Не надійшло»: closes a waiting «Я оплатив», writing nothing. */
+  dismissPayment(projectId: string, messageId: string): Promise<MessageView> {
+    return api
+      .post<MessageView>(`/api/projects/${projectId}/messages/${messageId}/payment/dismiss`)
+      .then((r) => r.data);
   },
 
   remove(projectId: string, messageId: string): Promise<void> {

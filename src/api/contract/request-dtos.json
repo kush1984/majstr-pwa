@@ -317,6 +317,11 @@
     "phone": "string?",
     "title": "string?"
   },
+  "PaymentNoticeRequest": {
+    "amount": "number",
+    "authorName": "string?",
+    "comment": "string?"
+  },
   "PaymentReceiptEditRequest": {
     "amount": "number",
     "label": "string?",
@@ -356,22 +361,11 @@
     "trades": "array"
   },
   "ProfileUpdateRequest": {
-    "actNumberFormat": "string?",
-    "bankName": "string?",
     "companyName": "string?",
-    "docCity": "string?",
     "email": "string?",
     "fullName": "string?",
-    "iban": "string?",
-    "legalAddress": "string?",
-    "legalName": "string?",
     "phone": "string?",
-    "taxGroup": "number?",
-    "taxId": "string?",
-    "taxRate": "number?",
-    "trades": "array",
-    "vatId": "string?",
-    "vatPayer": "boolean?"
+    "trades": "array"
   },
   "ProjectImportCommitRequest": {
     "rooms": "array"
@@ -481,6 +475,21 @@
     "utmCampaign": "string?",
     "utmMedium": "string?",
     "utmSource": "string?"
+  },
+  "RequisitesRequest": {
+    "actNumberFormat": "string?",
+    "bankName": "string?",
+    "docCity": "string?",
+    "iban": "string?",
+    "legalAddress": "string?",
+    "legalName": "string?",
+    "payoutCard": "string?",
+    "payoutLink": "string?",
+    "taxGroup": "number?",
+    "taxId": "string?",
+    "taxRate": "number?",
+    "vatId": "string?",
+    "vatPayer": "boolean?"
   },
   "ResetPasswordRequest": {
     "newPassword": "string",

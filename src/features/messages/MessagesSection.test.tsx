@@ -45,10 +45,49 @@ function renderSection(messages: MessageView[]) {
   return render(<MessagesSection projectId="p1" />, { wrapper });
 }
 
+const paid: MessageView = {
+  id: 'm3', authorName: 'Олена', authorPhone: null,
+  message: 'Завдаток', estimateName: null, isRead: true,
+  createdAt: '2026-11-19T10:00:00Z', files: [], kind: 'PAYMENT', paymentAmount: 10000,
+  paymentStatus: 'RECORDED', paymentNote: 'Квитанція збігається: сума, отримувач і дата.', paymentRecorded: true,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(messagesApi.markRead).mockResolvedValue(undefined);
   vi.mocked(messagesApi.remove).mockResolvedValue(undefined);
+});
+
+describe('MessagesSection — a client «Я оплатив» (V217)', () => {
+  it('marks it as a payment and says where it stands, with no button to record it here', async () => {
+    renderSection([paid]);
+
+    expect(await screen.findByText('💰 Оплата')).toBeTruthy();
+    expect(screen.getByText(/Клієнт каже, що переказав 10/)).toBeTruthy();
+    expect(screen.getByText(/Квитанція збігається — записано/)).toBeTruthy();
+    // Recording lives in the object's money, never in the message or the push.
+    expect(screen.queryByRole('button', { name: /Записати|Кошти прийшли/ })).toBeNull();
+  });
+
+  it('points a waiting one to the economy tab, and tells a deleted or dismissed one apart', async () => {
+    const view = renderSection([{ ...paid, paymentStatus: 'PENDING', paymentRecorded: false }]);
+    expect(await screen.findByText(/підтвердьте у вкладці «Економіка»/)).toBeTruthy();
+    view.unmount();
+
+    const again = renderSection([{ ...paid, paymentRecorded: false }]);
+    expect(await screen.findByText(/видалено з «Гроші обʼєкта»/)).toBeTruthy();
+    again.unmount();
+
+    renderSection([{ ...paid, paymentStatus: 'DISMISSED', paymentRecorded: false }]);
+    expect(await screen.findByText('Позначено: кошти не надійшли')).toBeTruthy();
+  });
+
+  it('an ordinary message carries no payment line', async () => {
+    renderSection([fromClient]);
+
+    expect(await screen.findByText('Коли починаєте?')).toBeTruthy();
+    expect(screen.queryByText('💰 Оплата')).toBeNull();
+  });
 });
 
 describe('MessagesSection', () => {

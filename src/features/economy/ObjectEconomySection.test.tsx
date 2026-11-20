@@ -35,6 +35,7 @@ vi.mock('@/api/payments.ts', () => ({ paymentsApi: { addReceipt: vi.fn() } }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
 vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn() } }));
 vi.mock('@/api/acts.ts', () => ({ actsApi: { list: vi.fn(() => Promise.resolve([])), create: vi.fn() } }));
+vi.mock('@/api/messages.ts', () => ({ messagesApi: { listForProject: vi.fn(() => Promise.resolve([])) } }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
 const mockNavigate = vi.fn();

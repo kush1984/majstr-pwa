@@ -32,6 +32,41 @@ export function vatIdWarning(value: string): string | null {
 }
 
 /**
+ * Where a client pays (V217). Unlike the numbers above these are refused by the server too — a client
+ * sends money to them — so the warning here only says it before the save does.
+ */
+export function cardWarning(value: string): string | null {
+  const d = value.replace(/[\s-]/g, '');
+  if (d.length === 0) return null;
+  return /^\d{13,19}$/.test(d) && luhn(d) ? null : 'settings.warnCard';
+}
+
+export function linkWarning(value: string): string | null {
+  const v = value.trim();
+  if (v.length === 0) return null;
+  try {
+    const url = new URL(v);
+    return url.protocol === 'https:' && url.hostname !== '' && url.username === '' ? null : 'settings.warnLink';
+  } catch {
+    return 'settings.warnLink';
+  }
+}
+
+/** The card-number check digit — the same rule `PayoutDetails.luhn` applies on the server. */
+export function luhn(d: string): boolean {
+  let sum = 0;
+  for (let i = d.length - 1, twice = false; i >= 0; i--, twice = !twice) {
+    let n = Number(d[i]);
+    if (twice) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+  }
+  return sum % 10 === 0;
+}
+
+/**
  * A customer's tax-id length rule depends on their type: a ФОП carries a 10-digit РНОКПП, a
  * COMPANY an 8-digit ЄДРПОУ. PERSON has no tax id, so never warns.
  */

@@ -73,6 +73,9 @@ export interface UserResponse {
   taxRate: number | null;
   docCity: string | null;
   actNumberFormat: ActNumberFormat;
+  /** Where a client pays (V217) — «Налаштування», behind the portal's «Оплатити». Absent = not set. */
+  payoutCard?: string;
+  payoutLink?: string;
   /** When he asked for a setup call (V191); absent = never. Stops the offer on the home screen. */
   helpRequestedAt?: string;
   /** When he answered «Чим займаєтесь?» — picked or skipped (V193); absent = not asked yet. */
@@ -214,7 +217,12 @@ export interface ProfileUpdateRequest {
   /** A trade not there before brings its starter catalog — the backend fills it unasked. */
   trades: Trade[];
   email?: string;
-  // Document requisites (acts iteration) — all optional.
+}
+
+/** PUT /api/profile/requisites — «Налаштування» (V217): the document requisites and where a client
+ *  pays. A full PUT of its own (blank clears), so the profile form can never blank it. The card must
+ *  pass Luhn and the link must be https — the server refuses either with a 400. */
+export interface RequisitesRequest {
   legalName?: string;
   taxId?: string;
   legalAddress?: string;
@@ -226,6 +234,8 @@ export interface ProfileUpdateRequest {
   taxRate?: number | null;
   docCity?: string;
   actNumberFormat?: ActNumberFormat;
+  payoutCard?: string;
+  payoutLink?: string;
 }
 
 /** PUT /api/profile/trades — «Чим займаєтесь?» after registration. An empty set is a skip; a
@@ -440,6 +450,19 @@ export interface MessageView {
   createdAt: string;
   /** Photos and PDFs left with the message, oldest first. Empty, never null. */
   files: MessageFileView[];
+  /** PAYMENT = the client's «Я оплатив» off the portal (V217). Absent on an older server = MESSAGE. */
+  kind?: 'MESSAGE' | 'PAYMENT';
+  /** PAYMENT only: what the client says he sent. */
+  paymentAmount?: number;
+  /**
+   * PAYMENT only. RECORDED = in the object's money (the receipt matched, or the master confirmed);
+   * PENDING = waits for «Кошти прийшли» / «Не надійшло»; DISMISSED = the master said it never came.
+   */
+  paymentStatus?: 'PENDING' | 'RECORDED' | 'DISMISSED';
+  /** PAYMENT only: what the receipt check found, in the master's words — why it waits, or what matched. */
+  paymentNote?: string | null;
+  /** PAYMENT only: the payment it wrote still exists (false once the master deleted it). */
+  paymentRecorded?: boolean;
 }
 
 /**

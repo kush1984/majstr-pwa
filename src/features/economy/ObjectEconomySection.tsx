@@ -21,6 +21,7 @@ import { useEconomy, useToggleEstimateCounted } from './useEconomy.ts';
 import { useActs } from '@/features/acts/useActs.ts';
 import { actCreateBlock, useNewAct } from '@/features/acts/useNewAct.ts';
 import { ObjectMoneyCard } from './ObjectMoneyCard.tsx';
+import { PaymentNotices } from './PaymentNotices.tsx';
 import type { CrewMarginResponse, ObjectEconomyActsResponse, SignedEstimatePanelResponse } from '@/api/types.ts';
 
 // «Прибуток/Витрати» and the expense journal were parked here behind a flag in August and are now
@@ -368,6 +369,9 @@ export function ObjectEconomySection({ objectId, objectCreatedAt }: { objectId: 
   // Session-replay masking: everything inside is redacted in the recording (lib/posthog.ts).
   return (
     <section className="ph-mask space-y-3">
+      {/* A client's «Я оплатив» the receipt check could not settle (V217) — first, it asks a question. */}
+      <PaymentNotices objectId={objectId} canWrite={isPro} />
+
       {panels.length > 0 && (
         <div className="space-y-2">
           {panels.map((p) => (

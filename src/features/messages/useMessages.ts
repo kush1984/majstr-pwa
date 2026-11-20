@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { messagesApi } from '@/api/messages.ts';
 import type { MessageView } from '@/api/types.ts';
+import { invalidateObjectMoney } from '@/features/economy/useEconomy.ts';
 
 export const messagesKey = (projectId: string) => ['project-messages', projectId] as const;
 
@@ -47,6 +48,27 @@ export function useDeleteMessage(projectId: string) {
     mutationFn: (messageId: string) => messagesApi.remove(projectId, messageId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: messagesKey(projectId) });
+      void qc.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+}
+
+/**
+ * «Кошти прийшли» / «Не надійшло» on a client's waiting «Я оплатив» (V217). The answered message is
+ * written into the list, and the object's money refetched: a confirmed notice is a new payment there.
+ */
+export function useSettlePaymentNotice(projectId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, arrived }: { messageId: string; arrived: boolean }) =>
+      arrived
+        ? messagesApi.confirmPayment(projectId, messageId)
+        : messagesApi.dismissPayment(projectId, messageId),
+    onSuccess: (updated) => {
+      qc.setQueryData<MessageView[]>(messagesKey(projectId), (old) =>
+        old?.map((m) => (m.id === updated.id ? updated : m)),
+      );
+      invalidateObjectMoney(qc, projectId);
       void qc.invalidateQueries({ queryKey: ['projects'] });
     },
   });
