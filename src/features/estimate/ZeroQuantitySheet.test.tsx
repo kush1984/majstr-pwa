@@ -14,12 +14,28 @@ function line(id: string, over: Partial<EstimateItemResponse> = {}): EstimateIte
 }
 
 describe('zeroQuantityLines', () => {
-  it('names works and materials with no quantity — never a «%» line', () => {
+  it('names works and materials with no quantity', () => {
     const est = anEstimate({
-      items: [line('w0'), line('m0', { type: 'MATERIAL' }), line('w1', { quantity: 4 }),
-        line('pct', { unit: 'PERCENT', quantity: 0 })],
+      items: [line('w0'), line('m0', { type: 'MATERIAL' }), line('w1', { quantity: 4 })],
     });
     expect(zeroQuantityLines(est).map((i) => i.id)).toEqual(['w0', 'm0']);
+  });
+
+  it('names a «%» line still unset — no percentage, or no base — and never a finished one', () => {
+    // A «%» position arrives from the catalog empty (2026-11-20): the client would see it as 0 ₴.
+    const pct = (id: string, over: Partial<EstimateItemResponse>) =>
+      line(id, { unit: 'PERCENT', unitPrice: 0, percentBaseKind: 'POSITION', ...over });
+    const est = anEstimate({
+      items: [
+        line('base', { quantity: 10, lineTotal: 1000 }),
+        pct('noPct', { quantity: 0 }),
+        pct('noBase', { quantity: 5, baseDetached: true }),
+        pct('done', { quantity: 5, percentBaseItemId: 'base', lineTotal: 50 }),
+        pct('baseGone', { quantity: 5, baseDetached: true, lineTotal: 50 }),
+        pct('ofTotal', { quantity: 5, percentBaseKind: 'TOTAL', lineTotal: 50 }),
+      ],
+    });
+    expect(zeroQuantityLines(est).map((i) => i.id)).toEqual(['noPct', 'noBase']);
   });
 
   it('asks nothing about a signed estimate or an ADDENDUM — neither can lose lines', () => {

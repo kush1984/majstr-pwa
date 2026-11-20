@@ -374,6 +374,8 @@ function patchEstimateWithCatalogLines(
       // Reading `src.category` alone showed the other trade's heading for the moment between the
       // tap and the refetch — the very heading this round exists to stop appearing.
       const branch = e.trade ? src.sharedTrades?.find((s) => s.trade === e.trade) : undefined;
+      // A «%» position comes in empty, as the server adds it: no percentage, no base chosen yet.
+      const percent = src.unit === 'PERCENT';
       return [{
         id: e.id,
         type: src.type,
@@ -381,8 +383,8 @@ function patchEstimateWithCatalogLines(
         category: branch?.category ?? src.category,
         trade: e.trade ?? src.trade,
         unit: src.unit,
-        quantity: e.quantity,
-        unitPrice: src.defaultPrice,
+        quantity: percent ? 0 : e.quantity,
+        unitPrice: percent ? 0 : src.defaultPrice,
         // The position's comment rides along, as the server copies it (V207).
         note: src.note ?? null,
         noteVisible: true,
@@ -390,8 +392,8 @@ function patchEstimateWithCatalogLines(
         sortOrder: e.sortOrder ?? 0,
         measurementRefs: [],
         quantityManual: false,
-        // A new line is never a percentage: «%» is chosen in the editor, where a base is chosen too.
-        percentBaseKind: null, percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
+        percentBaseKind: percent ? 'POSITION' : null,
+        percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
       }];
     });
     return [...items, ...lines];

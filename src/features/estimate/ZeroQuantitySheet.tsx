@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import type { EstimateItemResponse, EstimateResponse } from '@/api/types.ts';
+import { isPercentUnset } from './percentLine.ts';
 
 /**
  * The lines a client would read as «0 ₴»: a work or a material with no quantity. A «%» line has no
@@ -10,7 +11,8 @@ import type { EstimateItemResponse, EstimateResponse } from '@/api/types.ts';
  */
 export function zeroQuantityLines(est: EstimateResponse): EstimateItemResponse[] {
   if (est.status === 'SIGNED' || est.kind === 'ADDENDUM') return [];
-  return est.items.filter((i) => i.unit !== 'PERCENT' && Number(i.quantity) === 0);
+  // An unfinished «%» line (no percentage, or no base yet) is a 0 ₴ row to the client just the same.
+  return est.items.filter((i) => (i.unit !== 'PERCENT' && Number(i.quantity) === 0) || isPercentUnset(i));
 }
 
 /**

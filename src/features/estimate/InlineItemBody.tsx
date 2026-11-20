@@ -6,6 +6,7 @@ import { InlineTextCell } from '@/components/InlineTextCell.tsx';
 import { formatMoney } from '@/lib/format.ts';
 import { formatInlineNumber } from '@/lib/inlineEdit.ts';
 import { cn } from '@/lib/cn.ts';
+import { isPercentUnset } from './percentLine.ts';
 import {
   isManualOverMeasurements, percentPatch, quantityPatch, roundedPrice, sumEdit,
 } from './inlineItem.ts';
@@ -96,7 +97,6 @@ export function InlineItemBody({
               }}
             />
             <span>%</span>
-            {percentText && <span className={cn('min-w-0', item.baseDetached && 'text-amber')}>{percentText}</span>}
           </>
         ) : (
           <>
@@ -131,25 +131,46 @@ export function InlineItemBody({
             />
           </>
         )}
-        <span aria-hidden className="ml-auto">=</span>
-        {isPercent || (noQuantity && liveSum === null) ? (
-          <span className="min-h-[44px] content-center px-1 text-sm font-bold text-primary tabular-nums">
-            {noQuantity ? '—' : formatMoney(item.lineTotal)}
-          </span>
-        ) : (
-          // Stays mounted while a neighbour is typed (only its text goes grey), so «Далі» from the
-          // price still lands on it.
-          <InlineNumberCell
-            value={item.lineTotal}
-            kind="money"
-            ariaLabel={label('sum')}
-            display={formatInlineNumber(liveSum ?? item.lineTotal, 'money')}
-            tone={liveSum === null ? 'default' : 'dim'}
-            className="text-sm font-bold text-primary"
-            onCommit={commitSum}
-          />
-        )}
+        {/* «=» and the sum travel together: on a narrow phone the row wraps, and a lone «=» left at
+            the end of one line with its figure on the next read as a broken row. */}
+        <span className="ml-auto flex items-center gap-x-1.5 whitespace-nowrap">
+          <span aria-hidden>=</span>
+          {isPercent || (noQuantity && liveSum === null) ? (
+            <span className="min-h-[44px] content-center px-1 text-sm font-bold text-primary tabular-nums">
+              {noQuantity ? '—' : formatMoney(item.lineTotal)}
+            </span>
+          ) : (
+            // Stays mounted while a neighbour is typed (only its text goes grey), so «Далі» from the
+            // price still lands on it.
+            <InlineNumberCell
+              value={item.lineTotal}
+              kind="money"
+              ariaLabel={label('sum')}
+              display={formatInlineNumber(liveSum ?? item.lineTotal, 'money')}
+              tone={liveSum === null ? 'default' : 'dim'}
+              className="text-sm font-bold text-primary"
+              onCommit={commitSum}
+            />
+          )}
+        </span>
       </div>
+
+      {/* What a «%» line is a share OF, on a line of its own under the figures — inside the row it
+          pushed the percent and its sum onto three lines on a phone. */}
+      {isPercent && percentText && (isPercentUnset(item) ? (
+        // Straight from the catalog: nothing chosen yet. The prompt opens the form where it is chosen.
+        <button
+          type="button"
+          onClick={onMore}
+          className="-mt-1 min-h-[36px] pl-[1.7rem] text-left text-xs font-semibold text-amber-strong"
+        >
+          {percentText}
+        </button>
+      ) : (
+        <p className={cn('-mt-1 pl-[1.7rem] text-xs text-muted', item.baseDetached && 'text-amber')}>
+          {percentText}
+        </p>
+      ))}
 
       {typedSum !== null && !noQuantity && (
         <p className="mt-1 flex flex-wrap items-center gap-x-2 pl-[1.7rem] text-[12px] text-muted">

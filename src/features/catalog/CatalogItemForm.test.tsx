@@ -190,3 +190,39 @@ describe('CatalogItemForm — custom trades', () => {
     await waitFor(() => expect(sel('#ci-trade').value).toBe('custom:ct-gone'));
   });
 });
+
+/** «%» is a share of another sum; a master picked it for «Монтаж шафи» and got «1 % · 1 000 ₴ — база». */
+describe('CatalogItemForm — asks about «%»', () => {
+  it('asks in place when he picks «%», and not for an ordinary unit', async () => {
+    renderForm();
+    await waitFor(() => expect(sel('#ci-unit')).not.toBeNull());
+    expect(screen.queryByText(/Ви певні, що «%»/)).toBeNull();
+
+    set('#ci-unit', 'PERCENT');
+
+    expect(await screen.findByText(/Ви певні, що «%»/)).toBeTruthy();
+    set('#ci-unit', 'M2');
+    await waitFor(() => expect(screen.queryByText(/Ви певні, що «%»/)).toBeNull());
+  });
+
+  it('asks no price for «%» and saves it without one', async () => {
+    vi.mocked(catalogApi.create).mockResolvedValue(catalog[0]);
+    renderForm();
+    await waitFor(() => expect(sel('#ci-unit')).not.toBeNull());
+    set('#ci-name', 'Вивіз сміття');
+    set('#ci-unit', 'PERCENT');
+
+    await waitFor(() => expect(document.querySelector('#ci-price')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
+
+    await waitFor(() => expect(catalogApi.create).toHaveBeenCalled());
+    expect(vi.mocked(catalogApi.create).mock.calls[0][0]).toMatchObject({ unit: 'PERCENT', defaultPrice: 0 });
+  });
+
+  it('does not nag about an item that is already in «%»', async () => {
+    renderForm({ ...catalog[0], id: '7', name: 'Знижка', unit: 'PERCENT' });
+    await waitFor(() => expect(sel('#ci-unit')).not.toBeNull());
+
+    expect(screen.queryByText(/Ви певні, що «%»/)).toBeNull();
+  });
+});

@@ -617,7 +617,7 @@
     "zeroLines": {
       "title_one": "{{count}} position without a quantity — your client will see it as 0 ₴",
       "title_other": "{{count}} positions without a quantity — your client will see them as 0 ₴",
-      "hint": "Usually these are template lines you haven't got to yet. Remove them — or keep them if that's on purpose.",
+      "hint": "Usually these are template lines you haven't got to yet, or a «%» with nothing chosen to take it of. Remove them — or keep them if that's on purpose.",
       "remove": "Remove and continue",
       "keep": "Keep as is",
       "removed_one": "Removed {{count}} position",
@@ -710,6 +710,7 @@
     "percentOfSum": "{{sum}} — base",
     "percentOfItem": "of “{{name}}”",
     "percentOfTotal": "of the estimate total",
+    "percentChooseBase": "choose what it is a share of (⋯)",
     "percentBaseGone": "base deleted",
     "percentLabel": "Percent, %",
     "percentBase": "Percentage of what",
@@ -1622,6 +1623,7 @@
     "proHint": "Available on the PRO plan"
   },
   "catalog": {
+    "percentAsk": "Sure about «%»? It is for a share of another sum: a discount, waste removal at 5 % of the works. The percentage and what it is a share of are set in the estimate. For ordinary work pick pcs, m², m.",
     "noteHint": "Goes into the estimates the client has not signed yet",
     "title": "Catalog",
     "addItem": "+ Add item",

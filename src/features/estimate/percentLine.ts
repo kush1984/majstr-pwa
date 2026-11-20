@@ -26,10 +26,25 @@ export function percentLabel(
   if (kind === 'TOTAL') return t('estimate.percentOfTotal');
   if (kind === 'MANUAL') return t('estimate.percentOfSum', { sum: formatMoney(item.unitPrice) });
 
+  // Added from the catalog and not set yet: the base is chosen in the estimate, never in the catalog.
+  if (isPercentUnset(item)) return t('estimate.percentChooseBase');
   const base = item.percentBaseItemId ? byId.get(item.percentBaseItemId) : undefined;
   // The base is gone: say so instead of showing a percentage of nothing. The amount itself stays —
   // the master is charging for this work, and the row keeps its last computed figure.
   return base
     ? t('estimate.percentOfItem', { name: base.name })
     : t('estimate.percentBaseGone');
+}
+
+/**
+ * A «%» line that is not finished: no percentage typed, or no base chosen (how a «%» position arrives
+ * from the catalog). It reads 0 ₴, so the send asks about it like a line with no quantity.
+ */
+export function isPercentUnset(item: EstimateItemResponse): boolean {
+  if (item.unit !== 'PERCENT' || item.baseOriginLabel) return false;
+  if (Number(item.quantity) === 0) return true;
+  // No base and nothing computed. The server marks any base-less POSITION line detached on save, so
+  // the flag cannot tell «never chosen» from «base deleted»; the amount can — a line whose base was
+  // deleted keeps the figure it is charging for, and reads «база видалена» instead.
+  return item.percentBaseKind === 'POSITION' && !item.percentBaseItemId && Number(item.lineTotal) === 0;
 }

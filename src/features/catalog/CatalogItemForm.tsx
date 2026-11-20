@@ -122,6 +122,11 @@ export function CatalogItemForm({
   // The trade is live: picking a different one re-narrows the category list under it.
   const selectedTradeChoice = watch('tradeChoice') as TradeKey;
   const selectedCategory = watch('category');
+  // «%» is a share OF another sum (a discount, «вивіз сміття 5 % від робіт»), not a unit of work, and
+  // it carries no figure here — the percentage and what it is a share of are set in the estimate.
+  // A master picked it for «Монтаж шафи», so the form asks, in place; an item already in % is not nagged.
+  const isPercent = watch('unit') === 'PERCENT';
+  const askPercent = isPercent && initial?.unit !== 'PERCENT';
   const categoryOptions = useMemo(() => {
     const found = new Set<string>();
     for (const item of catalog.data ?? []) {
@@ -150,7 +155,7 @@ export function CatalogItemForm({
       // A custom trade wins over any system trade sent alongside it (forced to OTHER server-side).
       trade: customTradeId ? undefined : (v.tradeChoice as Trade),
       customTradeId: customTradeId ?? undefined,
-      defaultPrice: parsePrice(v.defaultPrice),
+      defaultPrice: v.unit === 'PERCENT' ? 0 : parsePrice(v.defaultPrice),
       // Absent = untouched; an emptied field clears the comment (and the hint it replaced).
       ...(note.trim() !== initialComment ? { note: note.trim() } : {}),
     };
@@ -208,6 +213,11 @@ export function CatalogItemForm({
             </Select>
           </FormField>
         </div>
+        {askPercent && (
+          <p role="note" className="-mt-2 rounded-lg border border-amber/40 bg-amber-soft px-3 py-2 text-sm text-secondary">
+            {t('catalog.percentAsk')}
+          </p>
+        )}
 
         <FormField
           label={t('estimate.category')}
@@ -248,20 +258,22 @@ export function CatalogItemForm({
           </FormField>
         )}
 
-        <FormField
-          label={t('catalog.priceLabel')}
-          htmlFor="ci-price"
-          required
-          error={errors.defaultPrice?.message}
-        >
-          <Input
-            id="ci-price"
-            inputMode="decimal"
-            placeholder="0"
-            invalid={Boolean(errors.defaultPrice)}
-            {...register('defaultPrice')}
-          />
-        </FormField>
+        {!isPercent && (
+          <FormField
+            label={t('catalog.priceLabel')}
+            htmlFor="ci-price"
+            required
+            error={errors.defaultPrice?.message}
+          >
+            <Input
+              id="ci-price"
+              inputMode="decimal"
+              placeholder="0"
+              invalid={Boolean(errors.defaultPrice)}
+              {...register('defaultPrice')}
+            />
+          </FormField>
+        )}
 
         <FormField label={t('estimate.noteLabel')} htmlFor="ci-note" hint={t('catalog.noteHint')}>
           <textarea

@@ -203,20 +203,25 @@ function ItemRow({
               <span className="-mt-2 block truncate px-1 pb-1.5 text-[11px] leading-tight text-muted">{subline}</span>
             )}
           </span>
-          <span className="flex flex-shrink-0 items-center whitespace-nowrap text-xs text-faint">
-            <InlineNumberCell
-              value={item.defaultPrice}
-              kind="money"
-              ariaLabel={`${t('estimate.inline.price')}, ${item.name}`}
-              className="text-sm font-semibold text-primary"
-              onCommit={(price) => {
-                // A catalog price of 0 would price the next estimate at nothing: an emptied cell
-                // keeps the old price (owner ruling 2026-10-26; the server refuses it anyway).
-                if (price >= 0.01) onInline(item, { defaultPrice: price }, 'price');
-              }}
-            />
-            <span className="pl-0.5">₴ / {t('units.' + item.unit)}</span>
-          </span>
+          {item.unit === 'PERCENT' ? (
+            // A «%» position has no price — the percentage and its base are set in the estimate.
+            <span className="flex-shrink-0 whitespace-nowrap px-1 text-sm font-semibold text-muted">%</span>
+          ) : (
+            <span className="flex flex-shrink-0 items-center whitespace-nowrap text-xs text-faint">
+              <InlineNumberCell
+                value={item.defaultPrice}
+                kind="money"
+                ariaLabel={`${t('estimate.inline.price')}, ${item.name}`}
+                className="text-sm font-semibold text-primary"
+                onCommit={(price) => {
+                  // A catalog price of 0 would price the next estimate at nothing: an emptied cell
+                  // keeps the old price (owner ruling 2026-10-26; the server refuses it anyway).
+                  if (price >= 0.01) onInline(item, { defaultPrice: price }, 'price');
+                }}
+              />
+              <span className="pl-0.5">₴ / {t('units.' + item.unit)}</span>
+            </span>
+          )}
           <button
             type="button"
             onClick={() => onEdit(item)}
@@ -267,7 +272,9 @@ function ItemRow({
               {subline}
             </span>
           )}
-          <span className="block text-xs text-muted">за {t('units.' + item.unit)}</span>
+          {item.unit !== 'PERCENT' && (
+            <span className="block text-xs text-muted">за {t('units.' + item.unit)}</span>
+          )}
           {note && (
             <span className="mt-1 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
               {note.text}
@@ -275,7 +282,7 @@ function ItemRow({
           )}
         </span>
         <span className="whitespace-nowrap text-sm font-bold text-primary">
-          {formatMoney(item.defaultPrice)}
+          {item.unit === 'PERCENT' ? '%' : formatMoney(item.defaultPrice)}
         </span>
       </button>
       <LineNote item={item} />

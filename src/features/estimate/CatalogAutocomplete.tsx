@@ -209,7 +209,7 @@ export function CatalogAutocomplete({
                         {t('itemType.' + item.type)}
                       </span>
                       <span className="text-xs text-muted">
-                        {formatMoney(item.defaultPrice)}/{t('units.' + item.unit)}
+                        {item.unit === 'PERCENT' ? '%' : `${formatMoney(item.defaultPrice)}/${t('units.' + item.unit)}`}
                       </span>
                     </span>
                   </span>

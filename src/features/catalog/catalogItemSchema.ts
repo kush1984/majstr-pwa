@@ -14,12 +14,7 @@ export const UNIT_OPTIONS: readonly Unit[] = UNITS;
  * number only when calling the API — avoids the NaN/coercion friction of
  * number inputs. The backend is the source of truth for money.
  */
-const priceString = z
-  .string()
-  .min(1, i18n.t('validation.enterPrice'))
-  // The same reader as every money field (review P-58): `Number` refused «1 200» and passed
-  // «0,004» as a price the server then rounded to 0.
-  .refine((s) => parseMoney(s) !== null, i18n.t('validation.priceTooLow'));
+const priceString = z.string();
 
 export const catalogItemSchema = z.object({
   name: z
@@ -39,6 +34,17 @@ export const catalogItemSchema = z.object({
   // system Trade literal or `custom:<uuid>` for a master-invented trade (see tradeKey.ts).
   tradeChoice: z.string().min(1),
   defaultPrice: priceString,
+}).superRefine((v, ctx) => {
+  // A «%» position has no price: what it is a share of exists only in an estimate (the field is
+  // hidden for it). Every other position needs one.
+  if (v.unit === 'PERCENT') return;
+  if (v.defaultPrice.trim() === '') {
+    ctx.addIssue({ code: 'custom', path: ['defaultPrice'], message: i18n.t('validation.enterPrice') });
+  } else if (parseMoney(v.defaultPrice) === null) {
+    // The same reader as every money field (review P-58): `Number` refused «1 200» and passed
+    // «0,004» as a price the server then rounded to 0.
+    ctx.addIssue({ code: 'custom', path: ['defaultPrice'], message: i18n.t('validation.priceTooLow') });
+  }
 });
 
 export type CatalogItemFormValues = z.infer<typeof catalogItemSchema>;
