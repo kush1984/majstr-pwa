@@ -150,25 +150,31 @@ describe('AddItemSheet — «%» line with a base (regression: submit was silent
     fireEvent.change(document.querySelector('#it-unit')!, { target: { value: 'PERCENT' } });
   }
 
-  /** The base <select> has no id — reach it through the sibling option it renders. */
-  function baseSelect(): HTMLSelectElement {
-    return screen.getByRole('option', { name: 'Шафа' }).closest('select') as HTMLSelectElement;
+  const second: EstimateItemResponse = {
+    ...base, id: 's2', name: 'Тумба', unitPrice: 2500, lineTotal: 2500, sortOrder: 1,
+  };
+
+  /** A base is ticked by its name in the list of the estimate's lines. */
+  function tickBase(name: string) {
+    fireEvent.click(screen.getByRole('checkbox', { name: new RegExp(name) }));
   }
 
-  it('adds a «% від позиції» line once a base is picked (the exact reported case)', async () => {
+  it('adds a «% від позицій» line of two ticked positions, in the order ticked (V221)', async () => {
     vi.mocked(catalogApi.list).mockResolvedValue([]);
     vi.mocked(estimatesApi.addItem).mockResolvedValue({
       id: 'li9', type: 'WORK', name: 'Укрупнення', unit: 'PERCENT',
       quantity: 15, unitPrice: 0, lineTotal: 1875, sortOrder: 5,
-      percentBaseKind: 'POSITION', percentBaseItemId: 's1',
+      percentBaseKind: 'POSITION', percentBaseItemId: 's2', percentBaseItemIds: ['s2', 's1'],
     } as never);
     const onClose = vi.fn();
-    renderSheet(onClose, [base]);
+    renderSheet(onClose, [base, second]);
 
     await openPercentManual();
-    // «Від позиції» base, then pick the sibling in the base <select> (the 3rd combobox).
-    fireEvent.click(screen.getByRole('button', { name: 'Від позиції' }));
-    fireEvent.change(baseSelect(), { target: { value: 's1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Від позицій' }));
+    tickBase('Тумба');
+    tickBase('Шафа');
+    // 15 % of the two together: 12 500 + 2 500 = 15 000 → 2 250.
+    expect(screen.getByText(/15 000/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
 
@@ -177,30 +183,30 @@ describe('AddItemSheet — «%» line with a base (regression: submit was silent
       expect(estimatesApi.addItem).toHaveBeenCalledWith(
         'e1',
         expect.objectContaining({
-          unit: 'PERCENT', quantity: 15, percentBaseKind: 'POSITION', percentBaseItemId: 's1',
+          unit: 'PERCENT', quantity: 15, percentBaseKind: 'POSITION', percentBaseItemIds: ['s2', 's1'],
         }),
         expect.any(String),
       ),
     );
   });
 
-  it('blocks a «% від позиції» line with no base picked, and shows why (no silent no-op)', async () => {
+  it('blocks a «% від позицій» line with no base ticked, and shows why (no silent no-op)', async () => {
     vi.mocked(catalogApi.list).mockResolvedValue([]);
     const onClose = vi.fn();
     renderSheet(onClose, [base]);
 
     await openPercentManual();
-    fireEvent.click(screen.getByRole('button', { name: 'Від позиції' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Від позицій' }));
     fireEvent.click(screen.getByRole('button', { name: 'Додати' }));
 
     // Nothing is sent, and the master is told what's missing — the opposite of "nothing happens".
-    expect(await screen.findByText('Спершу оберіть позицію для відсотка')).toBeTruthy();
+    expect(await screen.findByText('Спершу оберіть хоча б одну позицію для відсотка')).toBeTruthy();
     expect(estimatesApi.addItem).not.toHaveBeenCalled();
   });
 
   it('«Від кошторису» + «−» submits a NEGATIVE percent — the sign is the toggle, not a typed minus', async () => {
     // Mobile decimal keypads have no minus key, so a «Від кошторису» discount is a +/− toggle and the
-    // field stays a positive magnitude; the sign is applied on submit. «Від позиції» has no toggle.
+    // field stays a positive magnitude; the sign is applied on submit. «Від позицій» has no toggle.
     const work = {
       id: 'w1', type: 'WORK', name: 'Робота', category: null, unit: 'M2',
       quantity: 1, unitPrice: 1000, lineTotal: 1000, sortOrder: 0,

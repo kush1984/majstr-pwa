@@ -1,5 +1,6 @@
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { roundMoney } from '@/lib/decimal.ts';
+import { baseIdsOf } from './percentLine.ts';
 
 /**
  * Editing one field of an estimate line from the row. The server takes the WHOLE line on every
@@ -18,7 +19,7 @@ export function itemRequest(item: EstimateItemResponse, patch: Partial<EstimateI
     measurementRefs: item.measurementRefs,
     quantityManual: item.quantityManual,
     percentBaseKind: item.percentBaseKind,
-    percentBaseItemId: item.percentBaseItemId,
+    percentBaseItemIds: baseIdsOf(item),
     ...patch,
   };
 }

@@ -18,12 +18,11 @@ import { recomputeLines } from './useEstimate.ts';
  * <p><b>`marginAccepted` is not mirrored</b> and is carried through from the server untouched: it
  * sums over signed ACT lines and their ADJUSTMENT rows, which the editor does not hold.</p>
  *
- * <p><b>A «%» line with no crew price is FROZEN</b> at the amount the client's sheet gives it, and
- * at ZERO if that amount is negative (review B-72, the owner's rule). Re-measuring it against the
- * crew's smaller subtotal — which is what both sides used to do — showed «Знижка −10 %» as
- * −1 000 ₴ for the crew against −1 200 ₴ for the client, so a discount the master had just given
- * away read as 1 800 ₴ of margin instead of 800 ₴. The freeze rides `baseDetached`, which
- * `recomputeLines` already honours on both percent passes.</p>
+ * <p><b>A line with no crew price is ZERO for the crew</b> (owner ruling 2026-11-23): the master
+ * added it to the client's copy — a «+10 %», an extra work — and the crew never sees it, so its
+ * whole amount is his margin, and a discount he added comes out of it. A «%» line is zeroed through
+ * `baseDetached`, which `recomputeLines` honours on both percent passes, so it is never re-measured
+ * against the crew's subtotal.</p>
  */
 export function crewMarginOf(est: EstimateResponse): CrewMarginResponse | null {
   const fromServer = est.crewMargin;
@@ -45,16 +44,13 @@ export function crewMarginOf(est: EstimateResponse): CrewMarginResponse | null {
 /**
  * One line wearing the crew's own number. On a PERCENT line that number IS a percent (the backend
  * stores the original percent in `sourceUnitPrice` for exactly this), so it goes back into the
- * quantity; a line with no crew price is left exactly as it is, which is what makes its contribution
- * to the margin zero.
+ * quantity; a line with no crew price was added by the master and is zero for the crew.
  */
 function asCrew(item: EstimateItemResponse): EstimateItemResponse {
   if (item.sourceUnitPrice == null) {
-    // An ordinary line keeps the client's own price, so its contribution to the margin is zero for
-    // free. A «%» line has to be frozen, or the pass re-measures it against the crew's subtotal.
     return item.unit === 'PERCENT'
-      ? { ...item, baseDetached: true, lineTotal: Math.max(0, item.lineTotal) }
-      : item;
+      ? { ...item, baseDetached: true, lineTotal: 0 }
+      : { ...item, unitPrice: 0, lineTotal: 0 };
   }
   return item.unit === 'PERCENT'
     ? { ...item, quantity: item.sourceUnitPrice }

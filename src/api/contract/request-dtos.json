@@ -196,6 +196,7 @@
     "note": "string?",
     "noteVisible": "boolean?",
     "percentBaseItemId": "string?",
+    "percentBaseItemIds": "array?",
     "percentBaseKind": "string?",
     "quantity": "number",
     "quantityManual": "boolean?",

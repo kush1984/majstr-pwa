@@ -597,8 +597,11 @@ export interface EstimateItemResponse {
    * is five hundred hryvnia for one percent.
    */
   percentBaseKind: PercentBaseKind | null;
-  /** The line this percentage is measured against (`POSITION`); null otherwise. */
+  /** The first base line — what a server before V221 sent. Read through `baseIdsOf`. */
   percentBaseItemId: string | null;
+  /** The lines this percentage is measured against (`POSITION`, V221), in the order ticked; their
+   *  amounts are summed. Absent on a row cached before V221 — read through `baseIdsOf`. */
+  percentBaseItemIds?: string[];
   /** The live link is off — the amount was typed by hand, or the base was deleted. */
   baseDetached: boolean;
   /**
@@ -760,8 +763,10 @@ export interface EstimateItemRequest {
   quantityManual?: boolean;
   /** For a `PERCENT` line: what it is a percentage OF. Omitted elsewhere. */
   percentBaseKind?: PercentBaseKind | null;
-  /** Only with `percentBaseKind: 'POSITION'`, and only an ORDINARY line of the same estimate. */
+  /** What an older build sends: one base. A current build sends `percentBaseItemIds`. */
   percentBaseItemId?: string | null;
+  /** Only with `percentBaseKind: 'POSITION'`, and only ORDINARY lines of the same estimate (V221). */
+  percentBaseItemIds?: string[] | null;
   /** The master's own comment (V206). Absent = leave it as is; '' = clear it. */
   note?: string;
   /** Whether the client sees `note`. Absent = leave it as is (a new line: visible). */

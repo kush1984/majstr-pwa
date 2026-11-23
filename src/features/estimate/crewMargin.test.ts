@@ -27,8 +27,8 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
   /**
    * THE PARITY FIXTURE. The same three lines are asserted to the same two figures in
    * `CrewMarginIntegrationTest` on the backend: a м² line, a «% від кошторису» surcharge that has
-   * to be re-measured against the crew's own subtotal, and a line added afterwards with no crew
-   * price. Change one side and this comment is the reason to change the other.
+   * to be re-measured against the crew's own subtotal, and a line the master added afterwards with
+   * no crew price. Change one side and this comment is the reason to change the other.
    */
   it('agrees with the backend on the shared fixture', () => {
     const est = estimate([
@@ -40,13 +40,10 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
 
     const margin = crewMarginOf(est)!;
 
-    // Crew: 100 × 200 = 20 000 + line c unchanged at the client's 5 000 = 25 000, +10 % = 27 500.
-    expect(margin.crewTotal).toBe(27500);
-    // Client: 30 000 + 5 000 = 35 000, +10 % = 38 500. Margin 11 000 — and NOTHING of it comes
-    // from line c: it enters BOTH views identically (its own 5 000 and the 500 the surcharge adds
-    // on top of it), so it cancels in the subtraction. That is what «contributes zero» means for a
-    // line that also sits inside a percentage's base.
-    expect(margin.margin).toBe(11000);
+    // Crew: 100 × 200 = 20 000; line c is the master's, zero for the crew; +10 % = 22 000.
+    expect(margin.crewTotal).toBe(22000);
+    // Client: 30 000 + 5 000 = 35 000, +10 % = 38 500. Everything above the crew's 22 000 is his.
+    expect(margin.margin).toBe(16500);
     expect(margin.unpricedCount).toBe(1);
     expect(margin.unpricedTotal).toBe(5000);
   });
@@ -70,9 +67,8 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
    *
    * A «Знижка −10 % від кошторису» typed on the copy AFTER it was made has no crew price. Both
    * sides used to re-measure it against the crew's smaller subtotal — −1 000 ₴ for the crew
-   * against −1 200 ₴ for the client — so the discount read as 1 800 ₴ of margin. The owner's rule
-   * freezes an unpriced line at the client's amount and a negative one at ZERO: the discount comes
-   * out of the master's own margin, which is 800 ₴.
+   * against −1 200 ₴ for the client — so the discount read as 1 800 ₴ of margin. A line the master
+   * added is zero for the crew: the discount comes out of his own margin, which is 800 ₴.
    */
   it('takes a discount typed on the copy out of the master own margin', () => {
     const est = estimate([
@@ -88,8 +84,9 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
     expect(margin.unpricedCount).toBe(1);
   });
 
-  /** The mirror image: a surcharge typed afterwards passes through both views unchanged. */
-  it('passes a surcharge typed on the copy through both views', () => {
+  /** The owner's case (2026-11-23): «+10 %» typed on the copy is all his — «Бригаді» does not grow.
+   *  Asserted to the same figures by `CrewMarginIntegrationTest#aSurchargeTypedOnTheCopyIsAllTheMastersMargin`. */
+  it('counts a surcharge typed on the copy as the master own margin', () => {
     const est = estimate([
       line({ id: 'a', quantity: 100, unitPrice: 120, lineTotal: 12000, sourceUnitPrice: 100 }),
       line({ id: 's', unit: 'PERCENT', quantity: 10, unitPrice: 0, lineTotal: 1200,
@@ -98,8 +95,8 @@ describe('crewMarginOf — the mirror of the backend CrewMarginCalculator', () =
 
     const margin = crewMarginOf(est)!;
 
-    expect(margin.crewTotal).toBe(11200);
-    expect(margin.margin).toBe(2000);
+    expect(margin.crewTotal).toBe(10000);
+    expect(margin.margin).toBe(3200);
   });
 
   /** A price raised after duplicating is real margin — the copy is the client's sheet. */

@@ -23,6 +23,7 @@ import type { EstimateItemRequest, EstimateItemResponse, PercentBaseKind } from 
 import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
 import { MeasureCalculator } from './MeasureCalculator.tsx';
 import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx';
+import { baseIdsOf } from './percentLine.ts';
 
 /**
  * Manual line-item form. Used both for adding a new item and editing one.
@@ -86,19 +87,25 @@ export function ItemForm({
   // POSITION/TOTAL picker would be actively misleading here (there is no real base to point at,
   // and re-picking one would not do anything), so this renders a completely different, honest block.
   const isFrozen = Boolean(initial?.baseOriginLabel);
-  // «%» is a share OF something: «Від позиції» (a markup on one line) or «Від кошторису» (a share of
+  // «%» is a share OF something: «Від позицій» (a markup on one line) or «Від кошторису» (a share of
   // the works- or materials-subtotal). Default POSITION — a legacy MANUAL/null line opens as POSITION
   // too (MANUAL is gone from the product for a LIVE line); a detached one keeps its frozen amount and
   // says so. A frozen (consolidated) line is always MANUAL — there is no picker to default into.
   const [baseKind, setBaseKind] = useState<PercentBaseKind>(
     isFrozen ? 'MANUAL' : initial?.percentBaseKind === 'TOTAL' ? 'TOTAL' : 'POSITION',
   );
-  const [baseItemId, setBaseItemId] = useState<string | null>(initial?.percentBaseItemId ?? null);
-  // A POSITION «%» line must name the position it's a share of — surfaced inline, not swallowed.
+  // «Від позицій» may name several lines (V221, owner 2026-11-23); the percent is of their sum. Kept
+  // in the order ticked, which is the order the row names them in.
+  const [baseItemIds, setBaseItemIds] = useState<string[]>(initial ? baseIdsOf(initial) : []);
+  const toggleBase = (id: string) => {
+    setBaseItemIds((was) => (was.includes(id) ? was.filter((x) => x !== id) : [...was, id]));
+    setBaseError(false);
+  };
+  // A POSITION «%» line must name the positions it's a share of — surfaced inline, not swallowed.
   const [baseError, setBaseError] = useState(false);
   // Sign of a «Від кошторису» percent, OR of a frozen consolidated line (which may just as well be
   // a discount). The field holds a POSITIVE magnitude; this +/− toggle carries the sign (the mobile
-  // decimal keypad has no minus). «Від позиції» (a live one) is always a markup — no toggle there.
+  // decimal keypad has no minus). «Від позицій» (a live one) is always a markup — no toggle there.
   // An existing line opens on the right side by reading the sign of its stored percent.
   const [percentMinus, setPercentMinus] = useState<boolean>(
     initial?.unit === 'PERCENT' && (initial.quantity ?? 0) < 0,
@@ -166,7 +173,10 @@ export function ItemForm({
   // (a discount).
   const pct = (isPercent && percentCanBeNegative && percentMinus ? -1 : 1)
     * (parseQuantity(watch('quantity'), { allowZero: true }) ?? 0);
-  const baseLine = siblings.find((s) => s.id === baseItemId) ?? null;
+  const baseLines = baseItemIds
+    .map((id) => siblings.find((s) => s.id === id))
+    .filter((s): s is EstimateItemResponse => s !== undefined);
+  const baseLinesSum = sumMoney(baseLines.map((s) => s.lineTotal ?? 0));
   // «Від кошторису» base = the subtotal of every line of THIS line's type that is not itself a
   // «% від кошторису» — the exact rule EstimateMath uses server-side (a WORK percent measures works,
   // a MATERIAL percent materials, and neither compounds). Passing the full est.total instead made
@@ -176,7 +186,7 @@ export function ItemForm({
       && !(s.unit === 'PERCENT' && (s.percentBaseKind ?? 'MANUAL') === 'TOTAL'))
     .map((s) => s.lineTotal ?? 0);
   const totalBaseSum = sumMoney(totalBase);
-  const baseAmount = baseKind === 'TOTAL' ? totalBaseSum : (baseLine?.lineTotal ?? 0);
+  const baseAmount = baseKind === 'TOTAL' ? totalBaseSum : baseLinesSum;
   // The line's amount as the server will store it (quantity × price, HALF_UP to kopecks), live
   // while he types. Null — not «0 ₴» — while either field is empty or not yet a number.
   const lineSum = (() => {
@@ -195,16 +205,22 @@ export function ItemForm({
         ? 'estimate.percentScopeWorks' : 'estimate.percentScopeMaterials');
       return t('estimate.percentPreviewTotal', { pct, scope, base: formatMoney(totalBaseSum), result });
     }
-    return baseLine
+    // Several bases: the ticks right above name them, so the preview counts them.
+    if (baseLines.length > 1) {
+      return t('estimate.percentPreviewItems', {
+        pct, count: baseLines.length, base: formatMoney(baseLinesSum), result,
+      });
+    }
+    return baseLines.length === 1
       ? t('estimate.percentPreviewItem', {
-        pct, name: baseLine.name, base: formatMoney(baseLine.lineTotal), result,
+        pct, name: baseLines[0].name, base: formatMoney(baseLinesSum), result,
       })
       : t('estimate.percentNoBaseYet');
   })();
 
   const submit = handleSubmit((v) => {
     // «%» validation the schema can't do — the base kind lives in component state, not the form.
-    if (v.unit === 'PERCENT' && baseKind === 'POSITION' && !baseItemId) {
+    if (v.unit === 'PERCENT' && baseKind === 'POSITION' && baseLines.length === 0) {
       setBaseError(true);
       return;
     }
@@ -237,9 +253,9 @@ export function ItemForm({
       category: v.category.trim() || undefined,
       unit: v.unit,
       // The field is a positive magnitude; a «Від кошторису» (or frozen) «−» makes the percent
-      // negative (a discount). «Від позиції» is always a positive markup.
+      // negative (a discount). «Від позицій» is always a positive markup.
       quantity: isPercent && percentCanBeNegative && percentMinus ? -quantity : quantity,
-      // A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
+      // A LIVE «%» line has no price of its own — «Від позицій»/«Від кошторису» both measure
       // another sum. A FROZEN (MANUAL) line's price IS the base sum it was frozen against, and
       // stays directly editable — there is no live base to derive it from any more.
       unitPrice,
@@ -247,7 +263,7 @@ export function ItemForm({
       quantityManual,
       // Only a percentage line records a base; anything else sends none, whatever is in state.
       percentBaseKind: v.unit === 'PERCENT' ? baseKind : undefined,
-      percentBaseItemId: v.unit === 'PERCENT' && baseKind === 'POSITION' ? baseItemId : undefined,
+      percentBaseItemIds: v.unit === 'PERCENT' && baseKind === 'POSITION' ? baseLines.map((b) => b.id) : undefined,
       // Absent = untouched; an emptied field clears the comment (and the hint it replaced).
       ...(noteChanged ? { note: note.trim() } : {}),
       noteVisible,
@@ -342,7 +358,7 @@ export function ItemForm({
             }}
           />
         </FormField>
-        {/* A LIVE «%» line has no price of its own — «Від позиції»/«Від кошторису» both measure
+        {/* A LIVE «%» line has no price of its own — «Від позицій»/«Від кошторису» both measure
             another sum, so the field would ask for a number that means nothing. A FROZEN
             (consolidated) line has no live base any more, so its price — the sum it was frozen
             against — becomes the one thing left to edit directly. */}
@@ -408,22 +424,38 @@ export function ItemForm({
 
           {baseKind === 'POSITION' && (
             <>
-              <select
-                value={baseItemId ?? ''}
-                onChange={(e) => { setBaseItemId(e.target.value || null); setBaseError(false); }}
+              <p className="text-xs text-muted">{t('estimate.percentPickBasesHint')}</p>
+              <div
+                role="group"
+                aria-label={t('estimate.percentBaseItem')}
+                data-testid="percent-base-list"
                 className={cn(
-                  'min-h-[44px] w-full rounded-xl border bg-surface px-3 text-sm text-primary',
+                  'max-h-64 divide-y divide-border overflow-y-auto rounded-xl border bg-surface',
                   baseError ? 'border-danger' : 'border-border',
                 )}
               >
-                <option value="">{t('estimate.percentNoBaseYet')}</option>
                 {/* Percentage lines are NOT offered — that is what makes a cycle unbuildable. */}
                 {siblings
                   .filter((s) => s.unit !== 'PERCENT' && s.id !== initial?.id)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-              </select>
+                  .map((s) => {
+                    const ticked = baseItemIds.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex min-h-[44px] cursor-pointer select-none items-center gap-3 px-3 py-2 text-sm [-webkit-touch-callout:none] [touch-action:manipulation]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ticked}
+                          onChange={() => toggleBase(s.id)}
+                          className="h-5 w-5 shrink-0 accent-brand"
+                        />
+                        <span className="min-w-0 flex-1 break-words text-primary">{s.name}</span>
+                        <span className="shrink-0 text-xs text-muted">{formatMoney(s.lineTotal ?? 0)}</span>
+                      </label>
+                    );
+                  })}
+              </div>
               {baseError && (
                 <p className="text-xs text-danger">{t('estimate.percentPickBaseError')}</p>
               )}
@@ -431,7 +463,7 @@ export function ItemForm({
           )}
 
           {/* «Від кошторису» may add to or take off the subtotal — the master picks the sign, no
-              «націнка/знижка» wording, just + / −. «Від позиції» is always a markup, so no toggle. */}
+              «націнка/знижка» wording, just + / −. «Від позицій» is always a markup, so no toggle. */}
           {baseKind === 'TOTAL' && (
             <div className="flex gap-1 rounded-xl bg-surface p-1">
               {[false, true].map((minus) => (

@@ -12,6 +12,7 @@ import { enqueue } from '@/lib/outbox/outbox.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
 import { CLIENT_DRIVEN_QUERY, awaitingClientInterval } from '@/lib/clientDrivenQuery.ts';
 import { MATERIALS_AVAILABILITY_KEY } from '@/features/materials/useMaterialsAvailability.ts';
+import { baseIdsOf } from './percentLine.ts';
 import type {
   BatchCatalogItemEntry,
   CatalogItemResponse,
@@ -33,6 +34,21 @@ export const ESTIMATE_KEY = ['estimate'] as const;
 // NEGATIVE «%» line — a discount, the line this pass exists for — disagreed with the stored amount
 // on 5,89 % of cases, and a figure the master read on the estimate is not the one he was billed.
 const round2 = roundMoney;
+
+/**
+ * The sum of a «% від позицій» line's bases (V221), or null — the line keeps its last amount — when
+ * none is named or one is missing: the mirror of `EstimateMath.sumOf`.
+ */
+function sumOfBases(ids: string[], amountById: Map<string, number>): number | null {
+  if (ids.length === 0) return null;
+  let sum = 0;
+  for (const id of ids) {
+    const amount = amountById.get(id);
+    if (amount == null) return null;
+    sum += amount;
+  }
+  return round2(sum);
+}
 
 /**
  * The three-step pass, mirroring the server's EstimateMath — <b>change the two together</b>.
@@ -75,7 +91,7 @@ export function recomputeLines(source: EstimateItemResponse[]): EstimateItemResp
       ? null
       : kindOf(i) === 'MANUAL'
         ? i.unitPrice
-        : (i.percentBaseItemId != null ? amountById.get(i.percentBaseItemId) ?? null : null);
+        : sumOfBases(baseIdsOf(i), amountById);
     i.lineTotal = share(i, base);
   }
 
@@ -271,7 +287,8 @@ export function useAddItem(estimateId: string) {
             // Carried through so the optimistic row is computed by the same rules the server uses;
             // the real amount arrives with the reply and replaces this one.
             percentBaseKind: req.percentBaseKind ?? null,
-            percentBaseItemId: req.percentBaseItemId ?? null,
+            percentBaseItemId: req.percentBaseItemIds?.[0] ?? req.percentBaseItemId ?? null,
+            percentBaseItemIds: req.percentBaseItemIds ?? (req.percentBaseItemId ? [req.percentBaseItemId] : []),
             baseDetached: false,
             baseOriginLabel: null,
             closedByActs: null,
@@ -390,7 +407,8 @@ function patchEstimateWithCatalogLines(
         measurementRefs: [],
         quantityManual: false,
         percentBaseKind: percent ? 'POSITION' : null,
-        percentBaseItemId: null, baseDetached: false, baseOriginLabel: null, closedByActs: null,
+        percentBaseItemId: null, percentBaseItemIds: [],
+        baseDetached: false, baseOriginLabel: null, closedByActs: null,
       }];
     });
     return [...items, ...lines];
@@ -611,7 +629,7 @@ export function useMarkUpItems(estimateId: string) {
             req: {
               type: item.type, name: item.name, category: item.category ?? undefined,
               unit: item.unit, quantity: item.quantity, unitPrice,
-              percentBaseKind: item.percentBaseKind, percentBaseItemId: item.percentBaseItemId,
+              percentBaseKind: item.percentBaseKind, percentBaseItemIds: baseIdsOf(item),
               measurementRefs: item.measurementRefs, quantityManual: item.quantityManual,
             } satisfies EstimateItemRequest,
           },

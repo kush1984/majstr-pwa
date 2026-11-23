@@ -237,7 +237,7 @@ describe('ObjectEconomySection', () => {
     expect(screen.queryByText('з прийнятого актами')).toBeNull();
   });
 
-  it('names the lines that carry no crew price instead of inflating the margin', async () => {
+  it('names the lines the master added, all of them in his margin', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
       estimates: [panel({
         crewMargin: { crewTotal: 20000, margin: 4000, marginAccepted: 1600, unpricedCount: 2, unpricedTotal: 5000 },
@@ -250,7 +250,7 @@ describe('ObjectEconomySection', () => {
     expect(await screen.findByText('з прийнятого актами')).toBeTruthy();
     // Matched on the stable half: the sentence has plural forms now (review P-51), so «2 позиції
     // … додані» and «5 позицій … додано» are both this line.
-    expect(screen.getByText(/без ціни бригади/)).toBeTruthy();
+    expect(screen.getByText(/без бригади/)).toBeTruthy();
   });
 
   it('an ordinary estimate shows no crew figures at all', async () => {

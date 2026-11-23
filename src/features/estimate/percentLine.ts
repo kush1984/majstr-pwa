@@ -28,12 +28,21 @@ export function percentLabel(
 
   // Added from the catalog and not set yet: the base is chosen in the estimate, never in the catalog.
   if (isPercentUnset(item)) return t('estimate.percentChooseBase');
-  const base = item.percentBaseItemId ? byId.get(item.percentBaseItemId) : undefined;
-  // The base is gone: say so instead of showing a percentage of nothing. The amount itself stays —
-  // the master is charging for this work, and the row keeps its last computed figure.
-  return base
-    ? t('estimate.percentOfItem', { name: base.name })
-    : t('estimate.percentBaseGone');
+  const bases = baseIdsOf(item).map((id) => byId.get(id));
+  // A base is gone: say so instead of showing a percentage of less. The amount itself stays — the
+  // master is charging for this work, and the row keeps its last computed figure.
+  if (bases.length === 0 || bases.some((b) => b === undefined)) return t('estimate.percentBaseGone');
+  // Several bases are named one by one (owner ruling 2026-11-23): the client sees what it is OF.
+  return t('estimate.percentOfItem', { name: bases.map((b) => b!.name).join(t('estimate.percentNamesJoin')) });
+}
+
+/**
+ * The lines a «% від позицій» is measured against (V221: several, summed). A row cached before V221
+ * carries only `percentBaseItemId`; both read the same here.
+ */
+export function baseIdsOf(item: Pick<EstimateItemResponse, 'percentBaseItemId' | 'percentBaseItemIds'>): string[] {
+  if (item.percentBaseItemIds && item.percentBaseItemIds.length > 0) return item.percentBaseItemIds;
+  return item.percentBaseItemId ? [item.percentBaseItemId] : [];
 }
 
 /**
@@ -46,5 +55,5 @@ export function isPercentUnset(item: EstimateItemResponse): boolean {
   // No base and nothing computed. The server marks any base-less POSITION line detached on save, so
   // the flag cannot tell «never chosen» from «base deleted»; the amount can — a line whose base was
   // deleted keeps the figure it is charging for, and reads «база видалена» instead.
-  return item.percentBaseKind === 'POSITION' && !item.percentBaseItemId && Number(item.lineTotal) === 0;
+  return item.percentBaseKind === 'POSITION' && baseIdsOf(item).length === 0 && Number(item.lineTotal) === 0;
 }

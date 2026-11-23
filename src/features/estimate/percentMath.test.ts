@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import '@/lib/i18n.ts';
 import { percentLabel } from './percentLine.ts';
+import { recomputeLines } from './useEstimate.ts';
 import type { EstimateItemResponse } from '@/api/types.ts';
 
 /**
@@ -37,6 +38,20 @@ describe('how a percentage line reads', () => {
     });
 
     expect(percentLabel(delivery, new Map([['base', wardrobe]]))).toContain('Шафа');
+  });
+
+  it('names every line a «% від позицій» is measured against, in the order ticked (V221)', () => {
+    const small = line({ id: 'a', name: 'Плитка 100x100', lineTotal: 8000 });
+    const large = line({ id: 'b', name: 'Плитка 60x60', lineTotal: 10000 });
+    const complexity = line({
+      id: 'c', unit: 'PERCENT', quantity: 25, lineTotal: 4500,
+      percentBaseKind: 'POSITION', percentBaseItemId: 'b', percentBaseItemIds: ['b', 'a'],
+    });
+
+    expect(percentLabel(complexity, new Map([['a', small], ['b', large]])))
+      .toBe('від «Плитка 60x60», «Плитка 100x100»');
+    // One of them deleted: the row says the base is gone rather than naming half of it.
+    expect(percentLabel(complexity, new Map([['b', large]]))).toBe('база видалена');
   });
 
   it('says the base is gone rather than showing a percentage of nothing', () => {
@@ -76,5 +91,29 @@ describe('how a percentage line reads', () => {
       );
       expect(label).not.toContain('₴/%');
     }
+  });
+});
+
+describe('a «% від позицій» on the device (V221) — the mirror of EstimateMath.sumOf', () => {
+  it('is a share of the ticked lines together, and keeps its amount when one of them is gone', () => {
+    const small = line({ id: 'a', quantity: 10, unitPrice: 800 });
+    const large = line({ id: 'b', quantity: 20, unitPrice: 500 });
+    const complexity = line({
+      id: 'c', unit: 'PERCENT', quantity: 25, unitPrice: 0, lineTotal: 0,
+      percentBaseKind: 'POSITION', percentBaseItemIds: ['a', 'b'],
+    });
+
+    expect(recomputeLines([small, large, complexity])[2].lineTotal).toBe(4500);
+    expect(recomputeLines([small, { ...complexity, lineTotal: 4500 }])[1].lineTotal).toBe(4500);
+  });
+
+  it('reads a row cached before V221, which names one base', () => {
+    const wardrobe = line({ id: 'a', quantity: 1, unitPrice: 1000 });
+    const delivery = line({
+      id: 'd', unit: 'PERCENT', quantity: 10, unitPrice: 0, lineTotal: 0,
+      percentBaseKind: 'POSITION', percentBaseItemId: 'a',
+    });
+
+    expect(recomputeLines([wardrobe, delivery])[1].lineTotal).toBe(100);
   });
 });
