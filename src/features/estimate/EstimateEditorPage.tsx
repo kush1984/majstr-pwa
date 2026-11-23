@@ -71,11 +71,11 @@ import { ReceiptPdfSheet } from './ReceiptPdfSheet.tsx';
 import { ZeroQuantitySheet, zeroQuantityLines } from './ZeroQuantitySheet.tsx';
 import { useClientPreview } from './useClientPreview.ts';
 
-// Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
-// iteration) — the backend endpoint and this component's own handler/dialog stay fully wired so
-// re-enabling later is a one-line flip, same pattern as ELECTRICAL_MEASUREMENTS_ENABLED. See the
-// sibling flip in ProjectDetailPage.tsx's row-level menu.
-const REOPEN_ENABLED: boolean = false;
+// Reopen (SIGNED → DRAFT) was hidden in the payments-economy-portal iteration and is back (owner,
+// 2026-11-23, after masters asked to fix or delete a signed estimate): the client signs again, the
+// earlier signature stays in history, payments stay on the object, and any act not REJECTED blocks
+// it server-side. See the sibling flip in ProjectDetailPage.tsx's row-level menu.
+const REOPEN_ENABLED: boolean = true;
 
 /** Where «← назад» (and a post-delete redirect) should land — the object page, on the SAME tab
  *  the master opened this estimate from (`fromTab`, off this page's own `?from=` param), or the
@@ -623,8 +623,10 @@ export function EstimateEditorPage() {
         </div>
 
         {signed && (
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-border bg-brand-soft px-3.5 py-3">
-            <span className="flex flex-1 items-center gap-1 text-sm font-semibold text-primary">
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-border bg-brand-soft px-3.5 py-3">
+            {/* The whole width to the words, the button under them: side by side on a phone the
+                label broke into four lines (375 px screenshot, 2026-11-23). */}
+            <span className="flex basis-full items-center gap-1 text-sm font-semibold text-primary">
               {t('estimate.signedViewOnly')}
               <InfoPopover text={t('estimate.signedViewOnlyInfo')} label={t('estimate.signedViewOnly')} />
             </span>
@@ -981,7 +983,7 @@ export function EstimateEditorPage() {
         open={reopenConfirmOpen}
         title={t('estimate.reopen')}
         message={t('estimate.reopenConfirm')}
-        confirmLabel={t('estimate.reopen')}
+        confirmLabel={t('estimate.reopenShort')}
         loading={reopenEstimate.isPending}
         onConfirm={confirmReopen}
         onClose={() => setReopenConfirmOpen(false)}

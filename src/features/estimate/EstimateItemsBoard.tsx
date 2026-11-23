@@ -589,14 +589,15 @@ function ItemRow({
                   {t('estimate.needsQuantity')}
                 </span>
               ) : (
-                <span>
+                // Never broken: a long «від «A», «B»» beside it split «25» from «%» (V221).
+                <span className="shrink-0 whitespace-nowrap">
                   {formatNumber(item.quantity, 3)} {t('units.' + item.unit)}
                 </span>
               )}
-              <span className="h-[3px] w-[3px] rounded-full bg-faint" />
+              <span className="h-[3px] w-[3px] shrink-0 rounded-full bg-faint" />
               {/* A percentage has no price per unit — «500 ₴/%» meant nothing. It says what it is a
                   percentage OF, in the same words the PDF and the client's portal use. */}
-              <span className={cn(item.baseDetached && 'text-amber')}>
+              <span className={cn('min-w-0', item.baseDetached && 'text-amber')}>
                 {percentLabel(item, byId) ?? `${formatMoney(item.unitPrice)}/${t('units.' + item.unit)}`}
               </span>
               {fullyClosed && (

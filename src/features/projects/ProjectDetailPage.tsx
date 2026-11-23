@@ -50,10 +50,9 @@ import { TasksSheet } from '@/features/tasks/TasksSheet.tsx';
 import { useTasks } from '@/features/tasks/useTasks.ts';
 import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
-// Reopen (SIGNED → DRAFT) is deliberately hidden from the UI for now (payments-economy-portal
-// iteration) — same flip point as EstimateEditorPage.tsx's REOPEN_ENABLED; the backend endpoint
-// and this component's own handler/dialog stay fully wired so re-enabling is a one-line flip.
-const REOPEN_ENABLED: boolean = false;
+// Reopen (SIGNED → DRAFT) is back (owner, 2026-11-23) — same flip point as EstimateEditorPage.tsx's
+// REOPEN_ENABLED.
+const REOPEN_ENABLED: boolean = true;
 
 export type Tab = 'estimate' | 'measurements' | 'photos' | 'economy' | 'acts';
 const TABS: { key: Tab; labelKey: string }[] = [
