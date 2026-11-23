@@ -80,6 +80,8 @@ export interface UserResponse {
   helpRequestedAt?: string;
   /** When he answered «Чим займаєтесь?» — picked or skipped (V193); absent = not asked yet. */
   tradesOnboardedAt?: string;
+  /** Where he works (V219); absent = not answered yet (the home screen asks once). */
+  region?: Region | null;
 }
 
 /** How a work act's number is displayed — «7» vs «7/2026». */
@@ -769,11 +771,6 @@ export interface EstimateItemRequest {
 export interface EstimateItemFromCatalogRequest {
   quantity: number;
   sortOrder?: number;
-  /** The trade whose FOLDER this position was tapped in. A position two trades both ship is
-   *  stored once (V118) and shown under both, so the row alone cannot say which work the line
-   *  is — the branch of the tree is the evidence. The server honours it only if the shipped
-   *  library files that exact name under that trade, and ignores it otherwise. */
-  trade?: Trade;
 }
 
 // ---------------------------------------------------------------------------
@@ -825,33 +822,13 @@ export interface CatalogItemResponse {
    *  drywall that is the order the work is actually done in (підготовка → каркас → звукоізоляція →
    *  оздоблення → надбавки). Absent for a folder the master invented, which sorts last.
    *
-   *  `sortOrder` cannot answer this: it is ONE global rank taken from the trade the row is STORED
-   *  under, so a row shown under ANOTHER trade's branch carries a rank from the wrong trade — which
-   *  is why the drywall board opened on «Каркас і обшивка». */
+   *  `sortOrder` cannot answer this: it is ONE global rank across all his trades — which is why the
+   *  drywall board once opened on «Каркас і обшивка». */
   categoryOrder?: number | null;
   createdAt: string;
-  /** Other trades that ALSO recognize this exact (name, type, unit) per the default catalog —
-   *  never includes `trade` itself. A master's catalog has one row per (name, type, unit), so a
-   *  position two of his trades both ship under identical wording is filed under whichever trade
-   *  claimed it first; this is how the OTHER trade's branch still finds it. The server
-   *  always sends this (empty array when nothing is shared) — optional here only so fixtures/
-   *  optimistic objects that predate this field don't all need updating. */
-  sharedTrades?: SharedTrade[];
   /** A position we shipped for a trade he has taken off his profile: kept with his price and
    *  still priced from, but left off the catalog screen and the pickers (`useVisibleCatalog`). */
   hidden?: boolean;
-}
-
-/** One foreign trade that ships a position, and the category IT files that position under.
- *  The two can legitimately disagree: backend V116 copied ten painter positions verbatim into
- *  drywall phases, so «Поклейка склополотна» is the painter's «Шпалери» and the drywaller's
- *  «Оздоблення під фарбування» at the same time. Rendering the STORED category under the other
- *  trade's chip is what put a Шпалери folder on a drywall screen. */
-export interface SharedTrade {
-  trade: Trade;
-  category?: string | null;
-  /** Where THAT trade's sequence puts the category above — see `CatalogItemResponse.categoryOrder`. */
-  categoryOrder?: number | null;
 }
 
 export interface CatalogItemRequest {
@@ -908,10 +885,6 @@ export interface BatchCatalogItemEntry {
    *  `X-Entity-Uuid` header, which cannot carry N ids. Makes a replayed offline batch
    *  idempotent PER LINE instead of duplicating the whole selection. */
   id?: string;
-  /** The branch of the picker tree this row was ticked in — see
-   *  {@link EstimateItemFromCatalogRequest.trade}. Per entry, because one multi-select can
-   *  span several branches. */
-  trade?: Trade;
 }
 
 // ---------------------------------------------------------------------------
@@ -2721,3 +2694,33 @@ export interface TelegramStatus {
   username?: string;
   botUsername?: string;
 }
+
+/** A master's rating of Majstr itself (V218). `publishConsent` counts only at 4–5 stars. */
+export interface AppReviewRequest {
+  rating: number;
+  text?: string | null;
+  /** Where it was given; absent = the profile. */
+  source?: 'PROFILE' | 'PROMPT';
+  publishConsent: boolean;
+}
+
+/** A published rating of Majstr, as majstr.pro shows it (V218). */
+export interface PublicAppReview {
+  /** «Олена К.» — never the full name. */
+  authorName: string;
+  trades: string[];
+  rating: number;
+  text: string | null;
+  monthsInMajstr: number;
+  estimates: number;
+  signedEstimates: number;
+  publishedAt: string;
+}
+
+/** The 24 oblasts and Kyiv city (V219) — mirrors the backend `Region` enum; labels in `regions.*`. */
+export const REGIONS = [
+  'VINNYTSIA', 'VOLYN', 'DNIPRO', 'DONETSK', 'ZHYTOMYR', 'ZAKARPATTIA', 'ZAPORIZHZHIA', 'IVANO_FRANKIVSK',
+  'KYIV_OBLAST', 'KIROVOHRAD', 'LUHANSK', 'LVIV', 'MYKOLAIV', 'ODESA', 'POLTAVA', 'RIVNE', 'SUMY', 'TERNOPIL',
+  'KHARKIV', 'KHERSON', 'KHMELNYTSKYI', 'CHERKASY', 'CHERNIVTSI', 'CHERNIHIV', 'KYIV_CITY',
+] as const;
+export type Region = (typeof REGIONS)[number];

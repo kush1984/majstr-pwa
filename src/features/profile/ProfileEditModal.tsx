@@ -11,8 +11,10 @@ import { toAppError } from '@/api/errors.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { CUSTOM_TRADE_EMOJI } from '@/lib/labels.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useAddCustomTrade, useDeleteCustomTrade, useRenameCustomTrade, useUpdateProfile } from './useProfile.ts';
-import type { Trade } from '@/api/types.ts';
+import { useAddCustomTrade, useDeleteCustomTrade, useRenameCustomTrade, useUpdateProfile, useUpdateRegion } from './useProfile.ts';
+import { regionOptions } from '@/features/region/regionOptions.ts';
+import type { Region, Trade } from '@/api/types.ts';
+import { Select } from '@/components/Select.tsx';
 
 interface FormState {
   fullName: string;
@@ -43,6 +45,9 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
 
   const [form, setForm] = useState<FormState>({ fullName: '', phone: '', companyName: '', email: '' });
   const [trades, setTrades] = useState<Trade[]>([]);
+  // Where he works (V219) — saved by its own call, after the profile, only when it changed.
+  const [region, setRegion] = useState<Region | ''>('');
+  const updateRegion = useUpdateRegion();
   const [errors, setErrors] = useState<{
     fullName?: boolean;
     phone?: boolean;
@@ -75,6 +80,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
         fullName: me.fullName ?? '', phone: me.phone ?? '', companyName: me.companyName ?? '', email: me.email,
       });
       setTrades(me.trades);
+      setRegion(me.region ?? '');
       setErrors({});
       seededRef.current = true;
     }
@@ -110,6 +116,7 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
         trades,
         ...(emailEditable ? { email: form.email.trim() } : {}),
       });
+      if (region && region !== me?.region) await updateRegion.mutateAsync(region);
       toast.success(t('profile.saved'));
       if (emailChanged) toast.info(t('profile.emailChangedSent'));
       // Removing a trade never touches the catalog (the master's data) — just a
@@ -198,6 +205,13 @@ export function ProfileEditModal({ open, onClose }: { open: boolean; onClose: ()
 
         <FormField label={t('auth.companyName')} hint={t('profile.companyNameHint')}>
           <Input value={form.companyName} onChange={set('companyName')} autoComplete="organization" />
+        </FormField>
+
+        <FormField label={t('region.label')} htmlFor="profile-region">
+          <Select id="profile-region" value={region} onChange={(e) => setRegion(e.target.value as Region | '')}>
+            <option value="">{t('region.pick')}</option>
+            {regionOptions(t).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
         </FormField>
 
         <fieldset>

@@ -19,6 +19,8 @@ import { usePlanLimits, isAtObjectLimit } from '@/features/plan/usePlanLimits.ts
 import { ShoppingHomeCard } from '@/features/shopping/ShoppingHomeCard.tsx';
 import { CashHomeStrip } from '@/features/cash/CashHomeStrip.tsx';
 import { HelpOfferCard } from './HelpOfferCard.tsx';
+import { AppReviewPromptCard } from '@/features/appReview/AppReviewPromptCard.tsx';
+import { RegionAskCard } from '@/features/region/RegionAskCard.tsx';
 import { VerifiedTrialCard } from './VerifiedTrialCard.tsx';
 import { TransferCard } from './TransferCard.tsx';
 import { useSampleProject } from '@/features/projects/useSampleProject.ts';
@@ -118,6 +120,10 @@ export function DashboardPage() {
         <TransferCard realObjects={projects.data.filter((p) => p.sample !== true).length} />
       )}
       {projects.isSuccess && <HelpOfferCard hasObjects={projects.data.length > 0} />}
+      {/* One question at a time, and never on the very first screen: the region once he has an
+          object, the rating only after the region is answered (V218, V219). */}
+      {projects.isSuccess && projects.data.some((p) => p.sample !== true) && <RegionAskCard />}
+      {me?.region && <AppReviewPromptCard />}
 
       {atProjectLimit && (
         <div className="mb-5">

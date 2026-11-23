@@ -20,6 +20,7 @@ import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { Modal } from '@/components/Modal.tsx';
 import { Button } from '@/components/Button.tsx';
 import { ProfileEditModal } from './ProfileEditModal.tsx';
+import { AppReviewSheet } from '@/features/appReview/AppReviewSheet.tsx';
 import { SettingsModal } from './SettingsModal.tsx';
 import { useDeleteLogo, useUploadLogo } from './useProfile.ts';
 import { usePush } from '@/hooks/usePush.ts';
@@ -58,6 +59,7 @@ export function ProfilePage() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [purchaseTab, setPurchaseTab] = useState<PurchaseTab>('pro');
   const [emailGateOpen, setEmailGateOpen] = useState(false);
@@ -255,6 +257,7 @@ export function ProfilePage() {
       <EmailVerifyModal open={emailGateOpen} onClose={() => setEmailGateOpen(false)} />
       <ProfileEditModal open={editOpen} onClose={() => setEditOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AppReviewSheet open={reviewOpen} source="PROFILE" onClose={() => setReviewOpen(false)} />
 
       {/* Unverified master tapped a PRO CTA (trial or upgrade): no PRO without a
           verified email, so route them to verification — no pay-now bypass. */}
@@ -314,6 +317,13 @@ export function ProfilePage() {
           title={t('profile.settings')}
           sub={t('profile.settingsSub')}
           onClick={() => setSettingsOpen(true)}
+        />
+        {/* «Оцінити Majstr» (V218) — always here; the home screen only asks now and then. */}
+        <MenuRow
+          icon="⭐"
+          title={t('appReview.profileRow')}
+          sub={t('appReview.profileRowSub')}
+          onClick={() => setReviewOpen(true)}
         />
         {/* Logging out with no signal is a trap: it clears the tokens and the local copy, but
             signing back in needs the server — so the master is locked out of their own app until

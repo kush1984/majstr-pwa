@@ -62,10 +62,7 @@ describe('AddItemSheet — catalog multi-select', () => {
     fireEvent.click(screen.getByRole('button', { name: /Додати 2/ }));
     // Each entry now also carries a client-generated id: the pick is authored offline-first,
     // and per-line ids let a partially-applied batch resume instead of duplicating what landed.
-    //
-    // ...and the BRANCH it was ticked in only when that is NOT the row's own trade (review P-70):
-    // naming its own trade made the server re-file it into the library folder, over one the master
-    // renamed. A position another trade claimed first (V118) still carries the branch.
+    // No trade rides along: every trade holds its own rows (backend V220), so the row says it.
     await waitFor(() => expect(estimatesApi.addItemsFromCatalogBatch).toHaveBeenCalled());
     const sent = vi.mocked(estimatesApi.addItemsFromCatalogBatch).mock.calls[0][1];
     expect(sent.map(({ catalogItemId, quantity, sortOrder }) => ({ catalogItemId, quantity, sortOrder })))
@@ -73,7 +70,7 @@ describe('AddItemSheet — catalog multi-select', () => {
         { catalogItemId: 'i1', quantity: 1, sortOrder: 5 },
         { catalogItemId: 'i2', quantity: 1, sortOrder: 6 },
       ]);
-    expect(sent.map((e) => e.trade)).toEqual([undefined, undefined]);
+    expect(sent.every((e) => !('trade' in e))).toBe(true);
     expect(new Set(sent.map((e) => e.id)).size).toBe(2); // distinct, not one id reused
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });

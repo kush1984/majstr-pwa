@@ -1,23 +1,8 @@
-import type { CatalogItemResponse, Trade } from '@/api/types.ts';
+import type { CatalogItemResponse } from '@/api/types.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { toSections, type Section } from '@/features/estimate/estimateArrange.ts';
 import { customTradeKey, type TradeKey } from './tradeKey.ts';
 import { catalogSectionRank } from './sharedCategory.ts';
-
-/**
- * A catalog row as it appears inside ONE branch, carrying the branch it is shown in.
- *
- * <p>This is the only evidence of which work a shared position is. The row is stored once, under
- * whichever trade claimed the name first (V118), and shown under every trade that ships it — so
- * the STORED trade answers «where does this live», never «what did he just pick». Sending the
- * branch along is what stops a position tapped in «Малярні роботи» from arriving in the estimate
- * as a drywall line, with a drywall folder heading above it.</p>
- */
-export type BranchRow = CatalogItemResponse & {
-  /** The system trade of the branch, or null in a custom-trade one (which the server cannot be
-   *  told about: `Trade` is an enum and a master-invented trade is not in it). */
-  filedUnder: Trade | null;
-};
 
 /** One trade and everything the master's catalog holds under it, already grouped into folders. */
 export interface TradeBranch {
@@ -25,9 +10,8 @@ export interface TradeBranch {
   /** The master's own name for a `custom:<id>` trade; null for a system one, whose label the
    *  caller translates from the key (the tree stays free of i18n). */
   customName: string | null;
-  sections: Section<BranchRow>[];
-  /** Positions in THIS branch. Not a share of the catalog total — a position two trades both
-   *  ship is counted in both, because it genuinely belongs to both. */
+  sections: Section<CatalogItemResponse>[];
+  /** Positions in THIS branch. */
   count: number;
 }
 
@@ -48,56 +32,17 @@ export function tradeKeyOf(item: CatalogItemResponse): TradeKey {
  * built over a flat list shows the same rows in the same sequence, only with the trade said out
  * loud. Custom trades and folders the library ships nothing for have no rank and go last.</p>
  *
- * <p><b>A shared position appears under EVERY trade that ships it</b>, in that trade's own
- * category. `catalog_items` has one row per (name, type, unit), so a position two of the
- * master's trades both use is stored once under whichever claimed it first — showing it only
- * there is what made him ask «що тут робить категорія Шпалери?» on the drywall screen, and
- * hiding it from the other branch would be worse: he would not find a priced position where he
- * goes looking for it. This replaced the old one-trade-at-a-time re-filing, which could only ever
- * answer for a single chip. The row keeps its id, so ticking either copy ticks the position once.</p>
- *
- * <p><b>Bounded by the trades the catalog actually uses.</b> `sharedTrades` names every trade the
- * LIBRARY ships the name under, not the master's — a drywaller owns «Установка люка-ревізії
- * простого» because V120 copied it into a drywall phase, and a whole «Сантехніка» branch holding
- * that one row would be a trade he does not do. A foreign trade earns a branch only when some row
- * is stored under it.</p>
+ * <p><b>Every row sits in its own trade's branch.</b> Since backend V220 a position two of the
+ * master's trades both ship is a row in EACH trade, in that trade's own folder and at its own
+ * price — so nothing is re-filed here, and an electrician never sees a tiling folder.</p>
  */
-export function toTradeTree(
-  items: readonly CatalogItemResponse[],
-  /**
-   * Every row the catalog holds, not only the ones on screen — which trades exist is a fact about
-   * the LIBRARY, and a search that happens to hide a branch must not re-file the rows that remain
-   * under it (review P-28). Defaults to `items` for callers with nothing filtered out.
-   */
-  all: readonly CatalogItemResponse[] = items,
-): TradeBranch[] {
-  const stored = new Set<TradeKey>();
-  for (const item of all) stored.add(tradeKeyOf(item));
-
-  const rows = new Map<TradeKey, BranchRow[]>();
-  const push = (key: TradeKey, item: CatalogItemResponse) => {
-    // The branch a row is shown in is a fact about THIS copy of it, not about the row.
-    const row: BranchRow = { ...item, filedUnder: systemTradeOf(key) };
-    const list = rows.get(key);
-    if (list) list.push(row);
-    else rows.set(key, [row]);
-  };
-
+export function toTradeTree(items: readonly CatalogItemResponse[]): TradeBranch[] {
+  const rows = new Map<TradeKey, CatalogItemResponse[]>();
   for (const item of items) {
-    const own = tradeKeyOf(item);
-    push(own, item);
-    // A custom trade never lends its rows to a system branch: its `trade` column reads OTHER for
-    // storage reasons only, and `sharedTrades` is computed off the NAME, so a system trade that
-    // happens to ship the same wording would swallow a position the master filed himself.
-    if (item.customTradeId) continue;
-    for (const shared of item.sharedTrades ?? []) {
-      if (shared.trade === own || !stored.has(shared.trade)) continue;
-      // No category on the other side means that trade files it nowhere in particular — keep the
-      // stored one rather than inventing «Без категорії».
-      push(shared.trade, shared.category == null
-        ? item
-        : { ...item, category: shared.category, categoryOrder: shared.categoryOrder });
-    }
+    const key = tradeKeyOf(item);
+    const list = rows.get(key);
+    if (list) list.push(item);
+    else rows.set(key, [item]);
   }
 
   return [...rows.entries()]
@@ -112,12 +57,6 @@ export function toTradeTree(
       || systemIndex(a.key) - systemIndex(b.key)
       || (a.customName ?? '').localeCompare(b.customName ?? '', 'uk'))
     .map(({ key, customName, sections, count }) => ({ key, customName, sections, count }));
-}
-
-/** The system trade a branch key names, or null for `custom:<id>` — which has no enum value to
- *  send and needs none: a custom-trade row is the master's own filing already. */
-function systemTradeOf(key: TradeKey): Trade | null {
-  return (TRADE_VALUES as readonly string[]).includes(key) ? (key as Trade) : null;
 }
 
 /** Where a system trade sits in the library's own trade order; custom trades sort after them all. */

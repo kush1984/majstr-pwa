@@ -370,18 +370,15 @@ function patchEstimateWithCatalogLines(
       // Not in the cached catalog (never prefetched, or added on another device) — skip the
       // preview rather than invent a line; the server still adds it correctly on replay.
       if (!src) return [];
-      // The folder of the BRANCH it was picked in, which is what the server will file it under.
-      // Reading `src.category` alone showed the other trade's heading for the moment between the
-      // tap and the refetch — the very heading this round exists to stop appearing.
-      const branch = e.trade ? src.sharedTrades?.find((s) => s.trade === e.trade) : undefined;
       // A «%» position comes in empty, as the server adds it: no percentage, no base chosen yet.
       const percent = src.unit === 'PERCENT';
       return [{
         id: e.id,
         type: src.type,
         name: src.name,
-        category: branch?.category ?? src.category,
-        trade: e.trade ?? src.trade,
+        // The row's own trade and folder, as the server files it: every trade holds its own rows.
+        category: src.category,
+        trade: src.trade,
         unit: src.unit,
         quantity: percent ? 0 : e.quantity,
         unitPrice: percent ? 0 : src.defaultPrice,

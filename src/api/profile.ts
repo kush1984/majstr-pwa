@@ -1,5 +1,7 @@
 import { api } from './client.ts';
-import type { HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, RequisitesRequest, SenderProfileRequest, UserResponse } from './types.ts';
+import type {
+  HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, Region, RequisitesRequest, SenderProfileRequest, UserResponse,
+} from './types.ts';
 
 interface CustomTradeRequest {
   name: string;
@@ -13,6 +15,11 @@ export const profileApi = {
   },
 
   /** «Налаштування» (V217): document requisites + where a client pays. */
+  /** Where he works (V219) — its own write, so the profile form cannot blank it. */
+  updateRegion(region: Region): Promise<UserResponse> {
+    return api.put<UserResponse>('/api/profile/region', { region }).then((r) => r.data);
+  },
+
   updateRequisites(req: RequisitesRequest): Promise<UserResponse> {
     return api.put<UserResponse>('/api/profile/requisites', req).then((r) => r.data);
   },

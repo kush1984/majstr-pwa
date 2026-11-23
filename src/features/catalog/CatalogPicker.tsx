@@ -12,10 +12,10 @@ import { formatMoney } from '@/lib/format.ts';
 import { cn } from '@/lib/cn.ts';
 import { useVisibleCatalog } from './useCatalog.ts';
 import { TradeLevel } from './TradeLevel.tsx';
-import { toTradeTree, type BranchRow, type TradeBranch } from './catalogTree.ts';
+import { toTradeTree, type TradeBranch } from './catalogTree.ts';
 import { CatalogItemForm } from './CatalogItemForm.tsx';
 import { CreateFromSearch, shouldOfferCreate } from './CreateFromSearch.tsx';
-import type { CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
+import type { CatalogItemResponse, ItemType } from '@/api/types.ts';
 
 type TypeFilter = ItemType | 'ALL';
 
@@ -79,7 +79,7 @@ export function CatalogPicker({
   /** Perform the write. The caller maps catalog items to its own payload (an estimate line, a
    *  template item, an additional work); everything around it — busy state, the error toast, the
    *  success toast, clearing the basket — lives here so the callers cannot drift on it. */
-  onPick: (items: BranchRow[]) => Promise<void>;
+  onPick: (items: CatalogItemResponse[]) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const online = useOnline();
@@ -110,11 +110,8 @@ export function CatalogPicker({
       .filter((i) => !needle || i.name.toLowerCase().includes(needle));
   }, [data, q, typeFilter]);
 
-  // Which trades EXIST is a fact about the catalog, not about what the search box is showing
-  // (review P-28). Built from `filtered`, a search that hid every drywall row also removed the
-  // DRYWALL branch — so a position both trades ship appeared under the other one, and the line
-  // was filed there. `data` answers «whose folder is this», `filtered` «what do I see».
-  const branches = useMemo(() => toTradeTree(filtered, data ?? []), [filtered, data]);
+  // Every row sits in its own trade's branch (backend V220): no row is re-filed for display.
+  const branches = useMemo(() => toTradeTree(filtered), [filtered]);
 
   // One branch = nothing for a trade level to disambiguate, so it is not drawn and its categories
   // sit at the top level, exactly as they did before the tree.
@@ -124,23 +121,14 @@ export function CatalogPicker({
   const toggleOpen = (key: string, fallback: boolean) =>
     setOpenState((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }));
 
-  // Which BRANCH each ticked row was ticked in, beside the tick itself. A shared position appears
-  // under every trade that ships it, so the row alone cannot say which work the master meant —
-  // and the server files the estimate line by that answer. Kept separate from `selected` so the
-  // sub-components keep asking a plain Set the plain question.
-  const [branchOf, setBranchOf] = useState<Map<string, Trade | null>>(new Map());
 
-  const toggle = (item: BranchRow) => {
+  const toggle = (item: CatalogItemResponse) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(item.id)) next.delete(item.id);
       else next.add(item.id);
       return next;
     });
-    // Remembered on tick and never cleared on untick: the row is gone from the basket anyway, and
-    // a stale entry answers about a row nothing will read. Re-ticking in another branch overwrites
-    // it, which is the only case where the answer changes.
-    setBranchOf((was) => new Map(was).set(item.id, item.filedUnder));
   };
 
   const offerCreate = searching && !isPending && shouldOfferCreate(q, (data ?? []).map((i) => i.name));
@@ -153,16 +141,15 @@ export function CatalogPicker({
   const created = (item: CatalogItemResponse) => {
     setCreating(null);
     setQ('');
-    const row: BranchRow = { ...item, filedUnder: item.customTradeId ? null : item.trade };
     if (single || selected.size === 0) {
-      void run([row], !single);
+      void run([item], !single);
       return;
     }
-    toggle(row);
+    toggle(item);
     toast.success(t('catalog.createFromSearch.addedToBasket', { name: item.name }));
   };
 
-  const run = async (items: BranchRow[], announce: boolean) => {
+  const run = async (items: CatalogItemResponse[], announce: boolean) => {
     if (items.length === 0 || busy) return;
     setBusy(true);
     try {
@@ -185,8 +172,7 @@ export function CatalogPicker({
   // master had already chosen — silently, with the button still promising them.
   const addSelected = () => run(
     (data ?? [])
-      .filter((i) => selected.has(i.id))
-      .map((i) => ({ ...i, filedUnder: branchOf.get(i.id) ?? null })),
+      .filter((i) => selected.has(i.id)),
     true,
   );
 
@@ -315,7 +301,7 @@ function TradeBranchNode({
   blocked: ReadonlySet<string>;
   single?: boolean;
   busy: boolean;
-  onRow: (item: BranchRow) => void;
+  onRow: (item: CatalogItemResponse) => void;
 }) {
   const picked = branch.sections.reduce(
     (n, s) => n + s.items.filter((i) => selected.has(i.id)).length,
@@ -372,7 +358,7 @@ function CategoryFolder({
   onRow,
 }: {
   category: string;
-  items: BranchRow[];
+  items: CatalogItemResponse[];
   open: boolean;
   /** Absent while searching — the header stays as a label, see the picker's doc. */
   onToggle?: () => void;
@@ -380,7 +366,7 @@ function CategoryFolder({
   blocked: ReadonlySet<string>;
   single?: boolean;
   busy: boolean;
-  onRow: (item: BranchRow) => void;
+  onRow: (item: CatalogItemResponse) => void;
 }) {
   const { t } = useTranslation();
   const name = category === '' ? t('catalog.noCategory') : category;

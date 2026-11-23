@@ -130,7 +130,6 @@ export function useCreateCatalogItem() {
         // Whether this brand-new position is also shipped under another trade is something only
         // the server (catalog_templates) knows — invalidate() replaces this with the real answer
         // as soon as the create round-trips.
-        sharedTrades: [],
       };
       return offlineMutate<CatalogItemResponse>({
         entity: 'catalogItem', entityId: id, type: 'create', payload: req, deps: [],
@@ -201,7 +200,7 @@ export function useCatalogSync() {
             id: c.id, name: c.name, category: c.category ?? null, trade: c.trade ?? null,
             customTradeId: null, customTradeName: null, type: c.type, unit: c.unit,
             defaultPrice: c.defaultPrice, sortOrder: Number.MAX_SAFE_INTEGER,
-            createdAt: new Date().toISOString(), sharedTrades: [],
+            createdAt: new Date().toISOString(),
           }));
           patchCatalog(qc, (items) =>
             items.map((i) => (prices.has(i.id) ? { ...i, defaultPrice: prices.get(i.id) ?? i.defaultPrice } : i)));

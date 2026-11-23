@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { routes } from '@/lib/config.ts';
 import { config } from '@/lib/config.ts';
 import { TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY } from '@/features/plan/tempFreeUnlocks.ts';
+import type { PublicAppReview } from '@/api/types.ts';
 
 /**
- * Public marketing landing — what a logged-OUT visitor sees at "/". Pure presentation: no API
- * calls, so it paints instantly without the backend. Its own `landing-*` palette (warm ink, paper,
+ * Public marketing landing — what a logged-OUT visitor sees at "/". Pure presentation that paints
+ * instantly without the backend; the ONE call, masters' reviews (V218), lands after the paint and
+ * draws nothing until there is something to show. Its own `landing-*` palette (warm ink, paper,
  * the brand orange) keeps it apart from the in-app theme.
  *
  * <p>Every phone on the page is a REAL screen of the app (`public/landing/shot-*.webp`, re-shot by
@@ -22,6 +24,7 @@ export function LandingPage() {
       <Features />
       <HowItWorks />
       <Audience />
+      <Reviews />
       <Control />
       <Faq />
       <FinalCTA />
@@ -528,6 +531,58 @@ function Audience() {
           <span className="font-semibold text-landing-ink">{t('landing.tradesNote')}</span>{' '}
           {trades.join(' · ')}
         </p>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * «Що кажуть майстри» (V218) — masters' ratings of Majstr they agreed to show and the admin
+ * published, each with figures read from his own account (time in Majstr, estimates, signatures):
+ * what makes a review believable. No reviews, or the backend away — the section is simply not there.
+ */
+function Reviews() {
+  const { t } = useTranslation();
+  const [reviews, setReviews] = useState<PublicAppReview[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`${config.apiBaseUrl}/api/public/app-reviews`)
+      .then((r) => (r.ok ? (r.json() as Promise<PublicAppReview[]>) : []))
+      .then((rows) => { if (alive) setReviews(rows.filter((r) => r.text)); })
+      .catch(() => { /* no section without the backend */ });
+    return () => { alive = false; };
+  }, []);
+  if (reviews.length === 0) return null;
+  return (
+    <section className="px-4 pb-16 sm:px-6 lg:pb-20">
+      <div className="mx-auto max-w-[1160px]">
+        <SectionTitle sub={t('appReview.landingSub')}>{t('appReview.landingTitle')}</SectionTitle>
+        <div className="grid gap-5 md:grid-cols-3">
+          {reviews.slice(0, 6).map((r) => (
+            <figure
+              key={`${r.authorName}-${r.publishedAt}`}
+              className="flex flex-col rounded-2xl border border-landing-line/60 bg-white p-5 shadow-[0_6px_20px_-14px_rgba(58,37,25,0.35)]"
+            >
+              <div className="text-lg leading-none text-landing-amber" aria-label={t('appReview.star', { count: r.rating })}>
+                {'★'.repeat(r.rating)}
+              </div>
+              <blockquote className="mt-3 flex-1 text-[15px] leading-relaxed">«{r.text}»</blockquote>
+              <figcaption className="mt-4 border-t border-landing-line/50 pt-3">
+                <div className="font-bold">
+                  {r.authorName}
+                  {r.trades.length > 0 && <span className="font-normal text-landing-muted"> · {r.trades.join(', ')}</span>}
+                </div>
+                <div className="mt-0.5 text-xs text-landing-muted">
+                  {[
+                    t('appReview.landingMonths', { count: r.monthsInMajstr }),
+                    t('appReview.landingEstimates', { count: r.estimates }),
+                    r.signedEstimates > 0 ? t('appReview.landingSigned', { count: r.signedEstimates }) : null,
+                  ].filter(Boolean).join(' · ')}
+                </div>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
       </div>
     </section>
   );

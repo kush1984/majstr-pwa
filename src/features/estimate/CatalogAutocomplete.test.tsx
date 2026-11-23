@@ -16,7 +16,6 @@ const item: CatalogItemResponse = {
   customTradeName: null,
   description: null,
   sortOrder: 0,
-  sharedTrades: [],
   categoryOrder: null,
   createdAt: '2026-09-16T08:00:00Z',
 };

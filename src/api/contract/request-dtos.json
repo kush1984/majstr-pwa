@@ -6,8 +6,7 @@
     "catalogItemId": "string",
     "id": "string?",
     "quantity": "number",
-    "sortOrder": "number?",
-    "trade": "string?"
+    "sortOrder": "number?"
   },
   "AddTemplatesRequest": {
     "trades": "array"
@@ -23,6 +22,12 @@
   "AdminEstimateTemplateRequest": {
     "name": "string",
     "trade": "string?"
+  },
+  "AppReviewRequest": {
+    "publishConsent": "boolean?",
+    "rating": "number",
+    "source": "string?",
+    "text": "string?"
   },
   "ApplyTemplatesRequest": {
     "estimate": "object?",
@@ -182,8 +187,7 @@
   },
   "EstimateItemFromCatalogRequest": {
     "quantity": "number",
-    "sortOrder": "number?",
-    "trade": "string?"
+    "sortOrder": "number?"
   },
   "EstimateItemRequest": {
     "category": "string?",
@@ -458,6 +462,9 @@
   },
   "RefreshTokenRequest": {
     "refreshToken": "string"
+  },
+  "RegionRequest": {
+    "region": "string"
   },
   "RegisterRequest": {
     "companyName": "string?",

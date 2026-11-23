@@ -23,6 +23,8 @@ vi.mock('@/features/shopping/ShoppingHomeCard.tsx', () => ({ ShoppingHomeCard: (
 vi.mock('@/features/cash/CashHomeStrip.tsx', () => ({ CashHomeStrip: () => null }));
 vi.mock('@/features/inbox/InboxHomeStrip.tsx', () => ({ InboxHomeStrip: () => null }));
 vi.mock('./HelpOfferCard.tsx', () => ({ HelpOfferCard: () => null }));
+vi.mock('@/features/appReview/AppReviewPromptCard.tsx', () => ({ AppReviewPromptCard: () => null }));
+vi.mock('@/features/region/RegionAskCard.tsx', () => ({ RegionAskCard: () => null }));
 vi.mock('./VerifiedTrialCard.tsx', () => ({ VerifiedTrialCard: () => null }));
 vi.mock('@/components/ProjectCard.tsx', () => ({ ProjectCard: () => null }));
 const openSample = vi.fn();
