@@ -694,6 +694,17 @@ export interface EstimateResponse {
   /** «Бригаді / Твоя націнка» while the copy is still a draft — absent on anything but a
    *  markup duplicate. Owner-only: never render it in portal mode. */
   crewMargin?: CrewMarginResponse | null;
+  /** Why this SIGNED estimate cannot be reopened now — null when it can (or is not signed). */
+  reopenBlock?: ReopenBlock | null;
+}
+
+/**
+ * What stands in the way of «Перевідкрити для змін» (backend `ReopenGuard`), sent with the
+ * estimate so the app says so before the tap. `actNumbers` as printed («3», «П-1»).
+ */
+export interface ReopenBlock {
+  reason: 'ADDENDUM' | 'DRAFT_ACT' | 'SENT_ACT' | 'SIGNED_ACT';
+  actNumbers: string[];
 }
 
 /**
@@ -947,6 +958,8 @@ export interface SignedEstimatePanelResponse {
   discountRate?: number | null;
   /** «Бригаді / Твоя націнка» — present only on a marked-up copy, absent otherwise. */
   crewMargin?: CrewMarginResponse | null;
+  /** Why «Перевідкрити для змін» would refuse — null when it would not. */
+  reopenBlock?: ReopenBlock | null;
 }
 
 /** PRO-only internals — null on `ObjectEconomyResponse` for FREE. Deliberately two numbers

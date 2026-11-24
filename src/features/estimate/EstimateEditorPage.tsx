@@ -11,6 +11,7 @@ import { InfoPopover } from '@/components/InfoPopover.tsx';
 import { Fab } from '@/components/Fab.tsx';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { reopenBlockFixableInActs, reopenBlockMessage } from './reopenBlock.ts';
 import { Spinner } from '@/components/Spinner.tsx';
 import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
@@ -630,7 +631,21 @@ export function EstimateEditorPage() {
               {t('estimate.signedViewOnly')}
               <InfoPopover text={t('estimate.signedViewOnlyInfo')} label={t('estimate.signedViewOnly')} />
             </span>
-            {REOPEN_ENABLED && (
+            {/* Blocked (an act on it, or an act's own rollup): say why and what to do right here,
+                instead of a button that would only answer with the same refusal (owner, 2026-11-24). */}
+            {REOPEN_ENABLED && est.reopenBlock && (
+              <>
+                <p className="basis-full text-sm text-muted" data-testid="reopen-block">
+                  {reopenBlockMessage(t, est.reopenBlock)}
+                </p>
+                {reopenBlockFixableInActs(est.reopenBlock) && (
+                  <Button variant="secondary" onClick={() => navigate(`${routes.project(est.projectId)}?tab=acts`)}>
+                    {t('estimate.toActs')}
+                  </Button>
+                )}
+              </>
+            )}
+            {REOPEN_ENABLED && !est.reopenBlock && (
               <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>
                 {t('estimate.reopen')}
               </Button>

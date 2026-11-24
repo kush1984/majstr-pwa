@@ -15,6 +15,11 @@ import { toAppError } from '@/api/errors.ts';
 import { routes } from '@/lib/config.ts';
 import { ActionMenu, ActionMenuItem } from '@/components/ActionMenu.tsx';
 import { InfoPopover } from '@/components/InfoPopover.tsx';
+import { Modal } from '@/components/Modal.tsx';
+import { Button } from '@/components/Button.tsx';
+import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
+import { useReopenEstimate } from '@/features/estimate/useEstimate.ts';
+import { reopenBlockFixableInActs, reopenBlockMessage } from '@/features/estimate/reopenBlock.ts';
 import { ProgressStrip, progressPct } from '@/components/ProgressStrip.tsx';
 import { estimateName } from '@/features/estimate/estimateName.ts';
 import { useEconomy, useToggleEstimateCounted } from './useEconomy.ts';
@@ -140,8 +145,21 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toggle = useToggleEstimateCounted(objectId);
+  const reopen = useReopenEstimate(panel.id);
+  const [reopenOpen, setReopenOpen] = useState(false);
 
   const isAddendum = panel.kind === 'ADDENDUM';
+
+  const confirmReopen = async () => {
+    try {
+      await reopen.mutateAsync();
+      toast.success(t('estimate.reopened'));
+      setReopenOpen(false);
+      void navigate(routes.estimate(panel.id));
+    } catch (err) {
+      toast.error(toAppError(err).message);
+    }
+  };
 
   const onToggle = () => {
     toggle.mutate(
@@ -207,11 +225,24 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
                     onClick={() => { close(); onGenerate(); }}
                   />
                 )}
+                {/* Owner, 2026-11-24: reopen belongs here too, and when something stands in the way
+                    the tap says what (the server's ReopenGuard), not a confirmation that then fails. */}
                 <ActionMenuItem
-                  icon={panel.countedInEconomy ? '🚫' : '✓'}
-                  label={panel.countedInEconomy ? t('economy.excludeAct') : t('economy.includeAct')}
-                  onClick={() => { close(); onToggle(); }}
+                  icon="✏️"
+                  label={t('estimate.reopen')}
+                  onClick={() => { close(); setReopenOpen(true); }}
                 />
+                {/* Only the way BACK (owner, 2026-11-24). Every real reason to leave a signed estimate
+                    out is taken at the signature (a signed copy, a signed variant, a signed rollup);
+                    by hand it only ever zeroed «За договором» by mistake. When that automatic guess
+                    is wrong — two signed estimates that are two real deals — this turns it back on. */}
+                {!panel.countedInEconomy && (
+                  <ActionMenuItem
+                    icon="✓"
+                    label={t('economy.includeAct')}
+                    onClick={() => { close(); onToggle(); }}
+                  />
+                )}
               </>
             )}
           </ActionMenu>
@@ -225,6 +256,29 @@ function EstimatePanel({ panel, objectId, canGenerate, onGenerate }: {
           {t('economy.notCountedNote')}
           <InfoPopover text={t('economy.notCountedInfo')} label={t('economy.notCountedNote')} />
         </p>
+      )}
+      {panel.reopenBlock ? (
+        <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title={t('estimate.reopenBlock.title')}>
+          <p className="mb-5 text-sm text-muted" data-testid="reopen-block">{reopenBlockMessage(t, panel.reopenBlock)}</p>
+          <div className="flex gap-2">
+            <Button variant="secondary" fullWidth onClick={() => setReopenOpen(false)}>{t('common.gotIt')}</Button>
+            {reopenBlockFixableInActs(panel.reopenBlock) && (
+              <Button fullWidth onClick={() => { setReopenOpen(false); void navigate(`${routes.project(objectId)}?tab=acts`); }}>
+                {t('estimate.toActs')}
+              </Button>
+            )}
+          </div>
+        </Modal>
+      ) : (
+        <ConfirmDialog
+          open={reopenOpen}
+          title={t('estimate.reopen')}
+          message={t('estimate.reopenConfirm')}
+          confirmLabel={t('estimate.reopenShort')}
+          loading={reopen.isPending}
+          onConfirm={() => void confirmReopen()}
+          onClose={() => setReopenOpen(false)}
+        />
       )}
     </div>
   );

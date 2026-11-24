@@ -33,7 +33,7 @@ vi.mock('@/api/economy.ts', () => ({
 }));
 vi.mock('@/api/payments.ts', () => ({ paymentsApi: { addReceipt: vi.fn() } }));
 vi.mock('@/api/upgrade.ts', () => ({ upgradeApi: { click: vi.fn(() => Promise.resolve()) } }));
-vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn() } }));
+vi.mock('@/api/estimates.ts', () => ({ estimatesApi: { setCountInEconomy: vi.fn(), reopen: vi.fn() } }));
 vi.mock('@/api/acts.ts', () => ({ actsApi: { list: vi.fn(() => Promise.resolve([])), create: vi.fn() } }));
 vi.mock('@/api/messages.ts', () => ({ messagesApi: { listForProject: vi.fn(() => Promise.resolve([])) } }));
 vi.mock('@/hooks/useToast.ts', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
@@ -201,6 +201,42 @@ describe('ObjectEconomySection', () => {
 
     expect(await screen.findByText(/Знижка 15/)).toBeTruthy();
     expect(screen.queryByText(/14,77/)).toBeNull();
+  });
+
+  /** Owner, 2026-11-24: «Перевідкрити для змін» in the panel's ⋮, and a blocked one says why at once. */
+  it('a reopen blocked by a sent act says why on the tap and leads to «Акти», without asking to confirm', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({ reopenBlock: { reason: 'SENT_ACT', actNumbers: ['3'] } })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Дії' }));
+    fireEvent.click(screen.getByText('Перевідкрити для змін'));
+
+    expect(screen.getByTestId('reopen-block').textContent).toBe(
+      'Акт № 3 уже надіслано клієнту. Щоб перевідкрити кошторис, поверніть акт у чернетку й видаліть його у вкладці «Акти».');
+    expect(screen.queryByText(/Клієнт підпише його ще раз/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Відкрити акти' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/projects/p1?tab=acts');
+    expect(estimatesApi.reopen).not.toHaveBeenCalled();
+  });
+
+  it('a reopen nothing blocks asks to confirm, reopens and opens the estimate', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(economyFixture({
+      estimates: [panel({ reopenBlock: null })],
+      pro: { expenses: 0, profit: 0 },
+    }));
+    vi.mocked(estimatesApi.reopen).mockResolvedValue({} as never);
+    renderSection('PRO');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Дії' }));
+    fireEvent.click(screen.getByText('Перевідкрити для змін'));
+    expect(screen.getByText(/Клієнт підпише його ще раз/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Перевідкрити' }));
+
+    await waitFor(() => expect(estimatesApi.reopen).toHaveBeenCalledWith('e1'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/estimates/e1'));
   });
 
   /** Several «% від кошторису» lines at different percents: the amount alone, never a blend. */
@@ -464,9 +500,24 @@ describe('ObjectEconomySection', () => {
     expect(await screen.findByText(/Знижка\s+15%\s+-1\s500/)).toBeTruthy();
   });
 
-  it('the act ⋮ menu toggles counted-in-economy via the existing PATCH', async () => {
+  /** Owner, 2026-11-24: a signed estimate is never left out by hand (the signature does it), only
+   *  turned back on when that automatic guess was wrong. */
+  it('the ⋮ menu offers no «Не враховувати» on a counted estimate', async () => {
     vi.mocked(economyApi.economy).mockResolvedValue(
       economyFixture({ estimates: [panel({ countedInEconomy: true })] }),
+    );
+
+    renderSection('FREE');
+
+    await screen.findByText('Кухня');
+    fireEvent.click(screen.getByLabelText('Дії'));
+    await screen.findByText('Перевідкрити для змін');
+    expect(screen.queryByText('Не враховувати цей кошторис')).toBeNull();
+  });
+
+  it('the ⋮ menu turns an uncounted estimate back on via the existing PATCH', async () => {
+    vi.mocked(economyApi.economy).mockResolvedValue(
+      economyFixture({ estimates: [panel({ countedInEconomy: false })] }),
     );
     vi.mocked(estimatesApi.setCountInEconomy).mockResolvedValue({} as never);
 
@@ -474,9 +525,9 @@ describe('ObjectEconomySection', () => {
 
     await screen.findByText('Кухня');
     fireEvent.click(screen.getByLabelText('Дії'));
-    fireEvent.click(await screen.findByText('Не враховувати цей кошторис'));
+    fireEvent.click(await screen.findByText('Враховувати цей кошторис'));
 
-    await waitFor(() => expect(estimatesApi.setCountInEconomy).toHaveBeenCalledWith('e1', false));
+    await waitFor(() => expect(estimatesApi.setCountInEconomy).toHaveBeenCalledWith('e1', true));
   });
 
   it('the works axis shows «Прийнято актами» and flips the balance wording by sign', async () => {
@@ -524,8 +575,8 @@ describe('ObjectEconomySection', () => {
     // Wait for the acts query to land so the block is computed, then open the menu.
     await waitFor(() => expect(actsApi.list).toHaveBeenCalledWith('p1'));
     fireEvent.click(screen.getByLabelText('Дії'));
-    // The toggle item still renders — only «Згенерувати акт» is suppressed.
-    await screen.findByText('Не враховувати цей кошторис');
+    // The menu still opens — only «Згенерувати акт» is suppressed.
+    await screen.findByText('Перевідкрити для змін');
     expect(screen.queryByText('Згенерувати акт')).toBeNull();
   });
 

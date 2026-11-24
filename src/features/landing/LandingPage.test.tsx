@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import '@/lib/i18n.ts';
@@ -26,6 +26,27 @@ const llmsTxt = () => readFileSync(path.join(root, 'public', 'llms.txt'), 'utf8'
 const NOT_A_PROMISE_WE_KEEP = ['команд', 'компаній', 'аналітик', 'відгук'];
 
 describe('LandingPage', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  /** Owner, 2026-11-24: a stars-only review shows too, with the name and time in Majstr — no trades,
+   *  no estimate counts. */
+  it('shows a published review without words, with only his name and months in Majstr', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([{
+        authorName: 'Тарас К.', trades: ['Електрика', 'Сантехніка'], rating: 5, text: null,
+        monthsInMajstr: 4, estimates: 31, signedEstimates: 14, publishedAt: '2026-11-24T00:46:09Z',
+      }]),
+    }));
+    renderLanding();
+
+    expect(await screen.findByText('Тарас К.')).toBeTruthy();
+    expect(screen.getByText('4 місяці в Majstr')).toBeTruthy();
+    expect(screen.queryByText(/Електрика, Сантехніка/)).toBeNull();
+    expect(screen.queryByText(/31 кошторис/)).toBeNull();
+    expect(screen.queryByText(/14 підписан/)).toBeNull();
+  });
+
   it('keeps «Увійти» — masters open the landing to get into their account too', () => {
     renderLanding();
 

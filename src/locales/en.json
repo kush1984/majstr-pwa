@@ -556,6 +556,19 @@
     "signedNoEdit": "Estimate is signed — editing is unavailable",
     "reopen": "Reopen for changes",
     "reopenShort": "Reopen",
+    "reopenBlock": {
+      "actNumber": "No. {{number}}",
+      "addendum": "This estimate was created automatically when an act was signed — it is not reopened.",
+      "draft_one": "To reopen, first delete the draft act {{acts}} in the «Акти» tab.",
+      "draft_other": "To reopen, first delete the draft acts {{acts}} in the «Акти» tab.",
+      "sent_one": "Act {{acts}} has been sent to the client. To reopen the estimate, move the act back to draft and delete it in the «Акти» tab.",
+      "sent_other": "Acts {{acts}} stand on this estimate and one is with the client. To reopen, move the sent one back to draft and delete them in the «Акти» tab.",
+      "signed_one": "The client has signed act {{acts}} on this estimate, so it cannot be reopened. Create a new estimate for changes.",
+      "signed_other": "The client has signed acts {{acts}} on this estimate, so it cannot be reopened. Create a new estimate for changes.",
+      "signedNoNumber": "The client has signed an act on this estimate, so it cannot be reopened. Create a new estimate for changes.",
+      "title": "Can't reopen yet"
+    },
+    "toActs": "Open acts",
     "reopenConfirm": "Reopen this estimate for changes? The client signs it again and the earlier signature stays in history. Payments on the object stay; until it is signed again, «За договором» leaves it out.",
     "reopened": "Estimate reopened — edit and send to the client again",
     "economyOn": "Remove from object economy",
@@ -803,7 +816,6 @@
     "summaryTitle": "Total for signed estimates",
     "notCountedNote": "Not folded into the total below — the master excluded this estimate from the economy",
     "notCountedInfo": "This estimate stays, but its amount doesn't count toward the object's totals — e.g. a variant, or a source rolled into a consolidated estimate.",
-    "excludeAct": "Exclude this estimate",
     "includeAct": "Include this estimate",
     "amount": "Amount, ₴",
     "date": "Date",
@@ -2809,13 +2821,9 @@
     "thanks": "Thank you! We read every review.",
     "thanksPublish": "Thank you! Once checked, your review will appear on majstr.pro.",
     "landingTitle": "What masters say",
-    "landingSub": "Reviews from masters who work in Majstr. The figures come from their accounts.",
+    "landingSub": "Reviews from masters who work in Majstr.",
     "landingMonths_one": "{{count}} month in Majstr",
-    "landingMonths_other": "{{count}} months in Majstr",
-    "landingEstimates_one": "{{count}} estimate",
-    "landingEstimates_other": "{{count}} estimates",
-    "landingSigned_one": "{{count}} signed by a client",
-    "landingSigned_other": "{{count}} signed by clients"
+    "landingMonths_other": "{{count}} months in Majstr"
   },
   "regions": {
     "VINNYTSIA": "Vinnytsia",
@@ -2851,6 +2859,7 @@
     "askText": "So that market prices can be shown for your region later.",
     "save": "Save",
     "saved": "Region saved",
-    "notNow": "Later"
+    "notNow": "Later",
+    "onboardingNote": "Optional. So that market prices can be shown for your region later."
   }
 }

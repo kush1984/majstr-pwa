@@ -538,8 +538,9 @@ function Audience() {
 
 /**
  * «Що кажуть майстри» (V218) — masters' ratings of Majstr they agreed to show and the admin
- * published, each with figures read from his own account (time in Majstr, estimates, signatures):
- * what makes a review believable. No reviews, or the backend away — the section is simply not there.
+ * published: stars, the words if he wrote any, his name and how long he has been in Majstr. Owner,
+ * 2026-11-24: a stars-only review shows too; no trades and no estimate counts (too much room).
+ * No reviews, or the backend away — the section is simply not there.
  */
 function Reviews() {
   const { t } = useTranslation();
@@ -548,7 +549,7 @@ function Reviews() {
     let alive = true;
     fetch(`${config.apiBaseUrl}/api/public/app-reviews`)
       .then((r) => (r.ok ? (r.json() as Promise<PublicAppReview[]>) : []))
-      .then((rows) => { if (alive) setReviews(rows.filter((r) => r.text)); })
+      .then((rows) => { if (alive) setReviews(rows); })
       .catch(() => { /* no section without the backend */ });
     return () => { alive = false; };
   }, []);
@@ -566,18 +567,13 @@ function Reviews() {
               <div className="text-lg leading-none text-landing-amber" aria-label={t('appReview.star', { count: r.rating })}>
                 {'★'.repeat(r.rating)}
               </div>
-              <blockquote className="mt-3 flex-1 text-[15px] leading-relaxed">«{r.text}»</blockquote>
-              <figcaption className="mt-4 border-t border-landing-line/50 pt-3">
-                <div className="font-bold">
-                  {r.authorName}
-                  {r.trades.length > 0 && <span className="font-normal text-landing-muted"> · {r.trades.join(', ')}</span>}
-                </div>
-                <div className="mt-0.5 text-xs text-landing-muted">
-                  {[
-                    t('appReview.landingMonths', { count: r.monthsInMajstr }),
-                    t('appReview.landingEstimates', { count: r.estimates }),
-                    r.signedEstimates > 0 ? t('appReview.landingSigned', { count: r.signedEstimates }) : null,
-                  ].filter(Boolean).join(' · ')}
+              {r.text && <blockquote className="mt-3 text-[15px] leading-relaxed">«{r.text}»</blockquote>}
+              <figcaption className="mt-auto pt-4">
+                <div className={r.text ? 'border-t border-landing-line/50 pt-3' : ''}>
+                  <div className="font-bold">{r.authorName}</div>
+                  <div className="mt-0.5 text-xs text-landing-muted">
+                    {t('appReview.landingMonths', { count: r.monthsInMajstr })}
+                  </div>
                 </div>
               </figcaption>
             </figure>

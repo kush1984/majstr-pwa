@@ -17,7 +17,7 @@ import { tokens } from '@/lib/tokens.ts';
 import type { UserResponse } from '@/api/types.ts';
 
 vi.mock('@/api/profile.ts', () => ({
-  profileApi: { updateTrades: vi.fn(), addCustomTrade: vi.fn() },
+  profileApi: { updateTrades: vi.fn(), addCustomTrade: vi.fn(), updateRegion: vi.fn() },
 }));
 vi.mock('@/api/projects.ts', () => ({ projectsApi: { createSample: vi.fn() } }));
 vi.mock('@/hooks/useToast.ts', () => ({
@@ -85,6 +85,31 @@ describe('TradesOnboardingPage — «Чим займаєтесь?» (V190)', () 
 
     expect(await screen.findByText('home')).toBeTruthy();
     expect(profileApi.updateTrades).toHaveBeenCalledWith({ trades: ['TILING', 'PAINTER'] });
+    expect(profileApi.updateRegion).not.toHaveBeenCalled();
+  });
+
+  /** Prices are to follow the oblast (plan-regional-prices, step 1): asked here, before the catalog. */
+  it('saves the oblast with the trades when he picks one, and only then', async () => {
+    vi.mocked(profileApi.updateRegion).mockImplementation(async (region) => ({ ...fresh, region }));
+    renderScreen();
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.change(screen.getByLabelText('У якій області працюєте?'), { target: { value: 'LVIV' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
+
+    expect(await screen.findByText('home')).toBeTruthy();
+    expect(profileApi.updateRegion).toHaveBeenCalledWith('LVIV');
+  });
+
+  it('a failed oblast save never keeps him on the screen', async () => {
+    vi.mocked(profileApi.updateRegion).mockRejectedValue(new Error('down'));
+    renderScreen();
+
+    fireEvent.click(screen.getByRole('button', { name: /Плитка/ }));
+    fireEvent.change(screen.getByLabelText('У якій області працюєте?'), { target: { value: 'LVIV' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Далі' }));
+
+    expect(await screen.findByText('home')).toBeTruthy();
   });
 
   it('goes back to the screen that sent him here', async () => {

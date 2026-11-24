@@ -11,8 +11,10 @@ import { routes } from '@/lib/config.ts';
 import { CUSTOM_TRADE_EMOJI, TRADE_EMOJI } from '@/lib/labels.ts';
 import { TRADE_VALUES } from '@/features/auth/registerSchema.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useAddCustomTrade, useUpdateTrades } from '@/features/profile/useProfile.ts';
-import type { Trade } from '@/api/types.ts';
+import { useAddCustomTrade, useUpdateRegion, useUpdateTrades } from '@/features/profile/useProfile.ts';
+import { Select } from '@/components/Select.tsx';
+import { regionOptions } from '@/features/region/regionOptions.ts';
+import type { Region, Trade } from '@/api/types.ts';
 import { needsTradesScreen, rememberTradesAnswer, type PendingTradesAnswer } from './tradesOnboarding.ts';
 import { useSampleProject } from '@/features/projects/useSampleProject.ts';
 
@@ -49,6 +51,7 @@ export function TradesOnboardingPage() {
   const { data: me } = useMe();
   const updateTrades = useUpdateTrades();
   const addCustomTrade = useAddCustomTrade();
+  const updateRegion = useUpdateRegion();
   const sample = useSampleProject();
 
   const [picked, setPicked] = useState<Trade[]>(() => me?.trades ?? []);
@@ -57,6 +60,9 @@ export function TradesOnboardingPage() {
   const [addingCustom, setAddingCustom] = useState(false);
   const [confirmSkip, setConfirmSkip] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Where he works (V219), asked here too since prices are to follow the oblast (plan-regional-prices,
+  // step 1): before, only the home card asked, after the first object. Optional, like a custom trade.
+  const [region, setRegion] = useState<Region | ''>(() => me?.region ?? '');
 
   // Sent here by the gate, but the server says the trades are there after all (another device, or a
   // cache restored a moment stale): nothing to ask — go back. Opened on purpose (the empty template
@@ -94,6 +100,14 @@ export function TradesOnboardingPage() {
   /** The answer itself — «Далі» and «Подивитися приклад» both save it first. */
   const saveTrades = async () => {
     await updateTrades.mutateAsync({ trades: picked });
+    // The oblast is a bonus, never a reason to hold him here: a failure leaves the home card to ask.
+    if (region && region !== me?.region) {
+      try {
+        await updateRegion.mutateAsync(region);
+      } catch {
+        // asked again on the home screen
+      }
+    }
     for (const name of customNames) {
       try {
         await addCustomTrade.mutateAsync(name);
@@ -145,7 +159,7 @@ export function TradesOnboardingPage() {
 
   return (
     <div className="min-h-dvh bg-canvas">
-      <div className="mx-auto max-w-xl px-4 pb-40 pt-6 sm:px-6">
+      <div className="mx-auto max-w-xl px-4 pb-52 pt-6 sm:px-6">
         <h1 className="text-2xl font-extrabold tracking-tight text-primary">{t('onboarding.trades.title')}</h1>
         <p className="mt-1.5 text-sm text-muted">{t('onboarding.trades.subtitle')}</p>
 
@@ -225,6 +239,17 @@ export function TradesOnboardingPage() {
               {t('profile.addCustomTrade')}
             </button>
           )}
+        </section>
+
+        <section className="mt-6">
+          <label htmlFor="onboarding-region" className="mb-1.5 block text-sm font-semibold text-primary">
+            {t('region.askTitle')}
+          </label>
+          <Select id="onboarding-region" value={region} onChange={(e) => setRegion(e.target.value as Region | '')}>
+            <option value="">{t('region.pick')}</option>
+            {regionOptions(t).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </Select>
+          <p className="mt-1 text-xs text-muted">{t('region.onboardingNote')}</p>
         </section>
       </div>
 
