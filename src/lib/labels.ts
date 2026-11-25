@@ -25,6 +25,8 @@ export const TRADE_EMOJI: Record<Trade, string> = {
   FLOORING: '🪵',
   DEMOLITION: '🔨',
   METAL: '⚙️',
+  DOORS_WINDOWS: '🚪',
+  CLIMATE: '❄️',
   GENERAL: '🛠️',
   OTHER: '📦',
 };

@@ -22,6 +22,8 @@ const CLASS_BY_TRADE: Record<Trade, string> = {
   FLOORING:   'bg-orange-100 text-orange-800',
   DEMOLITION: 'bg-red-100 text-red-800',
   METAL:      'bg-slate-200 text-slate-800',
+  DOORS_WINDOWS: 'bg-teal-100 text-teal-800',
+  CLIMATE:    'bg-indigo-100 text-indigo-800',
   GENERAL:    'bg-blue-100 text-blue-800',
   OTHER:      'bg-neutral-200 text-neutral-700',
 };

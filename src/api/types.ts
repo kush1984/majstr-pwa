@@ -14,6 +14,8 @@ export type Trade =
   | 'FLOORING'
   | 'DEMOLITION'
   | 'METAL'
+  | 'DOORS_WINDOWS'
+  | 'CLIMATE'
   | 'GENERAL'
   | 'OTHER';
 export type Plan = 'FREE' | 'PRO' | 'TEAM';

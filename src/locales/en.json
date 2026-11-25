@@ -214,6 +214,8 @@
     "FLOORING": "Flooring",
     "DEMOLITION": "Demolition",
     "METAL": "Metalwork",
+    "DOORS_WINDOWS": "Doors and windows",
+    "CLIMATE": "Climate and ventilation",
     "GENERAL": "General works",
     "OTHER": "Other"
   },

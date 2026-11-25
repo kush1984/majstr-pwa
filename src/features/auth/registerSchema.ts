@@ -11,6 +11,8 @@ export const TRADE_VALUES = [
   'FLOORING',
   'DEMOLITION',
   'METAL',
+  'DOORS_WINDOWS',
+  'CLIMATE',
   'GENERAL',
   'OTHER',
 ] as const satisfies readonly string[];
