@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@/lib/i18n.ts';
-import { TypeBreakdown, adjustTotals } from './EstimateEditorPage.tsx';
+import { TypeBreakdown, adjustTotals, canPickForMarkup } from './EstimateEditorPage.tsx';
 import type { EstimateItemResponse } from '@/api/types.ts';
 
 /**
@@ -94,5 +94,14 @@ describe('adjustTotals — reused recap under «До сплати» now also fol
       }),
     ];
     expect(adjustTotals(items)).toEqual({ markup: 0, discount: -120 });
+  });
+});
+
+describe('«Націнка на позиції» — what may be ticked', () => {
+  it('works AND materials may be marked up; only a «%» line may not (it follows its base)', () => {
+    expect(canPickForMarkup(line({ type: 'WORK' }))).toBe(true);
+    expect(canPickForMarkup(line({ type: 'MATERIAL', unit: 'PIECE' }))).toBe(true);
+    expect(canPickForMarkup(line({ type: 'WORK', unit: 'PERCENT' }))).toBe(false);
+    expect(canPickForMarkup(line({ type: 'MATERIAL', unit: 'PERCENT' }))).toBe(false);
   });
 });

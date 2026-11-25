@@ -94,58 +94,99 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
   const uploadsAreReceipts = open?.key === RECEIPTS;
   const atLimit = uploadsAreReceipts ? atReceiptLimit : atPhotoLimit;
 
-  const validateAndDownscale = async (file: File) => {
-    if (!online) {
-      toast.error(t('offline.needConnection'));
-      return null;
-    }
-    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
-      toast.error(t('photos.badType'));
-      return null;
-    }
+  // A gallery pick is SEVERAL photos at once (masters: ten one-by-one trips to the gallery «це
+  // капець як не зручно»). They go up one after another — one request in flight, so a phone on
+  // site does not push ten full images through a weak link in parallel — and the batch ends in ONE
+  // toast, not ten.
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const busy = progress !== null || upload.isPending;
+
+  /** A reason the photo was refused, or the downscaled file to send. */
+  const prepare = async (file: File): Promise<File | string> => {
+    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) return t('photos.badType');
     // Size-check AFTER downscaling — a raw camera shot can exceed 10 MB and still
     // compress to a few hundred KB; rejecting it up front would break the
     // take-a-photo-on-site flow on modern phones.
     const compact = await downscaleImage(file);
-    if (compact.size > MAX_BYTES) {
-      toast.error(t('photos.tooLarge'));
-      return null;
+    return compact.size > MAX_BYTES ? t('photos.tooLarge') : compact;
+  };
+
+  /**
+   * Upload the picked files into `folder`. Only as many as the plan's cap still allows are sent —
+   * the server would refuse the rest one by one anyway — and the master is told the remainder was
+   * left out rather than finding fewer photos than he picked.
+   */
+  const uploadAll = async (
+    list: FileList | null,
+    target: { source: 'MANUAL' | 'RECEIPT'; folder: FolderKey },
+    onDone: (added: ProjectPhotoResponse[]) => void,
+  ) => {
+    const picked = Array.from(list ?? []);
+    if (picked.length === 0) return;
+    if (!online) {
+      toast.error(t('offline.needConnection'));
+      return;
     }
-    return compact;
-  };
-
-  /** Upload into the folder the master is standing in — there is no root to fall back to. */
-  const onPick = async (file: File | undefined) => {
-    if (!file || !open) return;
-    const compact = await validateAndDownscale(file);
-    if (!compact) return;
-    upload.mutate(
-      { file: compact, source: uploadsAreReceipts ? 'RECEIPT' : 'MANUAL', folder: open.key },
-      {
-        onSuccess: () => toast.success(t('photos.uploaded')),
-        onError: (err) => toast.error(toAppError(err).message),
-      },
-    );
-  };
-
-  /** From the folder list (object-first «＋»): into «Інше», said so, with a way to re-file it. */
-  const onPickToOther = async (file: File | undefined) => {
-    if (!file) return;
-    if (atPhotoLimit) {
+    const used = target.source === 'RECEIPT' ? receiptCount : manualCount;
+    const cap = target.source === 'RECEIPT' ? caps.maxReceiptPhotosPerObject : caps.maxPhotosPerObject;
+    const room = cap == null ? picked.length : Math.max(0, cap - used);
+    if (room === 0) {
       toast.error(t('photos.limitReached'));
       return;
     }
-    const compact = await validateAndDownscale(file);
-    if (!compact) return;
-    upload.mutate(
-      { file: compact, source: 'MANUAL', folder: null },
-      {
-        onSuccess: (photo) => toast.success(t('photos.addedToOther'), {
-          action: { label: t('photos.moveToFolder'), onClick: () => setMoving(photo) },
-        }),
-        onError: (err) => toast.error(toAppError(err).message),
-      },
-    );
+    const files = picked.slice(0, room);
+    const added: ProjectPhotoResponse[] = [];
+    let failed = 0;
+    let lastError = '';
+    setProgress({ done: 0, total: files.length });
+    try {
+      for (const [i, file] of files.entries()) {
+        const ready = await prepare(file);
+        if (typeof ready === 'string') {
+          failed++;
+          lastError = ready;
+        } else {
+          try {
+            added.push(await upload.mutateAsync({ file: ready, ...target }));
+          } catch (err) {
+            failed++;
+            lastError = toAppError(err).message;
+          }
+        }
+        setProgress({ done: i + 1, total: files.length });
+      }
+    } finally {
+      setProgress(null);
+    }
+    if (added.length > 0) onDone(added);
+    if (failed > 0) {
+      toast.error(files.length === 1 ? lastError : t('photos.someFailed', { count: failed, reason: lastError }));
+    }
+    if (picked.length > files.length) {
+      toast.info(t('photos.limitPartial', { count: files.length, max: cap }));
+    }
+  };
+
+  /** Upload into the folder the master is standing in — there is no root to fall back to. */
+  const onPick = (list: FileList | null) => {
+    if (!open) return;
+    void uploadAll(list, { source: uploadsAreReceipts ? 'RECEIPT' : 'MANUAL', folder: open.key }, (added) => {
+      toast.success(added.length === 1 ? t('photos.uploaded') : t('photos.uploadedMany', { count: added.length }));
+    });
+  };
+
+  /** From the folder list (object-first «＋»): into «Інше», said so, with a way to re-file it. */
+  const onPickToOther = (list: FileList | null) => {
+    void uploadAll(list, { source: 'MANUAL', folder: null }, (added) => {
+      // «Перемістити» re-files ONE photo; for a batch the way on is the folder itself.
+      if (added.length === 1) {
+        toast.success(t('photos.addedToOther'), {
+          action: { label: t('photos.moveToFolder'), onClick: () => setMoving(added[0]) },
+        });
+      } else {
+        toast.success(t('photos.addedToOtherMany', { count: added.length }));
+      }
+    });
   };
 
   const confirmDelete = async () => {
@@ -173,7 +214,10 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
           same input, the same source (a «Чеки» upload stays a receipt); on the list, into «Інше». */}
       <Fab
         ariaLabel={t('photos.addPhotoFab')}
-        onClick={() => (open === null ? otherRef.current?.click() : galleryRef.current?.click())}
+        onClick={() => {
+          if (busy) return; // one batch at a time — the bar under the folder says how far it is
+          (open === null ? otherRef : galleryRef).current?.click();
+        }}
       />
       {open === null ? (
         <>
@@ -244,7 +288,7 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
-                disabled={upload.isPending || atLimit}
+                disabled={busy || atLimit}
                 title={atLimit ? t('photos.limitReached') : undefined}
                 className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand disabled:opacity-60"
               >
@@ -254,11 +298,13 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
             <button
               type="button"
               onClick={() => galleryRef.current?.click()}
-              disabled={upload.isPending || atLimit}
+              disabled={busy || atLimit}
               title={atLimit ? t('photos.limitReached') : undefined}
               className="min-h-[44px] rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-brand disabled:opacity-60"
             >
-              {upload.isPending
+              {progress && progress.total > 1
+                ? t('photos.uploadingProgress', progress)
+                : busy
                 ? t('photos.uploading')
                 : <>🖼 {canCapture ? t('photos.fromGallery') : t('photos.addFile')}</>}
             </button>
@@ -269,7 +315,7 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
               capture="environment"
               className="hidden"
               onChange={(e) => {
-                void onPick(e.target.files?.[0]);
+                onPick(e.target.files);
                 e.target.value = '';
               }}
             />
@@ -277,9 +323,10 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
               ref={galleryRef}
               type="file"
               accept="image/png,image/jpeg,image/webp"
+              multiple
               className="hidden"
               onChange={(e) => {
-                void onPick(e.target.files?.[0]);
+                onPick(e.target.files);
                 e.target.value = '';
               }}
             />
@@ -364,10 +411,11 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
           ref={otherRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          multiple
           className="hidden"
           data-testid="photo-fab-input"
           onChange={(e) => {
-            void onPickToOther(e.target.files?.[0]);
+            onPickToOther(e.target.files);
             e.target.value = '';
           }}
         />

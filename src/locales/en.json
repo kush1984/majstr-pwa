@@ -911,6 +911,10 @@
     "title": "Object photos",
     "uploading": "Uploading…",
     "uploaded": "Photo added",
+    "uploadedMany": "Photos added: {{count}}",
+    "uploadingProgress": "Uploading {{done}} of {{total}}…",
+    "someFailed": "Photos not added: {{count}}. {{reason}}",
+    "limitPartial": "Limit is {{max}} photos per object: only {{count}} added, the rest skipped",
     "deleted": "Photo deleted",
     "deleteTitle": "Delete photo?",
     "deleteMessage": "This photo will be deleted. This can't be undone.",
@@ -940,6 +944,7 @@
     "moveToNew": "To new",
     "folderCount": "{{n}} photo(s)",
     "addedToOther": "Added to «Other»",
+    "addedToOtherMany": "Added to «Other»: {{count}} photos",
     "addPhotoFab": "New photo"
   },
   "acts": {

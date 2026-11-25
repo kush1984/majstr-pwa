@@ -6,7 +6,8 @@ import { PhotosSection } from './PhotosSection.tsx';
 import { downscaleImage } from '@/lib/image.ts';
 import type { ProjectPhotoResponse } from '@/api/types.ts';
 
-const uploadMutate = vi.fn();
+// `mutateAsync`: a gallery pick is a batch, uploaded one after another (masters: «по одному — капець»).
+const uploadMutate = vi.fn(async (_vars: unknown) => photo({ id: 'new' }));
 
 // The photo tiles fetch their bytes over an authenticated stream — stub the viewers so the tests
 // exercise the grid, not the network.
@@ -24,7 +25,7 @@ const deleteFolderMutate = vi.hoisted(() => vi.fn());
 const setFolderMutate = vi.hoisted(() => vi.fn());
 vi.mock('./usePhotos.ts', () => ({
   usePhotos: () => ({ data: holder.photos, isPending: false }),
-  useUploadPhoto: () => ({ mutate: uploadMutate, isPending: false }),
+  useUploadPhoto: () => ({ mutateAsync: uploadMutate, isPending: false }),
   useSetPhotoVisibility: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePhoto: () => ({ mutateAsync: vi.fn(), isPending: false }),
   usePhotoFolders: () => ({ data: holder.folders, isPending: false }),
@@ -248,7 +249,6 @@ describe('PhotosSection — the «＋» (object-first)', () => {
     const file = new File([new Uint8Array(1)], 'wall.jpg', { type: 'image/jpeg' });
     vi.mocked(downscaleImage).mockResolvedValue(file);
     const success = vi.spyOn(toast, 'success');
-    uploadMutate.mockImplementation((_vars, opts: { onSuccess: (p: unknown) => void }) => opts.onSuccess(photo({ id: 'new' })));
     render(<PhotosSection projectId="p1" />);
 
     fireEvent.change(document.querySelector<HTMLInputElement>('[data-testid="photo-fab-input"]')!,
@@ -260,7 +260,6 @@ describe('PhotosSection — the «＋» (object-first)', () => {
       action: expect.objectContaining({ label: 'Перемістити в папку' }),
     }));
     success.mockRestore();
-    uploadMutate.mockReset();
   });
 
   it("inside a folder, it is that folder's own picker — a «Чеки» upload stays a receipt", async () => {
@@ -272,5 +271,75 @@ describe('PhotosSection — the «＋» (object-first)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Нове фото' }));
 
     expect(click).toHaveBeenCalledOnce();
+  });
+});
+
+describe('PhotosSection — several photos from the gallery at once', () => {
+  const jpg = (name: string) => new File([new Uint8Array(1)], name, { type: 'image/jpeg' });
+  const gallery = () => document.querySelector<HTMLInputElement>('input[type="file"]:not([capture])')!;
+
+  beforeEach(() => {
+    vi.mocked(downscaleImage).mockImplementation(async (f: File) => f);
+  });
+
+  it('both pickers allow picking many; the camera stays one shot', () => {
+    render(<PhotosSection projectId="p1" />);
+    expect(document.querySelector<HTMLInputElement>('[data-testid="photo-fab-input"]')!.multiple).toBe(true);
+    openFolder('Інше');
+    expect(gallery().multiple).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('input[capture]')?.multiple ?? false).toBe(false);
+  });
+
+  it('every picked photo goes up, in order, and the batch ends in ONE toast', async () => {
+    const success = vi.spyOn(toast, 'success');
+    const files = [jpg('1.jpg'), jpg('2.jpg'), jpg('3.jpg')];
+    render(<PhotosSection projectId="p1" />);
+    openFolder('Інше');
+
+    fireEvent.change(gallery(), { target: { files } });
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Додано фото: 3'));
+    expect(uploadMutate.mock.calls.map((c) => (c[0] as { file: File }).file)).toEqual(files);
+    expect(success).toHaveBeenCalledOnce();
+    success.mockRestore();
+  });
+
+  it('a bad file is skipped and named once; the rest still go up', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const pdf = new File([new Uint8Array(1)], 'plan.pdf', { type: 'application/pdf' });
+    render(<PhotosSection projectId="p1" />);
+    openFolder('Інше');
+
+    fireEvent.change(gallery(), { target: { files: [jpg('1.jpg'), pdf, jpg('2.jpg')] } });
+
+    await waitFor(() => expect(error).toHaveBeenCalledWith(
+      'Не додано фото: 1. Приймаються лише зображення PNG або JPEG'));
+    expect(uploadMutate).toHaveBeenCalledTimes(2);
+    error.mockRestore();
+  });
+
+  it('only what the cap still allows is sent, and the master is told the rest was left out', async () => {
+    holder.photos = Array.from({ length: 8 }, (_, i) => photo({ id: `m${i}` })); // cap is 10
+    const info = vi.spyOn(toast, 'info');
+    render(<PhotosSection projectId="p1" />);
+    openFolder('Інше');
+
+    fireEvent.change(gallery(), { target: { files: [jpg('1.jpg'), jpg('2.jpg'), jpg('3.jpg'), jpg('4.jpg')] } });
+
+    await waitFor(() => expect(info).toHaveBeenCalled());
+    expect(uploadMutate).toHaveBeenCalledTimes(2);
+    expect(info.mock.calls[0][0]).toContain('додано лише 2');
+    info.mockRestore();
+  });
+
+  it('from the folder list a batch lands in «Інше» with a count', async () => {
+    const success = vi.spyOn(toast, 'success');
+    render(<PhotosSection projectId="p1" />);
+
+    fireEvent.change(document.querySelector<HTMLInputElement>('[data-testid="photo-fab-input"]')!,
+      { target: { files: [jpg('1.jpg'), jpg('2.jpg')] } });
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Додано в «Інше»: 2 фото'));
+    success.mockRestore();
   });
 });

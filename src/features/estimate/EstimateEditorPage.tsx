@@ -82,6 +82,16 @@ const REOPEN_ENABLED: boolean = true;
  *  the master opened this estimate from (`fromTab`, off this page's own `?from=` param), or the
  *  default Кошторис tab when absent. Pulled out of the component for a test that doesn't need to
  *  mount the whole page (economy-nav-and-discount iteration). */
+/**
+ * What «Націнка на позиції» may tick. A «%» line rises with the base it measures, so marking it up
+ * too would land the markup twice — it alone is refused. Materials are allowed: masters price
+ * their own buying, delivery and carrying into them (training 2026-11-24 — a picker that skipped
+ * them was the complaint). In delete mode everything is fair game.
+ */
+export function canPickForMarkup(i: EstimateItemResponse): boolean {
+  return i.unit !== 'PERCENT';
+}
+
 export function resolveBackUrl(projectId: string, fromTab: string | null): string {
   if (!projectId) return routes.projects;
   return `${routes.project(projectId)}${fromTab ? `?tab=${fromTab}` : ''}`;
@@ -176,9 +186,6 @@ export function EstimateEditorPage() {
   const [zeroKept, setZeroKept] = useState(false);
   const markUpItems = useMarkUpItems(id);
   const duplicate = useDuplicateEstimate(id);
-  // Materials are bought at cost and passed through, and a «%» line rises with the base it measures
-  // — so neither may be picked for a markup. In delete mode everything is fair game.
-  const canPickForMarkup = (i: EstimateItemResponse) => i.type === 'WORK' && i.unit !== 'PERCENT';
 
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [dictationOpen, setDictationOpen] = useState(false);
@@ -685,7 +692,7 @@ export function EstimateEditorPage() {
                   onInline={INLINE_ITEM_EDITING ? commitInline : undefined}
                   selection={picked === null ? undefined : {
                     selected: picked,
-                    // In markup mode a material or «%» row carries no tick at all: a checkbox that
+                    // In markup mode a «%» row carries no tick at all: a checkbox that
                     // does nothing is a worse answer than no checkbox.
                     canSelect: pickFor === 'markup' ? canPickForMarkup : undefined,
                     onToggle: (itemId) => setPicked((prev) => {

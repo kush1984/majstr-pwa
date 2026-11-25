@@ -938,6 +938,10 @@
     "title": "Фото об'єкту",
     "uploading": "Завантаження…",
     "uploaded": "Фото додано",
+    "uploadedMany": "Додано фото: {{count}}",
+    "uploadingProgress": "Завантаження {{done}} з {{total}}…",
+    "someFailed": "Не додано фото: {{count}}. {{reason}}",
+    "limitPartial": "Ліміт — {{max}} фото на обʼєкт: додано лише {{count}}, решту пропущено",
     "deleted": "Фото видалено",
     "deleteTitle": "Видалити фото?",
     "deleteMessage": "Це фото буде видалено. Дію не можна скасувати.",
@@ -967,6 +971,7 @@
     "moveToNew": "У нову",
     "folderCount": "{{n}} фото",
     "addedToOther": "Додано в «Інше»",
+    "addedToOtherMany": "Додано в «Інше»: {{count}} фото",
     "addPhotoFab": "Нове фото"
   },
   "acts": {
