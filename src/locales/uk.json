@@ -2891,6 +2891,13 @@
     "landingMonths_many": "{{count}} місяців у Majstr",
     "landingMonths_other": "{{count}} місяця в Majstr"
   },
+  "priceHint": {
+    "inOblast": "Ринок, {{place}}: ~{{price}} за {{unit}} · майстрів: {{count}}",
+    "estimate": "Орієнтовно, {{place}}: ~{{price}} за {{unit}}",
+    "country": "По країні: ~{{price}} за {{unit}}",
+    "oblast": "{{name}} обл.",
+    "compare": "Порівняти ↗"
+  },
   "regions": {
     "VINNYTSIA": "Вінницька",
     "VOLYN": "Волинська",

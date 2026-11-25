@@ -7,7 +7,9 @@ import type {
   CatalogSyncResponse,
   CatalogUpdateNoticeResponse,
   ItemType,
+  PriceHintResponse,
   TemplateUpdatesResponse,
+  Unit,
 } from './types.ts';
 
 /** Contractor's reusable library of works and materials. */
@@ -56,6 +58,14 @@ export const catalogApi = {
     return api
       .get<CatalogItemResponse[]>('/api/catalog/search', { params: { q, limit } })
       .then((r) => r.data);
+  },
+
+  /** Market price for a work position by its name (`GET /api/catalog/price-hint`); null on 204 —
+   *  the library does not know the name, so there is nothing honest to show. */
+  priceHint(name: string, unit: Unit): Promise<PriceHintResponse | null> {
+    return api
+      .get<PriceHintResponse | ''>('/api/catalog/price-hint', { params: { name, unit } })
+      .then((r) => (r.status === 204 || !r.data ? null : r.data));
   },
 
   /** «Оновити каталог» — re-price and add in one transaction. `batchId` rides X-Entity-Uuid like

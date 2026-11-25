@@ -2832,6 +2832,13 @@
     "landingMonths_one": "{{count}} month in Majstr",
     "landingMonths_other": "{{count}} months in Majstr"
   },
+  "priceHint": {
+    "inOblast": "Market, {{place}}: ~{{price}} per {{unit}} · masters: {{count}}",
+    "estimate": "Approx., {{place}}: ~{{price}} per {{unit}}",
+    "country": "Nationwide: ~{{price}} per {{unit}}",
+    "oblast": "{{name}} oblast",
+    "compare": "Compare ↗"
+  },
   "regions": {
     "VINNYTSIA": "Vinnytsia",
     "VOLYN": "Volyn",

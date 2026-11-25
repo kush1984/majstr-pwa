@@ -11,6 +11,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
+import { PriceHint } from '@/features/estimate/PriceHint.tsx';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 import { customTradeKey, parseCustomTradeKey, type TradeKey } from './tradeKey.ts';
 import type { CatalogItemRequest, CatalogItemResponse, ItemType, Trade } from '@/api/types.ts';
 import {
@@ -55,6 +57,7 @@ export function CatalogItemForm({
   onDone: (saved?: CatalogItemResponse) => void;
 }) {
   const { t } = useTranslation();
+  const { online } = useOnlineGuard();
   const isEdit = Boolean(initial);
   const create = useCreateCatalogItem();
   const update = useUpdateCatalogItem();
@@ -259,6 +262,7 @@ export function CatalogItemForm({
         )}
 
         {!isPercent && (
+          <>
           <FormField
             label={t('catalog.priceLabel')}
             htmlFor="ci-price"
@@ -273,6 +277,10 @@ export function CatalogItemForm({
               {...register('defaultPrice')}
             />
           </FormField>
+          {/* The same market line as under an estimate line's price — the master pricing his own
+              catalog is the case the request named («коли я ставлю ціну за роботу»). */}
+          <PriceHint name={watch('name')} unit={watch('unit')} type={watch('type')} online={online} />
+          </>
         )}
 
         <FormField label={t('estimate.noteLabel')} htmlFor="ci-note" hint={t('catalog.noteHint')}>

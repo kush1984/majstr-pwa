@@ -11,7 +11,10 @@ import { asInput } from '@/test/dom.ts';
 import type { EstimateItemResponse } from '@/api/types.ts';
 
 vi.mock('@/api/catalog.ts', () => ({
-  catalogApi: { list: vi.fn(), create: vi.fn(), categories: vi.fn(), search: vi.fn() },
+  catalogApi: {
+    list: vi.fn(), create: vi.fn(), categories: vi.fn(), search: vi.fn(),
+    priceHint: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 const line = (over: Partial<EstimateItemResponse>): EstimateItemResponse => ({

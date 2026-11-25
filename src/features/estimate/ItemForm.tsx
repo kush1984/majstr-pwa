@@ -24,6 +24,8 @@ import { itemFormSchema, type ItemFormValues } from './itemSchema.ts';
 import { MeasureCalculator } from './MeasureCalculator.tsx';
 import { MeasurementPicker } from '@/features/measurements/MeasurementPicker.tsx';
 import { baseIdsOf } from './percentLine.ts';
+import { PriceHint } from './PriceHint.tsx';
+import { useOnlineGuard } from '@/hooks/useOnlineGuard.ts';
 
 /**
  * Manual line-item form. Used both for adding a new item and editing one.
@@ -64,6 +66,8 @@ export function ItemForm({
   deleting?: boolean;
 }) {
   const { t } = useTranslation();
+  // The market hint under the price asks the server; offline it is simply not shown.
+  const { online } = useOnlineGuard();
   const categories = useCatalogCategories();
   const { data: me } = useMe();
   // measurements are PRO — only then offer the picker (temporarily open to FREE too, see
@@ -388,6 +392,9 @@ export function ItemForm({
         <p className="-mt-1 min-h-5 text-sm text-muted" data-testid="line-sum">
           {lineSum != null && t('estimate.lineSumPreview', { sum: formatMoney(lineSum) })}
         </p>
+      )}
+      {!isPercent && (
+        <PriceHint name={watch('name')} unit={watchedUnit} type={watchedType} online={online} />
       )}
 
       {isPercent && isFrozen && (

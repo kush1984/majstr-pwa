@@ -810,6 +810,17 @@ export interface PriceListResponse {
   libraryPricedIds: string[];
 }
 
+/** «Ринок: ~350 ₴/м²» under the price field — backend `PriceHintResponse` (plan-regional-prices step 4).
+ *  OBLAST = median of 3+ masters of his oblast; OBLAST_ESTIMATE = country baseline × his oblast's
+ *  factor («орієнтовно»); COUNTRY = the library's market-checked price. */
+export interface PriceHintResponse {
+  level: 'OBLAST' | 'OBLAST_ESTIMATE' | 'COUNTRY';
+  price: number;
+  mastersCount: number | null;
+  region: Region | null;
+  computedAt: string | null;
+}
+
 export interface CatalogItemResponse {
   id: string;
   name: string;
