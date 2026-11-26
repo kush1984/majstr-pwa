@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/api/auth.ts';
@@ -9,6 +9,7 @@ import { isInAppBrowser } from '@/lib/inAppBrowser.ts';
 import { getStoredFirstTouch, getStoredRef, getStoredUtm } from '@/lib/referral.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { startSession } from './startSession.ts';
+import { afterLoginPath } from './afterLogin.ts';
 
 const SCRIPT = 'https://accounts.google.com/gsi/client';
 
@@ -44,6 +45,8 @@ export function GoogleSignIn() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // A ref, not a dependency: the button is drawn once; the target is read when Google answers.
+  const target = useRef(afterLoginPath(useLocation().state));
   const slot = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const available = googleSignInAvailable();
@@ -64,7 +67,7 @@ export function GoogleSignIn() {
             ...getStoredFirstTouch(),
           })
             .then((data) => startSession(qc, data))
-            .then(() => navigate(routes.home, { replace: true }))
+            .then(() => navigate(target.current, { replace: true }))
             .catch((err: unknown) => {
               // A refused token answers 401 «wrong email or password», which names nothing he typed. A gmail
               // alias of a password account (409) says it in the server's own words.

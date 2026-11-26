@@ -33,7 +33,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const location = useLocation();
   useTradesAnswerSync();
 
-  if (!hasToken) return <Navigate to={routes.login} replace />;
+  // Where he was going rides to the login page and back — a link from the bot opens what it names.
+  const from = { from: location.pathname + location.search };
+  if (!hasToken) return <Navigate to={routes.login} replace state={from} />;
   // Not while `me` is being refetched: a reload restores the cache from the device, written up to a
   // second behind, so a trade saved just before it reads as «none» until the server answers.
   if (me.data && !me.isFetching && needsTradesScreen(me.data) && location.pathname !== routes.welcome) {
@@ -49,7 +51,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (status === 401 || status === 403) {
       // Definitive rejection — don't leave dead tokens in storage.
       tokens.clear();
-      return <Navigate to={routes.login} replace />;
+      return <Navigate to={routes.login} replace state={from} />;
     }
     return (
       <div className="flex min-h-dvh items-center justify-center bg-canvas">

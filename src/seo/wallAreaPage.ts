@@ -2,6 +2,7 @@ import './seo.css';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
 import { trackPage } from '@/lib/visit.ts';
+import { installMasterTopLine } from './masterLine.ts';
 import { buildPlaneOutline, type Built } from '@/lib/shapes.ts';
 import { DIAGRAM_H, DIAGRAM_W, layoutDiagram } from '@/lib/shapeDiagramLayout.ts';
 import { PLAN_SHAPES, buildPlan, wallArea, type Opening, type PlanShape, type Room, type WallArea } from './wallArea.ts';
@@ -173,6 +174,7 @@ function render(r: WallArea, height: number): void {
 
   const cta = document.createElement('a');
   cta.href = '/register';
+  cta.dataset.track = 'calc:after-result';
   cta.className = 'seo-cta-button';
   cta.textContent = 'Порахувати весь ремонт із кошторисом для клієнта — безкоштовно';
   result.append(cta);
@@ -238,3 +240,4 @@ syncShape();
 form?.querySelectorAll<HTMLButtonElement>('[data-add]').forEach((button) =>
   button.addEventListener('click', () => addRow(button.dataset.add ?? '')),
 );
+installMasterTopLine(result);

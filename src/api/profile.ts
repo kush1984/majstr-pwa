@@ -1,6 +1,6 @@
 import { api } from './client.ts';
 import type {
-  HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, Region, RequisitesRequest, SenderProfileRequest, UserResponse,
+  HelpOfferResponse, HelpRequest, ProfileTradesRequest, ProfileUpdateRequest, Region, RequisitesRequest, SenderProfileRequest, UserResponse,
 } from './types.ts';
 
 interface CustomTradeRequest {
@@ -32,6 +32,17 @@ export const profileApi = {
   /** «Залиште телефон — передзвонимо»: saves the phone, stamps the ask for the admin's call list. */
   requestHelp(req: HelpRequest): Promise<UserResponse> {
     return api.post<UserResponse>('/api/profile/help-request', req).then((r) => r.data);
+  },
+
+  /** The home screen's setup-help card (V226): why it stands now, or null (204) for no card. */
+  helpOffer(): Promise<HelpOfferResponse | null> {
+    return api.get<HelpOfferResponse | ''>('/api/profile/help-offer')
+      .then((r) => (r.status === 204 || !r.data ? null : r.data));
+  },
+
+  /** «Додати номер із Telegram до документів?» — the bot's number becomes the profile phone, by this tap only. */
+  phoneFromTelegram(): Promise<UserResponse> {
+    return api.post<UserResponse>('/api/profile/phone-from-telegram').then((r) => r.data);
   },
 
   /** «Як вас підписати в документі?» — name, phone and company, nothing else. */

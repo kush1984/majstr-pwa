@@ -700,7 +700,11 @@ function LandingFooter() {
   return (
     <footer className="border-t border-landing-line/60 px-4 py-8 sm:px-6">
       <div className="mx-auto flex max-w-[1160px] flex-col gap-3 text-sm text-landing-muted md:flex-row md:items-center md:justify-between">
-        <span>{t('landing.footerCopyright')}</span>
+        <span>
+          {t('landing.footerCopyright')}
+          {/* How people search for it in Cyrillic («майстер про») — said once, here, not in the copy above. */}
+          <span className="mt-1 block text-xs">{t('landing.footerAlsoKnown')}</span>
+        </span>
         <div>
           {t('landing.footerSupport')}{' '}
           <a href={`mailto:${config.supportEmail}`} className="text-landing-ink hover:text-landing-amber-deep">

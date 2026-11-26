@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { profileApi } from '@/api/profile.ts';
 import { ME_QUERY_KEY } from '@/features/auth/useMe.ts';
 import { CATALOG_KEY } from '@/features/catalog/useCatalog.ts';
@@ -82,6 +82,31 @@ export function useRequestHelp() {
     onSuccess: (user: UserResponse) => {
       qc.setQueryData(ME_QUERY_KEY, user);
       void qc.invalidateQueries({ queryKey: ME_QUERY_KEY });
+      qc.setQueryData(HELP_OFFER_KEY, null); // asked: the server will offer it no more
+    },
+  });
+}
+
+export const HELP_OFFER_KEY = ['help-offer'] as const;
+
+/** The home screen's setup-help card (V226) — the server decides whether it stands and why. */
+export function useHelpOffer(enabled: boolean) {
+  return useQuery({
+    queryKey: HELP_OFFER_KEY,
+    queryFn: () => profileApi.helpOffer(),
+    enabled,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+}
+
+/** «Додати номер із Telegram до документів?» (V226) — only this tap copies it. */
+export function usePhoneFromTelegram() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => profileApi.phoneFromTelegram(),
+    onSuccess: (user: UserResponse) => {
+      qc.setQueryData(ME_QUERY_KEY, user);
     },
   });
 }

@@ -277,6 +277,7 @@
       ]
     },
     {
+      "id": "drywall-ceiling",
       "label": "Стеля 18 м², периметр 17 м",
       "calculator": "DRYWALL",
       "inputs": {
@@ -352,6 +353,7 @@
       ]
     },
     {
+      "id": "drywall-wall",
       "label": "Обшивка стін 30 м²",
       "calculator": "DRYWALL",
       "inputs": {

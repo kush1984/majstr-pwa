@@ -203,6 +203,44 @@ describe('a hand-on from the wall-area page', () => {
   });
 });
 
+/** Only those who pressed «Порахувати» saw the block after the answer (4 of 24): one quiet line above it, on every calculator. */
+describe('«Ви майстер?» between the form and the answer', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it.each(['kalkulyator-gipsokartonu.html', 'kalkulyator-shtukaturky.html', 'kalkulyator-styazhky.html', 'kalkulyator-plytky.html'])(
+    '%s shows it before anything is counted, once, named calc:top',
+    async (file) => {
+      await load(file);
+      const lines = document.querySelectorAll('.seo-master-line');
+      expect(lines).toHaveLength(1);
+      const link = lines[0].querySelector('a');
+      expect(link?.getAttribute('href')).toBe('/register');
+      expect(link?.dataset.track).toBe('calc:top');
+      expect(link?.textContent).toBe('Ви майстер? Рахуйте матеріали прямо в кошторисі для клієнта →');
+      expect(lines[0].nextElementSibling?.id).toBe('result');
+    },
+  );
+
+  it('the wall-area page has it too, from its own script', async () => {
+    const html = readFileSync(path.join(root, 'kalkulyator-ploshchi-stin.html'), 'utf8');
+    document.body.replaceWith(document.importNode(new DOMParser().parseFromString(html, 'text/html').body, true));
+    vi.resetModules();
+    await import('./wallAreaPage.ts');
+    const link = document.querySelector<HTMLAnchorElement>('.seo-master-line a');
+    expect(link?.dataset.track).toBe('calc:top');
+    expect(link?.closest('p')?.nextElementSibling?.id).toBe('result');
+  });
+
+  it('the block after the answer keeps its words and is named calc:after-result', () => {
+    for (const file of ['src/seo/calcPage.ts', 'src/seo/wallAreaPage.ts']) {
+      expect(readFileSync(path.join(root, file), 'utf8'), file).toContain("cta.dataset.track = 'calc:after-result';");
+    }
+  });
+});
+
 describe('kalkulyator-plytky — one form, two ways to count', () => {
   beforeEach(() => {
     document.body.replaceChildren();

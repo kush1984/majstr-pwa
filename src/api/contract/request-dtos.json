@@ -556,6 +556,9 @@
     "body": "string?",
     "done": "boolean?"
   },
+  "TelegramNotificationsRequest": {
+    "enabled": "boolean"
+  },
   "TemplateItemRequest": {
     "name": "string",
     "type": "string",

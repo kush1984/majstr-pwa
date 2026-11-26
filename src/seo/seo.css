@@ -117,7 +117,30 @@ h2 { font-size: 21px; line-height: 1.25; margin: 32px 0 10px; }
 .seo-master-cta { margin-top: 20px; padding: 16px; border: 2px solid var(--amber); border-radius: 16px; }
 .seo-master-cta p { margin: 0 0 12px; }
 .seo-master-cta .seo-small { margin: 10px 0 0; }
+/* «Ви майстер? …» under the form — quiet: a line, not a second button; padded to a thumb's height. */
+.seo-master-line { margin: 8px 0 0; font-size: 14px; }
+.seo-master-line a { display: inline-block; padding: 12px 0; color: var(--amber-deep); font-weight: 600; text-decoration: none; }
 .seo-note { font-size: 13px; color: var(--muted); margin-top: 20px; }
+
+/* The sample estimate: the next step right under the table, where 60 % of readers still are. */
+.seo-after-table { margin: 16px 0 8px; }
+.seo-after-table .seo-cta-button { background: var(--amber); color: #fff; }
+.seo-after-table .seo-small { margin: 8px 0 0; }
+
+/* A sign-up bar pinned to the bottom of a PHONE while the sample is being read (samplePage.ts shows and
+   hides it). The page keeps room for it, and the home indicator of an iPhone its own room below. */
+.seo-sticky-cta { display: none; }
+@media (max-width: 640px) {
+  .seo-page:has(.seo-sticky-cta) { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .seo-sticky-cta:not([hidden]) {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgb(0 0 0 / 8%);
+  }
+  .seo-sticky-cta .seo-cta-button {
+    display: block; margin: 0; text-align: center; background: var(--amber); color: #fff;
+  }
+}
 
 .seo-footer { flex-wrap: wrap; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); }
 .seo-footer a { color: var(--ink); }

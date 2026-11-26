@@ -1,7 +1,8 @@
 // Prints the calculator pages' typical-case tables into the HTML at build (and dev) time, from
 // src/seo/calc-snapshot.json — so a bot without JavaScript reads every figure, and no figure is
 // ever typed by hand. A page marks the spot with <!--SEO_TABLE:<CALCULATOR>--> (TILE, DRYWALL,
-// PLASTER, SCREED), and quotes one case in its prose with <!--SEO_EXAMPLE:<id>-->. The wall-area page
+// PLASTER, SCREED), and quotes one case in its prose with <!--SEO_EXAMPLE:<id>--> (or only its profile lines,
+// <!--SEO_PROFILE:<id>-->, for the drywall page's «Розрахунок профілю»). The wall-area page
 // asks no server, so its table comes straight from src/seo/wallArea.ts: <!--SEO_AREA_TABLE--> and
 // <!--SEO_AREA_EXAMPLE:<id>-->. The sample-document pages print theirs from src/seo/sampleEstimate.ts and
 // src/seo/sampleAct.ts: <!--SEO_SAMPLE_ESTIMATE|TOTAL|COUNT--> and <!--SEO_ACT_DOCUMENT|PAYABLE|COUNT-->. The tile
@@ -55,6 +56,16 @@ export function tableHtml(rows: SnapshotRow[]): string {
 /** «Плитка 300×600 мм — плиток: 106 (19,08 м²); Клей … — мішків: 6 (150 кг)» — a case's answer as a sentence. */
 export function exampleText(row: SnapshotRow): string {
   return row.materials.map((m) => `${escapeHtml(m.name)} — ${escapeHtml(materialText(m))}`).join('; ');
+}
+
+/** «стеля 18 м², периметр 17 м: профіль CD 60×27 — 58 м.п., профіль UD 27×28 — 20 м.п.» — only the PROFILE lines of a
+ *  drywall case, its label first: the «Розрахунок профілю для гіпсокартону» section quotes them in prose. */
+export function profileText(row: SnapshotRow): string {
+  const profiles = row.materials.filter((m) => m.name.startsWith('Профіль'));
+  if (profiles.length === 0) throw new Error(`calc-snapshot case «${row.label}» has no profile lines`);
+  const label = row.label.charAt(0).toLowerCase() + row.label.slice(1);
+  const lines = profiles.map((m) => `${m.name.charAt(0).toLowerCase()}${m.name.slice(1)} — ${materialText(m)}`);
+  return escapeHtml(`${label}: ${lines.join(', ')}`);
 }
 
 /** «стіни без вікон і дверей — 34,1 м²» … — one wall-area case's figures, in the order the page lists them. */
@@ -166,7 +177,9 @@ export function seoCalcTables(root: string): Plugin {
             .replace(/<!--SEO_LAYOUT_TABLE-->/g, () => layoutTableHtml(LAYOUT_CASES, escapeHtml))
             .replace(/<!--SEO_LAYOUT_EXAMPLE:([a-z0-9-]+)-->/g, (_, id: string) => escapeHtml(layoutCaseText(layoutCaseById(id))));
         }
-        if (!html.includes('<!--SEO_TABLE:') && !html.includes('<!--SEO_EXAMPLE:')) return html;
+        if (!html.includes('<!--SEO_TABLE:') && !html.includes('<!--SEO_EXAMPLE:') && !html.includes('<!--SEO_PROFILE:')) {
+          return html;
+        }
         const snapshot = JSON.parse(
           readFileSync(path.join(root, 'src', 'seo', 'calc-snapshot.json'), 'utf8'),
         ) as CalcSnapshot;
@@ -177,6 +190,11 @@ export function seoCalcTables(root: string): Plugin {
             const row = snapshot.rows.find((r) => r.id === id);
             if (!row) throw new Error(`calc-snapshot.json has no case «${id}» — run npm run seo:snapshot`);
             return exampleText(row);
+          })
+          .replace(/<!--SEO_PROFILE:([a-z0-9-]+)-->/g, (_, id: string) => {
+            const row = snapshot.rows.find((r) => r.id === id);
+            if (!row) throw new Error(`calc-snapshot.json has no case «${id}» — run npm run seo:snapshot`);
+            return profileText(row);
           });
       },
     },

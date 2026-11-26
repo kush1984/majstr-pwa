@@ -158,6 +158,7 @@
     "finalText": "Create your first project today.",
     "footerSupport": "Support:",
     "footerCopyright": "© 2026 Majstr.pro",
+    "footerAlsoKnown": "Majstr is «Майстер Про» (Majster Pro) in Ukrainian: estimates, acts and measurements for tradespeople and crew leads.",
     "footerCalcTile": "Tile calculator",
     "footerCalcDrywall": "Drywall calculator",
     "footerCalcPlaster": "Plaster calculator",
@@ -1170,13 +1171,24 @@
   },
   "telegram": {
     "title": "Telegram bot",
-    "sub": "Type or send voice notes to the bot about what needs doing — it files it by object",
+    "sub": "Tells you right away when a client signs, writes or reports a payment. It also takes tasks and voice notes — files them by object",
     "linked": "Connected {{username}}",
     "connect": "Connect",
     "unlink": "Disconnect",
     "unlinkTitle": "Disconnect the Telegram bot?",
-    "unlinkConfirm": "The bot will stop taking messages from this chat. What was saved stays. You can connect again here.",
-    "unavailable": "The bot is unavailable right now"
+    "unlinkConfirm": "The bot will stop sending notifications and taking messages from this chat. What was saved stays. You can connect again here.",
+    "unavailable": "The bot is unavailable right now",
+    "notifications": "Notifications in Telegram",
+    "notificationsSub": "Signatures, messages and payments from clients",
+    "phoneOffer": "Add {{phone}} from Telegram to your documents?",
+    "phoneAdd": "Add",
+    "phoneAdded": "Number added to your profile"
+  },
+  "telegramOffer": {
+    "title": "Want to know the moment a client signs?",
+    "body": "Connect Telegram — the bot will tell you about signatures, messages and payments from clients.",
+    "connect": "Connect",
+    "later": "Not now"
   },
   "tasks": {
     "title": "To do",
@@ -2628,7 +2640,9 @@
     "dismiss": "No, thanks",
     "thanks": "Thank you! We will call you soon.",
     "phoneInvalid": "Check the number, e.g. 067 123 45 67",
-    "onlyForTheCall": "Only for the call — it does not appear on your documents."
+    "onlyForTheCall": "Only for the call — it does not appear on your documents.",
+    "titleNotSent": "Stuck with your first estimate for a client?",
+    "bodyNotSent": "Leave your number — we will help in 10 minutes."
   },
   "trialOffer": {
     "title_one": "Verify your email — and you can turn on {{count}} day of PRO",

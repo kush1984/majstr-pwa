@@ -3,6 +3,7 @@ import { config } from '@/lib/config.ts';
 import { parseDecimal } from '@/lib/parseDecimal.ts';
 import { captureFirstTouch, captureRefFromUrl, captureUtmFromUrl } from '@/lib/referral.ts';
 import { trackPage } from '@/lib/visit.ts';
+import { installMasterTopLine } from './masterLine.ts';
 import { LAYOUT_ALLOWANCE, layoutSummary, type LayoutSummary } from './layoutBridge.ts';
 
 /**
@@ -143,6 +144,7 @@ function masterCta(): HTMLElement {
   lead.prepend(text('b', 'Ви майстер?'));
   const cta = document.createElement('a');
   cta.href = '/register';
+  cta.dataset.track = 'calc:after-result';
   cta.className = 'seo-cta-button';
   cta.textContent = 'Зробити кошторис для клієнта →';
   box.append(lead, cta, text('p', "Безкоштовно: 2 об'єкти, без картки.", 'seo-small'));
@@ -510,3 +512,4 @@ form?.addEventListener('change', (e) => {
 });
 syncDrywallFields();
 syncShownFields();
+installMasterTopLine(result);

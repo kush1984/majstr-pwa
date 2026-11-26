@@ -5,12 +5,8 @@ import { Input } from '@/components/Input.tsx';
 import { toast } from '@/hooks/useToast.ts';
 import { toAppError } from '@/api/errors.ts';
 import { useMe } from '@/features/auth/useMe.ts';
-import { useRequestHelp } from '@/features/profile/useProfile.ts';
+import { useHelpOffer, useRequestHelp } from '@/features/profile/useProfile.ts';
 import { isCallablePhone, normalizeUaPhone } from '@/lib/phone.ts';
-
-/** A day in, and still no object: the moment a call helps — not the first visit, where the card would
- *  push «Новий об'єкт» down for someone who has not tried anything yet (review). */
-const STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const DISMISSED = (userId: string) => `majstr.helpOfferDismissed.${userId}`;
 
@@ -23,18 +19,23 @@ function wasDismissed(userId: string): boolean {
 }
 
 /**
- * «Потрібна допомога з налаштуванням? Залиште телефон — передзвонимо» (V191).
+ * «Потрібна допомога з налаштуванням? Залиште телефон — передзвонимо» (V191, widened in V226).
  *
  * <p>Registration stopped asking for a phone (V190): a number asked of a stranger at the door was the
  * biggest reason to leave. Here it is OFFERED, to someone already inside, for something he gets back —
- * a call. Shown once he looks stuck (a day in, no object), until he asks or says «Ні, дякую» on this
+ * a call. The SERVER says when (`GET /api/profile/help-offer`): a day in with no object of his own, or a
+ * week in with an object and nothing ever handed to a client — each with its own words. The field starts
+ * with the number he shared with the Telegram bot, if any. Shown until he asks or says «Ні, дякую» on this
  * device. The number goes to the admin's call list only — never onto his documents (V193).</p>
  */
-export function HelpOfferCard({ hasObjects }: { hasObjects: boolean }) {
+export function HelpOfferCard() {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const requestHelp = useRequestHelp();
-  const [phone, setPhone] = useState('');
+  const asking = Boolean(me && !me.helpRequestedAt && !wasDismissed(me.id));
+  const { data: offer } = useHelpOffer(asking);
+  // null = untouched: the field shows his Telegram number until he types anything.
+  const [typed, setTyped] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [sent, setSent] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -47,8 +48,9 @@ export function HelpOfferCard({ hasObjects }: { hasObjects: boolean }) {
       </div>
     );
   }
-  const stuck = !hasObjects && Date.now() - new Date(me.createdAt).getTime() > STUCK_AFTER_MS;
-  if (!stuck || dismissed || me.helpRequestedAt || wasDismissed(me.id)) return null;
+  if (!asking || !offer || dismissed) return null;
+  const phone = typed ?? offer.phone ?? '';
+  const notSent = offer.reason === 'NOT_SENT';
 
   const onSend = async () => {
     const value = phone.trim();
@@ -75,8 +77,10 @@ export function HelpOfferCard({ hasObjects }: { hasObjects: boolean }) {
 
   return (
     <section className="mb-5 rounded-card border border-border bg-surface p-4" aria-labelledby="help-offer-title">
-      <h2 id="help-offer-title" className="text-[15px] font-bold text-primary">{t('helpOffer.title')}</h2>
-      <p className="mt-1 text-sm text-muted">{t('helpOffer.body')}</p>
+      <h2 id="help-offer-title" className="text-[15px] font-bold text-primary">
+        {t(notSent ? 'helpOffer.titleNotSent' : 'helpOffer.title')}
+      </h2>
+      <p className="mt-1 text-sm text-muted">{t(notSent ? 'helpOffer.bodyNotSent' : 'helpOffer.body')}</p>
       <div className="mt-3">
         <Input
           type="tel"
@@ -86,7 +90,7 @@ export function HelpOfferCard({ hasObjects }: { hasObjects: boolean }) {
           placeholder={t('auth.phonePlaceholder')}
           value={phone}
           invalid={invalid}
-          onChange={(e) => { setPhone(e.target.value); setInvalid(false); }}
+          onChange={(e) => { setTyped(e.target.value); setInvalid(false); }}
         />
         {invalid
           ? <p className="mt-1 text-xs text-red-600">{t('helpOffer.phoneInvalid')}</p>

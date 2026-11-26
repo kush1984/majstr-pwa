@@ -39,7 +39,7 @@ describe(FILE, () => {
   it('prints both parts, the totals and the sum in words into the HTML', () => {
     const html = built();
     expect(html).not.toContain('<!--SEO_');
-    expect(html).toContain('<h1>Зразок акта виконаних робіт на ремонт</h1>');
+    expect(html).toContain('<h1>Зразок акта виконаних робіт з матеріалами</h1>');
     expect(html.indexOf('І. Виконані роботи')).toBeLessThan(html.indexOf('ІІ. Додаткові роботи'));
     // Numbering runs on into the additional part, as the act PDF's does.
     expect(html).toContain(`${SAMPLE_LINES.length + 1}. ${SAMPLE_ACT_ADDITIONAL[0].name}`);
@@ -116,3 +116,25 @@ describe('the sample act page is reachable', () => {
     expect(read(file)).toContain('href="/zrazok-akta"');
   });
 });
+
+/** «акт виконаних робіт з використанням матеріалів» (18 impressions, 0 clicks): the page says how — and only what the app does. */
+describe(`${FILE} — materials`, () => {
+  const html = read(FILE);
+
+  it('names materials in its title, description and H1', () => {
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toContain('з матеріалами');
+    expect(/name="description" content="([^"]*)"/.exec(html)?.[1]).toContain('з використанням матеріалів');
+  });
+
+  it('explains estimate materials, receipts with a photo, returns and what the client sees', () => {
+    expect(html).toContain('<h2>Як показати в акті матеріали</h2>');
+    for (const fact of ['Матеріали з кошторису', 'фото чека обовʼязкове', 'суму повернення', 'сума чеків додається до «До сплати»']) {
+      expect(html, fact).toContain(fact);
+    }
+  });
+
+  it('its sign-up button is named act:final', () => {
+    expect(html).toContain('<a href="/register" class="seo-cta-button" data-track="act:final">');
+  });
+});
+

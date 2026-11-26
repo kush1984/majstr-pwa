@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { seoCalcTables, materialText, exampleText, areaFigures, escapeHtml } from '../../scripts/seo-pages-plugin.ts';
+import { seoCalcTables, materialText, exampleText, profileText, areaFigures, escapeHtml } from '../../scripts/seo-pages-plugin.ts';
 import { LAYOUT_CASES, layoutCase, layoutCaseById, layoutCaseText, layoutTableHtml } from './tileLayoutCases.ts';
 import { PLAN_SHAPES, WALL_AREA_CASES, wallArea } from './wallArea.ts';
 import { SHAPES } from '@/lib/shapes.ts';
@@ -15,12 +15,12 @@ const root = path.resolve(__dirname, '../..');
 const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
 const PAGES = [
   { file: 'kalkulyator-plytky.html', kind: 'TILE', h1: 'Калькулятор плитки онлайн — скільки плитки, клею й затирки купити', url: 'https://majstr.pro/kalkulyator-plytky' },
-  { file: 'kalkulyator-gipsokartonu.html', kind: 'DRYWALL', h1: 'Калькулятор гіпсокартону та профілю', url: 'https://majstr.pro/kalkulyator-gipsokartonu' },
+  { file: 'kalkulyator-gipsokartonu.html', kind: 'DRYWALL', h1: 'Калькулятор гіпсокартону — розрахунок профілю, листів і саморізів', url: 'https://majstr.pro/kalkulyator-gipsokartonu' },
   { file: 'kalkulyator-shtukaturky.html', kind: 'PLASTER', h1: 'Калькулятор штукатурки — скільки мішків купити на стіни', url: 'https://majstr.pro/kalkulyator-shtukaturky' },
   { file: 'kalkulyator-styazhky.html', kind: 'SCREED', h1: 'Калькулятор стяжки та наливної підлоги — скільки мішків суміші купити', url: 'https://majstr.pro/kalkulyator-styazhky' },
 ] as const;
 /** The wall-area page asks no server and prints no snapshot — geometry only, from src/seo/wallArea.ts. */
-const WALL_AREA_PAGE = { file: 'kalkulyator-ploshchi-stin.html', h1: 'Калькулятор площі стін — з вікнами й дверима', url: 'https://majstr.pro/kalkulyator-ploshchi-stin' };
+const WALL_AREA_PAGE = { file: 'kalkulyator-ploshchi-stin.html', h1: 'Калькулятор площі стін за розмірами кімнати — з вікнами й дверима', url: 'https://majstr.pro/kalkulyator-ploshchi-stin' };
 const ALL_PAGES = [...PAGES, WALL_AREA_PAGE];
 
 const snapshot = JSON.parse(read('src/seo/calc-snapshot.json')) as CalcSnapshot;
@@ -40,6 +40,10 @@ describe.each(ALL_PAGES)('$file', (page) => {
     expect(html).toContain('href="/register"');
     expect(html).toContain('Розрахунок орієнтовний');
     expect(html).toContain(`<link rel="canonical" href="${page.url}" />`);
+  });
+
+  it('its final sign-up button is named for the visit statistics (calc:final)', () => {
+    expect(read(page.file)).toMatch(/<a href="\/register" class="seo-cta-button" data-track="calc:final">/);
   });
 
   it('describes itself as a WebPage with breadcrumbs, and claims no FAQ it does not show', () => {
@@ -299,3 +303,32 @@ describe('the pages are reachable', () => {
     }
   });
 });
+
+/** «розрахунок профілю для гіпсокартону» (Search Console, 43 impressions, 0 clicks) — the page answers it. */
+describe('kalkulyator-gipsokartonu — розрахунок профілю', () => {
+  const html = read('kalkulyator-gipsokartonu.html');
+
+  it('says «розрахунок профілю» in its title, description and H1', () => {
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toContain('розрахунок профілю');
+    expect(/name="description" content="([^"]*)"/.exec(html)?.[1]).toContain('Розрахунок профілю');
+    expect(html).toContain('<h2>Розрахунок профілю для гіпсокартону</h2>');
+  });
+
+  it('quotes the profile from the SAME snapshot the calculator answers with — no figure typed by hand', () => {
+    const page = built('kalkulyator-gipsokartonu.html');
+    for (const id of ['drywall-ceiling', 'drywall-wall']) {
+      const row = snapshot.rows.find((r) => r.id === id);
+      expect(row, id).toBeDefined();
+      expect(page).toContain(profileText(row!));
+    }
+    expect(profileText(snapshot.rows.find((r) => r.id === 'drywall-ceiling')!)).toMatch(/^стеля .*профіль CD .* — \d+ м\.п\., профіль UD .* — \d+ м\.п\.$/);
+    expect(page).not.toContain('<!--SEO_PROFILE:');
+  });
+
+  it('uses the word in its natural forms', () => {
+    for (const form of ['профіль', 'профілю', 'профілів']) {
+      expect(new RegExp(`(?<![а-яіїєґ])${form}(?![а-яіїєґ])`, 'i').test(html), form).toBe(true);
+    }
+  });
+});
+

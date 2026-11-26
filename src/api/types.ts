@@ -84,6 +84,9 @@ export interface UserResponse {
   tradesOnboardedAt?: string;
   /** Where he works (V219); absent = not answered yet (the home screen asks once). */
   region?: Region | null;
+  /** The number he shared with the Telegram bot (V226) — for us to reach him, NEVER printed. Offered as
+   *  the profile phone while that is empty; only his tap copies it. */
+  contactPhone?: string | null;
 }
 
 /** How a work act's number is displayed — «7» vs «7/2026». */
@@ -2746,6 +2749,22 @@ export interface TelegramStatus {
   linked: boolean;
   username?: string;
   botUsername?: string;
+  /** «Сповіщення в Telegram» (V226): the app's notifications also go to the chat. Absent on an older server. */
+  notifications?: boolean;
+}
+
+/** PUT /api/telegram/notifications — the master's own switch (V226). */
+export interface TelegramNotificationsRequest {
+  enabled: boolean;
+}
+
+/** Why the home screen offers «Допомога з налаштуванням» (V226). */
+export type HelpReason = 'NO_OBJECT' | 'NOT_SENT';
+
+/** GET /api/profile/help-offer — the card, or 204 for none. `phone` = the number shared with the bot. */
+export interface HelpOfferResponse {
+  reason: HelpReason;
+  phone?: string | null;
 }
 
 /** A master's rating of Majstr itself (V218). `publishConsent` counts only at 4–5 stars. */

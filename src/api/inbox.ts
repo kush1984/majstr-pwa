@@ -1,6 +1,6 @@
 import { api } from './client.ts';
 import type {
-  InboxCreateRequest, InboxEntryView, InboxItemUpdateRequest, InboxOutcome, TelegramStatus,
+  InboxCreateRequest, InboxEntryView, InboxItemUpdateRequest, InboxOutcome, TelegramNotificationsRequest, TelegramStatus,
 } from './types.ts';
 
 /** «Вхідні» — what the bot or a quick add could not file by itself (majster-bot). */
@@ -49,5 +49,9 @@ export const telegramApi = {
   },
   unlink(): Promise<void> {
     return api.delete('/api/telegram').then(() => undefined);
+  },
+  /** «Сповіщення в Telegram» on / off (V226) — answers the new status. */
+  setNotifications(req: TelegramNotificationsRequest): Promise<TelegramStatus> {
+    return api.put<TelegramStatus>('/api/telegram/notifications', req).then((r) => r.data);
   },
 };

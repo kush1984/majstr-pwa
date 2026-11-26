@@ -62,8 +62,9 @@ export function useInboxActions() {
   };
 }
 
-export function useTelegram() {
-  return useQuery({ queryKey: TELEGRAM_KEY, queryFn: () => telegramApi.status(), refetchOnWindowFocus: true });
+/** `enabled: false` — not asked at all (the app-wide offer host asks only after a send). */
+export function useTelegram(enabled = true) {
+  return useQuery({ queryKey: TELEGRAM_KEY, queryFn: () => telegramApi.status(), refetchOnWindowFocus: true, enabled });
 }
 
 export function useTelegramActions() {
@@ -73,6 +74,11 @@ export function useTelegramActions() {
     unlink: useMutation({
       mutationFn: () => telegramApi.unlink(),
       onSuccess: () => { void qc.invalidateQueries({ queryKey: TELEGRAM_KEY }); },
+    }),
+    /** «Сповіщення в Telegram» (V226): the answer is the new status, written straight into the cache. */
+    notifications: useMutation({
+      mutationFn: (enabled: boolean) => telegramApi.setNotifications({ enabled }),
+      onSuccess: (status) => { qc.setQueryData(TELEGRAM_KEY, status); },
     }),
   };
 }

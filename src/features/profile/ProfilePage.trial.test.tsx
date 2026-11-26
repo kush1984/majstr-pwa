@@ -51,6 +51,7 @@ vi.mock('./useProfile.ts', () => ({
   useAddCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRenameCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteCustomTrade: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePhoneFromTelegram: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const baseMe: UserResponse = {

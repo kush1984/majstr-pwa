@@ -97,6 +97,44 @@ describe(FILE, () => {
   });
 });
 
+/** 60 % read to the end (median 48 s) and none signed up from a first visit: the next step sits where they are. */
+describe(`${FILE} — sign-up buttons`, () => {
+  const html = read(FILE);
+
+  it('puts «Скласти такий самий кошторис» right under the table, with what it costs', () => {
+    const afterDoc = html.slice(html.indexOf('</section>', html.indexOf('class="seo-doc"')));
+    expect(afterDoc.indexOf('data-track="sample:after-table"')).toBeLessThan(afterDoc.indexOf('<section'));
+    expect(html).toContain('<a href="/register" class="seo-cta-button" data-track="sample:after-table">Скласти такий самий кошторис зі своїми цінами →</a>');
+    expect(html).toContain('Безкоштовно: 2 обʼєкти, без картки.');
+  });
+
+  it('has a phone-only sticky button, hidden until the script shows it, and the final CTA keeps its place', () => {
+    expect(html).toMatch(/<div class="seo-sticky-cta" data-sticky-cta hidden>\s*<a href="\/register" class="seo-cta-button" data-track="sample:sticky">/);
+    expect(html).toContain('<a href="/register" class="seo-cta-button" data-track="sample:final">Спробувати безкоштовно →</a>');
+    const css = read('src/seo/seo.css');
+    expect(css).toContain('env(safe-area-inset-bottom)');
+    expect(css).toMatch(/\.seo-page:has\(\.seo-sticky-cta\) \{ padding-bottom:/);
+  });
+
+  it('every sign-up link on the page is named for the visit statistics', () => {
+    const links = [...html.matchAll(/<a href="\/register"[^>]*>/g)].map((m) => m[0]);
+    expect(links.length).toBe(3);
+    for (const link of links) expect(link).toMatch(/data-track="sample:[a-z-]+"/);
+  });
+});
+
+describe('the sticky button shows from the table to the final CTA', () => {
+  it('only once the table is half up the screen, and never beside the final CTA', async () => {
+    const { stickyCtaShown } = await import('./samplePage.ts');
+    expect(stickyCtaShown(700, 3000, 800)).toBe(false); // the table is still below
+    expect(stickyCtaShown(300, 3000, 800)).toBe(true); // reading the table
+    expect(stickyCtaShown(-2000, 900, 800)).toBe(true); // further down, the final CTA still off screen
+    expect(stickyCtaShown(-2000, 600, 800)).toBe(false); // the final CTA is in view
+    expect(stickyCtaShown(-1500, 3000, 800, { top: 500, bottom: 600 })).toBe(false); // the button under the table is on screen
+    expect(stickyCtaShown(-1500, 3000, 800, { top: -300, bottom: -200 })).toBe(true); // and scrolled past
+  });
+});
+
 describe('the sample page is reachable', () => {
   it('is a build input, in the sitemap and in llms.txt', () => {
     expect(read('vite.config.ts')).toContain("'zrazok-koshtorysu': path.resolve(__dirname, 'zrazok-koshtorysu.html')");

@@ -5,6 +5,7 @@ import { OfflineBanner } from '@/components/OfflineBanner.tsx';
 import { UpdateBanner } from '@/components/UpdateBanner.tsx';
 import { SenderSheetHost } from '@/features/sender/SenderSheetHost.tsx';
 import { TrialOfferHost } from '@/features/email/TrialOfferHost.tsx';
+import { TelegramOfferHost } from '@/features/inbox/TelegramOfferHost.tsx';
 
 export function App() {
   return (
@@ -13,6 +14,7 @@ export function App() {
       <RouterProvider router={router} />
       <SenderSheetHost />
       <TrialOfferHost />
+      <TelegramOfferHost />
       <UpdateBanner />
       <ToastViewport />
     </>

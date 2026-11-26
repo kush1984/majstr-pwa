@@ -11,6 +11,7 @@ import { senderSheetStore } from '@/features/sender/senderGate.ts';
 import { useEmailGate } from '@/features/email/useEmailGate.ts';
 import { EmailVerifyModal } from '@/features/email/EmailVerifyModal.tsx';
 import { trialOfferStore } from '@/features/email/trialOffer.ts';
+import { telegramOfferStore } from '@/features/inbox/telegramOffer.ts';
 import { copyWhenReady } from '@/lib/asyncClipboard.ts';
 import { track } from '@/lib/posthog.ts';
 import { canShareNatively, shareNatively } from '@/lib/shareLink.ts';
@@ -325,6 +326,8 @@ export function SharePortalSheet({
         await afterLinkLeft('share');
         onClose();
         trialOfferStore.afterSend();
+        // An estimate went to its client — the moment the bot's «підписав» is worth something.
+        if (mode !== 'economy') telegramOfferStore.afterSend();
       } else if (outcome === 'blocked') {
         // The publish spent the tap (iOS): the link is ready now, one more tap shares it.
         setShowUrl(true);
@@ -352,6 +355,8 @@ export function SharePortalSheet({
         toast.success(t('estimate.linkCopied'));
         onClose();
         trialOfferStore.afterSend();
+        // An estimate went to its client — the moment the bot's «підписав» is worth something.
+        if (mode !== 'economy') telegramOfferStore.afterSend();
       } else {
         setShowUrl(true);
         toast.error(t('estimate.linkCopyFailed'));
@@ -382,6 +387,7 @@ export function SharePortalSheet({
       track('estimate_shared', { scope: singleEstimateId ? 'estimate' : 'object', channel: 'email' });
       toast.success(t('estimate.emailSent'));
       onClose();
+      if (mode !== 'economy') telegramOfferStore.afterSend();
     } catch (err) {
       handleError(err);
     } finally {

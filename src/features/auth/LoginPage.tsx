@@ -12,6 +12,7 @@ import { toAppError } from '@/api/errors.ts';
 import { toast } from '@/hooks/useToast.ts';
 import { routes } from '@/lib/config.ts';
 import { GoogleSignIn } from './GoogleSignIn.tsx';
+import { afterLoginPath } from './afterLogin.ts';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -31,9 +32,9 @@ export function LoginPage() {
 
   useEffect(() => {
     if (login.isSuccess) {
-      void navigate(routes.home, { replace: true });
+      void navigate(afterLoginPath(location.state), { replace: true });
     }
-  }, [login.isSuccess, navigate]);
+  }, [login.isSuccess, navigate, location.state]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {

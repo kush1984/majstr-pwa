@@ -119,7 +119,7 @@ export function DashboardPage() {
       {projects.isSuccess && (
         <TransferCard realObjects={projects.data.filter((p) => p.sample !== true).length} />
       )}
-      {projects.isSuccess && <HelpOfferCard hasObjects={projects.data.length > 0} />}
+      {projects.isSuccess && <HelpOfferCard />}
       {/* One question at a time, and never on the very first screen: the region once he has an
           object, the rating only after the region is answered (V218, V219). */}
       {projects.isSuccess && projects.data.some((p) => p.sample !== true) && <RegionAskCard />}
