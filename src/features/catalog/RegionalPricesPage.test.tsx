@@ -61,9 +61,10 @@ describe('RegionalPricesPage — «Ціни по областях»', () => {
 
   it('«З цінами області» hides rows with only a country figure; another oblast is asked for by name', async () => {
     vi.mocked(catalogApi.regionalPrices).mockResolvedValue({
-      region: 'KYIV_CITY', factor: null, computedAt: null,
+      // As the server sends it: null fields are left OUT of the JSON (Jackson non_null), not null.
+      region: 'KYIV_CITY',
       items: [
-        { itemId: 'w1', level: null, regionalPrice: null, mastersCount: null, countryPrice: 170 },
+        { itemId: 'w1', countryPrice: 170 },
         { itemId: 'w2', level: 'OBLAST', regionalPrice: 480, mastersCount: 6, countryPrice: 400 },
       ],
     });

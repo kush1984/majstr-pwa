@@ -53,7 +53,8 @@ export function RegionalPricesPage() {
     const rows = (catalog.data ?? []).filter((i) => {
       const row = byId.get(i.id);
       if (!row) return false;
-      if (show === 'OBLAST' && row.level === null) return false;
+      // `== null`: the server leaves an absent level out of the JSON, so it arrives undefined.
+      if (show === 'OBLAST' && row.level == null) return false;
       return needle === '' || i.name.toLowerCase().includes(needle);
     });
     return toTradeTree(rows);

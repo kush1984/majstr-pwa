@@ -2913,7 +2913,7 @@
     "estimate": "Орієнтовно, {{place}}: ~{{price}} за {{unit}}",
     "country": "По країні: ~{{price}} за {{unit}}",
     "oblast": "{{name}} обл.",
-    "compare": "Порівняти ↗"
+    "compare": "Порівняти:"
   },
   "regions": {
     "VINNYTSIA": "Вінницька",

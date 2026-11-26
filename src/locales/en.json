@@ -2854,7 +2854,7 @@
     "estimate": "Approx., {{place}}: ~{{price}} per {{unit}}",
     "country": "Nationwide: ~{{price}} per {{unit}}",
     "oblast": "{{name}} oblast",
-    "compare": "Compare ↗"
+    "compare": "Compare:"
   },
   "regions": {
     "VINNYTSIA": "Vinnytsia",

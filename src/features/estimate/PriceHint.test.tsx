@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import '@/lib/i18n.ts';
 import { catalogApi } from '@/api/catalog.ts';
-import { PriceHint } from './PriceHint.tsx';
+import { COMPARE_SITES, PriceHint } from './PriceHint.tsx';
 
 vi.mock('@/api/catalog.ts', () => ({ catalogApi: { priceHint: vi.fn() } }));
 
@@ -29,9 +29,22 @@ describe('PriceHint — the market figure under the price field', () => {
     renderHint();
 
     expect(await screen.findByText(/Ринок, Львівська обл\.: ~195.*за м\.п\. · майстрів: 4/)).toBeTruthy();
-    const link = screen.getByRole('link', { name: /Порівняти/ });
-    expect(link.getAttribute('href')).toContain(encodeURIComponent('site:rabotniki.ua Монтаж мауерлату'));
-    expect(link.getAttribute('target')).toBe('_blank');
+    expect(screen.getByText('Порівняти:')).toBeTruthy();
+  });
+
+  it('«Порівняти» offers every site masters named, each a search for this work there', async () => {
+    vi.mocked(catalogApi.priceHint).mockResolvedValue({
+      level: 'COUNTRY', price: 170, mastersCount: null, region: null, computedAt: null,
+    });
+    renderHint();
+
+    await screen.findByTestId('price-hint');
+    for (const { label, site } of COMPARE_SITES) {
+      const link = screen.getByRole('link', { name: label });
+      expect(link.getAttribute('href')).toContain(encodeURIComponent(`site:${site} Монтаж мауерлату`));
+      expect(link.getAttribute('target')).toBe('_blank');
+    }
+    expect(COMPARE_SITES.map(s => s.site)).toEqual(['rabotniki.ua', 'kabanchik.ua', 'budver.com', 'olx.ua']);
   });
 
   it('the estimate says «орієнтовно», the library price says «по країні»', async () => {
@@ -47,6 +60,17 @@ describe('PriceHint — the market figure under the price field', () => {
     });
     renderHint();
     expect(await screen.findByText(/По країні: ~170/)).toBeTruthy();
+  });
+
+  it('a work we know nothing about still gets «Порівняти», with no figure of ours', async () => {
+    vi.mocked(catalogApi.priceHint).mockResolvedValue(null);
+    renderHint({ name: 'Заміна стояка у Петровича' });
+
+    await waitFor(() => expect(catalogApi.priceHint).toHaveBeenCalled());
+    expect(screen.getByText('Порівняти:')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'OLX' }).getAttribute('href'))
+      .toContain(encodeURIComponent('site:olx.ua Заміна стояка у Петровича'));
+    expect(screen.queryByText(/Ринок|Орієнтовно|По країні/)).toBeNull();
   });
 
   it('no request offline, for a material, a «%» line or a name still being typed', () => {
