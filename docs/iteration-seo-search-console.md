@@ -1,6 +1,6 @@
 # Iteration — SEO fixes from Search Console, and the sign-up buttons on public pages (PWA 1.94.1)
 
-**Status:** built 2026-11-26, not pushed yet (waiting for the owner's OK). PWA + one line map in the backend's
+**Status:** shipped 2026-11-26 (backend `8122530`, PWA 1.94.1 `6c138e9`). PWA + one line map in the backend's
 static admin page; no migration.
 **Source:** Google Search Console queries with impressions and no clicks, and our own visit statistics
 (V187/V188: scroll depth, engaged time, clicks by `data-track`).
