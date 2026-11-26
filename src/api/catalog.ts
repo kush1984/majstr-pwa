@@ -8,6 +8,8 @@ import type {
   CatalogUpdateNoticeResponse,
   ItemType,
   PriceHintResponse,
+  Region,
+  RegionalCatalogPricesResponse,
   TemplateUpdatesResponse,
   Unit,
 } from './types.ts';
@@ -66,6 +68,13 @@ export const catalogApi = {
     return api
       .get<PriceHintResponse | ''>('/api/catalog/price-hint', { params: { name, unit } })
       .then((r) => (r.status === 204 || !r.data ? null : r.data));
+  },
+
+  /** «Ціни по областях» (PRO): one oblast's prices for the works in my catalog; FREE gets 403. */
+  regionalPrices(region: Region): Promise<RegionalCatalogPricesResponse> {
+    return api
+      .get<RegionalCatalogPricesResponse>('/api/catalog/regional-prices', { params: { region } })
+      .then((r) => r.data);
   },
 
   /** «Оновити каталог» — re-price and add in one transaction. `batchId` rides X-Entity-Uuid like

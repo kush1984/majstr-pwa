@@ -79,6 +79,7 @@ export const routes = {
   projects: '/projects',
   catalog: '/catalog',
   catalogImport: '/catalog/import',
+  regionalPrices: '/catalog/regions',
   // «Перенести в Majstr» — existing estimates and price lists, many files at once (V201).
   transfer: '/transfer',
   priceList: '/price-list',

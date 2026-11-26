@@ -1752,7 +1752,8 @@
     },
     "tabsLabel": "Розділи каталогу",
     "tabItems": "Позиції",
-    "tabTemplates": "Шаблони"
+    "tabTemplates": "Шаблони",
+    "tabRegions": "По областях"
   },
   "measure": {
     "proTitle": "Заміри об'єкта — у PRO",
@@ -2890,6 +2891,22 @@
     "landingMonths_few": "{{count}} місяці в Majstr",
     "landingMonths_many": "{{count}} місяців у Majstr",
     "landingMonths_other": "{{count}} місяця в Majstr"
+  },
+  "regionalPrices": {
+    "region": "Область",
+    "factor": "Ціни тут {{percent}} до середніх по країні",
+    "noFactor": "Майстрів з цієї області поки замало для порівняння з країною",
+    "asOf": "дані на {{date}}",
+    "onlyOblast": "З цінами області",
+    "yours": "Ваша",
+    "country": "По країні",
+    "masters": "майстрів: {{count}}",
+    "estimate": "орієнтовно",
+    "empty": "Для робіт з вашого каталогу цін поки немає",
+    "loadError": "Не вдалося завантажити ціни",
+    "proTitle": "Ціни по областях",
+    "proPitch": "Скільки беруть за ті самі роботи в іншій області: медіана цін майстрів Majstr там і по країні, поруч із вашою ціною.",
+    "proHint": "Ціни по областях — у PRO"
   },
   "priceHint": {
     "inOblast": "Ринок, {{place}}: ~{{price}} за {{unit}} · майстрів: {{count}}",

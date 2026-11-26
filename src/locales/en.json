@@ -1704,7 +1704,8 @@
     },
     "tabsLabel": "Catalog sections",
     "tabItems": "Positions",
-    "tabTemplates": "Templates"
+    "tabTemplates": "Templates",
+    "tabRegions": "By oblast"
   },
   "measure": {
     "proTitle": "Object measurements — in PRO",
@@ -2831,6 +2832,22 @@
     "landingSub": "Reviews from masters who work in Majstr.",
     "landingMonths_one": "{{count}} month in Majstr",
     "landingMonths_other": "{{count}} months in Majstr"
+  },
+  "regionalPrices": {
+    "region": "Oblast",
+    "factor": "Prices here are {{percent}} vs the country average",
+    "noFactor": "Too few masters from this oblast to compare with the country yet",
+    "asOf": "as of {{date}}",
+    "onlyOblast": "With oblast prices",
+    "yours": "Yours",
+    "country": "Country",
+    "masters": "masters: {{count}}",
+    "estimate": "estimate",
+    "empty": "No prices yet for the works in your catalog",
+    "loadError": "Could not load prices",
+    "proTitle": "Prices by oblast",
+    "proPitch": "What the same works cost in another oblast: the median price of Majstr masters there and across the country, beside your own.",
+    "proHint": "Prices by oblast are in PRO"
   },
   "priceHint": {
     "inOblast": "Market, {{place}}: ~{{price}} per {{unit}} · masters: {{count}}",

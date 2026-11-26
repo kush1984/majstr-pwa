@@ -821,6 +821,26 @@ export interface PriceHintResponse {
   computedAt: string | null;
 }
 
+/** «Ціни по областях» — backend `RegionalCatalogPricesResponse` (plan-regional-prices step 2, PRO).
+ *  One row per work in the master's catalog that has a figure; joined to the catalog by `itemId`. */
+export interface RegionalCatalogPricesResponse {
+  region: Region;
+  /** The oblast's factor against the country; null — too few masters there for one. */
+  factor: number | null;
+  computedAt: string | null;
+  items: RegionalCatalogPriceRow[];
+}
+
+export interface RegionalCatalogPriceRow {
+  itemId: string;
+  /** OBLAST = median of 3+ masters there; OBLAST_ESTIMATE = country × the oblast's factor; null = none. */
+  level: 'OBLAST' | 'OBLAST_ESTIMATE' | null;
+  regionalPrice: number | null;
+  mastersCount: number | null;
+  /** The country baseline, else the library's price. */
+  countryPrice: number | null;
+}
+
 export interface CatalogItemResponse {
   id: string;
   name: string;

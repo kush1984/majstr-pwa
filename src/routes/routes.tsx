@@ -12,6 +12,7 @@ import { CatalogPage } from '@/features/catalog/CatalogPage.tsx';
 import { TransferPage } from '@/features/transfer/TransferPage.tsx';
 import { PriceListPage } from '@/features/catalog/PriceListPage.tsx';
 import { TemplatesPage } from '@/features/estimate/TemplatesPage.tsx';
+import { RegionalPricesPage } from '@/features/catalog/RegionalPricesPage.tsx';
 import { ProfilePage } from '@/features/profile/ProfilePage.tsx';
 import { EstimateImportPage } from '@/features/estimate/EstimateImportPage.tsx';
 import { EstimateEditorPage } from '@/features/estimate/EstimateEditorPage.tsx';
@@ -106,6 +107,7 @@ export const appRoutes: RouteObject[] = [
       // Inside the tab shell: its share panel sits above the bottom menu, and «Каталог» stays lit.
       { path: routes.priceList, element: <PriceListPage /> },
       { path: routes.templates, element: <TemplatesPage /> },
+      { path: routes.regionalPrices, element: <RegionalPricesPage /> },
       { path: routes.profile, element: <ProfilePage /> },
     ],
   },
