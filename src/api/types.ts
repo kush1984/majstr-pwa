@@ -337,6 +337,8 @@ export type PercentBaseKind = 'MANUAL' | 'POSITION' | 'TOTAL';
 export const UNITS = [
   'M2', 'M', 'LINEAR_METER', 'PIECE', 'KG', 'HOUR', 'SET',
   'M3', 'T', 'POINT', 'PERCENT', 'KM', 'DAY', 'FLOOR', 'LITRE',
+  // The shop's own counts (backend V229): «три мішки клею» was filed as «3 шт».
+  'BAG', 'PACK', 'BUCKET', 'CANISTER', 'ROLL', 'SHEET',
 ] as const;
 
 export type Unit = (typeof UNITS)[number];

@@ -185,7 +185,13 @@
     "KM": "km",
     "DAY": "day",
     "FLOOR": "floor",
-    "LITRE": "L"
+    "LITRE": "L",
+    "BAG": "bag",
+    "PACK": "pack",
+    "BUCKET": "bucket",
+    "CANISTER": "can.",
+    "ROLL": "roll",
+    "SHEET": "sheet"
   },
   "unitOptions": {
     "M2": "m² (square metre)",
@@ -202,7 +208,13 @@
     "KM": "km (kilometre)",
     "DAY": "day (working day)",
     "FLOOR": "floor (per floor)",
-    "LITRE": "L (litre)"
+    "LITRE": "L (litre)",
+    "BAG": "bag",
+    "PACK": "pack",
+    "BUCKET": "bucket",
+    "CANISTER": "can. (canister)",
+    "ROLL": "roll",
+    "SHEET": "sheet"
   },
   "unitPer": "per {{unit}}",
   "trades": {
