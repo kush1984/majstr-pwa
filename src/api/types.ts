@@ -2134,7 +2134,9 @@ export type NormBasis =
   /** V168: a riser's length in metres, a concrete's rebar ratio in kg/m³, a chase's section in cm². */
   | 'LENGTH'
   | 'REINFORCEMENT'
-  | 'CHASE_SECTION';
+  | 'CHASE_SECTION'
+  /** V227: a fence's sides — a panel per 2,5 m of every side, a post per panel plus one per run. */
+  | 'SIDES';
 
 /**
  * One line of the arithmetic behind a material — «Монтаж на стіни · 20 м² × 1 = 20 м²». Shown so
@@ -2204,7 +2206,7 @@ export interface MaterialCoverage {
  * names it and the screen asks once per position rather than once per material.
  */
 export interface MissingParameter {
-  /** `PERIMETER`, `SECTION`, `THICKNESS`, `STEP` or (V168) `LENGTH`, `REINFORCEMENT`, `CHASE_SECTION`;
+  /** `PERIMETER`, `SECTION`, `THICKNESS`, `STEP`, (V168) `LENGTH`, `REINFORCEMENT`, `CHASE_SECTION` or (V227) `SIDES`;
    *  a string so another is not a breaking change. */
   parameter: string;
   materialName: string;
@@ -2240,6 +2242,8 @@ export interface StoredMaterialParams {
   lengths?: Record<string, number>;
   reinforcements?: Record<string, number>;
   chaseSections?: Record<string, number>;
+  /** V227 — a fence's sides as the server wrote them back: «25 + 15 + 25; 10». */
+  sides?: Record<string, string>;
 }
 
 export interface MaterialCalculationResponse {
@@ -2338,6 +2342,8 @@ export interface MaterialParamsRequest {
   lengths?: Record<string, number>;
   reinforcements?: Record<string, number>;
   chaseSections?: Record<string, number>;
+  /** V227 — text, read on the server («25 + 15 + 25; 10»); a blank string forgets it. */
+  sides?: Record<string, string>;
 }
 
 /** A correction to one norm's coefficient. Saved as the master's OWN norm, forked on write. */

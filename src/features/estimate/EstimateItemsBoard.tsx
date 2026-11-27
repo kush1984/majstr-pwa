@@ -535,6 +535,7 @@ function ItemRow({
           item={item}
           number={number}
           percentText={item.unit === 'PERCENT' ? percentLabel(item, byId) : null}
+          note={<LineNote item={item} />}
           onCommit={onInline}
           onMore={() => onEdit(item)}
         />
@@ -616,8 +617,9 @@ function ItemRow({
       )}
       {/* The comment lives BESIDE the row, behind an (i) — the master's own, else the library's hint
           (V119/V206). Inline it ran the width of the board and pushed the estimate sideways
-          («все пливе»); an estimate row already carries quantity, price and act progress. */}
-      <LineNote item={item} />
+          («все пливе»); an estimate row already carries quantity, price and act progress. An inline row
+          holds it on its name line instead, so its sum lines up with every other row's. */}
+      {!inlineHere && <LineNote item={item} />}
     </div>
   );
 }

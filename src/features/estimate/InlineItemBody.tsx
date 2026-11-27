@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EstimateItemRequest, EstimateItemResponse } from '@/api/types.ts';
 import { InlineNumberCell } from '@/components/InlineNumberCell.tsx';
@@ -27,13 +27,19 @@ export type InlineCommit = (item: EstimateItemResponse, patch: Partial<EstimateI
  * number goes; the section header counts them.
  */
 export function InlineItemBody({
-  item, number, percentText, className, onCommit, onMore,
+  item, number, percentText, className, note, onCommit, onMore,
 }: {
   item: EstimateItemResponse;
   number: number;
   /** «від Укладання плитки» — what a «%» line is a percentage OF (the board's own label). */
   percentText: string | null;
   className?: string;
+  /**
+   * The line's (i) comment, beside «⋯» on the NAME row. As a column of its own beside the whole row it
+   * made only the commented rows narrower, so their sums sat left of the others and wrapped onto a
+   * line of their own (owner, 2026-11-27: «сума зʼїхала»). Here every figures row is the same width.
+   */
+  note?: ReactNode;
   onCommit: InlineCommit;
   onMore: () => void;
 }) {
@@ -72,6 +78,8 @@ export function InlineItemBody({
           className="min-w-0 flex-1 text-sm font-medium text-primary"
           onCommit={(name) => onCommit(item, { name }, 'name')}
         />
+        {/* As tall as «⋯» beside it, so the two marks sit on one line. */}
+        {note && <span className="flex min-h-[44px] items-center">{note}</span>}
         <button
           type="button"
           onClick={onMore}

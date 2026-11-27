@@ -1230,3 +1230,65 @@ describe('MaterialCalculatorPage — the lines we do not count (V204)', () => {
     expect(screen.queryByText('Ці позиції ми не рахуємо')).toBeNull();
   });
 });
+
+describe('fence sides (V227)', () => {
+  const asked: MaterialCalculationResponse['parameters'] = [
+    { parameter: 'SIDES', materialName: 'Панель 3D-огорожі', estimateItemId: 'f1', positionName: 'Монтаж секції 3D-сітки', suggested: null },
+    { parameter: 'SIDES', materialName: 'Стовп для 3D-огорожі', estimateItemId: 'f1', positionName: 'Монтаж секції 3D-сітки', suggested: null },
+  ];
+
+  it('asks for the sides once per position and saves them as typed', async () => {
+    calculate.mockResolvedValue(answer({ materials: [], parameters: asked }));
+    renderPage();
+
+    const field = await screen.findByLabelText('Монтаж секції 3D-сітки, м');
+    expect(screen.getByText('Потрібні сторони паркану')).toBeTruthy();
+    expect(screen.getAllByLabelText('Монтаж секції 3D-сітки, м')).toHaveLength(1);
+
+    fireEvent.change(field, { target: { value: '25, 15, 25; 10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Порахувати' }));
+
+    await waitFor(() => expect(saveParams).toHaveBeenCalledWith('est-1', { sides: { f1: '25, 15, 25; 10' } }));
+  });
+
+  it('shows the answer it was counted from, and says what the row was counted from', async () => {
+    calculate.mockResolvedValue(
+      answer({
+        materials: [
+          line({
+            materialId: 'p1',
+            name: 'Стовп для 3D-огорожі',
+            unit: 'PIECE',
+            baseQuantity: 32,
+            quantity: 32,
+            wastePercent: 0,
+            packageSize: null,
+            packageName: null,
+            packages: null,
+            sources: [
+              {
+                estimateItemId: 'f1',
+                name: 'Монтаж секції 3D-сітки',
+                unit: 'LINEAR_METER',
+                quantity: 75,
+                qtyPerUnit: 1,
+                normId: 'n9',
+                ownNorm: false,
+                basis: 'SIDES',
+                param: 2.5,
+                amount: 32,
+              },
+            ],
+          }),
+        ],
+        answers: { perimeter: null, sections: {}, thicknesses: {}, sides: { f1: '25 + 15 + 25; 10' } },
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByDisplayValue('25 + 15 + 25; 10')).toBeTruthy();
+    expect(screen.getByText('Сторони паркану')).toBeTruthy();
+    fireEvent.click(screen.getByText('Показати розрахунок'));
+    expect(screen.getByText(/сторони разом 75 м, панель 2,5 м.*=.*32/)).toBeTruthy();
+  });
+});

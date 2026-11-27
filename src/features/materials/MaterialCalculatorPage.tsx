@@ -15,6 +15,7 @@ import { packageCount } from '@/lib/packages.ts';
 import { routes } from '@/lib/config.ts';
 import { isTilingLine, tileLayoutRoute } from './tileLayoutModel.ts';
 import { PositionMatchCard } from './PositionMatchCard.tsx';
+import { FenceSidesAsk } from './FenceSidesAsk.tsx';
 import { useEstimate } from '@/features/estimate/useEstimate.ts';
 import { materialsApi } from '@/api/materials.ts';
 import { SHOPPING_KEY, SHOPPING_SUMMARY_KEY } from '@/features/shopping/useShoppingList.ts';
@@ -758,6 +759,15 @@ export function MaterialCalculatorPage() {
           />
         ))}
 
+        <FenceSidesAsk
+          estimateId={id}
+          data={data}
+          onSaved={() => {
+            setEdited({});
+            return qc.invalidateQueries({ queryKey: ['materials', id] });
+          }}
+        />
+
         {!calc.isError && data && <Habits trades={data.coverage.trades} onSaved={afterNormChange} />}
 
         <div className="mb-4 rounded-card border border-border bg-surface p-3">
@@ -1376,6 +1386,12 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
     source.param != null && source.basis === 'STEP'
       ? ` ÷ ${t('materials.stepSource', { value: formatNumber(source.param, 3) })}`
       : '';
+  // A fence (V227) is whole panels per SIDE and a post more per run — no product of the line's
+  // metres, so its row says what it was counted from instead; the sides themselves are on the card.
+  const sides =
+    source.basis === 'SIDES'
+      ? t('materials.sidesSource', { total: formatNumber(source.quantity, 3), module: figureText })
+      : null;
   const busy = save.isPending || restore.isPending;
 
   const submit = () => {
@@ -1391,9 +1407,15 @@ function SourceRow({ source, onSaved }: { source: MaterialSourceLine; onSaved: (
     <div>
       <p className="text-xs text-muted">
         {source.name ?? ''}
-        {basis}: {quantity}
-        {param} × {formatNumber(source.qtyPerUnit, 3)}
-        {divisor} ={' '}
+        {basis}:{' '}
+        {sides ?? (
+          <>
+            {quantity}
+            {param} × {formatNumber(source.qtyPerUnit, 3)}
+            {divisor}
+          </>
+        )}{' '}
+        ={' '}
         {formatNumber(source.amount, 3)}
         {source.ownNorm && (
           <span className="ml-1 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-medium text-brand-700">

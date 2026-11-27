@@ -295,6 +295,7 @@
     "perimeter": "number?",
     "reinforcements": "object?",
     "sections": "object?",
+    "sides": "object?",
     "steps": "object?",
     "thicknesses": "object?"
   },
