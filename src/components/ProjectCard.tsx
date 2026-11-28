@@ -52,6 +52,13 @@ export function ProjectCard({ project }: { project: ProjectResponse }) {
               {t('sample.badge')}
             </span>
           )}
+          {/* View-only on his plan (iteration-read-only-objects): said on the list, before he opens it. */}
+          {project.readOnly === true && (
+            <span data-testid="read-only-badge"
+              className="mt-1 inline-block rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-semibold text-muted">
+              🔒 {t('limits.readOnlyBadge')}
+            </span>
+          )}
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
             {project.address && <span className="break-words">{project.address}</span>}
             {project.clientFullName && (

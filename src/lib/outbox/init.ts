@@ -443,7 +443,9 @@ export function initOutbox(qc: QueryClient): () => void {
       if (s === 401) return 'auth';
       if (s === 403) {
         const code = (e.response.data as { code?: string } | undefined)?.code ?? '';
-        return code.includes('LIMIT') ? 'limit' : 'retry';
+        // A view-only object (iteration-read-only-objects) is the same decision as a cap — PRO, or
+        // drop the change; retrying it eight times would only end in «stuck».
+        return code.includes('LIMIT') || code === 'OBJECT_READ_ONLY' ? 'limit' : 'retry';
       }
       if (s >= 400 && s < 500 && s !== 408 && s !== 429) {
         const code = (e.response.data as { code?: string } | undefined)?.code ?? '';

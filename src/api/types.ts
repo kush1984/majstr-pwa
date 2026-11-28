@@ -422,6 +422,12 @@ export interface ProjectResponse {
   /** A one-off paid object (V214): PRO's per-object caps and the logo on its PDFs, no AI features.
    *  Optional: a cached object from before reads as an ordinary one. */
   paid?: boolean;
+  /** The plan leaves this object view-only (iteration-read-only-objects): on FREE only the first
+   *  objects ever made, the training sample and a one-off paid object can change. Open, share, print
+   *  and record money stay. Optional: an older server or a cached object reads as changeable. */
+  readOnly?: boolean;
+  /** Estimates ever made on this object, deleted ones included — what the FREE cap counts. */
+  estimatesCreated?: number;
 }
 
 /** Mirrors PortalSummaryRequest (V202). */

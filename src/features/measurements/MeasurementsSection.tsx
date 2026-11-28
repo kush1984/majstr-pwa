@@ -102,7 +102,8 @@ type EditTarget = {
  * Electrical rows are the seed of the future «Калькулятори» hub. PRO-gated; owner-only —
  * temporarily open to FREE too, see {@link TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY}.
  */
-export function MeasurementsSection({ objectId }: { objectId: string }) {
+/** `readOnly`: a view-only object (iteration-read-only-objects) — read, no «＋ кімната». */
+export function MeasurementsSection({ objectId, readOnly = false }: { objectId: string; readOnly?: boolean }) {
   const { t } = useTranslation();
   const { data: me } = useMe();
   const isPro = TEMP_FREE_GETS_MEASUREMENTS_AND_ECONOMY || (me?.plan ?? 'FREE') !== 'FREE';
@@ -531,7 +532,7 @@ export function MeasurementsSection({ objectId }: { objectId: string }) {
 
       {/* Add-room modal. */}
       {/* «＋» is the tab's own action (object-first): a room. */}
-      <Fab ariaLabel={t('measure.addRoom')} onClick={() => setRoomModalOpen(true)} />
+      {!readOnly && <Fab ariaLabel={t('measure.addRoom')} onClick={() => setRoomModalOpen(true)} />}
 
       <Modal open={roomModalOpen} onClose={() => setRoomModalOpen(false)} title={t('measure.addRoom')}>
         <div className="space-y-3">

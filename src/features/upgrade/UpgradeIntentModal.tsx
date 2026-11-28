@@ -21,10 +21,12 @@ export type PurchaseMode = PurchaseTab | 'choice';
  * Both panels share one grid cell, so switching tabs never changes the sheet's size.
  * Amounts are shown for clarity but owned by the server: PRO sends only the period, the object nothing.
  */
-export function UpgradeIntentModal({ open, onClose, mode = 'pro' }: {
+export function UpgradeIntentModal({ open, onClose, mode = 'pro', unlockProjectId }: {
   open: boolean;
   onClose: () => void;
   mode?: PurchaseMode;
+  /** The object tab buys THIS view-only object back (iteration-read-only-objects), not a new one. */
+  unlockProjectId?: string;
 }) {
   const { t } = useTranslation();
   const limits = usePlanLimits();
@@ -68,7 +70,7 @@ export function UpgradeIntentModal({ open, onClose, mode = 'pro' }: {
     }
   };
   const pay = () => startCheckout(() =>
-    shown === 'object' ? billingApi.checkoutObject() : billingApi.checkout(period, autoRenew));
+    shown === 'object' ? billingApi.checkoutObject(unlockProjectId) : billingApi.checkout(period, autoRenew));
 
   // Cheapest-per-month last: the eye lands on the annual tariff after seeing the others.
   const periods: { value: BillingPeriod; title: string; price: string; note?: string; badge?: string }[] = [

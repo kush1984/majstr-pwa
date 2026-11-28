@@ -117,6 +117,18 @@ describe('the replay', () => {
     expect((await listOutbox())[0]).toMatchObject({ status: 'failed', attempts: 1 });
     stop();
   });
+
+  it('blocks a change to a view-only object for a decision instead of retrying it (OBJECT_READ_ONLY)', async () => {
+    const stop = initOutbox(new QueryClient());
+    vi.spyOn(clientsApi, 'create').mockRejectedValueOnce(new AxiosError('refused', '403', undefined, undefined,
+      { status: 403, data: { code: 'OBJECT_READ_ONLY' } } as AxiosResponse));
+    await enqueue(client('c1'));
+
+    await flushOutbox();
+
+    expect((await listOutbox())[0]).toMatchObject({ status: 'blocked', blockReason: 'limit' });
+    stop();
+  });
 });
 
 describe('the sync status', () => {

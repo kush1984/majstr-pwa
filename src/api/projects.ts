@@ -24,6 +24,12 @@ export const projectsApi = {
     return api.get<ProjectResponse>(`/api/projects/${id}`).then((r) => r.data);
   },
 
+  /** Spend a bought object credit on this view-only object (iteration-read-only-objects): it becomes a
+   *  paid object for good. 409 OBJECT_NOT_LOCKED / NO_OBJECT_CREDIT. Online only. */
+  unlock(id: string): Promise<ProjectResponse> {
+    return api.post<ProjectResponse>(`/api/projects/${id}/unlock`).then((r) => r.data);
+  },
+
   /** `id` (a client-generated UUID) rides the X-Entity-Uuid header → idempotent offline replay. */
   create(req: ProjectRequest, id?: string): Promise<ProjectResponse> {
     return api

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useProject } from '@/features/projects/useProjects.ts';
+import { ReadOnlyObjectBanner } from '@/features/plan/ReadOnlyObjectBanner.tsx';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/Button.tsx';
@@ -168,6 +170,11 @@ export function ActEditorPage() {
 
   const signed = act.data?.status === 'SIGNED';
   const sent = act.data?.status === 'SENT';
+  // A view-only object (FREE past its first objects, iteration-read-only-objects) shows its acts the
+  // way a signed act is shown: read, share, PDF — no edit. The server refuses a change as well.
+  const project = useProject(projectId);
+  const objectReadOnly = project.data?.readOnly === true;
+  const locked = signed || objectReadOnly;
 
   // ---- header form + entered quantities (seeded once when data arrives) ----
   const [kind, setKind] = useState<WorkActKind>('INTERIM');
@@ -909,18 +916,18 @@ export function ActEditorPage() {
           {/* Everything but «Зберегти» (the bottom bar) lives here — a FAB carries ONE action, and
               this screen's one action is the save. Delete / PDF address a server row, so an unsaved
               new act offers only the paper signature. */}
-          {(!signed || act.data) && (
+          {(!locked || act.data) && (
             <ActionMenu ariaLabel={t('acts.actionsMenu')}
               triggerClassName="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-sunken text-lg leading-none text-primary">
               {(close) => (
                 <>
-                  {!signed && (
+                  {!locked && (
                     <ActionMenuItem icon="✍️" label={t('acts.sign')} onClick={() => { close(); void startSign(); }} />
                   )}
                   {act.data && (
                     <ActionMenuItem icon="📄" label={t('acts.pdf')} onClick={() => { close(); void onPdf(); }} />
                   )}
-                  {(act.data?.status === 'DRAFT' || act.data?.status === 'REJECTED') && (
+                  {!objectReadOnly && (act.data?.status === 'DRAFT' || act.data?.status === 'REJECTED') && (
                     <ActionMenuItem icon="🗑" label={t('common.delete')} danger
                       onClick={() => { close(); setConfirmDelete(true); }} />
                   )}
@@ -931,13 +938,15 @@ export function ActEditorPage() {
         </div>
       </div>
 
+      {objectReadOnly && <ReadOnlyObjectBanner projectId={projectId} />}
+
       {/* Header — the act’s own fields, titled like every other block so the editor reads as a
           stack of panels rather than one long form. */}
       <Section title={t('acts.detailsTitle')} flush>
         <div className="space-y-3">
         <div className="flex gap-1 rounded-xl bg-surface-sunken p-1">
           {(['INTERIM', 'FINAL'] as WorkActKind[]).map((k) => (
-            <button key={k} type="button" disabled={signed} onClick={() => setKind(k)}
+            <button key={k} type="button" disabled={locked} onClick={() => setKind(k)}
               className={'flex-1 rounded-lg py-2 text-sm font-semibold transition-colors '
                 + (kind === k ? 'bg-white text-brand shadow-sm' : 'text-muted')}>
               {t('acts.kind.' + k)}
@@ -945,9 +954,9 @@ export function ActEditorPage() {
           ))}
         </div>
         <Field label={t('acts.titleLabel')}>
-          <Input value={effectiveTitle} disabled={signed}
+          <Input value={effectiveTitle} disabled={locked}
             onChange={(e) => { setTitle(e.target.value); setTitleEdited(true); }} />
-          {!signed && titleSuggestions.length > 0 && (
+          {!locked && titleSuggestions.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {titleSuggestions.map((c) => (
                 <button key={c} type="button"
@@ -963,13 +972,13 @@ export function ActEditorPage() {
           )}
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label={t('acts.periodFrom')}><Input type="date" value={periodFrom} disabled={signed} invalid={!signed && periodInvalid} onChange={(e) => setPeriodFrom(e.target.value)} /></Field>
-          <Field label={t('acts.periodTo')}><Input type="date" value={periodTo} disabled={signed} invalid={!signed && periodInvalid} onChange={(e) => setPeriodTo(e.target.value)} /></Field>
+          <Field label={t('acts.periodFrom')}><Input type="date" value={periodFrom} disabled={locked} invalid={!locked && periodInvalid} onChange={(e) => setPeriodFrom(e.target.value)} /></Field>
+          <Field label={t('acts.periodTo')}><Input type="date" value={periodTo} disabled={locked} invalid={!locked && periodInvalid} onChange={(e) => setPeriodTo(e.target.value)} /></Field>
         </div>
-        {!signed && periodInvalid && <p className="-mt-1 text-xs text-danger">{t('acts.periodOrder')}</p>}
-        <Field label={t('acts.issuedAt')}><Input type="date" value={issuedAt} disabled={signed} onChange={(e) => setIssuedAt(e.target.value)} /></Field>
-        <Field label={t('acts.contractRef')}><Input value={contractRef} disabled={signed} onChange={(e) => setContractRef(e.target.value)} /></Field>
-        {!signed && (
+        {!locked && periodInvalid && <p className="-mt-1 text-xs text-danger">{t('acts.periodOrder')}</p>}
+        <Field label={t('acts.issuedAt')}><Input type="date" value={issuedAt} disabled={locked} onChange={(e) => setIssuedAt(e.target.value)} /></Field>
+        <Field label={t('acts.contractRef')}><Input value={contractRef} disabled={locked} onChange={(e) => setContractRef(e.target.value)} /></Field>
+        {!locked && (
           <Checkbox label={t('acts.showMaterials')} checked={showMaterials} onChange={() => setShowMaterials((v) => !v)} />
         )}
         </div>
@@ -1005,7 +1014,7 @@ export function ActEditorPage() {
                 {sectioned && (
                   <label className="flex items-center gap-2 px-1 pt-1">
                     <input type="checkbox" checked={allTicked}
-                      disabled={signed || fillable.length === 0}
+                      disabled={locked || fillable.length === 0}
                       onChange={() => toggleCategory(lines)}
                       className="h-4 w-4 accent-brand" />
                     <span className="text-xs font-semibold text-secondary">{cat || t('acts.noCategory')}</span>
@@ -1025,7 +1034,7 @@ export function ActEditorPage() {
                       {/* Closed lines are filtered out above, so a rendered line is always
                           tickable; unticking a closed-but-entered line removes it from the act
                           (and, being closed, from the picker). */}
-                      <input type="checkbox" disabled={signed} checked={entered > 0}
+                      <input type="checkbox" disabled={locked} checked={entered > 0}
                         onChange={() => toggleLine(line)} className="mt-1 h-5 w-5 accent-brand" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
@@ -1041,7 +1050,7 @@ export function ActEditorPage() {
                           })}
                         </p>
                         <div className="mt-2 flex items-center gap-2">
-                          <Input type="text" inputMode="decimal" value={qty[line.estimateItemId] ?? ''} disabled={signed}
+                          <Input type="text" inputMode="decimal" value={qty[line.estimateItemId] ?? ''} disabled={locked}
                             invalid={badQty}
                             onChange={(e) => setQty((q) => ({ ...q, [line.estimateItemId]: e.target.value }))}
                             className="w-28" />
@@ -1052,7 +1061,7 @@ export function ActEditorPage() {
                           </span>
                         </div>
                         {badQty && <p className="mt-1 text-xs text-danger">{t('validation.badQuantity')}</p>}
-                        {exceeds && !signed && (
+                        {exceeds && !locked && (
                           <div className="mt-1 rounded-lg bg-amber-50 p-2">
                             <p className="text-xs text-amber-700">{t('acts.exceeds')}</p>
                             <button type="button" onClick={() => convertExcess(line)}
@@ -1093,20 +1102,20 @@ export function ActEditorPage() {
                     : x))}
                 />
               )}
-              {!signed && dupEstimates.length > 0 && (
+              {!locked && dupEstimates.length > 0 && (
                 <p className="mt-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
                   {t('acts.additionalDuplicate', { names: dupEstimates.join(', ') })}
                 </p>
               )}
               <div className="mt-2 grid grid-cols-3 gap-2">
-                <Select value={a.unit} disabled={signed}
+                <Select value={a.unit} disabled={locked}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, unit: e.target.value as Unit } : x))}>
                   {ACT_UNITS.map((code) => <option key={code} value={code}>{t('units.' + code)}</option>)}
                 </Select>
-                <Input inputMode="decimal" placeholder={t('acts.qty')} value={a.quantity} disabled={signed}
+                <Input inputMode="decimal" placeholder={t('acts.qty')} value={a.quantity} disabled={locked}
                   invalid={badRow && qtyOf(a.quantity) === null}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, quantity: e.target.value } : x))} />
-                <Input inputMode="decimal" placeholder={t('acts.price')} value={a.unitPrice} disabled={signed}
+                <Input inputMode="decimal" placeholder={t('acts.price')} value={a.unitPrice} disabled={locked}
                   invalid={badRow && moneyOf(a.unitPrice) === null}
                   onChange={(e) => setAdditional((list) => list.map((x, j) => j === i ? { ...x, unitPrice: e.target.value } : x))} />
               </div>
@@ -1126,7 +1135,7 @@ export function ActEditorPage() {
               {!badRow && num(a.quantity) > 0 && money(a.unitPrice) === 0 && (
                 <p className="mt-1 text-xs text-amber-700">{t('acts.rowFree')}</p>
               )}
-              {!signed && (
+              {!locked && (
                 <button type="button" className="mt-1.5 text-xs font-semibold text-danger"
                   onClick={() => setAdditional((list) => list.filter((_, j) => j !== i))}>{t('common.delete')}</button>
               )}
@@ -1137,7 +1146,7 @@ export function ActEditorPage() {
         {/* Two doors, the same two everywhere else a position is added: browse the catalog, or type
             it. Acts only ever had the type-ahead, which answers «як це називалось?» but not «що я
             взагалі роблю на цьому об'єкті» — the browse picker is the one that shows the trade. */}
-        {!signed && (
+        {!locked && (
           <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
             <button type="button" onClick={() => setCatalogPicker(true)}
               className="text-sm font-semibold text-brand">{t('acts.addAdditionalFromCatalog')}</button>
@@ -1179,7 +1188,7 @@ export function ActEditorPage() {
               {t('acts.receiptsRejected', { count: rejected.size })}
             </p>
           )}
-          <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={signed}
+          <ActReceiptsSection actId={id} projectId={projectId} receipts={receipts} signed={locked}
             sent={sent}
             queued={queued} onQueuedChanged={refreshQueued}
             toExpenses={receiptsToExpenses} onToExpensesChange={setReceiptsToExpenses}
@@ -1191,7 +1200,7 @@ export function ActEditorPage() {
       {/* The bill. Its own panel because it is the block the master and the client both read last,
           and «Зараховано авансу» is an input that changes the figure right under it. */}
       <Section title={t('acts.settlementTitle')} flush>
-        {!signed && (
+        {!locked && (
           <div>
             <div className="mb-1 flex items-center gap-1.5">
               <span className="text-sm font-medium text-secondary">{t('acts.advance')}</span>
@@ -1240,7 +1249,7 @@ export function ActEditorPage() {
           <Row label={t('acts.payable')} value={formatMoneyExact(shownPayable)} bold />
           {invalid && <p className="text-xs text-danger">{t('acts.fixFields')}</p>}
         </div>
-        {!signed && (
+        {!locked && (
           <div className="mt-3 border-t border-border pt-3">
             <Checkbox label={t('acts.showCumulative')} checked={showCumulative} onChange={() => setShowCumulative((v) => !v)} />
           </div>
@@ -1248,7 +1257,7 @@ export function ActEditorPage() {
       </Section>
 
 
-      {!signed && (
+      {!locked && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
           <div className="mx-auto max-w-2xl">
             <Button fullWidth

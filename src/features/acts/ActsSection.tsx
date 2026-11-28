@@ -29,7 +29,10 @@ import type { WorkActResponse, WorkActStatus } from '@/api/types.ts';
  * acts (newest first) and offers «+ Новий акт», blocked with an explanation when one act is still
  * open or a FINAL act already closed the object (mirrors the backend guards in {@code WorkActCreator}).
  */
-export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; objectCreatedAt?: string }) {
+/** `readOnly`: a view-only object (iteration-read-only-objects) — its acts open and share, no new one. */
+export function ActsSection({ objectId, objectCreatedAt, readOnly = false }: {
+  objectId: string; objectCreatedAt?: string; readOnly?: boolean;
+}) {
   const { t } = useTranslation();
   const acts = useActs(objectId);
   const newAct = useNewAct(objectId, objectCreatedAt);
@@ -67,7 +70,7 @@ export function ActsSection({ objectId, objectCreatedAt }: { objectId: string; o
     <div className="space-y-3 pb-24">
       {/* The «＋» is the tab's ONE create action (it also says why it is blocked); the line below
           only explains. A dashed «+ Новий акт» beside it was the same action twice. */}
-      <Fab ariaLabel={t('acts.newAct')} onClick={onFab} />
+      {!readOnly && <Fab ariaLabel={t('acts.newAct')} onClick={onFab} />}
       <div>
         {!online && block === null && (
           <p className="mt-1.5 text-center text-[11px] text-muted">{t('acts.newActNeedsConnection')}</p>

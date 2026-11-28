@@ -29,6 +29,7 @@ import { routes } from '@/lib/config.ts';
 import type { EstimateItemResponse, EstimateResponse, ProjectResponse } from '@/api/types.ts';
 import { TradeSelect, type TradeChoice } from './TradeSelect.tsx';
 import { useProject } from '@/features/projects/useProjects.ts';
+import { ReadOnlyObjectBanner } from '@/features/plan/ReadOnlyObjectBanner.tsx';
 import { ItemForm } from './ItemForm.tsx';
 import { EstimateItemsBoard } from './EstimateItemsBoard.tsx';
 import { EstimateNextStep, FillQuantitiesHint } from './EstimateNextStep.tsx';
@@ -302,6 +303,10 @@ export function EstimateEditorPage() {
   // A signed estimate is read-only in the UI (the backend also enforces 409):
   // hide edit/delete, show a "view only" banner with a master-only reopen.
   const signed = est.status === 'SIGNED';
+  // A view-only object (FREE past its first objects, iteration-read-only-objects) locks the sheet
+  // the same way a signature does: read, share and print, no change. The server refuses it too.
+  const readOnlyObject = project.data?.readOnly === true;
+  const locked = signed || readOnlyObject;
   // Receipts offered (default-on) for embedding in the PDF: this estimate's own, plus — for a
   // consolidated estimate — those of its source estimates (their receipts stay on the sources).
   // The object's progress photos are offered too (default-off) for a receipt saved as a plain photo.
@@ -554,12 +559,12 @@ export function EstimateEditorPage() {
           >
             {(close) => (
               <>
-                {!signed && (
+                {!locked && (
                   <ActionMenuItem icon="✏️" label={t('estimate.menuRename')} onClick={() => { close(); openEdit(); }} />
                 )}
                 {/* Entering selection from a named action, not from a long press: on Android a long
                     press competes with text selection and the context menu. */}
-                {!signed && est.items.length > 0 && (
+                {!locked && est.items.length > 0 && (
                   <ActionMenuItem
                     icon="☑"
                     label={t('estimate.menuSelect')}
@@ -569,7 +574,7 @@ export function EstimateEditorPage() {
                 {/* The same picking mode, a different verb — «деколи роботи при малих обʼємах чи на
                     висоті мають коштувати більше». Applied in place, so it is offered only on a
                     sheet that can still change. */}
-                {!signed && est.items.some(canPickForMarkup) && (
+                {!locked && est.items.some(canPickForMarkup) && (
                   <ActionMenuItem
                     icon="📈"
                     label={t('estimate.menuMarkupItems')}
@@ -579,7 +584,7 @@ export function EstimateEditorPage() {
                 {/* Duplicating is a whole-sheet decision — «зроби мені клієнтський варіант +15 %» —
                     and it defaults to every WORK line, so no picking mode first. 📑, not 📄: the
                     PDF action a few rows down owns that icon. */}
-                {est.items.length > 0 && (
+                {!readOnlyObject && est.items.length > 0 && (
                   <ActionMenuItem
                     icon="📑"
                     label={t('estimate.menuDuplicate')}
@@ -589,14 +594,14 @@ export function EstimateEditorPage() {
                 {/* Typed or dictated. Two microphones and either one qualifies: the OS keyboard's
                     own 🎤 on a phone/tablet, or the in-app Web Speech API in a browser that has it.
                     Online-only: the parse is a model call. */}
-                {!signed && canDictate && (
+                {!locked && canDictate && (
                   <ActionMenuItem
                     icon="🎤"
                     label={t('dictation.fabLabel')}
                     onClick={() => { close(); guard(() => setDictationOpen(true))(); }}
                   />
                 )}
-                {!signed && (
+                {!locked && (
                   <ActionMenuItem
                     icon="🧾"
                     label={t('receipt.fabLabel')}
@@ -640,7 +645,7 @@ export function EstimateEditorPage() {
             </span>
             {/* Blocked (an act on it, or an act's own rollup): say why and what to do right here,
                 instead of a button that would only answer with the same refusal (owner, 2026-11-24). */}
-            {REOPEN_ENABLED && est.reopenBlock && (
+            {REOPEN_ENABLED && !readOnlyObject && est.reopenBlock && (
               <>
                 <p className="basis-full text-sm text-muted" data-testid="reopen-block">
                   {reopenBlockMessage(t, est.reopenBlock)}
@@ -652,13 +657,15 @@ export function EstimateEditorPage() {
                 )}
               </>
             )}
-            {REOPEN_ENABLED && !est.reopenBlock && (
+            {REOPEN_ENABLED && !readOnlyObject && !est.reopenBlock && (
               <Button variant="secondary" onClick={() => setReopenConfirmOpen(true)}>
                 {t('estimate.reopen')}
               </Button>
             )}
           </div>
         )}
+
+        {readOnlyObject && <ReadOnlyObjectBanner projectId={projectId} />}
 
         {/* Client banner */}
         {project.data && <ClientBanner project={project.data} />}
@@ -675,7 +682,7 @@ export function EstimateEditorPage() {
                 title={t('estimate.emptyTitle')}
                 text={t('estimate.emptyText')}
                 action={
-                  <Button onClick={() => setAddOpen(true)} disabled={signed}>
+                  <Button onClick={() => setAddOpen(true)} disabled={locked}>
                     {t('estimate.addItem')}
                   </Button>
                 }
@@ -685,7 +692,7 @@ export function EstimateEditorPage() {
                 <EstimateItemsBoard
                   items={est.items}
                   estimateId={id}
-                  signed={signed}
+                  signed={locked}
                   touched={touched}
                   lastTouched={lastTouched}
                   onEdit={setEditing}
@@ -717,7 +724,7 @@ export function EstimateEditorPage() {
                     });
                   }}
                 />
-                {!signed && (
+                {!locked && (
                   <button
                     type="button"
                     onClick={() => setAddOpen(true)}
@@ -783,7 +790,7 @@ export function EstimateEditorPage() {
               projectId={projectId}
               estimateId={id}
               sourceEstimateIds={est.sourceEstimateIds}
-              signed={signed}
+              signed={locked}
             />
 
             {/* «Що далі» — the end of the document, and the answer to the question the master has
@@ -804,7 +811,7 @@ export function EstimateEditorPage() {
                 status={est.status}
                 signedAt={est.signedAt}
                 onShare={guard(() => void onShare())}
-                onCreateAct={est.kind === 'ADDENDUM' ? undefined : () => void navigate(routes.newAct(projectId))}
+                onCreateAct={est.kind === 'ADDENDUM' || readOnlyObject ? undefined : () => void navigate(routes.newAct(projectId))}
                 // The calculator asks the server for every figure it shows and caches nothing, so
                 // offline it opens on a spinner that never resolves. Say so at the door instead.
                 onMaterials={guard(() => void navigate(routes.materials(est.id)))}
@@ -814,7 +821,7 @@ export function EstimateEditorPage() {
                 zeroCount={est.total > 0 ? zeroLines.length : 0}
               />
             )}
-            {CATALOG_SYNC_CARD && !signed && <CatalogSyncCard estimateId={id} items={est.items} />}
+            {CATALOG_SYNC_CARD && !locked && <CatalogSyncCard estimateId={id} items={est.items} />}
           </div>
 
           {/* Desktop summary */}
@@ -834,7 +841,7 @@ export function EstimateEditorPage() {
           moved to the header ⋮ and to the next-step block at the foot of the list. Hidden on a
           signed estimate, which cannot gain positions, and while selecting: it sat on top of the
           selection bar's «Скасувати». */}
-      {!signed && picked === null && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
+      {!locked && picked === null && <Fab ariaLabel={t('estimate.addItemTitle')} onClick={() => setAddOpen(true)} />}
 
       {pdfSheetOpen && (
         <ReceiptPdfSheet
@@ -866,7 +873,7 @@ export function EstimateEditorPage() {
 
       <AddItemSheet
         estimateId={id}
-        objectId={signed ? undefined : projectId}
+        objectId={locked ? undefined : projectId}
         // The other lines and the current total: a «%» line needs something to be a
         // percentage OF, and the live figure under the picker is what makes it checkable.
         siblings={est.items}
@@ -907,7 +914,7 @@ export function EstimateEditorPage() {
           <ItemForm
             key={editing.id}
             initial={editing}
-            objectId={signed ? undefined : projectId}
+            objectId={locked ? undefined : projectId}
             siblings={est.items}
             submitLabel={t('common.save')}
             submitting={updateItem.isPending}

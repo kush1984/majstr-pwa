@@ -22,10 +22,14 @@ export const billingApi = {
 
   /**
    * Buy ONE object without a subscription (V214). The server owns the price; the webhook adds an
-   * object credit, and the payer comes back to the return page with `?for=object`.
+   * object credit, and the payer comes back to the return page with `?for=object`. With `unlock` (a
+   * view-only object of his, iteration-read-only-objects) the server checks it first and the return
+   * URL carries `&unlock=<id>`, where the credit is spent on that object.
    */
-  checkoutObject(): Promise<CheckoutResponse> {
-    return api.post<CheckoutResponse>('/api/billing/checkout-object').then((r) => r.data);
+  checkoutObject(unlock?: string): Promise<CheckoutResponse> {
+    return api
+      .post<CheckoutResponse>('/api/billing/checkout-object', undefined, unlock ? { params: { unlock } } : undefined)
+      .then((r) => r.data);
   },
 
   /**

@@ -59,6 +59,14 @@ describe('ProjectCard — the badge shows the ONE derived stage (object-status-u
     expect(screen.getByText('Скасовано')).toBeTruthy();
   });
 
+  it('says «Лише перегляд» on an object the plan leaves view-only, and nothing on an ordinary one', () => {
+    const { unmount } = renderCard(project({ readOnly: true }));
+    expect(screen.getByTestId('read-only-badge').textContent).toContain('Лише перегляд');
+    unmount();
+    renderCard(project());
+    expect(screen.queryByTestId('read-only-badge')).toBeNull();
+  });
+
   const stages: ObjectStage[] = ['ASSESSMENT', 'PENDING_SIGNATURE', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
   it.each(stages)('renders a badge for every stage (%s) without crashing', (stage) => {
     renderCard(project({ stage }));

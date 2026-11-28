@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/EmptyState.tsx';
 import { ErrorState } from '@/components/ErrorState.tsx';
 import { UpgradeBanner } from '@/components/UpgradeBanner.tsx';
 import { usePlanLimits, isAtLimit, objectCaps } from '@/features/plan/usePlanLimits.ts';
+import { ReadOnlyObjectBanner } from '@/features/plan/ReadOnlyObjectBanner.tsx';
 import { useSenderGate } from '@/features/sender/senderGate.ts';
 import { estimatesApi } from '@/api/estimates.ts';
 import { toast } from '@/hooks/useToast.ts';
@@ -238,13 +239,20 @@ export function ProjectDetailPage() {
   // limit and "share with client" still need every estimate.
   const activeList = list.filter((s) => s.status !== 'SIGNED');
   // FREE caps estimates per project (closes the unlimited-drafts hole). Block
-  // "new estimate" preemptively once this project hits the cap; deleting one
-  // frees a slot (count is live). Backend still enforces it.
+  // "new estimate" preemptively once this project hits the cap. Backend still enforces it.
   // A one-off paid object (V214) takes PRO's caps.
   const caps = objectCaps(limits.data, p.paid);
-  const atEstimateLimit = isAtLimit(list.length, caps.maxEstimatesPerProject);
+  // The cap counts every estimate EVER made here, deleted ones too (iteration-read-only-objects),
+  // so the live list alone would offer a slot the server refuses.
+  const atEstimateLimit = isAtLimit(Math.max(list.length, p.estimatesCreated ?? 0), caps.maxEstimatesPerProject);
+  // A view-only object: FREE past its first objects. Read, share, print, money — no change.
+  const readOnly = p.readOnly === true;
   const addEstimate = () => {
     if (createEstimate.isPending || applyTemplate.isPending) return;
+    if (readOnly) {
+      toast.info(t('limits.readOnlyObject', { max: limits.data?.maxProjects ?? 2 }));
+      return;
+    }
     if (atEstimateLimit) {
       toast.info(t('limits.estimatesHint', { max: caps.maxEstimatesPerProject }));
       return;
@@ -493,6 +501,7 @@ export function ProjectDetailPage() {
           <InlineTextCell
             className="ph-mask min-w-0 flex-1"
             value={p.name}
+            readOnly={readOnly}
             ariaLabel={t('projects.editName')}
             onCommit={(name) => saveHeader({ name })}
           />
@@ -502,6 +511,7 @@ export function ProjectDetailPage() {
           <InlineTextCell
             className="min-w-0 flex-1"
             value={p.address ?? ''}
+            readOnly={readOnly}
             allowEmpty
             maxLength={512}
             placeholder={t('projects.addAddress')}
@@ -518,7 +528,7 @@ export function ProjectDetailPage() {
             <span className="text-xs text-primary">
               <strong className="font-semibold">{p.clientFullName}</strong>
             </span>
-            {p.clientId && (
+            {p.clientId && !readOnly && (
               <button
                 type="button"
                 onClick={() => setEditClientOpen(true)}
@@ -542,6 +552,8 @@ export function ProjectDetailPage() {
         </section>
       )}
 
+      {readOnly && <ReadOnlyObjectBanner projectId={id} />}
+
       <ShoppingObjectRow projectId={id} />
 
       {/* Tabs */}
@@ -564,13 +576,13 @@ export function ProjectDetailPage() {
       </div>
 
       {tab === 'measurements' ? (
-        <MeasurementsSection objectId={id} />
+        <MeasurementsSection objectId={id} readOnly={readOnly} />
       ) : tab === 'photos' ? (
-        <PhotosSection projectId={id} paid={p.paid} />
+        <PhotosSection projectId={id} paid={p.paid} readOnly={readOnly} />
       ) : tab === 'economy' ? (
         <ObjectEconomySection objectId={id} objectCreatedAt={p.createdAt} />
       ) : tab === 'acts' ? (
-        <ActsSection objectId={id} objectCreatedAt={p.createdAt} />
+        <ActsSection objectId={id} objectCreatedAt={p.createdAt} readOnly={readOnly} />
       ) : (
         <>
           {/* The two share links used to be full-width cards here. On a phone they pushed the
@@ -583,11 +595,11 @@ export function ProjectDetailPage() {
               {/* Only what is still being worked on is combined (owner, 2026-11-20): a rollup of what
                   the client already SIGNED repeats «Економіка» — which already totals the contract —
                   and the rollup itself is excluded from the money, so it only confused. */}
-              {activeList.length >= 2 && (
+              {activeList.length >= 2 && !readOnly && (
                 <button
                   type="button"
                   onClick={() => setConsolidateOpen(true)}
-                  disabled={atEstimateLimit}
+                  disabled={atEstimateLimit || readOnly}
                   title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
                   className="text-[13px] font-semibold text-brand disabled:opacity-60"
                 >
@@ -604,7 +616,7 @@ export function ProjectDetailPage() {
             <p className="mb-3 text-xs text-muted">{t('projects.signedMovedToEconomyHint')}</p>
           )}
 
-          {atEstimateLimit && (
+          {atEstimateLimit && !readOnly && (
             <UpgradeBanner
               text={t('limits.estimatesHint', { max: caps.maxEstimatesPerProject })}
               trigger="ESTIMATE_LIMIT"
@@ -624,13 +636,15 @@ export function ProjectDetailPage() {
               // button; the signed ones are a quiet link away (owner, 2026-11-20).
               action={
                 <div className="flex flex-col items-center gap-1">
-                  <Button
-                    onClick={addEstimate}
-                    disabled={atEstimateLimit}
-                    loading={createEstimate.isPending || applyTemplate.isPending}
-                  >
-                    ＋ {t('common.newEstimate')}
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      onClick={addEstimate}
+                      disabled={atEstimateLimit}
+                      loading={createEstimate.isPending || applyTemplate.isPending}
+                    >
+                      ＋ {t('common.newEstimate')}
+                    </Button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setTab('economy')}
@@ -646,7 +660,7 @@ export function ProjectDetailPage() {
               icon="🧾"
               title={t('projects.noEstimatesTitle')}
               text={t('projects.noEstimatesText')}
-              action={
+              action={readOnly ? undefined : (
                 <Button
                   onClick={addEstimate}
                   disabled={atEstimateLimit}
@@ -654,7 +668,7 @@ export function ProjectDetailPage() {
                 >
                   {t('projects.createEstimate')}
                 </Button>
-              }
+              )}
             />
           ) : (
             <div className="space-y-2">
@@ -672,22 +686,25 @@ export function ProjectDetailPage() {
                     return by ? estimateName(by.name, by.createdAt) : null;
                   })()}
                   onClick={() => navigate(`${routes.estimate(s.id)}?from=${tab}`)}
-                  onReopen={() => setConfirm({ kind: 'reopen', est: s })}
-                  onDelete={() => setConfirm({ kind: 'delete', est: s })}
+                  // A view-only object (iteration-read-only-objects): no reopen, no delete.
+                  onReopen={readOnly ? undefined : () => setConfirm({ kind: 'reopen', est: s })}
+                  onDelete={readOnly ? undefined : () => setConfirm({ kind: 'delete', est: s })}
                   onDismissSuperseded={() => dismissSuperseded.mutate(s.id)}
                 />
               ))}
               {/* Its own width, set apart from the last row — full width it read as part of the list. */}
-              <div className="flex justify-center pt-4">
-                <Button
-                  onClick={addEstimate}
-                  disabled={atEstimateLimit}
-                  title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
-                  loading={createEstimate.isPending || applyTemplate.isPending}
-                >
-                  ＋ {t('common.newEstimate')}
-                </Button>
-              </div>
+              {!readOnly && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    onClick={addEstimate}
+                    disabled={atEstimateLimit}
+                    title={atEstimateLimit ? t('limits.atLimitTooltip') : undefined}
+                    loading={createEstimate.isPending || applyTemplate.isPending}
+                  >
+                    ＋ {t('common.newEstimate')}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -715,18 +732,18 @@ export function ProjectDetailPage() {
         open={tasksOpen}
         onClose={() => setTasksOpen(false)}
         objectId={id}
-        readOnly={isTerminalStage(p.stage)}
+        readOnly={readOnly || isTerminalStage(p.stage)}
       />
       <NotesSheet
         open={notesOpen}
         onClose={() => setNotesOpen(false)}
         objectId={id}
-        readOnly={isTerminalStage(p.stage)}
+        readOnly={readOnly || isTerminalStage(p.stage)}
       />
 
       {/* «＋» does the open tab's main action (object-first). This page owns the estimates tab's;
           every other tab's section renders its own. */}
-      {tab === 'estimate' && <Fab ariaLabel={t('common.newEstimate')} onClick={addEstimate} />}
+      {tab === 'estimate' && !readOnly && <Fab ariaLabel={t('common.newEstimate')} onClick={addEstimate} />}
     </>
   );
 }
@@ -750,8 +767,8 @@ function EstimateRow({
    *  its name, for the banner. Null in the ordinary case. */
   supersededByName: string | null;
   onClick: () => void;
-  onReopen: () => void;
-  onDelete: () => void;
+  onReopen?: () => void;
+  onDelete?: () => void;
   onDismissSuperseded: () => void;
 }) {
   const { t } = useTranslation();
@@ -806,21 +823,21 @@ function EstimateRow({
             </span>
           </div>
         </button>
-        {(summary.status !== 'SIGNED' || REOPEN_ENABLED) && (
+        {(summary.status === 'SIGNED' ? REOPEN_ENABLED && onReopen : onDelete) && (
           <ActionMenu ariaLabel={t('estimate.actions')}>
             {(close) =>
               summary.status === 'SIGNED' ? (
                 <ActionMenuItem
                   icon="🔓"
                   label={t('estimate.reopen')}
-                  onClick={() => { close(); onReopen(); }}
+                  onClick={() => { close(); onReopen?.(); }}
                 />
               ) : (
                 <ActionMenuItem
                   icon="🗑"
                   danger
                   label={t('estimate.deleteEstimate')}
-                  onClick={() => { close(); onDelete(); }}
+                  onClick={() => { close(); onDelete?.(); }}
                 />
               )
             }

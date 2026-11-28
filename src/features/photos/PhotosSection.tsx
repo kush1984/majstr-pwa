@@ -49,7 +49,8 @@ type FolderKey = string | null;
  * about. Either source can be shown to the client (SHARED → appears on the portal). Files come
  * from an authenticated stream, so each tile fetches its blob with the bearer token (`AuthPhoto`).
  */
-export function PhotosSection({ projectId, paid }: { projectId: string; paid?: boolean }) {
+/** `readOnly`: a view-only object (iteration-read-only-objects) — its photos are shown, none added. */
+export function PhotosSection({ projectId, paid, readOnly = false }: { projectId: string; paid?: boolean; readOnly?: boolean }) {
   const { t } = useTranslation();
   const { online } = useOnlineGuard(); // photo uploads have no offline queue yet
   const photos = usePhotos(projectId);
@@ -212,13 +213,15 @@ export function PhotosSection({ projectId, paid }: { projectId: string; paid?: b
     <section>
       {/* «＋» (object-first): inside a folder it is exactly that folder's own «add» button — the
           same input, the same source (a «Чеки» upload stays a receipt); on the list, into «Інше». */}
-      <Fab
-        ariaLabel={t('photos.addPhotoFab')}
-        onClick={() => {
-          if (busy) return; // one batch at a time — the bar under the folder says how far it is
-          (open === null ? otherRef : galleryRef).current?.click();
-        }}
-      />
+      {!readOnly && (
+        <Fab
+          ariaLabel={t('photos.addPhotoFab')}
+          onClick={() => {
+            if (busy) return; // one batch at a time — the bar under the folder says how far it is
+            (open === null ? otherRef : galleryRef).current?.click();
+          }}
+        />
+      )}
       {open === null ? (
         <>
           <ul className="space-y-2">

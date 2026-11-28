@@ -37,6 +37,11 @@
     "planShort": "Plan {{plan}}"
   },
   "oneOffObject": {
+    "unlockCta": "Unlock",
+    "unlocked": "Project unlocked — it is yours for good",
+    "unlockedTitle": "Project unlocked!",
+    "unlockedBody": "Change it as usual — it stays with you for good, no subscription.",
+    "openObject": "Open project",
     "proIsCheaper": "You already bought an object this month — PRO at 299 ₴ is cheaper: no limits, with AI.",
     "pay": "Pay {{price}} ₴",
     "bannerCta": "One more object",
@@ -54,9 +59,11 @@
   },
   "limits": {
     "objectsHint": "Free plan — {{max}} objects total ever (you've created {{used}}). One more — one-off, no subscription, or unlimited on PRO.",
-    "estimatesHint": "FREE — up to {{max}} estimates per project. Unlimited on PRO.",
+    "estimatesHint": "FREE — {{max}} estimates per project, ever (deleted ones count too). Unlimited on PRO.",
     "atLimitTooltip": "You've reached the free-plan limit. Upgrade to PRO to create more.",
-    "upgradeCta": "Learn about PRO"
+    "upgradeCta": "Learn about PRO",
+    "readOnlyObject": "View only: on FREE only your first {{max}} projects change. Sharing and PDFs still work.",
+    "readOnlyBadge": "View only"
   },
   "landing": {
     "navSignIn": "Sign in",
@@ -2411,7 +2418,7 @@
   },
   "planEnding": {
     "title": "PRO ends on {{date}}",
-    "text": "After that the account is on FREE: some features switch off, your data stays.",
+    "text": "After that the account is on FREE: your data stays, but only your first 2 projects can be changed — the rest become view-only.",
     "action": "Extend PRO"
   },
   "plan": {
